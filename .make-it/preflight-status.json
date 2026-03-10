@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-03-10",
+  "results": {
+    "git": { "status": "GREEN", "version": "2.52.0" },
+    "docker": { "status": "GREEN", "version": "29.2.1" },
+    "github_cli": { "status": "GREEN", "version": "2.80.0" },
+    "github_auth": { "status": "GREEN", "account": "sn-ravance" },
+    "azure_cli": { "status": "GREEN", "subscription": "AzureCloud" },
+    "vscode": { "status": "GREEN", "version": "1.111.0" },
+    "vpn": { "status": "GREEN", "note": "Inferred from Azure CLI connectivity" },
+    "local_admin": { "status": "GREEN", "note": "Inferred from Docker and tool installations" }
+  },
+  "overall": "READY"
+}

@@ -1,0 +1,334 @@
+# Prompt Templates Reference
+
+These are the 11 Claude Code prompts that /make-it generates BEHIND THE SCENES based on the user's answers. The user never sees or writes these prompts -- the skill fills in all [BRACKETS] automatically from the conversation context.
+
+The skill executes these in order, skipping any that don't apply.
+
+---
+
+## Prompt #1: Start a New Project
+
+```
+Create a new SaaS project called [PROJECT_NAME].
+
+Purpose: [PURPOSE]
+Main features: [FEATURES_LIST]
+Users: [USER_DESCRIPTION]
+
+Set up the project structure with:
+- Frontend [FRONTEND_FRAMEWORK]
+- Backend [BACKEND_FRAMEWORK]
+- Infrastructure [Terraform]
+- Documentation
+```
+
+**Required context:** project name, purpose, features, users, stack choice
+**Always runs:** Yes
+
+---
+
+## Prompt #2: Design the User Interface
+
+```
+Design a modern web interface for [PROJECT_NAME].
+
+Pages needed:
+- Login page
+- Dashboard (main page after login)
+[CUSTOM_PAGES]
+- Admin panel
+- User profile
+
+Make it responsive and easy to use on mobile and browser.
+```
+
+**Required context:** project name, custom pages from features
+**Always runs:** Yes
+
+---
+
+## Prompt #3: Choose Technology Stack
+
+```
+Recommend the best technology stack for [PROJECT_NAME].
+
+Requirements:
+- Type: [APP_TYPE]
+- Users: [USER_COUNT_ESTIMATE]
+- Security: [COMPLIANCE_NEEDS]
+- Special features: [SPECIAL_FEATURES]
+
+Suggest similar technologies to PULSE:
+- Next.js frontend
+- Azure Functions backend
+- PostgreSQL database
+- Azure cloud services
+```
+
+**Required context:** app type, user count, compliance, special features
+**Always runs:** Yes (validates/confirms stack decision from Phase 2)
+
+---
+
+## Prompt #4: Design the Architecture
+
+```
+Design the system architecture for [PROJECT_NAME] using M.A.C.H. principles.
+
+Key features:
+[FEATURES_LIST]
+
+Show me:
+- How services should be separated
+- What APIs are needed
+- How frontend and backend connect
+- Cloud services to use
+```
+
+**Required context:** features list, stack choice
+**Always runs:** Yes
+
+---
+
+## Prompt #5: Create Cloud Infrastructure
+
+```
+Create Terraform configuration for [PROJECT_NAME] on Azure.
+
+Services needed:
+- Web app for frontend
+- Functions for backend
+- [DATABASE_TYPE] database
+- File storage
+[AI_SERVICES_LINE]
+
+Security requirements:
+- Private networking (no public access)
+- All secrets in Azure Key Vault
+- Encryption everywhere
+```
+
+**Required context:** database type, whether AI services needed
+**Runs when:** User wants cloud deployment (not just local prototype)
+
+---
+
+## Prompt #6: Add Docker Support
+
+```
+Create Docker containers for [PROJECT_NAME].
+
+Components to containerize:
+- [FRONTEND_FRAMEWORK]
+- [BACKEND_FRAMEWORK]
+
+Make containers secure and optimized for production.
+Include docker-compose.yml for local development.
+```
+
+**Required context:** stack choice
+**Runs when:** Multi-runtime stack OR user wants containers
+
+---
+
+## Prompt #7: Add Multi-Tenant Support
+
+```
+Make [PROJECT_NAME] support multiple organizations (multi-tenant).
+
+Tenant type: [TENANT_TYPE]
+
+Each tenant should have:
+- Their own users
+- Separate data
+- Custom branding [optional]
+- Different subscription levels [if needed]
+
+Use shared database with tenant_id column.
+```
+
+**Required context:** tenant type (B2B/B2C/Both)
+**Runs when:** Multi-tenancy needed (B2B SaaS, multiple orgs)
+
+---
+
+## Prompt #8: Add User Login
+
+```
+Add user authentication to [PROJECT_NAME] using Open Identity Connect (OIDC) and NextAuth.js.
+
+Login provider: [AUTH_PROVIDER]
+Session length: [SESSION_LENGTH]
+
+Users should:
+- Sign in with SSO (single sign-on)
+- Stay logged in securely
+- Automatically be created on first login
+```
+
+**Required context:** auth provider, session length
+**Runs when:** Authentication needed
+
+---
+
+## Prompt #9: Add User Permissions
+
+```
+Create a RBAC Authorization permission system for [PROJECT_NAME].
+
+User roles needed:
+[ROLES_LIST]
+
+Permissions:
+[PERMISSIONS_LIST]
+```
+
+**Required context:** roles, permissions mapping
+**Runs when:** Multiple user roles needed
+
+---
+
+## Prompt #10: Design AI Prompt Architecture
+
+**This prompt adapts based on the AI usage level determined during design.**
+
+### Prompt #10a: Tier 1 -- Minimal AI (1-3 prompts)
+
+```
+Set up AI prompt management for [PROJECT_NAME] -- Tier 1 (minimal).
+
+This app uses AI for:
+[AI_FEATURES_LIST]
+
+AI prompts (list all):
+[PROMPT_1_NAME]: [WHAT_IT_DOES]
+[PROMPT_2_NAME]: [WHAT_IT_DOES]
+[PROMPT_3_NAME]: [WHAT_IT_DOES]
+
+Requirements:
+- Store all prompts in a single dedicated file (lib/prompts.py or lib/prompts.ts)
+- Each prompt is a named constant with a descriptive variable name
+- Allow environment variable override for each prompt (for production tuning
+  without redeployment)
+- Include the AI model name and parameters (temperature, max_tokens) alongside
+  each prompt
+- Add a comment block at the top explaining each prompt's purpose
+
+Pattern to follow:
+- Python: PROMPT_NAME = os.getenv("PROMPT_NAME", """default content""")
+- TypeScript: export const PROMPTS = { name: process.env.PROMPT_NAME ?? `default` }
+
+Do NOT build a database or admin UI for prompts -- this app only has a few
+prompts and they rarely change.
+```
+
+**Required context:** AI features list, prompt names and purposes
+**Runs when:** ai_usage_level = "minimal" (1-3 prompts, developers only)
+
+### Prompt #10b: Tier 2 -- Moderate AI (4-10 prompts)
+
+```
+Design the AI prompt management system for [PROJECT_NAME] -- Tier 2
+(moderate). All AI prompts should be stored in the database and editable
+through the admin UI without code changes.
+
+This app uses AI for:
+[AI_FEATURES_LIST]
+
+AI prompts to manage:
+[PROMPT_LIST_WITH_CATEGORIES]
+
+Database schema needed (3 tables):
+1. managed_prompts -- registry with slug, name, content, version, is_active,
+   category, updated_by, timestamps
+2. managed_prompt_versions -- immutable version history (append-only),
+   content + change_summary + who changed it
+3. prompt_audit_log -- append-only audit trail of all changes
+
+API endpoints needed (6 routes, all behind admin permission):
+- GET /api/admin/prompts -- list all prompts
+- GET /api/admin/prompts/:key -- get prompt with version history
+- PUT /api/admin/prompts/:key -- update (creates new version, requires change_summary)
+- POST /api/admin/prompts/:key/test -- test with sample input
+- POST /api/admin/prompts/:key/restore -- rollback to previous version
+- GET /api/admin/prompts/:key/audit -- view change log
+
+Runtime loader: database first, code-defined fallback. Simple in-memory cache.
+Seed database on first run from code constants.
+
+Admin UI: prompt list, edit with change summary, test panel, version diff,
+one-click rollback, audit trail.
+
+Permission required: [PROMPT_ADMIN_PERMISSION]
+Storage: [DATABASE_TYPE]
+```
+
+**Required context:** AI features, prompt names/categories, admin permission name
+**Runs when:** ai_usage_level = "moderate" (4-10 prompts, product team edits)
+
+### Prompt #10c: Tier 3 -- Heavy AI (10+ prompts, AI-native app)
+
+```
+Design a full AI prompt management platform for [PROJECT_NAME] -- Tier 3
+(heavy). AI-native application with multiple agents, models, and providers.
+
+This app uses AI for:
+[AI_FEATURES_LIST]
+
+AI agents/components:
+[AGENT_LIST_WITH_MODELS_AND_PROVIDERS]
+
+AI prompts to manage:
+[FULL_PROMPT_LIST_WITH_CATEGORIES_AND_AGENTS]
+
+Database schema (6 tables):
+1. prompts -- registry with slug, name, description, category
+   (system|user|template|agent|skill|mcp), subcategory, agent_id, provider,
+   model, current_version, is_active, is_locked, locked_by/reason, source_file
+2. prompt_versions -- immutable history: content, system_message,
+   parameters (JSONB), model override, input/output schemas, change_summary
+3. prompt_usages -- runtime metrics: usage_type, location, call_count,
+   avg_latency_ms, token counts, error_count
+4. prompt_tags -- flexible tagging (unique per prompt)
+5. prompt_test_cases -- saved regression tests: input_data, expected_output
+6. prompt_audit_log -- immutable trail: action, old/new values (JSONB),
+   user, ip_address
+
+API (30+ routes): Full CRUD, versioning with diff, locking, tags, test cases,
+usage tracking, audit logs, analytics, import/export, full-text search.
+Permission scopes: prompts:read, prompts:write, prompts:delete, prompts:admin.
+
+Runtime: 3-tier resolution (Redis cache -> DB -> seed fallback).
+Public API: get_prompt(), render_prompt(), get_prompt_with_system(),
+invalidate_cache().
+
+Frontend (5 pages): Registry (filterable DataTable), Detail (tabbed: versions,
+usage, tests, audit), Editor (metadata + content + schemas), Analytics
+Dashboard, Audit Log.
+
+Reference architecture: auditgithub prompt management system.
+```
+
+**Required context:** AI features, agents/models/providers, full prompt inventory
+**Runs when:** ai_usage_level = "heavy" (10+ prompts, AI-native application)
+
+---
+
+## Prompt #11: Secure Everything
+
+```
+Implement security for [PROJECT_NAME] following Zero Trust principles.
+
+Protect:
+- Network: Use private connections for all services
+- Data: Encrypt everything in transit and at rest
+- Secrets: Store all passwords/keys in Azure Key Vault
+- Input: Validate all user input
+[AI_SECURITY_LINE]
+- Access: Only authenticated users with right permissions
+
+Rate limits: [RATE_LIMIT]
+```
+
+**Required context:** whether AI features exist, rate limit needs
+**Always runs:** Yes (security is non-negotiable)
