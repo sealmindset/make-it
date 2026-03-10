@@ -1,1 +1,172 @@
+# /make-it
 
+A Claude Code skill that takes a first-time developer from an app idea to a fully working, deployed application through guided Q&A. No programming knowledge required.
+
+You describe what you want in plain English. The skill handles everything else -- technical decisions, code generation, testing, and deployment.
+
+## What's Included
+
+| Skill | Purpose |
+|-------|---------|
+| `/make-it` | Build a new app from scratch through conversational Q&A |
+| `/resume-it` | Continue working on an app after the initial build -- fix bugs, add features, test, and deploy |
+
+### /make-it Flow
+
+0. **Preflight** -- Verifies your machine is ready (Git, Docker, GitHub CLI, Azure CLI, VS Code)
+1. **Ideation** -- Asks about your app idea in plain English (one question at a time)
+2. **Design** -- Makes all technical decisions behind the scenes using the Design Pattern Guide
+3. **Build** -- Generates the full application (pages, API, auth, permissions, infrastructure)
+4. **Ship** -- Hands off to `/ship-it` for CI/CD deployment
+
+### /resume-it Flow
+
+0. **Context Discovery** -- Reads project state, changelog, TODOs, and git history
+1. **Greet + Suggest** -- Shows where things stand and suggests next actions
+2. **Work** -- Helps with bug fixes, new features, TODO items, or anything you describe
+3. **Readiness Check** -- Standup-style assessment: what's done, what's blocked (tickets, env vars, infrastructure), what's next. Generates a shareable `NEXT-STEPS.md` checklist.
+4. **Test** -- Scaffolds automated tests (pytest, Playwright) and runs them
+5. **Ship** -- Hands off to `/ship-it` when ready
+
+## Prerequisites
+
+Before running `/make-it`, you need the following on your machine. The skill will check for these automatically and guide you through any missing items.
+
+| Tool | How to Install |
+|------|---------------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` |
+| Git | `brew install git` |
+| Docker Desktop | Install via [Dockyard](https://dockyard.example.com) or [docker.com](https://www.docker.com/products/docker-desktop/) |
+| GitHub CLI | `brew install gh` then `gh auth login` |
+| Azure CLI | `brew install azure-cli` then `az login` |
+| VS Code | `brew install --cask visual-studio-code` |
+| VPN access | Connect to your organization's VPN |
+
+## Installation
+
+1. Clone this repo into your Claude Code skills directory:
+
+```bash
+git clone https://github.com/sealmindset/make-it.git ~/.claude/make-it-skill
+```
+
+2. Copy the skill commands into your Claude Code commands directory:
+
+```bash
+# Create the commands directory if it doesn't exist
+mkdir -p ~/.claude/commands
+
+# Copy the skill entry points
+cp ~/.claude/make-it-skill/.claude/commands/make-it.md ~/.claude/commands/
+cp ~/.claude/make-it-skill/.claude/commands/resume-it.md ~/.claude/commands/
+
+# Copy the references and templates
+cp -r ~/.claude/make-it-skill/.claude/make-it ~/.claude/make-it
+```
+
+3. Verify the skills are available:
+
+```bash
+claude
+# Then type /make-it or /resume-it
+```
+
+## Usage
+
+### Building a New App
+
+```bash
+# Navigate to where you want to create your project
+cd ~/Documents/GitHub
+
+# Start Claude Code
+claude
+
+# Run the skill
+/make-it
+```
+
+The skill will:
+1. Check your machine is ready
+2. Ask you questions about your app idea
+3. Build the entire application
+4. Guide you to deployment
+
+### Resuming Work
+
+```bash
+# Navigate to your existing project
+cd ~/Documents/GitHub/my-app
+
+# Start Claude Code
+claude
+
+# Resume where you left off
+/resume-it
+```
+
+The skill will:
+1. Detect what was already built
+2. Show your current status and suggest next actions
+3. Help you continue building, fix issues, or run tests
+
+### Checking Readiness
+
+When running `/resume-it`, you can ask "what's next?" or "what do I need?" to get a standup-style assessment:
+
+- **What's done** -- completed work since last session
+- **What's blocked** -- tickets, infrastructure requests, env vars you need from other teams
+- **What's next** -- actionable items you can work on right now
+
+This generates a `NEXT-STEPS.md` file you can share with your manager or DevOps team.
+
+## Architecture
+
+```
+.claude/
+  commands/
+    make-it.md              # Main skill -- idea to working app
+    resume-it.md            # Resume skill -- continue, test, fix, ship
+  make-it/
+    references/
+      prerequisites.md      # Machine setup checks
+      design-blueprint.md   # Architectural decision framework
+      prompt-templates.md   # 11 enterprise build prompts
+      ship-it-guide.md      # Deployment handoff reference
+    templates/
+      app-context.md        # Template for tracking user answers
+```
+
+### State Files (created in your project directory)
+
+| File | Purpose |
+|------|---------|
+| `.make-it/app-context.json` | All design decisions from ideation and design phases |
+| `.make-it/preflight-status.json` | Machine readiness check results |
+| `.make-it-state.md` | Session breadcrumb -- what was built, what's pending, test status |
+| `NEXT-STEPS.md` | Shareable checklist of infrastructure, tickets, and env vars needed |
+| `CHANGELOG.md` | Running log of changes made across sessions |
+| `TODO.md` | Outstanding work items |
+
+## Standards Enforced
+
+All generated applications follow enterprise standards:
+
+- OIDC authentication (Azure AD / Entra ID)
+- Permission-based RBAC (never role string checks)
+- M.A.C.H. architecture principles
+- Input validation on all endpoints
+- Parameterized database queries (no SQL injection)
+- Security headers before production
+- Terraform for infrastructure as code
+- Secrets managed via `.env` (local), Azure Key Vault, or Secret Server (production)
+
+## Related Skills
+
+| Skill | Purpose | Repo |
+|-------|---------|------|
+| `/ship-it` | CI/CD deployment -- commits, pushes, creates PR with shared GHA workflows | Separate repo |
+
+## License
+
+Internal use.
