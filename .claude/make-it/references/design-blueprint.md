@@ -220,6 +220,119 @@ AI features mentioned?
 
 ---
 
+## 10. Mock Services & Local Development
+
+**What we need to know from the user:**
+- (Mostly inferred -- user doesn't need to answer this directly)
+- What external systems does the app integrate with? (detected from features)
+
+**Decision rules:**
+```
+Auth needed?
+  Yes -> ALWAYS include mock-oidc in docker-compose.yml
+  No  -> Skip mock-oidc
+
+External integrations mentioned? (Jira, GitHub, Salesforce, etc.)
+  Yes -> Generate a mock service per integration using the mock-apisrvr pattern
+  No  -> Skip custom mocks
+
+Structured logging / audit trail?
+  Yes -> Include mock-cribl for log ingestion testing
+  No  -> Skip mock-cribl
+
+GitHub integration or /ship-it CI/CD?
+  Yes -> Include mock-github for local testing
+  No  -> Skip mock-github
+```
+
+**Mock service catalog (from mocksvcs repo):**
+
+| Service | What It Mocks | Docker Port | When to Include |
+|---------|--------------|-------------|-----------------|
+| mock-oidc | Azure AD / Entra ID (full OIDC flow) | 3007 | Always (when auth needed) |
+| mock-github | GitHub REST API (repos, PRs, checks, actions) | 3006 | When app integrates with GitHub |
+| mock-cribl | Cribl Stream HTTP Source (log ingestion) | 3005 | When app has structured logging |
+| Custom mock | Any external API the app depends on | 3008+ | Per integration (auto-generated) |
+
+**Pre-seeded test data (mock-oidc):**
+
+| Subject | Email | Name | Use For |
+|---------|-------|------|---------|
+| mock-admin | admin@app.local | Mock Admin | Testing admin flows |
+| mock-analyst | analyst@app.local | Mock Analyst | Testing read-only flows |
+| mock-user | user@app.local | Mock User | Testing regular user flows |
+
+Default OIDC client: `mock-oidc-client` / `mock-oidc-secret`
+
+**The decoupling pattern (environment-based service switching):**
+
+All external service URLs are configured via environment variables. The application code
+never branches on `NODE_ENV` or checks whether it's running locally vs production.
+The same code path runs in both environments -- only the URL changes.
+
+```
+# .env (local development -- points to mock services in Docker)
+OIDC_ISSUER_URL=http://localhost:3007
+OIDC_CLIENT_ID=mock-oidc-client
+OIDC_CLIENT_SECRET=mock-oidc-secret
+JIRA_BASE_URL=http://localhost:3008
+GITHUB_API_URL=http://localhost:3006
+
+# .env.production (real services)
+OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
+OIDC_CLIENT_ID=<real-client-id>
+OIDC_CLIENT_SECRET=<from-key-vault>
+JIRA_BASE_URL=https://jira.company.com
+GITHUB_API_URL=https://api.github.com
+```
+
+**Service client abstraction:**
+
+Every external dependency gets a client class/module that reads its base URL from
+environment variables. No hardcoded URLs anywhere in the codebase.
+
+```python
+# Python pattern
+class JiraClient:
+    def __init__(self):
+        self.base_url = os.getenv("JIRA_BASE_URL")  # mock or real -- code doesn't care
+```
+
+```typescript
+// TypeScript pattern
+const jiraClient = new JiraClient({
+  baseUrl: process.env.JIRA_BASE_URL,  // mock or real -- code doesn't care
+});
+```
+
+**Custom mock generation (for app-specific integrations):**
+
+When the app integrates with an external API (Jira, Oracle EBS, Tempo, Salesforce, etc.),
+generate a lightweight mock service using the mock-apisrvr pattern:
+
+1. Create `mock_{service_name}/` directory with FastAPI app
+2. Implement the specific endpoints the app actually calls (not the entire API)
+3. Pre-seed with realistic test data matching the app's domain
+4. Add to docker-compose.yml with health check
+5. Add lifecycle scripts (start/restart/shutdown)
+
+**Implementation generates:**
+- mock-oidc service in docker-compose.yml (when auth needed)
+- Custom mock services for each external integration
+- Environment variables pointing to mock URLs in .env
+- Environment variables pointing to real URLs in .env.example (commented, for production)
+- Service client classes that read base URLs from environment
+
+**Key principles:**
+- Mock services run as Docker containers alongside the app -- `docker-compose up` starts everything
+- The app code is identical in dev and production -- only .env values change
+- Mock services use in-memory storage (data resets on container restart)
+- Each mock has a health check endpoint for Docker readiness
+- Pre-seeded test data lets developers test immediately without manual setup
+- No `if (isDevelopment)` branches in application code -- ever
+
+---
+
 ## Quick-Start Checklist (used to verify completeness)
 
 ### Before Writing Code
@@ -236,7 +349,11 @@ AI features mentioned?
 - [ ] Input validation on all endpoints
 - [ ] Parameterized database queries
 - [ ] Database migrations generated (Alembic or Prisma -- not just models)
-- [ ] Docker Compose for local dev
+- [ ] Docker Compose for local dev (includes mock services)
+- [ ] mock-oidc included in docker-compose.yml (if auth needed) -- testable login on day one
+- [ ] Custom mock services generated for each external integration
+- [ ] Service clients read base URLs from environment variables (no hardcoded URLs)
+- [ ] .env points to mock service URLs for local dev
 - [ ] .env for local secrets (never committed)
 - [ ] Frontend uses service/API layer for data (no hardcoded mock data in components)
 - [ ] One shared authenticated layout (no duplicate sidebar/nav per page)
@@ -246,6 +363,9 @@ AI features mentioned?
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 
 ### Before Production
+- [ ] Mock services excluded from production deployment (docker-compose.override.yml or profiles)
+- [ ] All service client base URLs configured for production endpoints
+- [ ] Production .env / secrets store has real service URLs (no mock references)
 - [ ] Security headers configured
 - [ ] Audit logging for auth and admin actions
 - [ ] Secrets in Azure Key Vault

@@ -20,7 +20,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - All technical jargon is translated to plain language
 - Questions are asked one at a time, conversationally
 - The Design Pattern Guide is the architectural blueprint (enforced silently)
-- The 11 Enterprise Prompts are the execution templates (filled in automatically)
+- The 12 Enterprise Prompts are the execution templates (filled in automatically)
 - `/ship-it` handles deployment (the user just types the command)
 
 ## /resume-it
@@ -49,7 +49,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
     references/
       prerequisites.md             # Preflight checks (from Vibe Code Quick Start)
       design-blueprint.md         # Extracted from AI Vibe Coded Design Pattern Guide
-      prompt-templates.md          # The 11 prompts (auto-filled from user answers)
+      prompt-templates.md          # The 12 prompts (auto-filled from user answers)
       ship-it-guide.md            # /ship-it integration reference
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
@@ -59,7 +59,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 - `AC-Vibe Code Developed Quick Start` -- Prerequisites and machine setup
 - `AC-AI Vibe Coded Design Pattern Guide` -- The architectural blueprint
-- `AC-Prompts for Building Enterprise Applications` -- The 11 execution prompts
+- `AC-Prompts for Building Enterprise Applications` -- The 12 execution prompts
 - `ship-it RFC` -- The CI/CD deployment skill
 
 ## Standards Enforced
@@ -68,6 +68,8 @@ All generated applications follow:
 - OIDC authentication (Azure AD / Entra ID)
 - Permission-based RBAC (never role string checks)
 - M.A.C.H. architecture principles
+- Mock services for local development (mock-oidc + per-integration mocks)
+- Environment-based service switching (no code branching for dev vs prod)
 - Input validation on all endpoints
 - Parameterized database queries
 - Security headers before production

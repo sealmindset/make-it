@@ -180,6 +180,9 @@ Based on their initial answer, conduct a conversational deep-dive. You need to u
      - "Does it need to work with AI or process data?"
    - For each feature, ask enough to understand the scope
    - Listen for keywords that signal: AI features, file uploads, real-time needs, data processing
+   - **Listen for external integrations** (Jira, GitHub, Oracle, Salesforce, Tempo, ServiceNow, Slack, etc.)
+     - For each integration, note: what system, what data is exchanged, which direction (read/write/both)
+     - These will drive mock service generation during the build phase
    - **If AI features are mentioned, probe deeper to classify AI usage level:**
      - How many distinct AI behaviors (prompts) does the app need?
      - Will non-developers need to edit/tune the AI behavior?
@@ -252,6 +255,12 @@ Now make all technical decisions BEHIND THE SCENES using the design-blueprint.md
   - 1-3 prompts, devs only -> tier 1 (code + config)
   - 4-10 prompts OR non-devs edit -> tier 2 (database + admin UI)
   - 10+ prompts OR AI-native app -> tier 3 (full platform)
+- Mock Services: Determine which mock services are needed (see Section 10 of design-blueprint.md)
+  - Auth needed -> mock-oidc (always)
+  - External integrations -> one custom mock per integration
+  - GitHub integration -> mock-github
+  - Structured logging -> mock-cribl
+  - Pre-seed mock-oidc test users to match the app's defined roles
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
@@ -320,6 +329,8 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 6. **Docker Support (Prompt #6)** -- Skip if single-runtime + no containers needed
    - Tell user: "Setting up development environment..."
    - Generate Dockerfile(s) and docker-compose.yml
+   - Use Docker Compose profiles: default profile for app services, "dev" profile for mock services
+   - Local development runs with `docker-compose --profile dev up`
 
 7. **Multi-Tenancy (Prompt #7)** -- Skip if not needed
    - Tell user: "Adding support for multiple organizations..."
@@ -331,6 +342,9 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Generate the COMPLETE auth flow (login, callback, token exchange, session, logout)
    - Do NOT generate stub endpoints that return placeholder messages
    - Include a get_current_user dependency/middleware for protecting routes
+   - Wire OIDC config to read issuer URL, client ID, and secret from environment variables
+   - .env must point to mock-oidc (http://localhost:3007) for local development
+   - No if/else branching for mock vs real OIDC -- same code path, different env vars
 
 9. **Permissions (Prompt #9)** -- Skip if single-role app
    - Tell user: "Setting up user permissions..."
@@ -350,6 +364,16 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 11. **Security (Prompt #11)**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
+
+12. **Mock Services (Prompt #12)** -- Always runs (at minimum, mock-oidc for auth)
+    - Tell user: "Setting up mock services so you can test everything locally..."
+    - Add mock-oidc to docker-compose.yml with pre-seeded test users matching the app's roles
+    - For each external integration (Jira, Oracle EBS, Tempo, etc.), generate a lightweight
+      mock service implementing only the endpoints the app calls
+    - Wire all service client base URLs to environment variables
+    - Set .env to point at mock service URLs, .env.example to document both mock and production URLs
+    - Verify mock services respond to health checks after docker-compose --profile dev up
+    - Verify the full auth flow works end-to-end against mock-oidc
 
 **After each prompt execution:**
 - Verify the code was generated correctly
@@ -372,9 +396,11 @@ After all prompts have been executed:
 4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory with at least one migration. If using Prisma, check for prisma/migrations/.
 5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example should be committed
 6. **Verify CHANGELOG.md and TODO.md exist** -- both should have content from the build
-7. **Run a build check** -- attempt to build/compile the project
-8. **Fix any build errors** -- iterate until the project builds cleanly
-9. **Verify Docker setup works** (if applicable) -- docker-compose up should work
+7. **Verify mock services are wired** -- mock-oidc in docker-compose.yml (if auth needed), service clients read base URLs from env vars, .env points to mock URLs
+8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports or production URLs in application code (they should all come from environment variables)
+9. **Run a build check** -- attempt to build/compile the project
+10. **Fix any build errors** -- iterate until the project builds cleanly
+11. **Verify Docker setup works** (if applicable) -- `docker-compose --profile dev up` should start app + mock services
 
 **Tell the user:**
 
@@ -515,6 +541,9 @@ That's it -- you just built your first app!"
    - Shared authenticated layout (one, not duplicated per page)
    - AI prompt seed data exists (Tier 2/3)
    - All dependencies at latest stable versions with no known CVEs
+   - Mock services included in docker-compose.yml (at minimum mock-oidc if auth is used)
+   - All external service URLs read from environment variables (no hardcoded URLs)
+   - .env points to mock service URLs for local development
 4. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed
 
 **Security non-negotiables (from design-blueprint.md):**

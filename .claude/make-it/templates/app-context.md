@@ -46,6 +46,23 @@ This template is populated by /make-it as the user answers questions. It becomes
   },
   "compliance": [],
   "special_features": [],
+  "mock_services": {
+    "mock_oidc": {
+      "needed": false,
+      "port": 3007,
+      "test_users": []
+    },
+    "mock_github": {
+      "needed": false,
+      "port": 3006
+    },
+    "mock_cribl": {
+      "needed": false,
+      "port": 3005
+    },
+    "custom_mocks": []
+  },
+  "integrations": [],
   "deployment": {
     "target": "azure",
     "containerize": false,
@@ -73,6 +90,9 @@ This template is populated by /make-it as the user answers questions. It becomes
 | ai_features.usage_level | Design | Inferred: none / minimal / moderate / heavy |
 | ai_features.prompt_management_tier | Design | 0 (none), 1 (code+config), 2 (db+admin), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
+| integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
+| mock_services | Design | Auto-determined: mock_oidc if auth, custom mocks per integration |
+| mock_services.custom_mocks | Design | One entry per integration: { name, port, endpoints_needed } |
 | compliance | Design | Only if enterprise/regulated |
 | deployment | Design | "Prototype or production?" |
 | pages | Design | Derived from features |

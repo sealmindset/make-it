@@ -1,6 +1,6 @@
 # Prompt Templates Reference
 
-These are the 11 Claude Code prompts that /make-it generates BEHIND THE SCENES based on the user's answers. The user never sees or writes these prompts -- the skill fills in all [BRACKETS] automatically from the conversation context.
+These are the 12 Claude Code prompts that /make-it generates BEHIND THE SCENES based on the user's answers. The user never sees or writes these prompts -- the skill fills in all [BRACKETS] automatically from the conversation context.
 
 The skill executes these in order, skipping any that don't apply.
 
@@ -18,6 +18,7 @@ Users: [USER_DESCRIPTION]
 Set up the project structure with:
 - Frontend [FRONTEND_FRAMEWORK]
 - Backend [BACKEND_FRAMEWORK]
+- Mock services (for local development testing)
 - Infrastructure [Terraform]
 - Documentation
 
@@ -156,11 +157,24 @@ Components to containerize:
 - [FRONTEND_FRAMEWORK]
 - [BACKEND_FRAMEWORK]
 
+Mock services to include in docker-compose.yml for local development:
+[MOCK_SERVICES_LIST]
+
+Each mock service should:
+- Have a health check endpoint
+- Be on a shared Docker network with the app services
+- Use environment variables from .env for configuration
+
+Use Docker Compose profiles to separate mock services from production services:
+- Default profile: app services only (frontend, backend, database, redis)
+- "dev" profile: adds all mock services
+- Local development runs: docker-compose --profile dev up
+- Production deploys: docker-compose up (no mock services included)
+
 Make containers secure and optimized for production.
-Include docker-compose.yml for local development.
 ```
 
-**Required context:** stack choice
+**Required context:** stack choice, mock services list
 **Runs when:** Multi-runtime stack OR user wants containers
 
 ---
@@ -210,6 +224,20 @@ Implementation requirements:
 - /auth/logout must clear the session and redirect to the OIDC provider logout endpoint
 - Include a middleware/dependency that extracts the current user from the session
   for use in protected route handlers (e.g., get_current_user dependency in FastAPI)
+
+Mock OIDC configuration for local development:
+- The OIDC issuer URL, client ID, and client secret MUST be read from environment
+  variables (never hardcoded)
+- .env file should point to the mock-oidc service:
+    OIDC_ISSUER_URL=http://localhost:3007
+    OIDC_CLIENT_ID=mock-oidc-client
+    OIDC_CLIENT_SECRET=mock-oidc-secret
+- The mock-oidc service provides a user picker with pre-seeded test users
+  (admin, analyst, regular user) so developers can test all role-based flows
+- The same auth code works against real Azure AD in production -- only the
+  environment variables change
+- Do NOT add any if/else branching for "mock mode" vs "real mode" -- the OIDC
+  protocol is identical regardless of provider
 ```
 
 **Required context:** auth provider, session length, auth library
@@ -389,3 +417,74 @@ Rate limits: [RATE_LIMIT]
 
 **Required context:** whether AI features exist, rate limit needs
 **Always runs:** Yes (security is non-negotiable)
+
+---
+
+## Prompt #12: Add Mock Services for Local Development
+
+```
+Set up mock services for [PROJECT_NAME] so the full application can be tested
+locally without any external dependencies or service tickets.
+
+Mock services needed:
+[MOCK_SERVICES_BLOCK]
+
+For EACH mock service, generate:
+
+1. A lightweight FastAPI application in mock_{service_name}/ that implements
+   ONLY the endpoints the app actually calls (not the entire external API)
+2. Pre-seeded test data that matches the app's domain and use cases
+3. In-memory storage (data resets on container restart -- this is intentional)
+4. A health check endpoint at GET /health
+5. A Dockerfile (Python 3.12, Alpine base, non-root user)
+6. A docker-compose service entry with:
+   - Health check
+   - Shared network with the app services
+   - Docker Compose profile "dev" (so mock services are excluded from production)
+   - Environment variables for configuration
+
+Mock OIDC service (if auth is needed):
+- Include mock-oidc as a Docker service (from the mocksvcs repo pattern)
+- Pre-seed with test users that match the app's roles:
+  [MOCK_USERS_BLOCK]
+- Default OIDC client: mock-oidc-client / mock-oidc-secret
+- Split URL architecture: localhost URLs for browser-facing endpoints,
+  container-hostname URLs for backend-facing endpoints (token, userinfo, JWKS)
+- Serves a browser-based user picker for interactive login
+
+Environment variable wiring:
+- .env must point all service URLs to the local mock services
+- .env.example must document the production URLs (commented out) alongside
+  the mock URLs (active) so developers understand what changes for production
+- Example:
+    # Local development (mock services)
+    OIDC_ISSUER_URL=http://localhost:3007
+    JIRA_BASE_URL=http://localhost:3008
+    # Production (uncomment and set real values)
+    # OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
+    # JIRA_BASE_URL=https://jira.company.com
+
+Service client pattern:
+- Every external dependency must have a client class/module
+- The client reads its base URL from an environment variable
+- The client does NOT check whether the URL points to a mock or real service
+- No if/else branching for development vs production -- same code path everywhere
+- Example (Python):
+    class JiraClient:
+        def __init__(self):
+            self.base_url = os.getenv("JIRA_BASE_URL")
+        async def get_boards(self):
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.base_url}/rest/agile/1.0/board")
+                return response.json()
+
+Verification:
+- After docker-compose --profile dev up, ALL mock services must respond to
+  their health check endpoints
+- The auth flow must work end-to-end against mock-oidc (login -> callback ->
+  session -> dashboard)
+- Service clients must successfully call mock endpoints and return data
+```
+
+**Required context:** list of external integrations, auth roles for mock users
+**Runs when:** Always (every app has at least auth, which needs mock-oidc)
