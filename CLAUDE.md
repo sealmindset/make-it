@@ -21,7 +21,19 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - Questions are asked one at a time, conversationally
 - The Design Pattern Guide is the architectural blueprint (enforced silently)
 - The 12 Enterprise Prompts are the execution templates (filled in automatically)
+- `/try-it` spins up the app locally with mock services, tests everything, and lets the user explore
 - `/ship-it` handles deployment (the user just types the command)
+
+## /try-it
+
+`/try-it` spins up the app with all mock services and tests everything automatically. Runs after `/make-it` build completes (automatically) or standalone anytime.
+
+0. **Context Discovery** -- Reads app-context, docker-compose, .env
+1. **Startup** -- Builds containers, starts all services + mock services, resolves port conflicts
+2. **Automated Testing** -- Playwright tests login as each role, navigates every page, checks permissions, takes screenshots
+3. **Fix** -- Any failures are diagnosed and fixed automatically (up to 3 retry cycles)
+4. **Report** -- Generates `TRY-IT-REPORT.md` with test results, screenshots, and access instructions
+5. **Handoff** -- Tells user how to explore their app in the browser, stays available to fix issues they find
 
 ## /resume-it
 
@@ -44,6 +56,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 .claude/
   commands/
     make-it.md                    # Main skill -- idea to working app
+    try-it.md                     # Try skill -- spin up, test, explore in browser
     resume-it.md                  # Resume skill -- continue, test, fix, ship
   make-it/
     references/

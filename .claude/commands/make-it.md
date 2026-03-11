@@ -451,9 +451,18 @@ Write `.make-it-state.md` to the project root:
 [Any issues discovered during build-verify]
 
 ## Next Steps
+- Run /try-it to spin up and test the app
 - Run /resume-it to continue development
 - Run /ship-it to deploy
 ```
+
+After saving state, **automatically invoke /try-it** to spin up the app and let the user
+see it working. Do NOT ask the user if they want to try it -- just do it. The transition
+should feel seamless: the build finishes and the app starts coming to life.
+
+Tell user: "Now let's see your app in action!"
+
+Then execute the /try-it skill flow.
 
 </step>
 
