@@ -60,6 +60,15 @@ This template is populated by /make-it as the user answers questions. It becomes
       "needed": false,
       "port": 3005
     },
+    "mock_jira": {
+      "needed": false,
+      "port": 8443
+    },
+    "mock_tempo": {
+      "needed": false,
+      "port": 8444,
+      "requires": "mock_jira"
+    },
     "custom_mocks": []
   },
   "integrations": [],
@@ -91,8 +100,8 @@ This template is populated by /make-it as the user answers questions. It becomes
 | ai_features.prompt_management_tier | Design | 0 (none), 1 (code+config), 2 (db+admin), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
-| mock_services | Design | Auto-determined: mock_oidc if auth, custom mocks per integration |
-| mock_services.custom_mocks | Design | One entry per integration: { name, port, endpoints_needed } |
+| mock_services | Design | Auto-determined: mock_oidc if auth, mock_jira/mock_tempo/mock_github/mock_cribl if matching integration, custom mocks for others |
+| mock_services.custom_mocks | Design | One entry per integration without a ready-made mock: { name, port, endpoints_needed } |
 | compliance | Design | Only if enterprise/regulated |
 | deployment | Design | "Prototype or production?" |
 | pages | Design | Derived from features |

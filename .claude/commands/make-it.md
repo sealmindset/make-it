@@ -257,9 +257,11 @@ Now make all technical decisions BEHIND THE SCENES using the design-blueprint.md
   - 10+ prompts OR AI-native app -> tier 3 (full platform)
 - Mock Services: Determine which mock services are needed (see Section 10 of design-blueprint.md)
   - Auth needed -> mock-oidc (always)
-  - External integrations -> one custom mock per integration
-  - GitHub integration -> mock-github
-  - Structured logging -> mock-cribl
+  - Jira integration -> mock-jira (port 8443)
+  - Tempo integration -> mock-tempo (port 8444, requires mock-jira for shared seed data)
+  - GitHub integration -> mock-github (port 3006)
+  - Structured logging -> mock-cribl (port 3005)
+  - Other external integrations -> one custom mock per integration
   - Pre-seed mock-oidc test users to match the app's defined roles
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.

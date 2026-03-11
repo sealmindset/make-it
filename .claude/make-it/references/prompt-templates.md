@@ -429,19 +429,28 @@ locally without any external dependencies or service tickets.
 Mock services needed:
 [MOCK_SERVICES_BLOCK]
 
-For EACH mock service, generate:
+For EACH mock service:
+- If a ready-made mock exists in the mocksvcs catalog, use it directly:
+  - mock-oidc (port 3007) -- Azure AD / OIDC
+  - mock-github (port 3006) -- GitHub REST API
+  - mock-cribl (port 3005) -- Cribl Stream log ingestion
+  - mock-jira (port 8443) -- Jira Software REST API v2/v3
+  - mock-tempo (port 8444) -- Tempo Timesheets API v4 (shares seed data with mock-jira)
+- If no ready-made mock exists, generate a custom one:
+  1. A lightweight FastAPI application in mock_{service_name}/ that implements
+     ONLY the endpoints the app actually calls (not the entire external API)
+  2. Pre-seeded test data that matches the app's domain and use cases
+  3. In-memory storage (data resets on container restart -- this is intentional)
+  4. A health check endpoint at GET /health
+  5. A Dockerfile (Python 3.12, Alpine base, non-root user)
+  6. A docker-compose service entry with:
+     - Health check
+     - Shared network with the app services
+     - Docker Compose profile "dev" (so mock services are excluded from production)
+     - Environment variables for configuration
 
-1. A lightweight FastAPI application in mock_{service_name}/ that implements
-   ONLY the endpoints the app actually calls (not the entire external API)
-2. Pre-seeded test data that matches the app's domain and use cases
-3. In-memory storage (data resets on container restart -- this is intentional)
-4. A health check endpoint at GET /health
-5. A Dockerfile (Python 3.12, Alpine base, non-root user)
-6. A docker-compose service entry with:
-   - Health check
-   - Shared network with the app services
-   - Docker Compose profile "dev" (so mock services are excluded from production)
-   - Environment variables for configuration
+Note: mock-tempo requires mock-jira when both are included -- they share
+a DATA_SEED for consistent user/project data across services.
 
 Mock OIDC service (if auth is needed):
 - Include mock-oidc as a Docker service (from the mocksvcs repo pattern)
@@ -459,10 +468,14 @@ Environment variable wiring:
 - Example:
     # Local development (mock services)
     OIDC_ISSUER_URL=http://localhost:3007
-    JIRA_BASE_URL=http://localhost:3008
+    JIRA_BASE_URL=http://localhost:8443
+    TEMPO_BASE_URL=http://localhost:8444
+    GITHUB_API_URL=http://localhost:3006
     # Production (uncomment and set real values)
     # OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
     # JIRA_BASE_URL=https://jira.company.com
+    # TEMPO_BASE_URL=https://api.tempo.io
+    # GITHUB_API_URL=https://api.github.com
 
 Service client pattern:
 - Every external dependency must have a client class/module

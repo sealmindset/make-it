@@ -232,17 +232,25 @@ Auth needed?
   Yes -> ALWAYS include mock-oidc in docker-compose.yml
   No  -> Skip mock-oidc
 
-External integrations mentioned? (Jira, GitHub, Salesforce, etc.)
-  Yes -> Generate a mock service per integration using the mock-apisrvr pattern
-  No  -> Skip custom mocks
+Jira integration?
+  Yes -> Include mock-jira (Jira REST API v2/v3)
+  No  -> Skip mock-jira
+
+Tempo integration (time tracking, worklogs)?
+  Yes -> Include mock-tempo (requires mock-jira for shared seed data)
+  No  -> Skip mock-tempo
+
+GitHub integration or /ship-it CI/CD?
+  Yes -> Include mock-github for local testing
+  No  -> Skip mock-github
 
 Structured logging / audit trail?
   Yes -> Include mock-cribl for log ingestion testing
   No  -> Skip mock-cribl
 
-GitHub integration or /ship-it CI/CD?
-  Yes -> Include mock-github for local testing
-  No  -> Skip mock-github
+Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
+  Yes -> Generate a custom mock service per integration using the mock-apisrvr pattern
+  No  -> Skip custom mocks
 ```
 
 **Mock service catalog (from mocksvcs repo):**
@@ -252,7 +260,9 @@ GitHub integration or /ship-it CI/CD?
 | mock-oidc | Azure AD / Entra ID (full OIDC flow) | 3007 | Always (when auth needed) |
 | mock-github | GitHub REST API (repos, PRs, checks, actions) | 3006 | When app integrates with GitHub |
 | mock-cribl | Cribl Stream HTTP Source (log ingestion) | 3005 | When app has structured logging |
-| Custom mock | Any external API the app depends on | 3008+ | Per integration (auto-generated) |
+| mock-jira | Jira Software REST API v2/v3 (issues, projects, users, transitions, role assignments) | 8443 | When app integrates with Jira |
+| mock-tempo | Tempo Timesheets API v4 (worklogs, accounts, teams, plans) | 8444 | When app integrates with Tempo (shares seed data with mock-jira) |
+| Custom mock | Any external API the app depends on | 9000+ | Per integration (auto-generated) |
 
 **Pre-seeded test data (mock-oidc):**
 
@@ -275,7 +285,8 @@ The same code path runs in both environments -- only the URL changes.
 OIDC_ISSUER_URL=http://localhost:3007
 OIDC_CLIENT_ID=mock-oidc-client
 OIDC_CLIENT_SECRET=mock-oidc-secret
-JIRA_BASE_URL=http://localhost:3008
+JIRA_BASE_URL=http://localhost:8443
+TEMPO_BASE_URL=http://localhost:8444
 GITHUB_API_URL=http://localhost:3006
 
 # .env.production (real services)
@@ -283,6 +294,7 @@ OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
 OIDC_CLIENT_ID=<real-client-id>
 OIDC_CLIENT_SECRET=<from-key-vault>
 JIRA_BASE_URL=https://jira.company.com
+TEMPO_BASE_URL=https://api.tempo.io
 GITHUB_API_URL=https://api.github.com
 ```
 
