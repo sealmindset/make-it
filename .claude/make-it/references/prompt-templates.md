@@ -1,6 +1,6 @@
 # Prompt Templates Reference
 
-These are the 12 Claude Code prompts that /make-it generates BEHIND THE SCENES based on the user's answers. The user never sees or writes these prompts -- the skill fills in all [BRACKETS] automatically from the conversation context.
+These are the 14 Claude Code prompts that /make-it generates BEHIND THE SCENES based on the user's answers. The user never sees or writes these prompts -- the skill fills in all [BRACKETS] automatically from the conversation context.
 
 The skill executes these in order, skipping any that don't apply.
 
@@ -58,6 +58,19 @@ Layout rules:
 - Create ONE shared authenticated layout with sidebar navigation (not per-page layouts)
 - All authenticated pages share this layout via a route group like (authenticated)/layout.tsx
 - Do NOT duplicate the sidebar/layout in individual page directories
+- The authenticated layout MUST include a header bar with this exact structure:
+    Header Bar (h-14, border-b, bg-muted/40, px-6)
+    ├── SidebarTrigger (expand/collapse sidebar)
+    ├── Breadcrumbs (auto-generated from URL path)
+    ├── Spacer (flex-1)
+    ├── QuickSearch (⌘K command palette trigger button)
+    └── ModeToggle (light/dark/system theme toggle)
+
+Standard UI components (built into every app -- see Prompt #14 for details):
+- Breadcrumbs: auto-generated from URL path, with SEGMENT_LABELS for all app pages
+- DataTable: TanStack React Table v8 with Excel-style column filters -- use for ALL list pages
+- QuickSearch: ⌘K/Ctrl+K command palette with all pages and app actions searchable
+- ModeToggle: light/dark/system theme toggle with next-themes
 
 Data fetching rules:
 - Each page must fetch data from the backend API using the API client (lib/api.ts)
@@ -501,3 +514,223 @@ Verification:
 
 **Required context:** list of external integrations, auth roles for mock users
 **Runs when:** Always (every app has at least auth, which needs mock-oidc)
+
+---
+
+## Prompt #13: Seed Data for Local Development
+
+```
+Generate seed data for [PROJECT_NAME] so the app is fully populated on first startup.
+The user should open the app and immediately see a living, realistic experience -- NOT
+empty pages, NOT blank dashboards, NOT "no data found" messages.
+
+Stack: [STACK]
+Database: [DATABASE]
+Migration tool: [MIGRATION_TOOL]
+Roles: [ROLES_LIST]
+Pages: [PAGES_LIST]
+Mock OIDC test users: [MOCK_USERS_BLOCK]
+External integrations: [INTEGRATIONS_LIST]
+
+Generate a seed migration or startup script that populates the database with:
+
+1. **Users (one per role, matching mock-oidc test users):**
+   For each role defined in app-context.json, create a user record with:
+   - email matching the mock-oidc test user for that role
+   - oidc_subject matching the mock-oidc subject ID
+   - name matching the mock-oidc display name
+   - role set correctly
+   - last_login set to a recent date (so the app looks active)
+   These users MUST match the mock-oidc test users exactly so that when someone
+   logs in via mock-oidc, their session maps to an existing database user.
+
+2. **Core domain records (enough to populate every page):**
+   For each page/feature in the app, generate realistic sample data:
+   - List pages: 15-25 records with varied statuses, dates, and owners
+   - Dashboard metrics: enough underlying data to produce meaningful aggregations
+   - Charts/graphs: data spanning at least 6 months of history
+   - Detail pages: records with enough related data to look complete
+   - Use realistic names, descriptions, and values from the app's domain
+   - Vary the data: mix of statuses (active, completed, pending, failed),
+     different date ranges, different owners/creators
+   - Include some "recent" activity (today, this week) so the app feels alive
+
+3. **Integration-sourced records (if the app syncs from external systems):**
+   Create records that look like they were synced from external services:
+   - Data source records showing connected/synced status with recent timestamps
+   - Sample data that matches the mock service responses
+   - Use the same DATA_SEED naming conventions as mock services for consistency
+
+4. **Edge cases and variety:**
+   - At least one item in each possible status (don't make everything "active")
+   - At least one high-priority/critical item (for alerts, dashboards)
+   - Some old records and some very recent ones
+   - Records created by different users (spread ownership across roles)
+
+Implementation:
+- If using Alembic: create a data migration (separate from the schema migration)
+  that uses bulk_insert or op.execute to populate tables
+- If using Prisma: create a seed.ts file referenced in package.json prisma.seed
+- The seed must be idempotent -- check if data already exists before inserting
+  (e.g., use INSERT ... ON CONFLICT DO NOTHING, or check row count first)
+- The seed runs automatically on first startup (called from the startup script
+  or as part of the migration chain)
+- Use deterministic IDs (uuid5 with namespace) so the seed can be re-run safely
+
+Data volume guidelines:
+- Users: 1 per role (4-6 typically)
+- Primary domain objects: 15-25 each (forecasts, scenarios, projects, etc.)
+- Secondary/child objects: 3-5 per parent (tasks per project, items per list)
+- History/log records: 50-100 (activity feeds, audit logs)
+- Dashboard data: enough for 6-12 months of chart data points
+```
+
+**Required context:** roles, pages, features, integrations, mock-oidc test users, database/ORM choice
+**Runs when:** Always -- every app needs seed data for a meaningful first-run experience
+
+---
+
+## Prompt #14: Standard UI Components
+
+```
+Generate the four standard UI components for [PROJECT_NAME]. These components provide
+a polished, production-ready experience out of the box. They are built into every app
+by default -- the user can customize them after the initial build.
+
+Stack: Next.js with Tailwind CSS, shadcn/ui, lucide-react
+Pages: [PAGES_LIST]
+Roles: [ROLES_LIST]
+
+Generate ALL FOUR components below. Do NOT skip any.
+
+--- Component 1: Breadcrumb Navigation ---
+
+File: components/breadcrumbs.tsx
+
+Create an auto-generated breadcrumb component that derives breadcrumbs from the current
+URL path using usePathname().
+
+Requirements:
+- SEGMENT_LABELS map populated with ALL pages in this app:
+  [For each page, map the URL segment to a human-readable label, e.g.:
+   "dashboard": "Dashboard",
+   "forecasting": "Forecasting",
+   "scenarios": "Scenarios",
+   "settings": "Settings",
+   "admin": "Admin",
+   "users": "Users",
+   etc.]
+- Home icon (lucide Home) as first breadcrumb, links to /
+- ChevronRight separators between items (aria-hidden)
+- Last item styled as current page (font-medium, text-foreground, not clickable, aria-current="page")
+- Intermediate items are clickable links (text-muted-foreground, hover:text-foreground)
+- UUID/ID segments auto-detected (regex for UUIDs, numeric IDs) and truncated
+- Kebab-case/snake_case segments auto-converted to Title Case
+- Returns null on dashboard/home page (no breadcrumbs needed)
+- nav element with aria-label="Breadcrumb"
+
+--- Component 2: DataTable with Excel-Style Filters ---
+
+Files:
+- components/data-table.tsx (main container)
+- components/data-table-column-header.tsx (Excel-style filter popover per column)
+- components/data-table-toolbar.tsx (global search, filter badges, column visibility, reset)
+- components/data-table-pagination.tsx (rows per page, page navigation)
+
+Create a reusable, paginated DataTable using TanStack React Table v8 (@tanstack/react-table).
+
+Dependencies to install: @tanstack/react-table
+shadcn components needed: button, input, badge, checkbox, popover, dropdown-menu, select,
+  scroll-area, table, separator
+
+Requirements:
+- Custom FilterValue type supporting both array (multi-select) and comparison operators
+- arrayIncludesFilter function handling: array filtering, comparison (>=, <=, >, <, =, !=),
+  date parsing, numeric parsing, string comparison
+- State: sorting, columnFilters, columnVisibility, globalFilter, grouping, expanded, pagination
+- LocalStorage persistence with storage key "table-filters-{tableId}"
+- Persisted state validation against current column definitions
+- Column header popover with:
+  - Sort A→Z / Z→A buttons with clear
+  - Hide column button
+  - Mode toggle for date/number columns (Multi-select vs Comparison)
+  - Multi-select mode: search within values, Select All / Clear / Invert,
+    checkbox list with counts, hover actions (Select Only, Exclude)
+  - Comparison mode: operator selector + value input
+- Toolbar: global search, active filter count badge, group by dropdown,
+  column visibility popover, reset button (orange when customizations active)
+- Pagination: rows per page (10/20/30/40/50), direct page input, First/Prev/Next/Last buttons
+
+Every list page in the app MUST use this DataTable component. Define column definitions
+with DataTableColumnHeader for each list page:
+[PAGES_THAT_HAVE_LISTS]
+
+--- Component 3: Navigation Search (Command Palette) ---
+
+File: components/quick-search.tsx
+
+Create a command palette accessible via ⌘K (Mac) / Ctrl+K (Windows).
+
+Requirements:
+- Trigger button: outline variant, search icon, "Search..." text, ⌘K keyboard hint badge
+- Modal dialog (shadcn Dialog) with search input and scrollable results list
+- Fuzzy search with weighted scoring across title, description, and keywords:
+  - Exact title match: highest priority
+  - Title starts with query: high priority
+  - Title contains query: medium priority
+  - Keyword match: medium priority
+  - Description contains: low priority
+- Keyboard navigation: Arrow Up/Down, Enter to select, Escape to close, Tab to cycle
+- selectedIndex state with scroll-into-view behavior
+- Footer with keyboard hint badges (↑↓ Navigate, ↵ Select, Esc Close)
+- Reset query and selection when dialog closes
+
+Populate NAVIGATION_ITEMS with ALL pages in this app:
+[For each page:
+  { id: "page-slug", title: "Page Name", description: "What this page does",
+    href: "/page-path", icon: AppropriateIcon, keywords: ["related", "terms"],
+    category: "navigation" }
+]
+
+Populate SETTINGS_ITEMS for any settings/admin pages.
+
+--- Component 4: Theme Toggle (Light/Dark/System) ---
+
+Files:
+- components/theme-provider.tsx (next-themes wrapper)
+- components/mode-toggle.tsx (dropdown toggle)
+
+Dependencies to install: next-themes
+
+Requirements:
+- ThemeProvider: client component wrapping NextThemesProvider, passes all props through
+- Root layout integration:
+  - <html lang="en" suppressHydrationWarning>
+  - <body suppressHydrationWarning>
+  - ThemeProvider with attribute="class", defaultTheme="system", enableSystem,
+    disableTransitionOnChange
+- ModeToggle: dropdown menu with Light (Sun icon), Dark (Moon icon), System (Monitor icon)
+- Animated Sun/Moon icon transition using rotate/scale with dark: variant
+- mounted state pattern to prevent hydration mismatch (render disabled placeholder until mounted)
+- globals.css must include oklch CSS variables for both :root (light) and .dark themes
+  covering: background, foreground, card, popover, primary, secondary, muted, accent,
+  destructive, border, input, ring, chart-1 through chart-5, sidebar variants
+
+--- Layout Integration ---
+
+The authenticated layout (e.g., app/(authenticated)/layout.tsx) MUST wire these components
+into the header bar:
+
+<div className="flex h-14 items-center gap-4 border-b bg-muted/40 px-6">
+  <SidebarTrigger />
+  <Breadcrumbs />
+  <div className="flex-1" />
+  <QuickSearch />
+  <ModeToggle />
+</div>
+
+This header bar sits above the page content, inside the main content area (right of sidebar).
+```
+
+**Required context:** pages list, roles list, features
+**Always runs:** Yes -- every app gets these four standard UI components

@@ -186,7 +186,29 @@ Tell user the port if it changed:
 
 <step name="build-and-start">
 
-**1. Build the containers:**
+**1. Zscaler check (MANDATORY before any Docker build or pull):**
+
+Zscaler's SSL inspection breaks Docker image pulls and builds. Before building:
+
+```bash
+# Check if Zscaler is running
+pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1
+```
+
+If Zscaler is detected (or if a Docker build fails with TLS/certificate errors):
+
+Tell user: "Before I can build your app, I need you to pause Zscaler for a few minutes.
+It interferes with downloading the pieces your app needs.
+
+Right-click the Zscaler icon in your menu bar (it looks like a small blue shield),
+choose 'Disable,' and pick the longest time option. Let me know when it's done!"
+
+**Wait for user confirmation before proceeding.** Do NOT attempt Docker builds while Zscaler is active.
+
+After all Docker builds and image pulls complete, remind the user:
+"All done with the heavy lifting! You can re-enable Zscaler now."
+
+**2. Build the containers:**
 
 Tell user: "Building your app... this might take a minute the first time."
 
@@ -196,7 +218,8 @@ docker compose --profile dev build 2>&1
 
 **If build fails:**
 - Read the error silently
-- Diagnose: missing dependency? Dockerfile issue? Syntax error?
+- Diagnose: missing dependency? Dockerfile issue? Syntax error? TLS/certificate error (Zscaler)?
+- If TLS/certificate error: prompt user to disable Zscaler (see step 1 above)
 - Fix the issue in the source code
 - Tell user: "I found a small issue and fixed it. Building again..."
 - Retry (up to 3 attempts)
@@ -295,6 +318,9 @@ b. For each page:
    - Verify HTTP 200 response (page loads)
    - Check for JavaScript console errors
    - Check that the page is not blank (has meaningful content)
+   - **Verify seed data is visible** -- list pages should show items, dashboards should show
+     numbers/charts, not "No data found" or empty tables. If a page appears empty, this is
+     a seed data failure -- flag it for fixing.
    - Verify role-appropriate content (admin pages show for admin, hidden for regular user)
    - Take a screenshot
    - Record: page name, role, status (pass/fail), screenshot path
@@ -316,6 +342,9 @@ Verify:
 - Response status is 2xx
 - Response is valid JSON
 - Response has expected structure (not empty, not error)
+- **List endpoints return data** -- responses should contain records, not empty arrays.
+  If an endpoint returns `[]` or `{"items": []}`, the seed data is missing for that
+  entity. Flag it as a seed data issue to fix before handoff.
 
 **5. Test permission boundaries:**
 
@@ -642,6 +671,15 @@ Let me create it now..."
 - "Your machine is working hard! Let me try running fewer things at once..."
 - Start services one at a time instead of all at once
 - Skip non-essential mock services if memory is tight
+
+**If Docker build fails with TLS/certificate/SSL errors (Zscaler interference):**
+- Zscaler's SSL inspection breaks Docker image pulls and npm/pip installs inside containers
+- Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
+- Tell user: "It looks like Zscaler is blocking the download. I need you to pause it for a few minutes.
+  Right-click the Zscaler icon in your menu bar (the small blue shield), choose 'Disable,'
+  and pick the longest time option. Let me know when it's done!"
+- **Wait for user confirmation before retrying.** Do NOT retry builds while Zscaler is active.
+- After Docker builds complete, remind user: "All done! You can re-enable Zscaler now."
 
 **If port conflicts can't be resolved:**
 - Find the next 5 available ports

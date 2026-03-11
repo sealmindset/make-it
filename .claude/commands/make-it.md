@@ -306,6 +306,8 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Generate all pages identified during ideation
    - Ensure responsive design
    - Use ONE shared authenticated layout (route group) -- do NOT create duplicate layouts per page
+   - The authenticated layout MUST include a header bar with: SidebarTrigger | Breadcrumbs | Spacer | QuickSearch | ModeToggle
+   - All list pages MUST use the DataTable component (not plain HTML tables)
    - Pages must fetch data through a service/API layer -- do NOT hardcode mock data in components
    - If backend is not yet wired, create a mock service layer that returns sample data through the same interface the real API will use
 
@@ -377,6 +379,45 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
     - Verify mock services respond to health checks after docker-compose --profile dev up
     - Verify the full auth flow works end-to-end against mock-oidc
 
+13. **Seed Data (Prompt #13)** -- Always runs
+    - Tell user: "Adding sample data so you can explore the app right away..."
+    - Generate a database seed script or migration that populates the app with realistic sample data
+    - The user should see a populated app on first login -- NOT empty pages, NOT blank dashboards
+    - Seed data must include:
+      a. **Users** -- one per role defined in app-context (matching mock-oidc test users)
+      b. **Core domain records** -- enough data to make every page meaningful:
+         - Dashboards show real numbers, charts, and metrics
+         - List pages have 10-20 items with varied statuses and dates
+         - Detail pages have enough related data to look realistic
+         - Charts and graphs have data points spanning a reasonable time range
+      c. **Integration data** -- sample records that look like they came from external systems
+         (e.g., synced Jira projects, Tempo worklogs, financial records)
+      d. **Activity/history** -- recent timestamps so the app looks "alive" not stale
+    - Seed data runs automatically on first startup (via Alembic migration, Prisma seed, or startup script)
+    - Seed data must NOT conflict with mock service data -- use the same DATA_SEED or naming
+      conventions so the app and mock services tell a consistent story
+    - The startup script (or migration) should be idempotent -- safe to run multiple times
+
+14. **Standard UI Components (Prompt #14)** -- Always runs
+    - Tell user: "Adding the finishing touches to your interface..."
+    - Generate the four standard UI components that every app includes:
+      a. **Breadcrumbs** (`components/breadcrumbs.tsx`) -- auto-generated from URL path
+         with SEGMENT_LABELS populated for all pages in this app
+      b. **DataTable** (`components/data-table.tsx`, `data-table-column-header.tsx`,
+         `data-table-toolbar.tsx`, `data-table-pagination.tsx`) -- TanStack React Table v8
+         with Excel-style column filters, multi-select, comparison operators, sorting,
+         grouping, pagination, localStorage persistence
+      c. **QuickSearch** (`components/quick-search.tsx`) -- ⌘K/Ctrl+K command palette
+         with NAVIGATION_ITEMS populated for all pages in this app
+      d. **ModeToggle** (`components/theme-provider.tsx`, `components/mode-toggle.tsx`)
+         -- light/dark/system theme toggle using next-themes with oklch CSS variables
+    - Wire all four into the authenticated layout header bar:
+      SidebarTrigger | Breadcrumbs | Spacer (flex-1) | QuickSearch | ModeToggle
+    - Ensure ThemeProvider wraps the entire app in the root layout with
+      `suppressHydrationWarning` on `<html>` and `<body>`
+    - Replace any plain HTML tables on list pages with the DataTable component
+    - Install dependencies: `@tanstack/react-table`, `next-themes`
+
 **After each prompt execution:**
 - Verify the code was generated correctly
 - Fix any issues before moving to the next prompt
@@ -402,7 +443,31 @@ After all prompts have been executed:
 8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports or production URLs in application code (they should all come from environment variables)
 9. **Run a build check** -- attempt to build/compile the project
 10. **Fix any build errors** -- iterate until the project builds cleanly
-11. **Verify Docker setup works** (if applicable) -- `docker-compose --profile dev up` should start app + mock services
+11. **Verify standard UI components exist** -- All four must be present and wired:
+    - `components/breadcrumbs.tsx` exists with SEGMENT_LABELS populated for all app pages
+    - `components/data-table.tsx` and related files exist; all list pages use DataTable (not plain tables)
+    - `components/quick-search.tsx` exists with NAVIGATION_ITEMS for all app pages
+    - `components/theme-provider.tsx` and `components/mode-toggle.tsx` exist
+    - Authenticated layout header bar has: SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
+    - ThemeProvider wraps the app in root layout with `suppressHydrationWarning`
+    - `@tanstack/react-table` and `next-themes` are in package.json dependencies
+    If any are missing, generate them now.
+12. **Verify seed data exists** -- The database must be populated with sample data on first startup.
+    Check for a seed migration (Alembic), seed script, or Prisma seed file. Verify it creates:
+    - At least one user per role (matching mock-oidc test users)
+    - Enough domain records to populate every page (10-20 items for list pages)
+    - Dashboard metrics that show non-zero values
+    - Recent timestamps so the app looks active
+    If seed data is missing or incomplete, generate it now.
+13. **Zscaler check before Docker build** (if applicable) -- Before building or pulling Docker images,
+    check if Zscaler is running. Zscaler's SSL inspection interferes with Docker image pulls and builds.
+    Ask the user: "Before I build the app, I need you to pause Zscaler for a few minutes.
+    Right-click the Zscaler icon in your menu bar, choose 'Disable,' pick the longest option,
+    and let me know when it's done. (I'll remind you to turn it back on after.)"
+    Wait for user confirmation before proceeding with any `docker compose build` or `docker compose up`.
+    After Docker builds and image pulls complete, remind the user: "All done with the heavy lifting!
+    You can re-enable Zscaler now."
+14. **Verify Docker setup works** (if applicable) -- `docker-compose --profile dev up` should start app + mock services
 
 **Tell the user:**
 
@@ -550,7 +615,14 @@ That's it -- you just built your first app!"
    - Auth endpoints are fully implemented (not stubs)
    - Frontend pages use a service/API layer (no hardcoded mock data in components)
    - Shared authenticated layout (one, not duplicated per page)
+   - Header bar includes SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
+   - All four standard UI components generated (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
+   - All list pages use DataTable component (not plain HTML tables)
+   - ThemeProvider wraps app, oklch CSS variables for light/dark themes
    - AI prompt seed data exists (Tier 2/3)
+   - Database seed data exists -- app starts with populated pages, not empty screens
+   - Seed users match mock-oidc test users (one per role)
+   - Every list page has 10-20 sample records; dashboards show non-zero metrics
    - All dependencies at latest stable versions with no known CVEs
    - Mock services included in docker-compose.yml (at minimum mock-oidc if auth is used)
    - All external service URLs read from environment variables (no hardcoded URLs)
