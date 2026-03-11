@@ -224,19 +224,26 @@ AI features mentioned?
 
 ### Before Writing Code
 - [ ] OIDC provider identified
-- [ ] Stack chosen
+- [ ] Stack chosen (latest stable versions -- no outdated majors)
 - [ ] Roles and permissions defined
 - [ ] Git repo with .gitignore
+- [ ] .env.example created with all required env vars
+- [ ] .env copied from .env.example for local dev (gitignored)
 
 ### During Development
-- [ ] OIDC authentication working
+- [ ] OIDC authentication fully implemented (not stubs -- complete token exchange flow)
 - [ ] Permission-based access control
 - [ ] Input validation on all endpoints
 - [ ] Parameterized database queries
+- [ ] Database migrations generated (Alembic or Prisma -- not just models)
 - [ ] Docker Compose for local dev
 - [ ] .env for local secrets (never committed)
+- [ ] Frontend uses service/API layer for data (no hardcoded mock data in components)
+- [ ] One shared authenticated layout (no duplicate sidebar/nav per page)
+- [ ] CHANGELOG.md and TODO.md maintained
 - [ ] AI prompts externalized (not hardcoded in business logic) -- if using AI
 - [ ] Prompt management tier determined and implemented -- if using AI
+- [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 
 ### Before Production
 - [ ] Security headers configured

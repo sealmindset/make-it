@@ -20,6 +20,18 @@ Set up the project structure with:
 - Backend [BACKEND_FRAMEWORK]
 - Infrastructure [Terraform]
 - Documentation
+
+Also create:
+- CHANGELOG.md with an initial "## [0.1.0] - [DATE]" entry listing the project setup
+- TODO.md with high/medium/low priority sections (populate during build)
+- .env.example with all required environment variables (commented with descriptions)
+- Copy .env.example to .env for local development (this file is gitignored)
+
+Dependency version rules:
+- Always use the LATEST STABLE version of every dependency
+- For Next.js, use the latest 15.x release (not 14.x)
+- For React, use the version required by the chosen Next.js version
+- Check for known CVEs before pinning any version
 ```
 
 **Required context:** project name, purpose, features, users, stack choice
@@ -40,6 +52,18 @@ Pages needed:
 - User profile
 
 Make it responsive and easy to use on mobile and browser.
+
+Layout rules:
+- Create ONE shared authenticated layout with sidebar navigation (not per-page layouts)
+- All authenticated pages share this layout via a route group like (authenticated)/layout.tsx
+- Do NOT duplicate the sidebar/layout in individual page directories
+
+Data fetching rules:
+- Each page must fetch data from the backend API using the API client (lib/api.ts)
+- Do NOT use hardcoded mock data in page components
+- If the backend is not yet connected, create a mock API service layer that returns
+  sample data through the same API client interface, so swapping to real data later
+  requires changing only the service layer, not every page
 ```
 
 **Required context:** project name, custom pages from features
@@ -63,6 +87,9 @@ Suggest similar technologies to PULSE:
 - Azure Functions backend
 - PostgreSQL database
 - Azure cloud services
+
+Version policy: Always use the latest stable release of each dependency.
+Do NOT pin to older major versions (e.g., Next.js 14 when 15 is stable).
 ```
 
 **Required context:** app type, user count, compliance, special features
@@ -83,6 +110,13 @@ Show me:
 - What APIs are needed
 - How frontend and backend connect
 - Cloud services to use
+
+Database setup:
+- If using Python + SQLAlchemy: initialize Alembic (`alembic init alembic`),
+  configure alembic.ini and env.py to use the async engine, and generate
+  the initial migration from the models (`alembic revision --autogenerate -m "initial schema"`)
+- If using Node + Prisma: initialize Prisma schema and generate the initial migration
+- The database must be usable immediately after `docker-compose up` without manual steps
 ```
 
 **Required context:** features list, stack choice
@@ -155,18 +189,30 @@ Use shared database with tenant_id column.
 ## Prompt #8: Add User Login
 
 ```
-Add user authentication to [PROJECT_NAME] using Open Identity Connect (OIDC) and NextAuth.js.
+Add user authentication to [PROJECT_NAME] using Open Identity Connect (OIDC).
 
 Login provider: [AUTH_PROVIDER]
 Session length: [SESSION_LENGTH]
+Auth library: [AUTH_LIBRARY] (e.g., authlib for Python, next-auth for Next.js)
 
 Users should:
 - Sign in with SSO (single sign-on)
 - Stay logged in securely
 - Automatically be created on first login
+
+Implementation requirements:
+- Generate the COMPLETE auth flow, not stubs or placeholders
+- /auth/login must redirect to the OIDC provider authorization endpoint
+- /auth/callback must exchange the authorization code for tokens using [AUTH_LIBRARY],
+  validate the ID token, create or update the user in the database, establish a session
+  (Redis-backed if available), and redirect to the dashboard
+- /auth/me must return the current user from the session (or 401 if not authenticated)
+- /auth/logout must clear the session and redirect to the OIDC provider logout endpoint
+- Include a middleware/dependency that extracts the current user from the session
+  for use in protected route handlers (e.g., get_current_user dependency in FastAPI)
 ```
 
-**Required context:** auth provider, session length
+**Required context:** auth provider, session length, auth library
 **Runs when:** Authentication needed
 
 ---
@@ -256,6 +302,11 @@ API endpoints needed (6 routes, all behind admin permission):
 Runtime loader: database first, code-defined fallback. Simple in-memory cache.
 Seed database on first run from code constants.
 
+Seed data: Generate an Alembic data migration (or seed script) that inserts
+all of the app's AI prompts into the managed_prompts table on first run.
+Each prompt must have: slug, name, content, category, model, default parameters.
+The database must NOT start empty.
+
 Admin UI: prompt list, edit with change summary, test panel, version diff,
 one-click rollback, audit trail.
 
@@ -305,6 +356,12 @@ invalidate_cache().
 Frontend (5 pages): Registry (filterable DataTable), Detail (tabbed: versions,
 usage, tests, audit), Editor (metadata + content + schemas), Analytics
 Dashboard, Audit Log.
+
+Seed data: Generate an Alembic data migration (or seed script) that inserts
+ALL of the app's AI prompts into the database on first run. Each prompt must
+have: slug, name, description, content, system_message, category, agent_id,
+provider, model, default parameters. The database must NOT start empty.
+Include version 1 entries in prompt_versions for each seeded prompt.
 
 Reference architecture: auditgithub prompt management system.
 ```

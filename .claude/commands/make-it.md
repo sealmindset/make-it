@@ -285,21 +285,33 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Tell user: "Setting up your project structure..."
    - Create project directory, initialize git, set up base structure
    - Create .gitignore appropriate for the stack
+   - Create CHANGELOG.md with initial entry
+   - Create TODO.md with section headers (populate throughout build)
+   - Create .env.example with all required env vars (commented)
+   - Copy .env.example to .env (gitignored) for local development
 
 2. **UI Design (Prompt #2)**
    - Tell user: "Designing your pages and interface..."
    - Generate all pages identified during ideation
    - Ensure responsive design
+   - Use ONE shared authenticated layout (route group) -- do NOT create duplicate layouts per page
+   - Pages must fetch data through a service/API layer -- do NOT hardcode mock data in components
+   - If backend is not yet wired, create a mock service layer that returns sample data through the same interface the real API will use
 
 3. **Tech Stack Configuration (Prompt #3)**
    - Tell user: "Configuring the technology..."
    - Install dependencies, configure frameworks
    - This validates/implements the stack decision from Phase 2
+   - ALWAYS use the latest stable version of every dependency -- never pin to older majors
+   - Verify no known CVEs in chosen versions before proceeding
 
 4. **Architecture (Prompt #4)**
    - Tell user: "Setting up the architecture..."
    - Define APIs, service boundaries, frontend-backend connection
    - Apply M.A.C.H. principles
+   - If Python + SQLAlchemy: initialize Alembic and generate initial migration from models
+   - If Node + Prisma: initialize Prisma and generate initial migration
+   - Database must be usable after `docker-compose up` without manual migration steps
 
 5. **Cloud Infrastructure (Prompt #5)** -- Skip if prototype only
    - Tell user: "Setting up cloud infrastructure..."
@@ -316,6 +328,9 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 8. **Authentication (Prompt #8)** -- Skip if no auth needed
    - Tell user: "Setting up secure login..."
    - Implement OIDC with chosen provider
+   - Generate the COMPLETE auth flow (login, callback, token exchange, session, logout)
+   - Do NOT generate stub endpoints that return placeholder messages
+   - Include a get_current_user dependency/middleware for protecting routes
 
 9. **Permissions (Prompt #9)** -- Skip if single-role app
    - Tell user: "Setting up user permissions..."
@@ -328,8 +343,9 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
       - "heavy" -> Execute Prompt #10c (full management platform)
     - Tell user: "Setting up AI features..." (all tiers)
     - Tier 1: Create lib/prompts file with named constants and env var overrides
-    - Tier 2: Create schema (3 tables), API (6 routes), admin editor, runtime loader
-    - Tier 3: Create schema (6 tables), API (30+ routes), 5 frontend pages, 3-tier caching
+    - Tier 2: Create schema (3 tables), API (6 routes), admin editor, runtime loader, seed data migration
+    - Tier 3: Create schema (6 tables), API (30+ routes), 5 frontend pages, 3-tier caching, seed data migration
+    - Tier 2/3: Generate a seed migration or script that inserts ALL AI prompts into the database on first run -- the prompt tables must NOT start empty
 
 11. **Security (Prompt #11)**
     - Tell user: "Locking down security..."
@@ -351,9 +367,14 @@ After every 2-3 prompts, give a brief update:
 After all prompts have been executed:
 
 1. **Verify the project structure** -- ensure all expected files exist
-2. **Run a build check** -- attempt to build/compile the project
-3. **Fix any build errors** -- iterate until the project builds cleanly
-4. **Verify Docker setup works** (if applicable) -- docker-compose up should work
+2. **Verify no stub endpoints** -- search for placeholder messages like "not yet implemented" or "implement with" in route handlers. If found, complete the implementation.
+3. **Verify no hardcoded mock data in pages** -- pages should use a service/API layer, not inline arrays of fake data
+4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory with at least one migration. If using Prisma, check for prisma/migrations/.
+5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example should be committed
+6. **Verify CHANGELOG.md and TODO.md exist** -- both should have content from the build
+7. **Run a build check** -- attempt to build/compile the project
+8. **Fix any build errors** -- iterate until the project builds cleanly
+9. **Verify Docker setup works** (if applicable) -- docker-compose up should work
 
 **Tell the user:**
 
@@ -483,7 +504,17 @@ That's it -- you just built your first app!"
 0. **After Preflight:** All checks GREEN or YELLOW (resolved). No RED blockers remaining. VPN connected, local admin available, GitHub access confirmed, Azure subscription active, Docker installed.
 1. **After Ideation:** Must have: project name, purpose, at least 3 features, user description
 2. **After Design:** Must have: complete app-context.json with all required fields populated
-3. **After Build:** Must have: project that builds without errors, all expected files present
+3. **After Build:** Must have ALL of the following:
+   - Project builds without errors
+   - All expected files present
+   - CHANGELOG.md and TODO.md exist with content
+   - .env.example committed, .env created locally (gitignored)
+   - Database migrations generated (Alembic or Prisma) -- not just models
+   - Auth endpoints are fully implemented (not stubs)
+   - Frontend pages use a service/API layer (no hardcoded mock data in components)
+   - Shared authenticated layout (one, not duplicated per page)
+   - AI prompt seed data exists (Tier 2/3)
+   - All dependencies at latest stable versions with no known CVEs
 4. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed
 
 **Security non-negotiables (from design-blueprint.md):**
