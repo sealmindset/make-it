@@ -14,15 +14,22 @@ allowed-tools:
 
 <objective>
 
-Spin up a fully working version of the user's app on their local machine, test everything
-automatically, fix any problems, and then hand control to the user so they can explore
-their app in a browser. The user needs ZERO technical knowledge -- they just type /try-it
-and watch their app come to life.
+Present the user's app as a working demo they can explore in their browser. The app should
+already be verified and working (build-verify in /make-it handles the heavy testing/fixing).
+/try-it's primary job is the user-facing handoff: start the app if needed, run a quick
+smoke test to confirm everything still works, take screenshots, and guide the user through
+exploring their app.
 
 This skill can be run:
-- Automatically at the end of /make-it (after the build phase completes)
+- Automatically at the end of /make-it (after build-verify completes -- app is already running)
 - Standalone by the user at any time from within the project directory
 - After /resume-it makes changes (to verify everything still works)
+
+When called after /make-it, the app is already running and verified. /try-it just needs to
+present it to the user. When called standalone, /try-it may need to start the app first.
+
+/try-it still has a fix cycle as a safety net, but it should RARELY need to fix things.
+If /make-it's build-verify did its job, /try-it finds zero issues.
 
 </objective>
 
@@ -128,17 +135,28 @@ Based on context, create a mental checklist:
 
 <step name="greet-and-start">
 
-**1. Warm greeting:**
+**1. Check if app is already running (from build-verify):**
 
-If called after /make-it:
-"Your app is built! Now let's fire it up and make sure everything works.
-I'll handle all the setup -- you just sit back and watch."
+```bash
+# Check if containers are already up and healthy
+docker compose --profile dev ps 2>/dev/null
+```
+
+If containers are already running and healthy (typical after /make-it build-verify):
+- Skip the entire startup phase (Parts 2-4 below)
+- Go directly to the smoke test and then user handoff
+- Tell user: "Your app is already up and running! Let me do a quick check..."
+
+**2. Warm greeting (only if app is NOT already running):**
+
+If called after /make-it (shouldn't happen -- build-verify starts it):
+"Your app is built! Let me fire it up so you can explore it."
 
 If called standalone:
 "Welcome back to **[PROJECT_NAME]**! Let me get your app running so you can try it out.
 This will take a minute or two -- I'll keep you posted."
 
-**2. Pre-startup cleanup (silent):**
+**3. Pre-startup cleanup (only if starting fresh):**
 
 ```bash
 # Stop any existing containers from this project
@@ -272,10 +290,14 @@ Tell user: "Everything is running! Now let me test your app..."
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 2: AUTOMATED TESTING -- Test everything silently         -->
+<!-- PHASE 2: SMOKE TEST -- Quick verification that everything works -->
 <!-- ============================================================ -->
 
-<step name="automated-testing">
+<step name="smoke-test">
+
+**This is a QUICK verification, not a full test suite.** If /make-it's build-verify already
+passed, this smoke test should find zero issues. It exists as a safety net for standalone
+runs and to take screenshots for the report.
 
 **1. Install test tools if needed (silently):**
 
@@ -284,7 +306,19 @@ Tell user: "Everything is running! Now let me test your app..."
 npx playwright --version 2>/dev/null || npx playwright install chromium 2>/dev/null
 ```
 
-**2. Test the login flow for each role:**
+**2. Quick health check -- all services responding:**
+
+```bash
+# Verify all services are healthy
+curl -sf http://localhost:{mock_oidc_port}/health
+curl -sf http://localhost:{backend_port}/health
+curl -sf http://localhost:{frontend_port}
+# ... any other mock services
+```
+
+If any service is down, attempt to restart it before proceeding.
+
+**3. Test the login flow for each role:**
 
 For each role defined in app-context.json (e.g., admin, analyst, user):
 
@@ -294,33 +328,32 @@ a. Determine the matching mock-oidc test user:
 
 b. Test the complete login flow:
    ```bash
-   # Use Playwright to:
+   # Use Playwright (or curl-based OIDC flow) to:
    # 1. Navigate to http://localhost:{frontend_port}
    # 2. Click login (or get redirected to login)
    # 3. Follow OIDC redirect to mock-oidc with login_hint={mock_user}
    # 4. Get redirected back to the app
    # 5. Verify the dashboard loads
-   # 6. Take a screenshot
+   # 6. Verify the correct ROLE is in the session (from /auth/me)
+   # 7. Take a screenshot
    ```
 
 c. If login fails:
    - Check .env OIDC configuration
-   - Check mock-oidc is responding
+   - Check mock-oidc is responding and has the right users
    - Check redirect URIs are registered
    - Fix and retry
 
-**3. Test every page for each role:**
+**4. Test every page for each role (and take screenshots):**
 
 For each role, after login:
 
 a. Navigate to every page listed in app-context.json
 b. For each page:
    - Verify HTTP 200 response (page loads)
-   - Check for JavaScript console errors
    - Check that the page is not blank (has meaningful content)
    - **Verify seed data is visible** -- list pages should show items, dashboards should show
-     numbers/charts, not "No data found" or empty tables. If a page appears empty, this is
-     a seed data failure -- flag it for fixing.
+     numbers/charts, not "No data found" or empty tables
    - Verify role-appropriate content (admin pages show for admin, hidden for regular user)
    - Take a screenshot
    - Record: page name, role, status (pass/fail), screenshot path
@@ -330,30 +363,20 @@ c. If a page fails:
    - Continue testing other pages (don't stop at first failure)
    - Collect all failures for batch fixing
 
-**4. Test API endpoints:**
+**5. Test API endpoints (spot check):**
 
-For each API endpoint the app defines:
+For each API endpoint:
 ```bash
-# Test with auth token from the login session
 curl -sf -H "Authorization: Bearer {token}" http://localhost:{backend_port}/api/{endpoint}
 ```
 
-Verify:
-- Response status is 2xx
-- Response is valid JSON
-- Response has expected structure (not empty, not error)
-- **List endpoints return data** -- responses should contain records, not empty arrays.
-  If an endpoint returns `[]` or `{"items": []}`, the seed data is missing for that
-  entity. Flag it as a seed data issue to fix before handoff.
+Verify responses are 2xx, valid JSON, and non-empty.
 
-**5. Test permission boundaries:**
+**6. Test logout:**
 
-For each role, verify:
-- Can access pages/endpoints they SHOULD access
-- Gets rejected (403 or redirect) from pages/endpoints they should NOT access
-- Admin-only actions are blocked for regular users
+Verify logout clears the session and subsequent /auth/me returns 401.
 
-**6. Collect results:**
+**7. Collect results:**
 
 Build an internal test results summary:
 ```
@@ -371,17 +394,21 @@ Build an internal test results summary:
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 3: FIX -- Resolve any issues found                      -->
+<!-- PHASE 3: FIX -- Safety net for any remaining issues           -->
 <!-- ============================================================ -->
 
 <step name="fix-issues">
 
-**If ALL tests passed:**
-Skip to Phase 4 (Handoff).
+**This phase is a SAFETY NET.** If /make-it's build-verify did its job, this phase should
+have nothing to do. But when /try-it is run standalone (not after /make-it), or if something
+regressed, this phase catches and fixes it.
 
-**If tests failed:**
+**If ALL smoke tests passed:**
+Skip to Phase 4 (Report). Tell user: "Everything looks great!"
 
-Tell user: "Almost perfect! I found [N] small thing(s) to fix. Give me a moment..."
+**If smoke tests found issues:**
+
+Tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
 **Fix cycle:**
 
@@ -401,9 +428,9 @@ Tell user: "Almost perfect! I found [N] small thing(s) to fix. Give me a moment.
    e. Re-run the specific failing test
    f. If still failing, try a different fix approach (up to 3 attempts)
 
-3. After fixing all issues, run the FULL test suite again to check for regressions.
+3. After fixing all issues, re-run the smoke tests to check for regressions.
 
-4. Repeat fix cycle until all tests pass (or after 3 full cycles, report remaining issues).
+4. Repeat fix cycle (up to 3 full cycles).
 
 **Progress updates to user:**
 - "Fixed! Your login page is working now."

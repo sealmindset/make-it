@@ -72,6 +72,16 @@ Standard UI components (built into every app -- see Prompt #14 for details):
 - QuickSearch: ⌘K/Ctrl+K command palette with all pages and app actions searchable
 - ModeToggle: light/dark/system theme toggle with next-themes
 
+Font rules:
+- NEVER use external font CDNs (Google Fonts, Adobe Fonts, Typekit, etc.)
+- Enterprise environments use SSL inspection proxies (Zscaler) that block external
+  font downloads during Docker builds, causing build failures
+- ALWAYS use system font stacks:
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+- Do NOT import from next/font/google or any Google Fonts URL
+- Configure font-sans and font-mono as CSS custom properties in globals.css
+
 Data fetching rules:
 - Each page must fetch data from the backend API using the API client (lib/api.ts)
 - Do NOT use hardcoded mock data in page components
@@ -231,10 +241,27 @@ Implementation requirements:
 - Generate the COMPLETE auth flow, not stubs or placeholders
 - /auth/login must redirect to the OIDC provider authorization endpoint
 - /auth/callback must exchange the authorization code for tokens using [AUTH_LIBRARY],
-  validate the ID token, create or update the user in the database, establish a session
-  (Redis-backed if available), and redirect to the dashboard
+  get the userinfo from the OIDC provider, then look up the user in the APPLICATION
+  DATABASE to get their role. The flow is:
+    1. Exchange authorization code for tokens
+    2. Call the OIDC userinfo endpoint to get sub, email, name
+    3. Query the users table by oidc_subject (or fall back to email)
+    4. If found: read the role from the DATABASE record (NOT from OIDC claims)
+    5. If not found: create a new user with default role ("user")
+    6. Store {sub, email, name, role} in the session (role comes from DB)
+    7. Redirect to the dashboard
+  CRITICAL: User roles MUST come from the application database, NOT from OIDC
+  provider claims. The OIDC provider (mock-oidc or Azure AD) only provides identity
+  (sub, email, name). It does NOT provide application-specific roles.
 - /auth/me must return the current user from the session (or 401 if not authenticated)
-- /auth/logout must clear the session and redirect to the OIDC provider logout endpoint
+- /auth/logout must be a POST endpoint that clears the server-side session and returns
+  a JSON response (e.g., {"message": "logged out"}). The frontend logout button must
+  call this endpoint via POST (using the API client), then redirect to the login page
+  via client-side navigation (router.push("/")). Do NOT implement logout as:
+    - A GET endpoint (browsers can prefetch GET requests, causing unintended logouts)
+    - A frontend-side link (<a href="/api/auth/logout">) -- this routes to the frontend,
+      not the backend, causing a 404
+    - A redirect-only endpoint -- the frontend needs to handle the redirect itself
 - Include a middleware/dependency that extracts the current user from the session
   for use in protected route handlers (e.g., get_current_user dependency in FastAPI)
 
@@ -258,20 +285,199 @@ Mock OIDC configuration for local development:
 
 ---
 
-## Prompt #9: Add User Permissions
+## Prompt #9: User Management + RBAC Permissions
 
 ```
-Create a RBAC Authorization permission system for [PROJECT_NAME].
+Create a production-ready, database-driven RBAC system with full user management
+for [PROJECT_NAME]. This is a STANDARD component of every app -- not optional.
 
-User roles needed:
-[ROLES_LIST]
+Stack: [STACK]
+Database: [DATABASE]
+Auth provider: [AUTH_PROVIDER]
+Pages/resources in this app: [PAGES_LIST]
 
-Permissions:
-[PERMISSIONS_LIST]
+--- DATABASE SCHEMA ---
+
+Create these 4 tables (in addition to the existing users table):
+
+1. roles
+   - id: UUID primary key
+   - name: VARCHAR(100) unique, not null
+   - description: TEXT
+   - is_system: BOOLEAN default false (true for predefined roles -- cannot be deleted)
+   - is_active: BOOLEAN default true
+   - created_by: UUID FK -> users (nullable for system roles)
+   - created_at, updated_at: TIMESTAMP WITH TIMEZONE
+
+2. permissions
+   - id: UUID primary key
+   - resource: VARCHAR(100) not null (page or feature name, e.g., "forecasts", "users")
+   - action: VARCHAR(50) not null (one of: "view", "create", "edit", "delete")
+   - description: TEXT (human-readable, e.g., "View the Forecasting page")
+   - UNIQUE constraint on (resource, action)
+
+3. role_permissions (junction table)
+   - role_id: UUID FK -> roles, not null
+   - permission_id: UUID FK -> permissions, not null
+   - PRIMARY KEY (role_id, permission_id)
+
+4. Modify the existing users table:
+   - Add role_id: UUID FK -> roles (replaces the old VARCHAR role column)
+   - Keep email, name, oidc_subject, last_login, etc.
+
+Generate an Alembic migration (or Prisma migration) that:
+a. Creates the roles, permissions, and role_permissions tables
+b. Migrates the existing users.role VARCHAR column to users.role_id FK
+c. Seeds the system roles, permissions, and default mappings (see below)
+
+--- SEED DATA ---
+
+System roles (is_system=true, cannot be deleted):
+
+| Role | Description | Default Permission Level |
+|------|-------------|------------------------|
+| Super Admin | Full system access, can create custom roles and manage all users | ALL permissions |
+| Admin | Can manage app settings, API keys, data sources. Cannot manage users or roles | All except user/role management |
+| Manager | Can view most data and run operations (forecasts, scenarios) | View all + create/edit on operational pages |
+| User | Read-only access to dashboards and reports | View-only on allowed pages |
+
+Permissions auto-generated from this app's pages/resources:
+For EACH page/resource in [PAGES_LIST], create 4 permission records:
+- {resource}.view -- "View the {Page Name} page"
+- {resource}.create -- "Create new items on {Page Name}"
+- {resource}.edit -- "Edit items on {Page Name}"
+- {resource}.delete -- "Delete items on {Page Name}"
+
+Plus system permissions:
+- users.view, users.create, users.edit, users.delete -- "Manage users"
+- roles.view, roles.create, roles.edit, roles.delete -- "Manage roles"
+- settings.view, settings.edit -- "Manage app settings"
+- api_keys.view, api_keys.create, api_keys.delete -- "Manage API keys"
+
+Default role-permission mappings:
+- Super Admin: ALL permissions
+- Admin: All EXCEPT users.* and roles.* (cannot manage users or roles)
+- Manager: *.view on all resources + *.create and *.edit on operational resources
+  (forecasts, scenarios, alerts, etc.) but NOT on admin resources (users, roles, settings)
+- User: *.view only on non-admin resources (dashboard, forecasts, scenarios, alerts, finops)
+
+--- RUNTIME PERMISSION SYSTEM ---
+
+Create a permission service/module that:
+
+1. Loads permissions from the database into an in-memory cache on startup:
+   - Cache structure: { role_id: Set[permission_strings] }
+   - Permission string format: "resource.action" (e.g., "forecasts.view", "users.create")
+
+2. Provides these functions:
+   - has_permission(user, resource, action) -> bool
+     Checks the cached permissions for the user's role
+   - get_user_permissions(user) -> list[str]
+     Returns all permission strings for the user's role
+   - invalidate_cache()
+     Called when roles or role_permissions are modified via admin API
+
+3. Provides a route-protection middleware/dependency:
+   - require_permission(resource, action) -- returns 403 if the user lacks the permission
+   - Example usage in FastAPI:
+     @router.get("/api/forecasts")
+     async def list_forecasts(
+         user: Annotated[CurrentUser, Depends(require_permission("forecasts", "view"))],
+     ):
+   - Example usage in Express/NestJS:
+     @UseGuards(PermissionGuard("forecasts", "view"))
+
+--- ADMIN API ENDPOINTS ---
+
+User Management (require "users.view" / "users.create" / "users.edit" / "users.delete"):
+
+GET    /api/admin/users              -- List all users with their roles
+POST   /api/admin/users              -- Add a new user (by email). Body: { email, name, role_id }
+                                       The user must exist in the OIDC provider (Entra ID).
+                                       Creates a user record with the given role, ready for
+                                       their first SSO login.
+GET    /api/admin/users/{id}         -- Get user details with role and permissions
+PUT    /api/admin/users/{id}         -- Update user (change role, update name)
+DELETE /api/admin/users/{id}         -- Deactivate user (soft delete -- set is_active=false,
+                                       do NOT hard delete)
+
+Role Management (require "roles.view" / "roles.create" / "roles.edit" / "roles.delete"):
+
+GET    /api/admin/roles              -- List all roles with permission counts
+POST   /api/admin/roles              -- Create a custom role (Super Admin only).
+                                       Body: { name, description, permission_ids[] }
+GET    /api/admin/roles/{id}         -- Get role with full permission list
+PUT    /api/admin/roles/{id}         -- Update role permissions.
+                                       Body: { name?, description?, permission_ids[] }
+                                       System roles: can change permissions but NOT name
+                                       or is_system flag.
+DELETE /api/admin/roles/{id}         -- Delete a custom role (Super Admin only).
+                                       System roles CANNOT be deleted (return 400).
+                                       Reassign users on this role to "User" before deleting.
+
+Permission Reference:
+
+GET    /api/admin/permissions        -- List all available permissions (grouped by resource).
+                                       Used by the role management UI to show the permission
+                                       matrix. Returns:
+                                       [{ resource: "forecasts", permissions: [
+                                         { id, action: "view", description },
+                                         { id, action: "create", description },
+                                         ...
+                                       ]}]
+
+After any role or role_permissions change, call invalidate_cache().
+
+--- ADMIN UI PAGES ---
+
+1. User Management page (/admin/users):
+   - DataTable listing all users: name, email, role, last login, status (active/inactive)
+   - "Add User" button -> modal/dialog:
+     - Email input (required)
+     - Name input (required)
+     - Role dropdown (all active roles)
+     - Note: "This person must have a company account (Entra ID) to sign in"
+   - Row actions: Edit Role (dropdown), Deactivate/Reactivate
+   - Cannot deactivate yourself (prevent lockout)
+   - Cannot change Super Admin role unless you are Super Admin
+
+2. Role Management page (/admin/roles):
+   - DataTable listing all roles: name, description, user count, type (System/Custom)
+   - "Create Role" button (visible only to Super Admin) -> dialog:
+     - Name, description inputs
+     - Permission matrix (see below)
+   - Click any role -> Permission editor:
+     - Grid layout: rows = resources (pages), columns = actions (view/create/edit/delete)
+     - Checkbox at each intersection
+     - "Select All" per row (grant all CRUD for a resource)
+     - "Select All" per column (grant an action across all resources)
+     - System roles show a badge, cannot be deleted
+     - Save button applies changes immediately
+   - Row actions: Edit, Delete (custom roles only, Super Admin only)
+
+3. These pages are protected by the users.view / roles.view permissions respectively.
+   Regular users and managers should NOT see these pages in the sidebar.
+
+--- INTEGRATION WITH AUTH ---
+
+Update the auth callback (/auth/callback) to:
+1. After looking up the user in the database, load their role_id
+2. Fetch the role's permissions from the cache
+3. Store in session: { sub, email, name, role_id, role_name, permissions[] }
+
+Update get_current_user middleware to:
+1. Read role_id and permissions from the session
+2. Return a CurrentUser object with: subject, email, name, role_name, permissions[]
+
+Update the frontend sidebar/navigation to:
+1. Fetch user permissions from /auth/me on login
+2. Show/hide sidebar items based on "{resource}.view" permission
+3. Show/hide action buttons (Create, Edit, Delete) based on corresponding permissions
+4. Admin pages (Users, Roles) only visible if user has "users.view" / "roles.view"
 ```
 
-**Required context:** roles, permissions mapping
-**Runs when:** Multiple user roles needed
+**Required context:** stack, database, auth provider, pages/resources list
+**Always runs:** Yes -- every app gets database-driven RBAC with user management
 
 ---
 
@@ -495,14 +701,42 @@ Service client pattern:
 - The client reads its base URL from an environment variable
 - The client does NOT check whether the URL points to a mock or real service
 - No if/else branching for development vs production -- same code path everywhere
+- CRITICAL: Service clients MUST only call endpoints that actually exist on the
+  mock services. Before writing a service client method, verify the mock service
+  implements that endpoint. Known mock service API contracts:
+    - mock-jira: Use /rest/api/2/project/search for projects (NOT /rest/api/3/project).
+      Use /rest/api/3/search/jql for issue search (NOT /rest/api/3/search GET).
+      Use /rest/api/3/issue/{key} for individual issues.
+    - mock-tempo: All requests require Authorization: Bearer header.
+      Use /4/worklogs for worklogs, /4/teams for teams.
+    - mock-oidc: Use /users/{sub} PUT to register users, /clients/{id} PUT for
+      redirect URIs. Userinfo only returns sub, email, name, preferred_username
+      (NO role or custom claims).
+  If you're unsure whether an endpoint exists on a mock service, read the mock
+  service's route files before writing the client method.
 - Example (Python):
     class JiraClient:
         def __init__(self):
             self.base_url = os.getenv("JIRA_BASE_URL")
-        async def get_boards(self):
+        async def get_projects(self):
             async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.base_url}/rest/agile/1.0/board")
+                response = await client.get(f"{self.base_url}/rest/api/2/project/search")
                 return response.json()
+
+Mock service seeding (MANDATORY):
+- Generate a seed script (scripts/seed-mock-services.sh) that runs after
+  docker-compose --profile dev up and populates all mock services with app data:
+    1. Wait for all mock services to be healthy (poll /health endpoints)
+    2. Register app-specific users in mock-oidc via PUT /users/{sub} with
+       correct name, email, and preferred_username matching the database seed users
+    3. Remove any default mock-oidc users that don't belong to this app
+       (mock-oidc may have pre-seeded users from other projects)
+    4. Update the mock-oidc client redirect URIs via PUT /clients/{client_id}
+       to include the app's actual frontend callback URL (e.g.,
+       http://localhost:3100/api/auth/callback)
+    5. Verify all mock services return data on their main endpoints
+- The seed script must be idempotent (safe to run multiple times)
+- The seed script runs as part of the build-verify step, NOT left for the user
 
 Verification:
 - After docker-compose --profile dev up, ALL mock services must respond to
@@ -510,6 +744,7 @@ Verification:
 - The auth flow must work end-to-end against mock-oidc (login -> callback ->
   session -> dashboard)
 - Service clients must successfully call mock endpoints and return data
+- Mock-oidc must have exactly the right users for this app (no extras, no missing)
 ```
 
 **Required context:** list of external integrations, auth roles for mock users
@@ -537,12 +772,17 @@ Generate a seed migration or startup script that populates the database with:
 1. **Users (one per role, matching mock-oidc test users):**
    For each role defined in app-context.json, create a user record with:
    - email matching the mock-oidc test user for that role
-   - oidc_subject matching the mock-oidc subject ID
+   - oidc_subject matching the mock-oidc subject ID (e.g., "mock-admin", "mock-user")
    - name matching the mock-oidc display name
    - role set correctly
    - last_login set to a recent date (so the app looks active)
-   These users MUST match the mock-oidc test users exactly so that when someone
-   logs in via mock-oidc, their session maps to an existing database user.
+   CRITICAL: The oidc_subject in the database MUST exactly match the "sub" claim
+   that mock-oidc returns in its userinfo response. This is how the auth callback
+   maps an OIDC login to a database user with the correct role. If these don't
+   match, the user will be created as a new "user" role instead of getting their
+   intended role (admin, manager, etc.).
+   The mock service seed script (scripts/seed-mock-services.sh) must register
+   users in mock-oidc with the same subject IDs used in the database seed.
 
 2. **Core domain records (enough to populate every page):**
    For each page/feature in the app, generate realistic sample data:

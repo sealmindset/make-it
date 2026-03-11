@@ -20,18 +20,19 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - All technical jargon is translated to plain language
 - Questions are asked one at a time, conversationally
 - The Design Pattern Guide is the architectural blueprint (enforced silently)
-- The 12 Enterprise Prompts are the execution templates (filled in automatically)
-- `/try-it` spins up the app locally with mock services, tests everything, and lets the user explore
+- The 14 Enterprise Prompts are the execution templates (filled in automatically)
+- Build-verify is a silent quality gate: starts the app, tests auth/API/pages/permissions, fixes issues -- the user never sees broken output
+- `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
 
 ## /try-it
 
-`/try-it` spins up the app with all mock services and tests everything automatically. Runs after `/make-it` build completes (automatically) or standalone anytime.
+`/try-it` presents the user's app for exploration. When called after `/make-it`, the app is already running and verified by build-verify. When called standalone, it starts the app first.
 
-0. **Context Discovery** -- Reads app-context, docker-compose, .env
-1. **Startup** -- Builds containers, starts all services + mock services, resolves port conflicts
-2. **Automated Testing** -- Playwright tests login as each role, navigates every page, checks permissions, takes screenshots
-3. **Fix** -- Any failures are diagnosed and fixed automatically (up to 3 retry cycles)
+0. **Context Discovery** -- Reads app-context, docker-compose, .env; checks if app is already running
+1. **Startup** -- Starts containers if not already running; skips if build-verify left them up
+2. **Smoke Test** -- Quick verification (health checks, login, pages, screenshots) as a safety net
+3. **Fix (safety net)** -- If smoke test finds issues, diagnose and fix (should rarely happen)
 4. **Report** -- Generates `TRY-IT-REPORT.md` with test results, screenshots, and access instructions
 5. **Handoff** -- Tells user how to explore their app in the browser, stays available to fix issues they find
 
@@ -62,7 +63,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
     references/
       prerequisites.md             # Preflight checks (from Vibe Code Quick Start)
       design-blueprint.md         # Extracted from AI Vibe Coded Design Pattern Guide
-      prompt-templates.md          # The 12 prompts (auto-filled from user answers)
+      prompt-templates.md          # The 14 prompts (auto-filled from user answers)
       ship-it-guide.md            # /ship-it integration reference
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
@@ -79,11 +80,29 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 All generated applications follow:
 - OIDC authentication (Azure AD / Entra ID)
-- Permission-based RBAC (never role string checks)
+- Auth roles from application database (NOT OIDC provider claims)
+- Logout via POST to backend API (NOT GET links)
+- Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
+- Page-level CRUD permissions (resource.action format, auto-generated per page)
+- 4 system roles (Super Admin, Admin, Manager, User) seeded in migration
+- Custom roles with dynamic permission sets via admin UI permission matrix
+- User provisioning from OIDC directory only (no email invites)
+- require_permission(resource, action) middleware on all route handlers (never role string checks)
 - M.A.C.H. architecture principles
+- System fonts only (no external font CDNs -- Zscaler-safe)
 - Mock services for local development (mock-oidc + per-integration mocks)
+- Mock service seed script (scripts/seed-mock-services.sh)
+- Service client endpoints verified against mock API contracts
+- Database seed data matching mock-oidc users (oidc_subject alignment)
 - Environment-based service switching (no code branching for dev vs prod)
 - Input validation on all endpoints
 - Parameterized database queries
 - Security headers before production
 - Terraform for infrastructure as code
+
+## Build Quality
+
+The build process has three layers:
+1. **Prevention** -- Prompts encode lessons learned from past builds (auth patterns, font rules, API contracts, seed data requirements)
+2. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
+3. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism

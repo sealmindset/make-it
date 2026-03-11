@@ -180,6 +180,14 @@ Based on their initial answer, conduct a conversational deep-dive. You need to u
      - "Does it need to work with AI or process data?"
    - For each feature, ask enough to understand the scope
    - Listen for keywords that signal: AI features, file uploads, real-time needs, data processing
+   - **If multiple user types mentioned, probe for permission sensitivity:**
+     - "Even if someone has access to your app, are there things you'd want to limit?
+       For example, some people can view data but only certain people should be able to
+       change it or make decisions based on it."
+     - If yes: "Which areas are most sensitive? Where could the wrong change impact a
+       business decision?"
+     - This informs the permission granularity: page-level CRUD is the default, but if the
+       user describes field-level or action-level concerns, note that for Prompt #9
    - **Listen for external integrations** (Jira, GitHub, Oracle, Salesforce, Tempo, ServiceNow, Slack, etc.)
      - For each integration, note: what system, what data is exchanged, which direction (read/write/both)
      - These will drive mock service generation during the build phase
@@ -305,6 +313,8 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Tell user: "Designing your pages and interface..."
    - Generate all pages identified during ideation
    - Ensure responsive design
+   - NEVER use external font CDNs (Google Fonts, Adobe Fonts) -- use system font stacks only
+   - Do NOT import from next/font/google -- Zscaler SSL inspection blocks external fonts during builds
    - Use ONE shared authenticated layout (route group) -- do NOT create duplicate layouts per page
    - The authenticated layout MUST include a header bar with: SidebarTrigger | Breadcrumbs | Spacer | QuickSearch | ModeToggle
    - All list pages MUST use the DataTable component (not plain HTML tables)
@@ -345,14 +355,32 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Implement OIDC with chosen provider
    - Generate the COMPLETE auth flow (login, callback, token exchange, session, logout)
    - Do NOT generate stub endpoints that return placeholder messages
+   - Auth callback MUST read roles from the APPLICATION DATABASE (not OIDC claims):
+     1. Exchange code for tokens, get userinfo from OIDC
+     2. Look up user in database by oidc_subject (fall back to email)
+     3. Read role from the DATABASE record
+     4. Store {sub, email, name, role} in session where role comes from DB
+   - Logout MUST be a POST endpoint that clears the server-side session
+   - Frontend logout button MUST call the backend API via POST, then redirect via router.push
+   - Do NOT implement logout as a GET link or <a href> (causes 404 or unintended behavior)
    - Include a get_current_user dependency/middleware for protecting routes
    - Wire OIDC config to read issuer URL, client ID, and secret from environment variables
    - .env must point to mock-oidc (http://localhost:3007) for local development
    - No if/else branching for mock vs real OIDC -- same code path, different env vars
 
-9. **Permissions (Prompt #9)** -- Skip if single-role app
-   - Tell user: "Setting up user permissions..."
-   - Create permissions config, implement checks
+9. **User Management + Permissions (Prompt #9)** -- Always runs
+   - Tell user: "Setting up user management and permissions..."
+   - Create database tables: roles, permissions, role_permissions + update users table
+   - Generate migration with schema + seed data (4 system roles, page-level CRUD permissions)
+   - Create permission service with in-memory cache and invalidation
+   - Create admin API: user CRUD, role CRUD, permission listing
+   - Create admin UI: User Management page (add/edit/deactivate users, assign roles),
+     Role Management page (create custom roles, permission matrix editor)
+   - Wire require_permission(resource, action) middleware to all route handlers
+   - Update auth callback to load role + permissions from database into session
+   - Update frontend sidebar to show/hide pages and actions based on user permissions
+   - Super Admin can create custom roles with any permission combination
+   - System roles (Super Admin, Admin, Manager, User) cannot be deleted
 
 10. **AI Prompt Architecture (Prompt #10)** -- Skip if no AI features
     - Determine tier from ai_usage_level in app-context:
@@ -374,10 +402,16 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
     - Add mock-oidc to docker-compose.yml with pre-seeded test users matching the app's roles
     - For each external integration (Jira, Oracle EBS, Tempo, etc.), generate a lightweight
       mock service implementing only the endpoints the app calls
+    - CRITICAL: Verify service client methods call endpoints that EXIST on the mock services.
+      Read the mock service route files to confirm API contracts before writing clients.
+    - Generate scripts/seed-mock-services.sh that:
+      a. Waits for all mock services to be healthy
+      b. Registers app users in mock-oidc (matching database seed data)
+      c. Removes non-app users from mock-oidc
+      d. Updates mock-oidc client redirect URIs for the app's frontend port
+      e. Verifies all mock services return data
     - Wire all service client base URLs to environment variables
     - Set .env to point at mock service URLs, .env.example to document both mock and production URLs
-    - Verify mock services respond to health checks after docker-compose --profile dev up
-    - Verify the full auth flow works end-to-end against mock-oidc
 
 13. **Seed Data (Prompt #13)** -- Always runs
     - Tell user: "Adding sample data so you can explore the app right away..."
@@ -431,47 +465,159 @@ After every 2-3 prompts, give a brief update:
 
 <step name="build-verify">
 
-After all prompts have been executed:
+**Build-verify is a SILENT QUALITY GATE.** It ensures the app works like a production
+demo before the user ever sees it. The user sees progress messages ("Making sure
+everything works...") but NOT the technical details.
+
+The goal: when /try-it hands the app to the user, EVERYTHING works on the first click.
+No broken logins, no empty pages, no 404s, no missing data. The app must feel like it's
+already running in production.
+
+**PART A: Static code verification (before starting the app)**
 
 1. **Verify the project structure** -- ensure all expected files exist
-2. **Verify no stub endpoints** -- search for placeholder messages like "not yet implemented" or "implement with" in route handlers. If found, complete the implementation.
-3. **Verify no hardcoded mock data in pages** -- pages should use a service/API layer, not inline arrays of fake data
-4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory with at least one migration. If using Prisma, check for prisma/migrations/.
-5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example should be committed
+2. **Verify no stub endpoints** -- search for placeholder messages like "not yet implemented"
+   or "implement with" in route handlers. If found, complete the implementation.
+3. **Verify no hardcoded mock data in pages** -- pages should use a service/API layer, not
+   inline arrays of fake data
+4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory
+   with at least one migration. If using Prisma, check for prisma/migrations/.
+5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example
+   should be committed
 6. **Verify CHANGELOG.md and TODO.md exist** -- both should have content from the build
-7. **Verify mock services are wired** -- mock-oidc in docker-compose.yml (if auth needed), service clients read base URLs from env vars, .env points to mock URLs
-8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports or production URLs in application code (they should all come from environment variables)
-9. **Run a build check** -- attempt to build/compile the project
-10. **Fix any build errors** -- iterate until the project builds cleanly
-11. **Verify standard UI components exist** -- All four must be present and wired:
+7. **Verify mock services are wired** -- mock-oidc in docker-compose.yml (if auth needed),
+   service clients read base URLs from env vars, .env points to mock URLs
+8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports or production
+   URLs in application code (they should all come from environment variables)
+9. **Verify no external font imports** -- grep for `next/font/google`, `fonts.googleapis.com`,
+   or any external font CDN references. If found, replace with system font stacks.
+10. **Verify standard UI components exist** -- All four must be present and wired:
     - `components/breadcrumbs.tsx` exists with SEGMENT_LABELS populated for all app pages
-    - `components/data-table.tsx` and related files exist; all list pages use DataTable (not plain tables)
+    - `components/data-table.tsx` and related files exist; all list pages use DataTable
     - `components/quick-search.tsx` exists with NAVIGATION_ITEMS for all app pages
     - `components/theme-provider.tsx` and `components/mode-toggle.tsx` exist
     - Authenticated layout header bar has: SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
     - ThemeProvider wraps the app in root layout with `suppressHydrationWarning`
     - `@tanstack/react-table` and `next-themes` are in package.json dependencies
     If any are missing, generate them now.
-12. **Verify seed data exists** -- The database must be populated with sample data on first startup.
+11. **Verify seed data exists** -- The database must be populated with sample data on first startup.
     Check for a seed migration (Alembic), seed script, or Prisma seed file. Verify it creates:
-    - At least one user per role (matching mock-oidc test users)
+    - At least one user per role (matching mock-oidc test users by oidc_subject)
     - Enough domain records to populate every page (10-20 items for list pages)
     - Dashboard metrics that show non-zero values
     - Recent timestamps so the app looks active
     If seed data is missing or incomplete, generate it now.
-13. **Zscaler check before Docker build** (if applicable) -- Before building or pulling Docker images,
-    check if Zscaler is running. Zscaler's SSL inspection interferes with Docker image pulls and builds.
-    Ask the user: "Before I build the app, I need you to pause Zscaler for a few minutes.
-    Right-click the Zscaler icon in your menu bar, choose 'Disable,' pick the longest option,
-    and let me know when it's done. (I'll remind you to turn it back on after.)"
-    Wait for user confirmation before proceeding with any `docker compose build` or `docker compose up`.
-    After Docker builds and image pulls complete, remind the user: "All done with the heavy lifting!
-    You can re-enable Zscaler now."
-14. **Verify Docker setup works** (if applicable) -- `docker-compose --profile dev up` should start app + mock services
+12. **Verify mock service seed script exists** -- Check for scripts/seed-mock-services.sh.
+    It must: register app users in mock-oidc, remove non-app users, update client redirect URIs.
+    If missing, generate it now.
+13. **Verify auth callback reads roles from database** -- Read the auth callback code and confirm
+    it queries the users table (by oidc_subject or email) and reads the role from the database
+    record. If the callback uses OIDC claims for roles, fix it to use the database.
+14. **Verify logout is a POST endpoint** -- Read the logout route and confirm it's a POST that
+    clears the session. Read the frontend logout button and confirm it calls the API via POST
+    (not a GET link or <a href>). Fix if wrong.
+15. **Verify service client endpoints match mock services** -- For each service client, read the
+    methods and verify they call endpoints that actually exist on the corresponding mock service.
+    Cross-reference with the mock service route files. Fix any mismatches.
+16. **Verify database-driven RBAC** -- Check that:
+    - roles, permissions, role_permissions tables exist in the migration
+    - users table has role_id FK (not a VARCHAR role column)
+    - Seed migration creates 4 system roles, page-level CRUD permissions, and default mappings
+    - Permission service exists with has_permission(user, resource, action) and cache invalidation
+    - require_permission(resource, action) middleware is used on all route handlers
+    - Admin API has endpoints for user CRUD, role CRUD, and permission listing
+    - Admin UI has User Management and Role Management pages
+    - Frontend sidebar shows/hides items based on user permissions from session
+    If any of these are missing, generate them now.
 
-**Tell the user:**
+Tell user: "Your app is built! Now I'm making sure everything works perfectly..."
 
-"Your app is built! Here's what I created:
+**PART B: Live verification (start the app and test it)**
+
+16. **Zscaler check** -- Before any Docker build or pull:
+    ```bash
+    pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1
+    ```
+    If detected, ask the user to pause Zscaler. Wait for confirmation. Remind them to
+    re-enable after Docker builds complete.
+
+17. **Build and start containers:**
+    ```bash
+    docker compose --profile dev build 2>&1
+    docker compose --profile dev up -d 2>&1
+    ```
+    If build fails, diagnose silently, fix, and retry (up to 3 attempts).
+
+18. **Wait for all services to be healthy** -- poll health endpoints for each service
+    (timeout 120s per service). If a service fails, read logs, fix, restart.
+
+19. **Run the mock service seed script:**
+    ```bash
+    bash scripts/seed-mock-services.sh
+    ```
+    If the script fails, diagnose and fix. The mock services must have the correct users
+    and data before any testing begins.
+
+20. **Test the auth flow end-to-end for EACH role:**
+    For each role defined in app-context.json:
+    a. Navigate to the app URL
+    b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
+    c. Verify the callback completes and a session is established
+    d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
+    e. Verify the dashboard loads with content
+    f. Test logout (POST to /auth/logout, verify session is cleared, verify 401 after)
+
+    If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
+    auth callback is not reading roles from the database. Fix the callback code and retest.
+
+21. **Test every API endpoint:**
+    For each API route in the app (with an authenticated session):
+    a. Call the endpoint
+    b. Verify 2xx response
+    c. Verify response is valid JSON with expected structure
+    d. Verify list endpoints return NON-EMPTY arrays (seed data must exist)
+    e. Verify permission-protected endpoints return 403 for unauthorized roles
+
+22. **Test every page:**
+    For each page defined in app-context.json (with an authenticated session):
+    a. Request the page URL
+    b. Verify it loads (200)
+    c. Verify it has meaningful content (not empty tables, not "no data found")
+
+23. **Test permission boundaries:**
+    For each role, verify:
+    a. Can access pages/endpoints they SHOULD access
+    b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
+
+**PART C: Fix cycle (silent, automatic)**
+
+If ANY test fails in Part B:
+
+24. Diagnose the root cause from the error context
+25. Fix the issue in the application code
+26. If the fix requires a container restart, restart the affected service
+27. Re-run the failing test to confirm the fix
+28. After all fixes, re-run the FULL test suite to check for regressions
+29. Repeat the fix cycle (up to 3 full cycles)
+
+Common issues and fixes:
+- Auth callback returns wrong role -> fix to query database by oidc_subject
+- Logout returns 404 -> change to POST endpoint, fix frontend button
+- Service client gets 404 from mock -> fix endpoint URL to match mock routes
+- Page shows empty data -> verify seed migration ran, check API endpoint
+- Docker build fails with TLS error -> prompt user to disable Zscaler
+- Health check fails with IPv6 -> use 127.0.0.1 instead of localhost in health checks
+
+Tell user (during fix cycle): "Almost there -- just polishing a few things..."
+
+If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
+The app should be in the best possible state.
+
+**PART D: Declare success and hand off**
+
+30. Tell the user:
+
+"Your app is built and verified! Here's what I created:
 
 - [X] pages/screens
 - [X] API endpoints
@@ -480,13 +626,10 @@ After all prompts have been executed:
 - Security features built in
 - [Development environment / Cloud infrastructure] ready
 
-Let me make sure everything works..."
+Everything is working -- login, permissions, data, and all your pages. Now let's
+see your app in action!"
 
-Then attempt to run the local development environment and report results.
-
-**Save project state for /resume-it:**
-
-Write `.make-it-state.md` to the project root:
+31. **Save project state** -- Write `.make-it-state.md` to the project root:
 
 ```markdown
 # Project State -- [PROJECT_NAME]
@@ -494,42 +637,47 @@ Write `.make-it-state.md` to the project root:
 > Last session: make-it (initial build)
 
 ## Current Status
-[Summary of what was built and what's working]
+App is running locally with all services healthy. Build-verify passed -- login, roles,
+permissions, pages, API, seed data, mock services, and logout all verified.
 
 ## Build Completed
 - Phase 0: Preflight -- PASSED
 - Phase 1: Ideation -- COMPLETE
 - Phase 2: Design -- COMPLETE
 - Phase 3: Build -- COMPLETE
-- Phase 4: Ship -- [PENDING or COMPLETE]
+- Phase 4: Ship -- PENDING
 
 ## What Was Built
 - Pages: [list]
 - API endpoints: [list]
 - Auth: [provider or 'none']
-- Roles: [list or 'none']
+- Roles: [list with permission counts]
 - AI features: [description or 'none']
 - Infrastructure: [what was set up]
+- Mock services: [list with ports]
 
-## Skipped / Deferred
-[Any prompts that were skipped and why]
+## Build-Verify Results
+- Auth flow: PASSED (all roles login with correct permissions)
+- API endpoints: [X] of [Y] returning data
+- Pages: [X] of [Y] loading with content
+- Permission boundaries: PASSED
+- Logout: PASSED
+- Mock services: all seeded and responding
 
 ## Known Issues
-[Any issues discovered during build-verify]
+[Any issues that could not be fixed during build-verify]
 
 ## Next Steps
-- Run /try-it to spin up and test the app
-- Run /resume-it to continue development
 - Run /ship-it to deploy
+- Run /resume-it to continue development
 ```
 
-After saving state, **automatically invoke /try-it** to spin up the app and let the user
-see it working. Do NOT ask the user if they want to try it -- just do it. The transition
-should feel seamless: the build finishes and the app starts coming to life.
+32. **Automatically invoke /try-it** to present the app to the user. The app is already
+running and verified -- /try-it just needs to present the demo, take screenshots, and
+stay available for the user to explore.
 
-Tell user: "Now let's see your app in action!"
-
-Then execute the /try-it skill flow.
+Do NOT ask the user if they want to try it -- just do it. The transition should feel
+seamless: the build finishes and the app is ready to explore.
 
 </step>
 
@@ -606,14 +754,17 @@ That's it -- you just built your first app!"
 0. **After Preflight:** All checks GREEN or YELLOW (resolved). No RED blockers remaining. VPN connected, local admin available, GitHub access confirmed, Azure subscription active, Docker installed.
 1. **After Ideation:** Must have: project name, purpose, at least 3 features, user description
 2. **After Design:** Must have: complete app-context.json with all required fields populated
-3. **After Build:** Must have ALL of the following:
+3. **After Build (static checks):** Must have ALL of the following:
    - Project builds without errors
    - All expected files present
    - CHANGELOG.md and TODO.md exist with content
    - .env.example committed, .env created locally (gitignored)
    - Database migrations generated (Alembic or Prisma) -- not just models
    - Auth endpoints are fully implemented (not stubs)
+   - Auth callback reads roles from the DATABASE (not OIDC claims)
+   - Logout is a POST endpoint; frontend button calls API via POST (not a GET link)
    - Frontend pages use a service/API layer (no hardcoded mock data in components)
+   - No external font imports (no Google Fonts, no CDN fonts) -- system fonts only
    - Shared authenticated layout (one, not duplicated per page)
    - Header bar includes SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
    - All four standard UI components generated (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
@@ -621,13 +772,23 @@ That's it -- you just built your first app!"
    - ThemeProvider wraps app, oklch CSS variables for light/dark themes
    - AI prompt seed data exists (Tier 2/3)
    - Database seed data exists -- app starts with populated pages, not empty screens
-   - Seed users match mock-oidc test users (one per role)
+   - Seed user oidc_subjects match mock-oidc subject IDs exactly
    - Every list page has 10-20 sample records; dashboards show non-zero metrics
    - All dependencies at latest stable versions with no known CVEs
    - Mock services included in docker-compose.yml (at minimum mock-oidc if auth is used)
+   - Mock service seed script exists (scripts/seed-mock-services.sh)
+   - Service client endpoints match the mock service API contracts
    - All external service URLs read from environment variables (no hardcoded URLs)
    - .env points to mock service URLs for local development
-4. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed
+4. **After Build-Verify (live checks):** Must have ALL of the following:
+   - Docker containers start and all services pass health checks
+   - Mock service seed script runs successfully
+   - Auth flow works end-to-end for EVERY role (login -> correct role -> dashboard -> logout)
+   - Every API endpoint returns 2xx with non-empty data
+   - Every page loads with meaningful content (not empty tables)
+   - Permission boundaries work (unauthorized access returns 403)
+   - Logout clears session (returns 401 on subsequent /auth/me)
+5. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed
 
 **Security non-negotiables (from design-blueprint.md):**
 - NEVER skip input validation
@@ -639,7 +800,12 @@ That's it -- you just built your first app!"
 **Standards compliance:**
 - All generated code follows the AI Vibe Coded Design Pattern Guide
 - Authentication always uses OIDC (never custom password management)
-- Permission checks use has_permission(), never role string comparisons
+- Authorization is database-driven: roles, permissions, and role_permissions in DB tables
+- Permission checks use require_permission(resource, action), never role string comparisons
+- 4 system roles seeded: Super Admin, Admin, Manager, User (is_system=true)
+- Super Admin can create custom roles; system roles cannot be deleted
+- User management via admin UI (add by email, assign role, deactivate)
+- Frontend sidebar and action buttons respect user permissions from session
 - API-first design: backend returns JSON, frontend is separate concern
 
 </guardrails>

@@ -36,20 +36,65 @@ For each design pattern area below, the skill must gather enough information fro
 
 ---
 
-## 2. Authorization (Permission-Based RBAC)
+## 2. Authorization (Database-Driven RBAC with User Management)
 
 **What we need to know from the user:**
 - What types of users will use this app? (e.g., admins, managers, regular users)
 - What can each type of user do? What should they NOT be able to do?
 - Are there any sensitive actions only certain people should perform?
+- Do you need to control what different people can do within the app? (e.g., some
+  can view data but only certain people can change it)
 
 **Decision rules:**
-- Almost always implement permission-based RBAC (not role checks in code)
-- Single-role apps (just authenticated vs. not) -> simple role check is OK
-- Default roles: super_admin, admin, user (start with 3)
+- ALWAYS implement database-driven RBAC with admin UI (this is standard for every app)
+- Single-role apps (just authenticated vs. not) -> still use RBAC, just with fewer roles
+- Default system roles: Super Admin, Admin, Manager, User (4 predefined, cannot be deleted)
+- Super Admin can create custom roles with any permission combination
+- Permission granularity defaults to page-level CRUD (view, create, edit, delete per resource)
+- Permissions, roles, and role-permission mappings live in the DATABASE (not code config)
+- Admins can modify role permissions via the UI without code deploys
 
-**Implementation generates:** A single permissions config file (permissions.py or permissions.ts)
-**Anti-pattern to avoid:** `if (user.role === 'admin')` -- always use `has_permission(role, 'permission_name')`
+**Database schema (4 tables):**
+1. `roles` -- id, name, description, is_system (true for predefined roles), is_active, created_by, timestamps
+2. `permissions` -- id, resource (page/feature name), action (view, create, edit, delete), description
+3. `role_permissions` -- role_id, permission_id (many-to-many junction table)
+4. `users` table gets a `role_id` foreign key to `roles` (one role per user)
+
+**User provisioning:**
+- Admin adds users to the app by email or OIDC lookup (person must exist in Entra ID)
+- Admin assigns a role to the new user
+- User logs in via SSO and their role + permissions are loaded from the database
+- Users who don't exist in Entra ID need an IT ticket first -- the app does NOT support
+  separate login methods or email-based invites
+
+**Admin UI pages (generated for every app):**
+- **User Management** -- List users, add new user (by email), assign/change role, deactivate
+- **Role Management** -- List roles, create custom roles (Super Admin only), edit role permissions
+- **Permission matrix** -- Visual grid of roles × permissions with toggle controls
+
+**API endpoints (generated for every app):**
+- GET/POST /admin/users -- list and add users
+- GET/PUT/DELETE /admin/users/{id} -- get, update role, deactivate
+- GET/POST /admin/roles -- list and create roles (create = Super Admin only)
+- GET/PUT/DELETE /admin/roles/{id} -- get, update permissions, delete (custom roles only)
+- GET /admin/permissions -- list all available permissions
+
+**Runtime permission checking:**
+- `has_permission(user, resource, action)` queries the database (with in-memory cache)
+- Cache invalidated when roles or role-permissions are modified via admin API
+- Middleware/dependency: `require_permission(resource, action)` for route protection
+- Anti-pattern to avoid: `if (user.role === 'admin')` -- always use `has_permission()`
+
+**Seed data:**
+- 4 system roles with default permission mappings
+- Permissions auto-generated from app pages (one set of view/create/edit/delete per page)
+- Super Admin gets all permissions
+- Admin gets all except user/role management
+- Manager gets view + limited create/edit
+- User gets view-only
+
+**Implementation generates:** Database tables, migration, seed data, admin API, admin UI,
+runtime permission loader with caching, middleware for route protection
 
 ---
 
