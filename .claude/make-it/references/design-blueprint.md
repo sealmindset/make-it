@@ -320,7 +320,7 @@ Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
 
 | Service | What It Mocks | Docker Port | When to Include |
 |---------|--------------|-------------|-----------------|
-| mock-oidc | Azure AD / Entra ID (full OIDC flow) | 3007 | Always (when auth needed) |
+| mock-oidc | Azure AD / Entra ID (full OIDC flow, Python/FastAPI) | 3007 (host) → 10090 (container) | Always (when auth needed) |
 | mock-github | GitHub REST API (repos, PRs, checks, actions) | 3006 | When app integrates with GitHub |
 | mock-cribl | Cribl Stream HTTP Source (log ingestion) | 3005 | When app has structured logging |
 | mock-jira | Jira Software REST API v2/v3 (issues, projects, users, transitions, role assignments) | 8443 | When app integrates with Jira |
@@ -336,6 +336,15 @@ Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
 | mock-user | user@app.local | Mock User | Testing regular user flows |
 
 Default OIDC client: `mock-oidc-client` / `mock-oidc-secret`
+
+**mock-oidc architecture:**
+- Python 3.12 + FastAPI (NO Java -- Oracle licensing prohibited)
+- Built-in internal/external URL split: discovery document returns browser-facing
+  endpoints (authorization) with MOCK_OIDC_EXTERNAL_BASE_URL and server-to-server
+  endpoints (token, userinfo, JWKS) with MOCK_OIDC_INTERNAL_BASE_URL
+- Apps do NOT need OIDC_INTERNAL_URL or URL rewriting -- mock-oidc handles it natively
+- Health check: GET /health (standard Python image, no distroless issues)
+- Container port: 10090, host-mapped to 3007 (configurable)
 
 **The decoupling pattern (environment-based service switching):**
 

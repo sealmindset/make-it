@@ -54,7 +54,8 @@ This template is populated by /make-it as the user answers questions. It becomes
   "mock_services": {
     "mock_oidc": {
       "needed": false,
-      "port": 3007,
+      "host_port": 3007,
+      "container_port": 10090,
       "test_users": []
     },
     "mock_github": {

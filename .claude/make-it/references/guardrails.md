@@ -40,19 +40,20 @@ These apply to every project /make-it builds, no exceptions.
 9. **Input validation at system boundaries** -- Validate all external input (user input, API responses, file parsing, CLI arguments). Trust internal code; validate at the edges.
 10. **Mask/redact sensitive data in output** -- Logs, error messages, and UI never display full secrets, tokens, or credentials.
 11. **Latest stable dependencies** -- Always use the latest stable version of every dependency. No pinning to outdated majors. Check for known CVEs before proceeding.
+12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Oracle licensing costs prohibit Java in any part of the stack. Use Python, Node.js, Go, or Rust alternatives instead.
 
 ### Architecture
 
-12. **Separation of concerns** -- Distinct layers/modules with clear responsibilities. Models separate from business logic separate from presentation/UI.
-13. **Environment-based configuration** -- Same code path in dev and prod. No `if (isDevelopment)` branching. Configuration changes via env vars or settings files.
-14. **Extensibility by design** -- Identify the primary extension point (plugins, middleware, hooks, event handlers) and build it in from the start. Avoid monolithic designs where adding a feature requires modifying core code.
-15. **API-first for external communication** -- Any communication with external systems uses a client abstraction that reads its target from configuration.
+13. **Separation of concerns** -- Distinct layers/modules with clear responsibilities. Models separate from business logic separate from presentation/UI.
+14. **Environment-based configuration** -- Same code path in dev and prod. No `if (isDevelopment)` branching. Configuration changes via env vars or settings files.
+15. **Extensibility by design** -- Identify the primary extension point (plugins, middleware, hooks, event handlers) and build it in from the start. Avoid monolithic designs where adding a feature requires modifying core code.
+16. **API-first for external communication** -- Any communication with external systems uses a client abstraction that reads its target from configuration.
 
 ### Quality
 
-16. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.
-17. **Verify the thing works** -- Beyond "it compiles": start it, run it, confirm the primary function operates. For a web app, load the page. For a CLI, run the command. For an extension, verify it activates.
-18. **Git repo initialized** -- `git init`, `.gitignore` configured, initial state committed or ready to commit.
+17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.
+18. **Verify the thing works** -- Beyond "it compiles": start it, run it, confirm the primary function operates. For a web app, load the page. For a CLI, run the command. For an extension, verify it activates.
+19. **Git repo initialized** -- `git init`, `.gitignore` configured, initial state committed or ready to commit.
 
 ---
 

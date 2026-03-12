@@ -194,6 +194,29 @@ Use Docker Compose profiles to separate mock services from production services:
 - Local development runs: docker-compose --profile dev up
 - Production deploys: docker-compose up (no mock services included)
 
+Port conflict avoidance:
+- Developer machines often have multiple Docker projects running simultaneously.
+  Default ports (3000, 5432, 6379, 8000) are almost always already in use.
+- BEFORE writing docker-compose.yml, run: `lsof -i :PORT` for each port you plan
+  to use. If any port is occupied, pick an alternative immediately.
+- Use a consistent port offset strategy for the project (e.g., if 3000 is taken,
+  use 3001 for frontend, 8001 for backend, 5434 for postgres, 6383 for redis, etc.)
+- Document the chosen ports in .env and .env.example
+- Internal Docker networking is NOT affected -- containers talk to each other on
+  their internal ports (e.g., redis:6379) regardless of host port mapping
+
+Dockerfile and entrypoint rules:
+- If the backend requires database migrations (Alembic, Prisma), the Dockerfile
+  CMD MUST invoke an entrypoint.sh script, NOT the application server directly
+- The entrypoint.sh script must: wait for DB, run migrations, then exec the server
+- Example:
+    # WRONG -- migrations never run:
+    CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # CORRECT -- migrations run on every container start:
+    RUN chmod +x entrypoint.sh
+    CMD ["./entrypoint.sh"]
+- If using pg_isready in entrypoint.sh, install postgresql-client in the Dockerfile
+
 Make containers secure and optimized for production.
 ```
 
@@ -268,7 +291,7 @@ Implementation requirements:
 Mock OIDC configuration for local development:
 - The OIDC issuer URL, client ID, and client secret MUST be read from environment
   variables (never hardcoded)
-- .env file should point to the mock-oidc service:
+- .env file should point to the mock-oidc service (host-mapped port):
     OIDC_ISSUER_URL=http://localhost:3007
     OIDC_CLIENT_ID=mock-oidc-client
     OIDC_CLIENT_SECRET=mock-oidc-secret
@@ -278,6 +301,25 @@ Mock OIDC configuration for local development:
   environment variables change
 - Do NOT add any if/else branching for "mock mode" vs "real mode" -- the OIDC
   protocol is identical regardless of provider
+
+Docker OIDC networking:
+- The Python mock-oidc service handles internal/external URL split NATIVELY.
+  Its discovery document (/.well-known/openid-configuration) returns:
+    - Browser-facing endpoints (authorization_endpoint, end_session_endpoint) using
+      MOCK_OIDC_EXTERNAL_BASE_URL (e.g., http://localhost:3007)
+    - Server-to-server endpoints (token_endpoint, userinfo_endpoint, jwks_uri) using
+      MOCK_OIDC_INTERNAL_BASE_URL (e.g., http://mock-oidc:10090)
+- The app does NOT need an OIDC_INTERNAL_URL env var or URL rewriting helpers.
+  The backend simply fetches /.well-known/openid-configuration from mock-oidc
+  (via Docker network: http://mock-oidc:10090) and uses the returned URLs as-is.
+  The authorization_endpoint already points to localhost for browser redirects,
+  and the token_endpoint already points to the Docker hostname for server calls.
+- In docker-compose.yml, set the app's OIDC_ISSUER_URL to the Docker network URL:
+    OIDC_ISSUER_URL: http://mock-oidc:10090
+- In .env (for local non-Docker development), use the host-mapped port:
+    OIDC_ISSUER_URL=http://localhost:3007
+- In production, Azure AD is reachable from both browser and backend,
+  so no split is needed -- same URL works everywhere
 ```
 
 **Required context:** auth provider, session length, auth library
@@ -650,7 +692,7 @@ Mock services needed:
 
 For EACH mock service:
 - If a ready-made mock exists in the mocksvcs catalog, use it directly:
-  - mock-oidc (port 3007) -- Azure AD / OIDC
+  - mock-oidc (internal port 10090, host-mapped to 3007) -- Azure AD / OIDC
   - mock-github (port 3006) -- GitHub REST API
   - mock-cribl (port 3005) -- Cribl Stream log ingestion
   - mock-jira (port 8443) -- Jira Software REST API v2/v3
@@ -672,13 +714,45 @@ Note: mock-tempo requires mock-jira when both are included -- they share
 a DATA_SEED for consistent user/project data across services.
 
 Mock OIDC service (if auth is needed):
-- Include mock-oidc as a Docker service (from the mocksvcs repo pattern)
+- Include mock-oidc as a Docker service built from source (Python 3.12 + FastAPI)
+- Copy the mock-oidc source into mock-services/mock-oidc/ in the project
 - Pre-seed with test users that match the app's roles:
   [MOCK_USERS_BLOCK]
 - Default OIDC client: mock-oidc-client / mock-oidc-secret
-- Split URL architecture: localhost URLs for browser-facing endpoints,
-  container-hostname URLs for backend-facing endpoints (token, userinfo, JWKS)
+- Split URL architecture is BUILT INTO the mock-oidc discovery document:
+  configure MOCK_OIDC_EXTERNAL_BASE_URL (browser-facing, e.g., http://localhost:3007)
+  and MOCK_OIDC_INTERNAL_BASE_URL (container-facing, e.g., http://mock-oidc:10090)
+  as environment variables on the mock-oidc container
+- The app does NOT need OIDC_INTERNAL_URL or URL rewriting -- mock-oidc handles it
 - Serves a browser-based user picker for interactive login
+
+mock-oidc Docker service pattern:
+  mock-oidc:
+    build: ./mock-services/mock-oidc
+    environment:
+      MOCK_OIDC_EXTERNAL_BASE_URL: http://localhost:${MOCK_OIDC_HOST_PORT:-3007}
+      MOCK_OIDC_INTERNAL_BASE_URL: http://mock-oidc:10090
+    ports:
+      - "${MOCK_OIDC_HOST_PORT:-3007}:10090"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles: ["dev"]
+
+mock-oidc Dockerfile (mock-services/mock-oidc/Dockerfile):
+  FROM python:3.12-slim
+  WORKDIR /app
+  COPY requirements.txt .
+  RUN pip install --no-cache-dir -r requirements.txt
+  COPY . ./mock_oidc/
+  EXPOSE 10090
+  CMD ["uvicorn", "mock_oidc.main:app", "--host", "0.0.0.0", "--port", "10090"]
+
+IMPORTANT: Do NOT use Java-based OIDC servers (navikt/mock-oauth2-server or similar).
+Java dependencies are prohibited due to Oracle licensing costs. The Python mock-oidc
+service provides the same OIDC functionality without any Java dependency.
 
 Environment variable wiring:
 - .env must point all service URLs to the local mock services
@@ -686,7 +760,7 @@ Environment variable wiring:
   the mock URLs (active) so developers understand what changes for production
 - Example:
     # Local development (mock services)
-    OIDC_ISSUER_URL=http://localhost:3007
+    OIDC_ISSUER_URL=http://localhost:3007  # host-mapped port for mock-oidc
     JIRA_BASE_URL=http://localhost:8443
     TEMPO_BASE_URL=http://localhost:8444
     GITHUB_API_URL=http://localhost:3006
@@ -714,6 +788,12 @@ Service client pattern:
       (NO role or custom claims).
   If you're unsure whether an endpoint exists on a mock service, read the mock
   service's route files before writing the client method.
+
+Mock service auth middleware:
+- When generating custom mock services with Bearer token auth, the auth check
+  MUST be case-insensitive: `authHeader.toLowerCase().startsWith("bearer ")`
+- Different HTTP clients send "Bearer", "bearer", or "BEARER" -- a case-sensitive
+  check causes intermittent 401 errors that are hard to debug
 - Example (Python):
     class JiraClient:
         def __init__(self):
@@ -737,6 +817,16 @@ Mock service seeding (MANDATORY):
     5. Verify all mock services return data on their main endpoints
 - The seed script must be idempotent (safe to run multiple times)
 - The seed script runs as part of the build-verify step, NOT left for the user
+
+Environment variable name consistency (CRITICAL):
+- docker-compose.yml environment variable names MUST exactly match the names
+  used in the backend config class (e.g., pydantic Settings, dotenv, etc.)
+- Common mismatches that cause silent failures:
+    docker-compose: OIDC_ISSUER   →  backend expects: OIDC_ISSUER_URL
+    docker-compose: JIRA_API_TOKEN →  backend expects: JIRA_AUTH_TOKEN
+- After writing docker-compose.yml, cross-reference EVERY env var name against
+  the backend config class field names. A single mismatch means the backend
+  silently falls back to the default value (which is usually wrong).
 
 Verification:
 - After docker-compose --profile dev up, ALL mock services must respond to
@@ -816,6 +906,33 @@ Implementation:
 - The seed runs automatically on first startup (called from the startup script
   or as part of the migration chain)
 - Use deterministic IDs (uuid5 with namespace) so the seed can be re-run safely
+
+Alembic seed data pitfalls (CRITICAL -- these cause migration failures):
+
+1. op.execute() takes ONE argument only:
+   # WRONG -- TypeError: execute() takes 2 positional arguments but 3 were given
+   op.execute(sa.text("UPDATE x SET y = :val"), {"val": "foo"})
+   # CORRECT -- bind params onto the text() object itself
+   op.execute(sa.text("UPDATE x SET y = :val").bindparams(val="foo"))
+
+2. sa.text() bind params conflict with PostgreSQL :: cast syntax:
+   # WRONG -- SQLAlchemy parses `:lead_id::uuid` as bind param named "lead_id::uuid"
+   sa.text("UPDATE teams SET lead_id = :lead_id::uuid WHERE id = :team_id::uuid")
+   # CORRECT -- use f-string with deterministic UUIDs (safe for seed data with known IDs)
+   sa.text(f"UPDATE teams SET lead_id = '{LEAD_UUID}' WHERE id = '{TEAM_UUID}'")
+
+3. PostgreSQL enum columns require enum types in sa.table():
+   If the schema migration creates a column with sa.Enum("open", "closed", name="my_status"),
+   the seed data sa.table() definition MUST also use the enum type:
+   # WRONG -- ProgrammingError: column "status" is of type my_status but expression is VARCHAR
+   sa.column("status", sa.String)
+   # CORRECT -- reference the existing enum type (create_type=False prevents recreation)
+   sa.column("status", sa.Enum("open", "closed", name="my_status", create_type=False))
+
+4. UUID columns with VARCHAR bind params:
+   When inserting into UUID columns via bulk_insert with sa.table(), pass uuid.UUID
+   objects (not strings) for UUID columns. If using raw SQL, PostgreSQL accepts UUID
+   strings without explicit casts when the column type is UUID.
 
 Data volume guidelines:
 - Users: 1 per role (4-6 typically)

@@ -357,6 +357,10 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Generate Dockerfile(s) and docker-compose.yml
    - Use Docker Compose profiles: default profile for app services, "dev" profile for mock services
    - Local development runs with `docker-compose --profile dev up`
+   - BEFORE choosing ports: check which ports are already in use on the host
+     (`lsof -i :PORT`) and pick alternatives for any conflicts
+   - Backend Dockerfile CMD MUST use entrypoint.sh (not uvicorn/node directly)
+     so database migrations run on every container start
 
 7. **Multi-Tenancy (Prompt #7)** -- Skip if not needed
    - Tell user: "Adding support for multiple organizations..."
@@ -377,8 +381,11 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Do NOT implement logout as a GET link or <a href> (causes 404 or unintended behavior)
    - Include a get_current_user dependency/middleware for protecting routes
    - Wire OIDC config to read issuer URL, client ID, and secret from environment variables
-   - .env must point to mock-oidc (http://localhost:3007) for local development
+   - .env must point to mock-oidc for local development
    - No if/else branching for mock vs real OIDC -- same code path, different env vars
+   - In docker-compose.yml, set OIDC_ISSUER_URL to the Docker network URL
+     (http://mock-oidc:10090) -- the mock-oidc discovery document handles
+     internal/external URL split natively (no OIDC_INTERNAL_URL needed)
 
 9. **User Management + Permissions (Prompt #9)** -- Always runs
    - Tell user: "Setting up user management and permissions..."
@@ -541,36 +548,58 @@ already running in production.
     - Admin UI has User Management and Role Management pages
     - Frontend sidebar shows/hides items based on user permissions from session
     If any of these are missing, generate them now.
+17. **Verify docker-compose env var names match backend config** -- Read the backend config
+    class (e.g., pydantic Settings) and cross-reference every field name against the
+    docker-compose.yml environment block. Common mismatches:
+    - OIDC_ISSUER vs OIDC_ISSUER_URL
+    - JIRA_API_TOKEN vs JIRA_AUTH_TOKEN
+    Fix any mismatches so the backend receives the correct values.
+18. **Verify backend Dockerfile uses entrypoint.sh** -- If the backend requires database
+    migrations (Alembic/Prisma), the Dockerfile CMD must invoke entrypoint.sh (not the
+    application server directly). The entrypoint.sh must: wait for DB, run migrations,
+    then exec the server. If Dockerfile CMD runs uvicorn/node directly, migrations will
+    never execute and the database will be empty. Fix if wrong.
+19. **Verify Alembic seed migration syntax** -- If using Alembic, read the seed data migration
+    and check for these common bugs:
+    - op.execute() called with 2+ args (only takes 1 -- use sa.text().bindparams())
+    - sa.text() with PostgreSQL :: cast syntax (conflicts with :param bind syntax)
+    - sa.table() columns using sa.String for PostgreSQL enum columns (must use sa.Enum
+      with create_type=False)
+    Fix any issues found.
+20. **Verify port availability** -- Check that all ports in docker-compose.yml are available
+    on the host: `lsof -i :PORT`. If any port is already in use, remap to an unused port
+    in docker-compose.yml, .env, .env.example, and scripts/seed-mock-services.sh.
 
 Tell user: "Your app is built! Now I'm making sure everything works perfectly..."
 
 **PART B: Live verification (start the app and test it)**
 
-16. **Zscaler check** -- Before any Docker build or pull:
+21. **Zscaler check** -- Before any Docker build or pull:
     ```bash
     pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1
     ```
     If detected, ask the user to pause Zscaler. Wait for confirmation. Remind them to
     re-enable after Docker builds complete.
 
-17. **Build and start containers:**
+22. **Build and start containers:**
     ```bash
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
     If build fails, diagnose silently, fix, and retry (up to 3 attempts).
+    If port conflicts occur on `up`, remap conflicting ports and retry.
 
-18. **Wait for all services to be healthy** -- poll health endpoints for each service
+23. **Wait for all services to be healthy** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
 
-19. **Run the mock service seed script:**
+24. **Run the mock service seed script:**
     ```bash
     bash scripts/seed-mock-services.sh
     ```
     If the script fails, diagnose and fix. The mock services must have the correct users
     and data before any testing begins.
 
-20. **Test the auth flow end-to-end for EACH role:**
+25. **Test the auth flow end-to-end for EACH role:**
     For each role defined in app-context.json:
     a. Navigate to the app URL
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
@@ -582,7 +611,7 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
 
-21. **Test every API endpoint:**
+26. **Test every API endpoint:**
     For each API route in the app (with an authenticated session):
     a. Call the endpoint
     b. Verify 2xx response
@@ -590,13 +619,13 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     d. Verify list endpoints return NON-EMPTY arrays (seed data must exist)
     e. Verify permission-protected endpoints return 403 for unauthorized roles
 
-22. **Test every page:**
+27. **Test every page:**
     For each page defined in app-context.json (with an authenticated session):
     a. Request the page URL
     b. Verify it loads (200)
     c. Verify it has meaningful content (not empty tables, not "no data found")
 
-23. **Test permission boundaries:**
+28. **Test permission boundaries:**
     For each role, verify:
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
@@ -605,12 +634,12 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 If ANY test fails in Part B:
 
-24. Diagnose the root cause from the error context
-25. Fix the issue in the application code
-26. If the fix requires a container restart, restart the affected service
-27. Re-run the failing test to confirm the fix
-28. After all fixes, re-run the FULL test suite to check for regressions
-29. Repeat the fix cycle (up to 3 full cycles)
+29. Diagnose the root cause from the error context
+30. Fix the issue in the application code
+31. If the fix requires a container restart, rebuild and restart the affected service
+32. Re-run the failing test to confirm the fix
+33. After all fixes, re-run the FULL test suite to check for regressions
+34. Repeat the fix cycle (up to 3 full cycles)
 
 Common issues and fixes:
 - Auth callback returns wrong role -> fix to query database by oidc_subject
@@ -619,6 +648,13 @@ Common issues and fixes:
 - Page shows empty data -> verify seed migration ran, check API endpoint
 - Docker build fails with TLS error -> prompt user to disable Zscaler
 - Health check fails with IPv6 -> use 127.0.0.1 instead of localhost in health checks
+- Port already allocated -> remap to unused port in docker-compose.yml + .env
+- Backend can't reach mock-oidc -> set OIDC_ISSUER_URL to http://mock-oidc:10090 in docker-compose
+- Alembic migration fails with execute() args -> use sa.text().bindparams()
+- Alembic migration fails with enum type mismatch -> use sa.Enum(create_type=False)
+- Alembic migration fails with UUID/VARCHAR mismatch -> use f-string literals for UUIDs
+- Mock service returns 401 -> fix Bearer auth case sensitivity (toLowerCase)
+- Backend starts but DB is empty -> Dockerfile CMD must use entrypoint.sh, not uvicorn
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 
@@ -627,7 +663,7 @@ The app should be in the best possible state.
 
 **PART D: Declare success and hand off**
 
-30. Tell the user:
+35. Tell the user:
 
 "Your app is built and verified! Here's what I created:
 
@@ -641,7 +677,7 @@ The app should be in the best possible state.
 Everything is working -- login, permissions, data, and all your pages. Now let's
 see your app in action!"
 
-31. **Save project state** -- Write `.make-it-state.md` to the project root:
+36. **Save project state** -- Write `.make-it-state.md` to the project root:
 
 ```markdown
 # Project State -- [PROJECT_NAME]
@@ -684,7 +720,7 @@ permissions, pages, API, seed data, mock services, and logout all verified.
 - Run /resume-it to continue development
 ```
 
-32. **Automatically invoke /try-it** to present the app to the user. The app is already
+37. **Automatically invoke /try-it** to present the app to the user. The app is already
 running and verified -- /try-it just needs to present the demo, take screenshots, and
 stay available for the user to explore.
 
