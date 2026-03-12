@@ -79,9 +79,10 @@ These are corporate access requests that take time to approve. The skill must ch
 
 ## Tool Prerequisites (can be checked and installed automatically)
 
-### 6. Docker
+### 6. Docker (via Rancher Desktop)
 
-**Why needed:** Creates consistent local development environments that mirror production. Simplifies building, running, and testing services locally.
+**Why needed:** Creates consistent, isolated local development environments that mirror production. Containers are ephemeral sandboxes -- safe for non-technical users to experiment without risk to their machine or the corporate network.
+**Why Rancher Desktop (not Docker Desktop):** Rancher Desktop is free and open source with no per-seat licensing. It provides the same `docker` and `docker compose` CLI, same container runtime, same images and Dockerfiles. It is the approved container runtime at Sleep Number, installed via the Dockyard setup.
 **How to check:** `docker --version 2>/dev/null`
 **If missing (macOS):**
 - Must have all access prerequisites above first
@@ -96,7 +97,19 @@ These are corporate access requests that take time to approve. The skill must ch
 - Follow on-screen prompts (approve installs/permissions as requested)
 - Restart Terminal after completion
 - Verify install using post-install checks in Dockyard README.md
-**If missing (Windows):** Not yet available -- work in progress.
+**If missing (Windows):**
+- Must have all access prerequisites above first
+- Clone the Dockyard repository:
+  ```powershell
+  cd ~\Documents\Github
+  git clone https://github.com/SleepNumberInc/Dockyard.git
+  cd Dockyard
+  .\setup-windows.ps1
+  ```
+- Follow on-screen prompts (approve installs/permissions as requested)
+- Restart Terminal after completion
+- Verify install using post-install checks in Dockyard README.md
+- Note: Dockyard installs Rancher Desktop, which manages its own WSL integration internally. Users do NOT need to install or configure WSL separately.
 
 ### 7. Git
 
