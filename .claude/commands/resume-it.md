@@ -25,6 +25,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/design-blueprint.md
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
+@~/.claude/make-it/references/guardrails.md
 
 </execution_context>
 

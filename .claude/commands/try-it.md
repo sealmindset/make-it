@@ -37,6 +37,7 @@ If /make-it's build-verify did its job, /try-it finds zero issues.
 
 @~/.claude/make-it/references/design-blueprint.md
 @~/.claude/make-it/references/prompt-templates.md
+@~/.claude/make-it/references/guardrails.md
 
 </execution_context>
 

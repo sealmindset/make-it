@@ -74,7 +74,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 - `AC-Vibe Code Developed Quick Start` -- Prerequisites and machine setup
 - `AC-AI Vibe Coded Design Pattern Guide` -- The architectural blueprint
-- `AC-Prompts for Building Enterprise Applications` -- The 12 execution prompts
+- `AC-Prompts for Building Enterprise Applications` -- The 14 execution prompts
 - `ship-it RFC` -- The CI/CD deployment skill
 
 ## Tiered Guardrails
