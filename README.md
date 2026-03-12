@@ -168,7 +168,7 @@ This generates a `NEXT-STEPS.md` file you can share with your manager or DevOps 
     references/
       prerequisites.md      # Machine setup checks
       design-blueprint.md   # Architectural decision framework
-      prompt-templates.md   # 12 enterprise build prompts
+      prompt-templates.md   # 14 enterprise build prompts
       ship-it-guide.md      # Deployment handoff reference
     templates/
       app-context.md        # Template for tracking user answers

@@ -3,11 +3,29 @@
 This is the internal reference extracted from the AI Vibe Coded Design Pattern Guide.
 The /make-it skill uses this to determine WHAT questions to ask and HOW to map answers to implementation decisions. This file is NEVER shown to the user directly.
 
+**Guardrail tiers:** See `guardrails.md` for the tiered guardrail system. Tier 0 (universal) applies to every project. The design patterns below are primarily Tier 1 (web-app). During the Design phase, classify the project type first, then apply only the relevant patterns.
+
 ---
 
 ## Decision Framework
 
 For each design pattern area below, the skill must gather enough information from the user's natural language answers to make the right architectural choice. The user does NOT need to understand these patterns -- the skill infers them.
+
+### Step 0: Classify Project Type
+
+Before applying any design patterns, classify the project:
+
+| Type | Tiers | Signals |
+|------|-------|---------|
+| `web-app` | 0, 1 | Frontend + backend, browser-based, login, dashboards, CRUD |
+| `extension` | 0, 2 | IDE plugin, browser extension, editor tooling |
+| `cli` | 0, 3 | Command-line tool, terminal-based, no GUI |
+| `library` | 0, 4 | Importable package, no standalone runtime |
+| `api-service` | 0, 5 | Backend only, no frontend, serves other systems |
+
+Record `project_type` and `active_tiers` in app-context.json. Only apply design patterns from active tiers. Document skipped patterns in `skipped_guardrails`.
+
+**Sections 1-11 below are primarily Tier 1 (web-app) patterns.** For non-web projects, reference the appropriate tier in `guardrails.md` instead.
 
 ---
 

@@ -65,6 +65,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
       design-blueprint.md         # Extracted from AI Vibe Coded Design Pattern Guide
       prompt-templates.md          # The 14 prompts (auto-filled from user answers)
       ship-it-guide.md            # /ship-it integration reference
+      guardrails.md               # Tiered guardrail system (Tier 0-5)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
 ```
@@ -76,9 +77,41 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - `AC-Prompts for Building Enterprise Applications` -- The 12 execution prompts
 - `ship-it RFC` -- The CI/CD deployment skill
 
-## Standards Enforced
+## Tiered Guardrails
 
-All generated applications follow:
+Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. Higher tiers activate based on what's being built. See `guardrails.md` for the complete reference.
+
+### Tier 0: Universal (every project)
+- Ideation confirmed, Design documented in app-context.json, Build-verified before handoff
+- CHANGELOG.md and TODO.md from day one
+- No secrets in committed files, no hardcoded config values
+- Input validation at system boundaries, sensitive data masked in output
+- Latest stable dependencies, separation of concerns, environment-based config
+- Git initialized with proper .gitignore
+
+### Tier 1: Web Application
+- OIDC authentication, database-driven RBAC, 4 system roles, permission matrix
+- Standard UI components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
+- Docker Compose with mock services, seed data, system fonts only
+- 14 Enterprise Prompts executed in order
+
+### Tier 2: IDE Extension
+- Extension manifest complete, activation events scoped, SecretStorage for tokens
+- Provider pattern (TreeView, DiagnosticCollection), graceful degradation
+- Build produces bundled output, packaging exclusion file
+
+### Tier 3: CLI Tool
+- Argument parser, --help/--version, exit codes, structured output option
+
+### Tier 4: Library / Package
+- Package manifest, type declarations, explicit public API, no circular deps
+
+### Tier 5: API Service
+- Health check endpoint, OpenAPI spec, structured logging, consistent error format
+
+## Standards Enforced (Tier 1: Web App)
+
+Web applications additionally follow:
 - OIDC authentication (Azure AD / Entra ID)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)

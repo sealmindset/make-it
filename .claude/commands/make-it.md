@@ -33,6 +33,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/design-blueprint.md
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
+@~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -231,7 +232,18 @@ Does this sound right? Anything you'd like to add or change?"
 
 <step name="design-decisions">
 
-Now make all technical decisions BEHIND THE SCENES using the design-blueprint.md reference. The user only answers a few clarifying questions that truly require their input.
+Now make all technical decisions BEHIND THE SCENES using the design-blueprint.md and guardrails.md references. The user only answers a few clarifying questions that truly require their input.
+
+**MANDATORY FIRST: Classify project type (silently)**
+
+Based on ideation answers, classify the project type:
+- `web-app` -- Frontend + backend, browser-based, login, dashboards, CRUD
+- `extension` -- IDE plugin, browser extension, editor tooling
+- `cli` -- Command-line tool, terminal-based, no GUI
+- `library` -- Importable package, no standalone runtime
+- `api-service` -- Backend only, no frontend, serves other systems
+
+Record `project_type` and `active_tiers` in app-context.json. Apply Tier 0 (universal) guardrails unconditionally. Apply the matching higher tier from guardrails.md. Document any skipped guardrails in `skipped_guardrails`.
 
 **Questions that MAY need user input (only ask if not already clear from ideation):**
 
@@ -749,58 +761,97 @@ That's it -- you just built your first app!"
 
 <guardrails>
 
+**Reference: guardrails.md for the complete tiered system.**
+
 **Quality gates -- do NOT proceed past these without verification:**
 
-0. **After Preflight:** All checks GREEN or YELLOW (resolved). No RED blockers remaining. VPN connected, local admin available, GitHub access confirmed, Azure subscription active, Docker installed.
-1. **After Ideation:** Must have: project name, purpose, at least 3 features, user description
-2. **After Design:** Must have: complete app-context.json with all required fields populated
-3. **After Build (static checks):** Must have ALL of the following:
-   - Project builds without errors
-   - All expected files present
+0. **After Preflight:** All checks GREEN or YELLOW (resolved). No RED blockers remaining.
+1. **After Ideation:** Must have: project name, purpose, at least 3 features, user description.
+2. **After Design:** Must have: complete app-context.json with `project_type`, `active_tiers`, and all required fields populated. `skipped_guardrails` documents why non-active-tier guardrails were skipped.
+3. **After Build (static checks):** Apply the build-verify checklist for EACH active tier:
+
+   **Tier 0 checks (ALL projects):**
+   - Project builds/compiles with zero errors
    - CHANGELOG.md and TODO.md exist with content
+   - .gitignore properly configured (no secrets, no build artifacts)
+   - No hardcoded config values -- all from environment/settings
+   - Input validation at system boundaries
+   - All dependencies at latest stable versions with no known CVEs
+   - Sensitive data masked/redacted in output
+
+   **Tier 1 checks (web-app) -- IN ADDITION to Tier 0:**
    - .env.example committed, .env created locally (gitignored)
    - Database migrations generated (Alembic or Prisma) -- not just models
-   - Auth endpoints are fully implemented (not stubs)
-   - Auth callback reads roles from the DATABASE (not OIDC claims)
-   - Logout is a POST endpoint; frontend button calls API via POST (not a GET link)
-   - Frontend pages use a service/API layer (no hardcoded mock data in components)
-   - No external font imports (no Google Fonts, no CDN fonts) -- system fonts only
-   - Shared authenticated layout (one, not duplicated per page)
-   - Header bar includes SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
-   - All four standard UI components generated (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
-   - All list pages use DataTable component (not plain HTML tables)
-   - ThemeProvider wraps app, oklch CSS variables for light/dark themes
-   - AI prompt seed data exists (Tier 2/3)
-   - Database seed data exists -- app starts with populated pages, not empty screens
-   - Seed user oidc_subjects match mock-oidc subject IDs exactly
-   - Every list page has 10-20 sample records; dashboards show non-zero metrics
-   - All dependencies at latest stable versions with no known CVEs
-   - Mock services included in docker-compose.yml (at minimum mock-oidc if auth is used)
-   - Mock service seed script exists (scripts/seed-mock-services.sh)
-   - Service client endpoints match the mock service API contracts
-   - All external service URLs read from environment variables (no hardcoded URLs)
-   - .env points to mock service URLs for local development
-4. **After Build-Verify (live checks):** Must have ALL of the following:
-   - Docker containers start and all services pass health checks
-   - Mock service seed script runs successfully
-   - Auth flow works end-to-end for EVERY role (login -> correct role -> dashboard -> logout)
-   - Every API endpoint returns 2xx with non-empty data
-   - Every page loads with meaningful content (not empty tables)
-   - Permission boundaries work (unauthorized access returns 403)
-   - Logout clears session (returns 401 on subsequent /auth/me)
-5. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed
+   - Auth endpoints fully implemented (not stubs)
+   - Auth callback reads roles from DATABASE (not OIDC claims)
+   - Logout is POST; frontend button calls API via POST (not GET link)
+   - Frontend pages use service/API layer (no hardcoded mock data)
+   - No external font imports (system fonts only -- Zscaler-safe)
+   - Shared authenticated layout (one, not duplicated)
+   - Header bar: SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
+   - All four standard UI components generated
+   - All list pages use DataTable (not plain HTML tables)
+   - ThemeProvider wraps app, oklch CSS variables
+   - Database seed data populates all pages on first startup
+   - Seed user oidc_subjects match mock-oidc subject IDs
+   - Mock services in docker-compose.yml with seed script
+   - Service client endpoints match mock API contracts
+   - All external service URLs from environment variables
 
-**Security non-negotiables (from design-blueprint.md):**
-- NEVER skip input validation
-- NEVER use string concatenation for database queries
-- NEVER store secrets in code or .env files committed to git
-- ALWAYS use parameterized queries
-- ALWAYS validate on system boundaries
+   **Tier 2 checks (extension) -- IN ADDITION to Tier 0:**
+   - Extension manifest complete (all commands, views, config declared)
+   - Activation events scoped (not `*`)
+   - .vscodeignore or packaging exclusion file exists
+   - Build produces bundled output
+   - Tokens/secrets use SecretStorage (not plaintext settings)
+   - Graceful degradation when optional binaries unavailable
+   - Output channel for diagnostic logging
 
-**Standards compliance:**
-- All generated code follows the AI Vibe Coded Design Pattern Guide
+   **Tier 3 checks (cli) -- IN ADDITION to Tier 0:**
+   - `--help` produces valid output for all commands
+   - `--version` produces version string
+   - Exit codes: 0 success, non-zero failure
+   - Structured output option (--json or --output json)
+   - Stderr for diagnostics, stdout for output
+
+   **Tier 4 checks (library) -- IN ADDITION to Tier 0:**
+   - Package manifest with correct entry points
+   - Type declarations generated
+   - Public API is explicit (no accidental exports)
+   - No circular dependencies
+
+   **Tier 5 checks (api-service) -- IN ADDITION to Tier 0:**
+   - Health check endpoint exists
+   - OpenAPI/Swagger spec generated
+   - Error responses follow consistent format
+   - Request/response validation on all endpoints
+
+4. **After Build-Verify (live checks):** Adapted per project type:
+
+   **Tier 0 (ALL):** The primary function works when you run/start/activate the project.
+
+   **Tier 1 (web-app):** Docker containers start, health checks pass, auth flow works for every role, every page loads with content, permission boundaries enforced, logout clears session.
+
+   **Tier 2 (extension):** Extension activates without errors, commands execute, tree views populate, diagnostics appear on scan.
+
+   **Tier 3 (cli):** Primary command runs with sample input, help/version work, exit codes correct.
+
+   **Tier 4 (library):** Can be imported, exported functions work, types are correct.
+
+   **Tier 5 (api-service):** Server starts, health check passes, endpoints return expected responses, auth works if applicable.
+
+5. **Before Ship:** Must have: git repo initialized, .gitignore configured, code committed.
+
+**Security non-negotiables (ALL tiers -- from Tier 0):**
+- NEVER store secrets in code or committed files
+- NEVER hardcode config values (URLs, ports, keys)
+- ALWAYS validate input at system boundaries
+- ALWAYS mask/redact sensitive data in output
+- ALWAYS use latest stable dependency versions
+
+**Standards compliance (Tier 1 web-app only):**
 - Authentication always uses OIDC (never custom password management)
-- Authorization is database-driven: roles, permissions, and role_permissions in DB tables
+- Authorization is database-driven: roles, permissions, role_permissions in DB tables
 - Permission checks use require_permission(resource, action), never role string comparisons
 - 4 system roles seeded: Super Admin, Admin, Manager, User (is_system=true)
 - Super Admin can create custom roles; system roles cannot be deleted

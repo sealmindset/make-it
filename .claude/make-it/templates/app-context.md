@@ -1,11 +1,13 @@
 # App Context Template
 
-This template is populated by /make-it as the user answers questions. It becomes the single source of truth for all prompt generation.
+This template is populated by /make-it as the user answers questions. It becomes the single source of truth for all prompt generation and guardrail activation.
 
 ```json
 {
   "project_name": "",
   "purpose": "",
+  "project_type": "",
+  "active_tiers": [0],
   "features": [],
   "users": {
     "description": "",
@@ -26,7 +28,10 @@ This template is populated by /make-it as the user answers questions. It becomes
     "database": "",
     "orm": "",
     "validation": "",
-    "sessions": ""
+    "sessions": "",
+    "language": "",
+    "build_tool": "",
+    "runtime": ""
   },
   "app_type": "",
   "multi_tenancy": {
@@ -78,9 +83,22 @@ This template is populated by /make-it as the user answers questions. It becomes
     "prototype_only": false
   },
   "pages": [],
-  "prompts_to_run": []
+  "prompts_to_run": [],
+  "skipped_guardrails": {}
 }
 ```
+
+## Project Type Classification
+
+| Type | `project_type` value | Active Tiers | Signals |
+|------|---------------------|-------------|---------|
+| Web Application | `web-app` | 0, 1 | Frontend + backend, browser UI, login, dashboards, CRUD |
+| IDE Extension | `extension` | 0, 2 | VS Code plugin, editor tooling, browser extension |
+| CLI Tool | `cli` | 0, 3 | Command-line, terminal, no GUI |
+| Library / Package | `library` | 0, 4 | Importable, no standalone runtime |
+| API Service | `api-service` | 0, 5 | Backend only, no frontend, serves other systems |
+
+The `active_tiers` array determines which guardrails from `guardrails.md` are enforced. Tier 0 is always included.
 
 ## Field Mapping to Questions
 
@@ -88,12 +106,14 @@ This template is populated by /make-it as the user answers questions. It becomes
 |-------|----------------|---------------|
 | project_name | Ideation | "What do you want to call your app?" |
 | purpose | Ideation | "What problem does it solve?" |
+| project_type | Design | Auto-classified from ideation answers (user never sees this) |
+| active_tiers | Design | Auto-set from project_type |
 | features | Ideation | "What should it do?" (iterative) |
 | users | Ideation | "Who will use it?" |
 | auth | Design | Inferred from users.internal_or_external |
 | roles | Design | "What types of users?" |
 | permissions | Design | "What can each type do?" |
-| stack | Design | Inferred from app_type + features |
+| stack | Design | Inferred from app_type + features + project_type |
 | multi_tenancy | Design | Inferred from users description |
 | ai_features | Ideation + Design | Detected from features keywords |
 | ai_features.usage_level | Design | Inferred: none / minimal / moderate / heavy |
@@ -105,3 +125,22 @@ This template is populated by /make-it as the user answers questions. It becomes
 | compliance | Design | Only if enterprise/regulated |
 | deployment | Design | "Prototype or production?" |
 | pages | Design | Derived from features |
+| skipped_guardrails | Design | Documents why non-active-tier guardrails were skipped |
+
+## Skipped Guardrails Documentation
+
+The `skipped_guardrails` object records which higher-tier guardrails don't apply and why:
+
+```json
+{
+  "skipped_guardrails": {
+    "oidc_auth": "Project is a VS Code extension -- auth handled via API token in settings, not OIDC",
+    "database_rbac": "No database -- extension uses VS Code settings and server API for configuration",
+    "docker_compose": "VS Code extensions run in the editor runtime, not containers",
+    "seed_data": "No database to seed",
+    "standard_ui_components": "Extension uses VS Code TreeView and DiagnosticCollection, not web UI components"
+  }
+}
+```
+
+This creates an explicit audit trail of design decisions, preventing silent guardrail omission.
