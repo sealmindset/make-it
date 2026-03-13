@@ -24,7 +24,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - Build-verify is a silent quality gate: starts the app, tests auth/API/pages/permissions, fixes issues -- the user never sees broken output
 - `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
-- The user never fixes code -- security scanner findings and CI/CD automation issues are auto-remediated
+- The user never fixes code -- security scanner findings (if configured) and CI/CD automation issues are auto-remediated
 - The user only verifies their app works the way they envision it
 
 ## /try-it

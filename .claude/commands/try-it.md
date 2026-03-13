@@ -217,7 +217,7 @@ pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
 
 If a proxy is detected (or if a Docker build fails with TLS/certificate errors):
 
-Tell user: "Before I can build your app, I need you to temporarily pause your network security tool. It sometimes interferes with downloading the pieces your app needs. Right-click the security icon in your menu bar (it might look like a small shield), choose 'Disable' or 'Pause,' and pick the longest time option. Let me know when it's done!"
+Tell user: "Before I can build your app, I need you to temporarily pause your network security tool. It sometimes interferes with downloading the pieces your app needs. Look for the security application in your menu bar or system tray (it might be Zscaler, Netskope, GlobalProtect, or similar), choose 'Disable' or 'Pause,' and pick the longest time option. Let me know when it's done!"
 
 **Wait for user confirmation before proceeding.** Do NOT attempt Docker builds while the proxy is active.
 

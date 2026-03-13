@@ -92,6 +92,16 @@ Data fetching rules:
 - If the backend is not yet connected, create a mock API service layer that returns
   sample data through the same API client interface, so swapping to real data later
   requires changing only the service layer, not every page
+
+Frontend API proxy pattern (CRITICAL for auth cookies):
+- next.config.ts MUST include rewrites() to proxy /api/* to the backend
+  Example: { source: '/api/:path*', destination: `${process.env.BACKEND_INTERNAL_URL || 'http://localhost:8000'}/api/:path*` }
+- Frontend API client BASE_URL MUST be "/api" (relative, same-origin path)
+  NOT "http://localhost:PORT" or any absolute URL
+- All apiGet/apiPost/etc calls use paths WITHOUT /api prefix: apiGet("/dashboard"), apiGet("/projects")
+  The BASE_URL adds the /api prefix automatically
+- BACKEND_INTERNAL_URL must be set in the frontend Dockerfile at build time for standalone output
+- This pattern prevents cross-origin cookie blocking in modern browsers
 ```
 
 **Required context:** project name, custom pages from features
@@ -331,6 +341,27 @@ JWT signing:
 - .env.example should have `JWT_SECRET=` (empty) with comment: "Generate with: openssl rand -hex 32"
 - In production, JWT_SECRET is provisioned via the cloud secrets manager
 
+Frontend AuthMe type (MUST match JWT payload exactly):
+- The /auth/me endpoint returns the decoded JWT payload directly
+- AuthMe interface MUST be FLAT -- no .user wrapper, no nested objects:
+  interface AuthMe {
+    sub: string;
+    email: string;
+    name: string;
+    role_id: string;
+    role_name: string;
+    permissions: string[];
+  }
+- All frontend components use authMe.name (NOT authMe.user.display_name)
+- All frontend components use authMe.role_name (NOT authMe.role.name)
+- The User type (for /api/users responses) is SEPARATE from AuthMe
+
+Frontend API client 401 handling (CRITICAL -- do NOT add global redirect):
+- The API client's handleResponse function must NOT redirect to "/" on 401
+- The login page calls /auth/me to check for existing sessions -- 401 is expected
+- If handleResponse redirects on 401, the login page enters an infinite redirect loop
+- Auth guards in route layouts handle unauthorized redirects (not the API client)
+
 Mock OIDC configuration for local development:
 - The OIDC issuer URL, client ID, and client secret MUST be read from environment
   variables (never hardcoded)
@@ -363,6 +394,14 @@ Docker OIDC networking:
     OIDC_ISSUER_URL=http://localhost:3007
 - In production, most OIDC providers are reachable from both browser and backend,
   so no split is needed -- same URL works everywhere
+
+Same-origin proxy for OIDC flow:
+- The OIDC redirect_uri MUST go through the frontend proxy: {FRONTEND_URL}/api/auth/callback
+  NOT {BACKEND_URL}/api/auth/callback
+- The login endpoint (/api/auth/login) returns a 302 redirect to OIDC provider (not JSON)
+- The login button does: window.location.href = "/api/auth/login" (browser navigation, not fetch)
+- Cookies set by the callback are first-party (same origin as frontend)
+- This eliminates cross-origin cookie issues that cause auth loops
 ```
 
 **Required context:** auth provider, token expiry, auth library
@@ -1131,6 +1170,19 @@ into the header bar:
 </div>
 
 This header bar sits above the page content, inside the main content area (right of sidebar).
+
+--- Frontend/Backend Type Alignment (CRITICAL) ---
+
+Frontend TypeScript interfaces MUST exactly match backend Pydantic schema field names.
+Read each backend schema (schemas/*.py) before creating frontend types.
+
+Common mismatches to avoid:
+- Backend field_name vs frontend fieldName (use snake_case to match Python)
+- Backend returns list[] but frontend expects PaginatedResponse wrapper
+- Backend has 'title' but frontend defines 'label'
+- Backend has 'task_count' but frontend defines 'tasks_count'
+
+Build-verify must compare backend response JSON keys against frontend type definitions.
 ```
 
 **Required context:** pages list, roles list, features

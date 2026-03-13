@@ -52,6 +52,13 @@ Record `project_type` and `active_tiers` in app-context.json. Only apply design 
 **Implementation generates:** Three endpoints: /auth/login, /auth/callback, /auth/me
 **Key principle:** The identity provider handles AUTHENTICATION. The app handles AUTHORIZATION. Never mix them.
 
+**Frontend proxy pattern (prevents cross-origin cookie blocking):**
+- Next.js rewrites in next.config.ts proxy /api/* to the backend
+- Frontend BASE_URL="/api" (relative, same-origin)
+- OIDC redirect_uri goes through frontend: {FRONTEND_URL}/api/auth/callback
+- Login endpoint returns 302 redirect (not JSON)
+- BACKEND_INTERNAL_URL env var set at Docker build time for standalone output
+
 ---
 
 ## 2. Authorization (Database-Driven RBAC with User Management)

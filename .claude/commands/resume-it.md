@@ -120,9 +120,11 @@ If a security scanner is configured (see app-context.json `security_scanner` sec
 
 ```bash
 # Step 1: Check for open security scanner issues on the repo
-# Common labels: "auditgithub", "snyk", "security", "sonarqube"
-# Use the scanner-specific label from app-context.json if available
-gh issue list --label "auditgithub" --state open 2>/dev/null
+# Read security_scanner.type from app-context.json to determine the label
+# Common labels: "auditgithub", "snyk", "security", "sonarqube", "github-advanced-security"
+# Fall back to "security" if no scanner type is configured
+SCANNER_LABEL=$(jq -r '.security_scanner.type // "security"' .make-it/app-context.json 2>/dev/null || echo "security")
+gh issue list --label "$SCANNER_LABEL" --state open 2>/dev/null
 ```
 
 If scanner issues exist AND `SECURITY_SCANNER_API_KEY` is set in `.env`:
@@ -264,13 +266,13 @@ Build two checklists: **local development** and **production readiness**.
 
 | App Context Signal | Local Requirement | Production Requirement |
 |-------------------|-------------------|----------------------|
-| `auth.provider` contains "Azure AD" | Entra ID app registration (dev tenant) | Entra ID app registration (prod tenant) |
-| `stack.database` contains "PostgreSQL" | Local PostgreSQL (Docker) OR connection string to dev server | Azure PostgreSQL Flexible Server provisioned |
-| `stack.ai` contains "Azure OpenAI" | Azure OpenAI resource + API key (dev) | Azure OpenAI resource + API key (prod) |
-| `stack.storage` contains "Blob" | Azure Storage account or Azurite emulator | Azure Storage account (prod) |
-| `stack.monitoring` contains "Application Insights" | (optional locally) | App Insights resource + instrumentation key |
-| `deployment.containerize` is true | Docker running locally | Azure Container Registry + Container Apps environment |
-| `deployment.target` is "azure" | Azure CLI authenticated to dev subscription | Terraform applied for prod resources |
+| `auth.provider` is set | OIDC app registration (dev tenant/account) | OIDC app registration (prod tenant/account) |
+| `stack.database` contains "PostgreSQL" | Local PostgreSQL (Docker) OR connection string to dev server | Managed PostgreSQL provisioned (cloud provider) |
+| `stack.ai` references an AI service | AI service API key (dev) | AI service API key (prod) |
+| `stack.storage` references object storage | Local emulator or dev storage account | Cloud storage provisioned (S3, GCS, Azure Blob, etc.) |
+| `stack.monitoring` is configured | (optional locally) | Monitoring resource + instrumentation key |
+| `deployment.containerize` is true | Docker running locally | Container registry + container hosting environment |
+| `deployment.target` is set | Cloud CLI authenticated to dev environment | Terraform applied for prod resources |
 | `auth.needed` is true | `.env` with OIDC client ID/secret (dev) | Secrets store with OIDC client ID/secret (prod) |
 | Any API keys in code | `.env` with dev keys | Secrets store entries for prod keys |
 | `deployment.networking` mentions "VNet" | (not needed locally) | VNet + private endpoints configured |
@@ -284,19 +286,18 @@ Detect which secrets management approach the project uses or needs:
 | Signal | Secrets Store | Notes |
 |--------|--------------|-------|
 | `.env` / `.env.example` exists | `.env` file | Local development only -- NEVER committed to git |
-| Azure Key Vault references in code or Terraform | Azure Key Vault | Cloud-native, integrates with Azure managed identity |
+| Cloud secrets manager references in code or Terraform | Cloud secrets manager (Key Vault, Secrets Manager, etc.) | Cloud-native, integrates with managed identity/IAM |
 | AWS Secrets Manager references | AWS Secrets Manager | AWS-native, integrates with IAM roles |
 | HashiCorp Vault references | HashiCorp Vault | Platform-agnostic, commonly used in multi-cloud environments |
 | Enterprise secrets manager references or org policy | Enterprise secrets manager | Centralized secret management platform |
 
 For **local development**, secrets always go in `.env` (gitignored).
 For **production**, detect the org's preferred approach:
-- Check Terraform files for `azurerm_key_vault` references -> Azure Key Vault
-- Check Terraform files for `aws_secretsmanager_secret` references -> AWS Secrets Manager
-- Check for Vault provider or SDK imports -> HashiCorp Vault
+- Check Terraform files for secrets manager resources (azurerm_key_vault, aws_secretsmanager_secret, google_secret_manager_secret)
+- Check for HashiCorp Vault provider or SDK imports
 - Check for enterprise secrets manager SDK imports or config
-- If none detected, ask the user: "Where does your organization store production secrets -- Azure Key Vault, AWS Secrets Manager, HashiCorp Vault, or another secrets manager?"
-- Default recommendation: Azure Key Vault (if deploying to Azure), AWS Secrets Manager (if deploying to AWS)
+- If none detected, ask the user: "Where does your organization store production secrets -- a cloud secrets manager, HashiCorp Vault, or another secrets manager?"
+- Default recommendation: Use the secrets manager native to the chosen cloud provider
 
 **3. Check .env file (or .env.example) for missing values:**
 
@@ -383,13 +384,14 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 ## Secrets & Environment Variables
 
 **Local:** All secrets stored in `.env` (never committed to git)
-**Production:** [Azure Key Vault / Secret Server / TBD -- ask your team]
+**Production:** [Cloud secrets manager / Enterprise vault / TBD -- ask your team]
 
 | Variable | Purpose | Where to Get It | Local (.env) | Prod (secrets store) |
 |----------|---------|----------------|-------------|---------------------|
-| `AZURE_AD_CLIENT_ID` | App login | Entra ID app registration | [ ] | [ ] |
-| `AZURE_AD_CLIENT_SECRET` | App login | Entra ID app registration | [ ] | [ ] |
-| `DATABASE_URL` | Database connection | DBA team / Azure Portal | [ ] | [ ] |
+| `OIDC_CLIENT_ID` | App login | Identity provider app registration | [ ] | [ ] |
+| `OIDC_CLIENT_SECRET` | App login | Identity provider app registration | [ ] | [ ] |
+| `JWT_SECRET` | Token signing | Auto-generated (`openssl rand -hex 32`) | [ ] | [ ] |
+| `DATABASE_URL` | Database connection | DBA team / Cloud console | [ ] | [ ] |
 | `SECURITY_SCANNER_API_URL` | Security scanning | Security scanner admin | [ ] | [ ] |
 | `SECURITY_SCANNER_API_KEY` | Security scanning | Security scanner admin (scoped to this repo) | [ ] | [ ] |
 | ... | ... | ... | ... | ... |

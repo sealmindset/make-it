@@ -105,6 +105,18 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 ### Build-Verify (Web App)
 Full static verification + live verification per make-it.md build-verify step.
 
+Additional OIDC/auth/type checks (CRITICAL -- these prevent recurring issues across apps):
+- Frontend uses same-origin proxy: next.config.ts rewrites /api/* to backend
+- Frontend BASE_URL="/api" (relative path, not hardcoded hostname)
+- OIDC redirect_uri goes through frontend proxy: {FRONTEND_URL}/api/auth/callback
+- AuthMe type is flat: { sub, email, name, role_id, role_name, permissions[] }
+- No .user wrapper or nested Role object in AuthMe
+- API client does NOT globally redirect on 401
+- Login endpoint returns 302 redirect (not JSON)
+- Frontend API calls use paths without /api prefix (BASE_URL adds it)
+- Frontend TypeScript types match backend Pydantic schema field names exactly
+- Backend list endpoints: frontend uses T[] not PaginatedResponse<T> (unless backend actually paginates)
+
 ---
 
 ## Tier 2: IDE Extension Guardrails

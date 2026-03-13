@@ -86,8 +86,11 @@ git --version 2>/dev/null
 docker --version 2>/dev/null
 gh --version 2>/dev/null
 gh auth status 2>/dev/null
-az account show 2>/dev/null
 code --version 2>/dev/null
+# Cloud CLI checks are CONDITIONAL -- only run if user mentions cloud deployment:
+# az account show 2>/dev/null    # Azure
+# aws sts get-caller-identity 2>/dev/null  # AWS
+# gcloud auth list 2>/dev/null   # GCP
 ```
 
 **3. Ask the user about access items that can't be auto-detected:**
@@ -270,12 +273,12 @@ Record `project_type` and `active_tiers` in app-context.json. Apply Tier 0 (univ
 - Architecture: M.A.C.H. principles applied by default
 - Containerization: Based on stack choice (single vs multi-runtime)
 - IaC: Terraform if going to production
-- AI Prompt Management: Classify usage level and set tier (see Section 9 of design-blueprint.md)
+- AI Prompt Management: Classify usage level and set tier
   - No AI features -> tier 0 (skip)
   - 1-3 prompts, devs only -> tier 1 (code + config)
   - 4-10 prompts OR non-devs edit -> tier 2 (database + admin UI)
   - 10+ prompts OR AI-native app -> tier 3 (full platform)
-- Mock Services: Determine which mock services are needed (see Section 10 of design-blueprint.md)
+- Mock Services: Determine which mock services are needed
   - Auth needed -> mock-oidc (always)
   - Jira integration -> mock-jira (port 8443)
   - Tempo integration -> mock-tempo (port 8444, requires mock-jira for shared seed data)
@@ -576,6 +579,24 @@ already running in production.
 20. **Verify port availability** -- Check that all ports in docker-compose.yml are available
     on the host: `lsof -i :PORT`. If any port is already in use, remap to an unused port
     in docker-compose.yml, .env, .env.example, and scripts/seed-mock-services.sh.
+21. **Verify same-origin proxy pattern** -- next.config.ts has rewrites() routing
+    /api/* to backend. Frontend BASE_URL="/api" (relative). OIDC redirect_uri
+    uses FRONTEND_URL/api/auth/callback. Login endpoint returns 302. Login button
+    uses window.location.href (not fetch). BACKEND_INTERNAL_URL set in Dockerfile.
+    If any are wrong, fix them.
+22. **Verify AuthMe type matches JWT** -- Frontend AuthMe type must be flat:
+    { sub, email, name, role_id, role_name, permissions[] }. No .user wrapper.
+    All components use authMe.name not authMe.user.display_name. If wrong, fix.
+23. **Verify no global 401 redirect** -- API client handleResponse must NOT redirect
+    to "/" on 401. Login page checks /auth/me (expects 401). Auth guard in layout
+    handles redirects. If global redirect exists, remove it.
+24. **Verify frontend types match backend schemas** -- For each backend Pydantic
+    schema in schemas/*.py, compare field names against the corresponding frontend
+    TypeScript interface. Check: field name spelling, nesting structure, list vs
+    paginated response. Fix any mismatches. Common issues:
+    - title vs label, task_count vs tasks_count, jira_key vs jira_issue_key
+    - Backend returns list[] but frontend expects { items: T[], total: number }
+    - Backend returns role_name string but frontend expects nested Role object
 
 Tell user: "Your app is built! Now I'm making sure everything works perfectly..."
 
@@ -665,6 +686,12 @@ Common issues and fixes:
 - Alembic migration fails with UUID/VARCHAR mismatch -> use f-string literals for UUIDs
 - Mock service returns 401 -> fix Bearer auth case sensitivity (toLowerCase)
 - Backend starts but DB is empty -> Dockerfile CMD must use entrypoint.sh, not uvicorn
+- Cross-origin cookie blocking -> implement same-origin proxy in next.config.ts
+- AuthMe has .user wrapper -> flatten to match JWT payload
+- Login page infinite loop -> remove global 401 redirect from API client
+- API calls return 404 -> check for double /api prefix (BASE_URL="/api" + path "/api/...")
+- Frontend crashes with undefined -> types don't match backend schemas, read schemas first
+- OIDC callback cookie not set -> redirect_uri must go through frontend proxy
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 
