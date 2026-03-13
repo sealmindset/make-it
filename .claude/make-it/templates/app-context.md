@@ -8,6 +8,7 @@ This template is populated by /make-it as the user answers questions. It becomes
   "purpose": "",
   "project_type": "",
   "active_tiers": [0],
+  "scaffold": null,
   "features": [],
   "users": {
     "description": "",
@@ -111,6 +112,17 @@ This template is populated by /make-it as the user answers questions. It becomes
 
 The `active_tiers` array determines which guardrails from `guardrails.md` are enforced. Tier 0 is always included.
 
+## Scaffold Selection
+
+The `scaffold` field determines whether the Build phase uses a pre-built scaffold or generates from scratch.
+
+| Condition | `scaffold` value | Build strategy |
+|-----------|-----------------|----------------|
+| `web-app` + Python backend | `"fastapi-nextjs"` | Copy scaffold, replace placeholders, generate domain code on top |
+| All other combinations | `null` | Generate from prompt-templates.md (Prompts #1-#14) |
+
+When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, mock-oidc, and standard UI components — these come pre-built from the scaffold. Only domain-specific code is generated fresh.
+
 ## Field Mapping to Questions
 
 | Field | Gathered During | Question Theme |
@@ -119,6 +131,7 @@ The `active_tiers` array determines which guardrails from `guardrails.md` are en
 | purpose | Ideation | "What problem does it solve?" |
 | project_type | Design | Auto-classified from ideation answers (user never sees this) |
 | active_tiers | Design | Auto-set from project_type |
+| scaffold | Design | Auto-set: `"fastapi-nextjs"` for web-app + Python backend, `null` otherwise |
 | features | Ideation | "What should it do?" (iterative) |
 | users | Ideation | "Who will use it?" |
 | auth | Design | Inferred from users.internal_or_external |
