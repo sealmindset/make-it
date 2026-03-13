@@ -9,15 +9,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface DataTablePaginationProps {
-  table: Table<unknown>;
+interface DataTablePaginationProps<TData> {
+  table: Table<TData>;
   enableRowSelection?: boolean;
 }
 
-export function DataTablePagination({
+export function DataTablePagination<TData>({
   table,
   enableRowSelection = false,
-}: DataTablePaginationProps) {
+}: DataTablePaginationProps<TData>) {
   const pageCount = table.getPageCount();
   const pageIndex = table.getState().pagination.pageIndex;
   const pageSize = table.getState().pagination.pageSize;

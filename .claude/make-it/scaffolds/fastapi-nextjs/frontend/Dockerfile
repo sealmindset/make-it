@@ -4,7 +4,7 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # ---- Stage 2: Builder ----
 FROM node:20-alpine AS builder
@@ -18,6 +18,9 @@ COPY . .
 # BACKEND_INTERNAL_URL must be set at BUILD time because Next.js standalone
 # output bakes rewrites into the server bundle. Changing it at runtime has no effect.
 ENV BACKEND_INTERNAL_URL=http://backend:8000
+
+# Ensure public dir exists (may be empty in scaffold)
+RUN mkdir -p public
 
 RUN npm run build
 

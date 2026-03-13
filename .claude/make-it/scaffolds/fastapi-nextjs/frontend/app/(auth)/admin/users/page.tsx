@@ -103,7 +103,6 @@ export default function UsersPage() {
         <DataTableColumnHeader
           column={column}
           title="Role"
-          filterType="select"
         />
       ),
       cell: ({ row }) => {
@@ -138,7 +137,6 @@ export default function UsersPage() {
         <DataTableColumnHeader
           column={column}
           title="Status"
-          filterType="select"
         />
       ),
       cell: ({ row }) => {
@@ -168,7 +166,6 @@ export default function UsersPage() {
         <DataTableColumnHeader
           column={column}
           title="Created"
-          filterType="date"
         />
       ),
       cell: ({ row }) => formatDate(row.original.created_at),
