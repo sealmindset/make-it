@@ -279,8 +279,9 @@ Use shared database with tenant_id column.
 Add user authentication to [PROJECT_NAME] using Open Identity Connect (OIDC).
 
 Login provider: [AUTH_PROVIDER]
-Session length: [SESSION_LENGTH]
+Token expiry: [TOKEN_EXPIRY]
 Auth library: [AUTH_LIBRARY] (e.g., authlib for Python, next-auth for Next.js)
+JWT library: PyJWT (Python) or jsonwebtoken (Node.js)
 
 Users should:
 - Sign in with SSO (single sign-on)
@@ -298,23 +299,37 @@ Implementation requirements:
     3. Query the users table by oidc_subject (or fall back to email)
     4. If found: read the role from the DATABASE record (NOT from OIDC claims)
     5. If not found: create a new user with default role ("user")
-    6. Store {sub, email, name, role} in the session (role comes from DB)
-    7. Redirect to the dashboard
+    6. Sign a stateless JWT containing {sub, email, name, role_id, role_name}
+       using JWT_SECRET env var. Set expiry to [TOKEN_EXPIRY].
+    7. Set the JWT as an httpOnly, secure, sameSite=lax cookie named "token"
+    8. Redirect to the dashboard
   CRITICAL: User roles MUST come from the application database, NOT from OIDC
   provider claims. The OIDC provider (mock-oidc in dev, or your configured provider
   in production) only provides identity (sub, email, name). It does NOT provide
   application-specific roles.
-- /auth/me must return the current user from the session (or 401 if not authenticated)
-- /auth/logout must be a POST endpoint that clears the server-side session and returns
-  a JSON response (e.g., {"message": "logged out"}). The frontend logout button must
-  call this endpoint via POST (using the API client), then redirect to the login page
-  via client-side navigation (router.push("/")). Do NOT implement logout as:
+- /auth/me must validate the JWT from the cookie and return the decoded user
+  (or 401 if no token, expired, or invalid signature)
+- /auth/logout must be a POST endpoint that clears the JWT cookie (set maxAge=0
+  or expires=past date) and returns a JSON response (e.g., {"message": "logged out"}).
+  The frontend logout button must call this endpoint via POST (using the API client),
+  then redirect to the login page via client-side navigation (router.push("/")).
+  Do NOT implement logout as:
     - A GET endpoint (browsers can prefetch GET requests, causing unintended logouts)
     - A frontend-side link (<a href="/api/auth/logout">) -- this routes to the frontend,
       not the backend, causing a 404
     - A redirect-only endpoint -- the frontend needs to handle the redirect itself
-- Include a middleware/dependency that extracts the current user from the session
-  for use in protected route handlers (e.g., get_current_user dependency in FastAPI)
+- Include a middleware/dependency that validates the JWT from the cookie and extracts
+  the current user for use in protected route handlers (e.g., get_current_user
+  dependency in FastAPI)
+- The JWT is STATELESS -- no server-side session store (no Redis, no database
+  session table). All user info is in the token itself. This makes the app
+  horizontally scalable without shared session infrastructure.
+
+JWT signing:
+- JWT_SECRET MUST be read from an environment variable (never hardcoded)
+- Auto-generate JWT_SECRET in .env during project setup: `openssl rand -hex 32`
+- .env.example should have `JWT_SECRET=` (empty) with comment: "Generate with: openssl rand -hex 32"
+- In production, JWT_SECRET is provisioned via the cloud secrets manager
 
 Mock OIDC configuration for local development:
 - The OIDC issuer URL, client ID, and client secret MUST be read from environment
@@ -350,7 +365,7 @@ Docker OIDC networking:
   so no split is needed -- same URL works everywhere
 ```
 
-**Required context:** auth provider, session length, auth library
+**Required context:** auth provider, token expiry, auth library
 **Runs when:** Authentication needed
 
 ---
@@ -533,10 +548,11 @@ After any role or role_permissions change, call invalidate_cache().
 Update the auth callback (/auth/callback) to:
 1. After looking up the user in the database, load their role_id
 2. Fetch the role's permissions from the cache
-3. Store in session: { sub, email, name, role_id, role_name, permissions[] }
+3. Sign a new JWT containing { sub, email, name, role_id, role_name, permissions[] }
+   and set it as the httpOnly cookie (replaces the previous token)
 
 Update get_current_user middleware to:
-1. Read role_id and permissions from the session
+1. Validate the JWT from the cookie and read role_id and permissions from the token
 2. Return a CurrentUser object with: subject, email, name, role_name, permissions[]
 
 Update the frontend sidebar/navigation to:
@@ -860,7 +876,7 @@ Verification:
 - After docker-compose --profile dev up, ALL mock services must respond to
   their health check endpoints
 - The auth flow must work end-to-end against mock-oidc (login -> callback ->
-  session -> dashboard)
+  JWT cookie -> dashboard)
 - Service clients must successfully call mock endpoints and return data
 - Mock-oidc must have exactly the right users for this app (no extras, no missing)
 ```

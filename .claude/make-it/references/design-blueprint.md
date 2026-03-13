@@ -153,7 +153,7 @@ High-traffic API service
 | ORM/Driver | Prisma or pg | SQLAlchemy or asyncpg |
 | Auth | openid-client | authlib |
 | Validation | Zod | Pydantic |
-| Sessions | express-session + Redis | Redis-backed sessions |
+| Auth tokens | Stateless JWT (jsonwebtoken) | Stateless JWT (PyJWT) |
 
 ---
 

@@ -332,7 +332,7 @@ b. Test the complete login flow:
    # 3. Follow OIDC redirect to mock-oidc with login_hint={mock_user}
    # 4. Get redirected back to the app
    # 5. Verify the dashboard loads
-   # 6. Verify the correct ROLE is in the session (from /auth/me)
+   # 6. Verify the correct ROLE is returned by /auth/me (from JWT)
    # 7. Take a screenshot
    ```
 
@@ -372,7 +372,7 @@ Verify responses are 2xx, valid JSON, and non-empty.
 
 **6. Test logout:**
 
-Verify logout clears the session and subsequent /auth/me returns 401.
+Verify logout clears the JWT cookie and subsequent /auth/me returns 401.
 
 **7. Collect results:**
 

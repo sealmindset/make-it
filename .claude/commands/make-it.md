@@ -318,8 +318,10 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Create .gitignore appropriate for the stack
    - Create CHANGELOG.md with initial entry
    - Create TODO.md with section headers (populate throughout build)
-   - Create .env.example with all required env vars (commented)
+   - Create .env.example with all required env vars (commented, placeholder values)
    - Copy .env.example to .env (gitignored) for local development
+   - Auto-generate JWT_SECRET in .env (run: `openssl rand -hex 32`)
+   - .env.example should have `JWT_SECRET=` (empty) with a comment: "Generate with: openssl rand -hex 32"
 
 2. **UI Design (Prompt #2)**
    - Tell user: "Designing your pages and interface..."
@@ -372,18 +374,19 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 8. **Authentication (Prompt #8)** -- Skip if no auth needed
    - Tell user: "Setting up secure login..."
    - Implement OIDC with chosen provider
-   - Generate the COMPLETE auth flow (login, callback, token exchange, session, logout)
+   - Generate the COMPLETE auth flow (login, callback, token exchange, JWT, logout)
    - Do NOT generate stub endpoints that return placeholder messages
    - Auth callback MUST read roles from the APPLICATION DATABASE (not OIDC claims):
      1. Exchange code for tokens, get userinfo from OIDC
      2. Look up user in database by oidc_subject (fall back to email)
      3. Read role from the DATABASE record
-     4. Store {sub, email, name, role} in session where role comes from DB
-   - Logout MUST be a POST endpoint that clears the server-side session
+     4. Sign a stateless JWT containing {sub, email, name, role_id, role_name}, set as httpOnly cookie
+   - Logout MUST be a POST endpoint that clears the JWT cookie
    - Frontend logout button MUST call the backend API via POST, then redirect via router.push
    - Do NOT implement logout as a GET link or <a href> (causes 404 or unintended behavior)
    - Include a get_current_user dependency/middleware for protecting routes
    - Wire OIDC config to read issuer URL, client ID, and secret from environment variables
+   - JWT_SECRET must be read from env var (auto-generated during project setup, never hardcoded)
    - .env must point to mock-oidc for local development
    - No if/else branching for mock vs real OIDC -- same code path, different env vars
    - In docker-compose.yml, set OIDC_ISSUER_URL to the Docker network URL
@@ -399,7 +402,7 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Create admin UI: User Management page (add/edit/deactivate users, assign roles),
      Role Management page (create custom roles, permission matrix editor)
    - Wire require_permission(resource, action) middleware to all route handlers
-   - Update auth callback to load role + permissions from database into session
+   - Update auth callback to load role + permissions from database into JWT
    - Update frontend sidebar to show/hide pages and actions based on user permissions
    - Super Admin can create custom roles with any permission combination
    - System roles (Super Admin, Admin, Manager, User) cannot be deleted
@@ -505,7 +508,8 @@ already running in production.
 4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory
    with at least one migration. If using Prisma, check for prisma/migrations/.
 5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example
-   should be committed
+   should be committed. Verify JWT_SECRET is populated in .env (not empty) and is NOT
+   committed in .env.example (should be empty with a generation comment).
 6. **Verify CHANGELOG.md and TODO.md exist** -- both should have content from the build
 7. **Verify mock services are wired** -- mock-oidc in docker-compose.yml (if auth needed),
    service clients read base URLs from env vars, .env points to mock URLs
@@ -536,7 +540,7 @@ already running in production.
     it queries the users table (by oidc_subject or email) and reads the role from the database
     record. If the callback uses OIDC claims for roles, fix it to use the database.
 14. **Verify logout is a POST endpoint** -- Read the logout route and confirm it's a POST that
-    clears the session. Read the frontend logout button and confirm it calls the API via POST
+    clears the JWT cookie. Read the frontend logout button and confirm it calls the API via POST
     (not a GET link or <a href>). Fix if wrong.
 15. **Verify service client endpoints match mock services** -- For each service client, read the
     methods and verify they call endpoints that actually exist on the corresponding mock service.
@@ -549,7 +553,7 @@ already running in production.
     - require_permission(resource, action) middleware is used on all route handlers
     - Admin API has endpoints for user CRUD, role CRUD, and permission listing
     - Admin UI has User Management and Role Management pages
-    - Frontend sidebar shows/hides items based on user permissions from session
+    - Frontend sidebar shows/hides items based on user permissions from JWT/auth endpoint
     If any of these are missing, generate them now.
 17. **Verify docker-compose env var names match backend config** -- Read the backend config
     class (e.g., pydantic Settings) and cross-reference every field name against the
@@ -609,16 +613,16 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     For each role defined in app-context.json:
     a. Navigate to the app URL
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
-    c. Verify the callback completes and a session is established
+    c. Verify the callback completes and a JWT cookie is set
     d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
     e. Verify the dashboard loads with content
-    f. Test logout (POST to /auth/logout, verify session is cleared, verify 401 after)
+    f. Test logout (POST to /auth/logout, verify JWT cookie is cleared, verify 401 after)
 
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
 
 26. **Test every API endpoint:**
-    For each API route in the app (with an authenticated session):
+    For each API route in the app (with a valid JWT):
     a. Call the endpoint
     b. Verify 2xx response
     c. Verify response is valid JSON with expected structure
@@ -626,7 +630,7 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     e. Verify permission-protected endpoints return 403 for unauthorized roles
 
 27. **Test every page:**
-    For each page defined in app-context.json (with an authenticated session):
+    For each page defined in app-context.json (with a valid JWT):
     a. Request the page URL
     b. Verify it loads (200)
     c. Verify it has meaningful content (not empty tables, not "no data found")
@@ -874,7 +878,7 @@ That's it -- you just built your first app!"
 
    **Tier 0 (ALL):** The primary function works when you run/start/activate the project.
 
-   **Tier 1 (web-app):** Docker containers start, health checks pass, auth flow works for every role, every page loads with content, permission boundaries enforced, logout clears session.
+   **Tier 1 (web-app):** Docker containers start, health checks pass, auth flow works for every role, every page loads with content, permission boundaries enforced, logout clears JWT cookie.
 
    **Tier 2 (extension):** Extension activates without errors, commands execute, tree views populate, diagnostics appear on scan.
 
@@ -900,7 +904,7 @@ That's it -- you just built your first app!"
 - 4 system roles seeded: Super Admin, Admin, Manager, User (is_system=true)
 - Super Admin can create custom roles; system roles cannot be deleted
 - User management via admin UI (add by email, assign role, deactivate)
-- Frontend sidebar and action buttons respect user permissions from session
+- Frontend sidebar and action buttons respect user permissions from JWT/auth endpoint
 - API-first design: backend returns JSON, frontend is separate concern
 
 </guardrails>

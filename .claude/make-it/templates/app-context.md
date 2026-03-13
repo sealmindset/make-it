@@ -18,7 +18,7 @@ This template is populated by /make-it as the user answers questions. It becomes
   "auth": {
     "needed": false,
     "provider": "",
-    "session_length": "8 hours"
+    "token_expiry": "8 hours"
   },
   "roles": [],
   "permissions": {},
@@ -28,7 +28,7 @@ This template is populated by /make-it as the user answers questions. It becomes
     "database": "",
     "orm": "",
     "validation": "",
-    "sessions": "",
+    "auth_tokens": "stateless-jwt",
     "language": "",
     "build_tool": "",
     "runtime": ""
