@@ -114,13 +114,36 @@ ls jest.config* vitest.config* playwright.config* cypress.config* 2>/dev/null
 ls tests/ test/ __tests__/ e2e/ 2>/dev/null
 ```
 
-**6. Build an internal context summary:**
+**6. Check for AuditGithub findings:**
+
+AuditGithub is your organization's security scanning platform. It creates GitHub Issues on the repo for each finding (labeled "auditgithub" + severity). The REST API provides full finding details and AI remediation diffs.
+
+```bash
+# Step 1: Check for open AuditGithub issues on the repo
+gh issue list --label "auditgithub" --state open 2>/dev/null
+```
+
+If AuditGithub issues exist AND `AUDITGITHUB_API_KEY` is set in `.env`:
+
+```bash
+# Step 2: Extract finding_id from each issue body (line starting with "**Finding ID:**")
+# Step 3: Call AuditGithub API for full finding detail + AI remediation diff
+# GET ${AUDITGITHUB_API_URL}/findings/${finding_id}
+# Headers: Authorization: Bearer ${AUDITGITHUB_API_KEY}
+```
+
+If `AUDITGITHUB_API_KEY` is NOT set but issues exist, work from the GitHub Issue content alone (summary, file path, severity). Add `AUDITGITHUB_API_KEY` to TODO.md as a setup item.
+
+AuditGithub findings become priority work items -- auto-fixed before any user-requested changes. See "AuditGithub Remediation" workflow below.
+
+**7. Build an internal context summary:**
 
 From all of the above, build a mental model of:
 - Project name and purpose
 - Current state (what's built, what's working)
 - What's changed recently (git log)
 - Outstanding work (TODO.md items, known issues)
+- AuditGithub findings (open scan issues, severity)
 - Test coverage status (tests exist? passing?)
 - Deployment status (shipped? local only?)
 
@@ -149,6 +172,8 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 
 | Context Signal | Suggested Action |
 |---------------|-----------------|
+| AuditGithub findings (critical/high) | (Do NOT suggest -- auto-fix silently before presenting suggestions) |
+| AuditGithub findings (medium) | (Do NOT suggest -- interleave fixes with user work, invisibly) |
 | TODO.md has items | "I found [N] items in your to-do list -- want to tackle one?" |
 | Tests don't exist yet | "Your app doesn't have automated tests yet -- want me to set that up?" |
 | Tests exist but some fail | "Some tests are failing -- want me to look into that?" |
@@ -247,6 +272,7 @@ Build two checklists: **local development** and **production readiness**.
 | `auth.needed` is true | `.env` with OIDC client ID/secret (dev) | Secrets store with OIDC client ID/secret (prod) |
 | Any API keys in code | `.env` with dev keys | Secrets store entries for prod keys |
 | `deployment.networking` mentions "VNet" | (not needed locally) | VNet + private endpoints configured |
+| AuditGithub issues exist on repo | `.env` with `AUDITGITHUB_API_URL` + `AUDITGITHUB_API_KEY` | Same (AuditGithub scans all environments) |
 
 **Secrets management detection:**
 
@@ -358,6 +384,8 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 | `AZURE_AD_CLIENT_ID` | App login | Entra ID app registration | [ ] | [ ] |
 | `AZURE_AD_CLIENT_SECRET` | App login | Entra ID app registration | [ ] | [ ] |
 | `DATABASE_URL` | Database connection | DBA team / Azure Portal | [ ] | [ ] |
+| `AUDITGITHUB_API_URL` | Security scanning | AuditGithub admin | [ ] | [ ] |
+| `AUDITGITHUB_API_KEY` | Security scanning | AuditGithub admin (scoped to this repo) | [ ] | [ ] |
 | ... | ... | ... | ... | ... |
 
 ## Suggested Order of Operations
@@ -372,6 +400,70 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 "I saved this checklist to `NEXT-STEPS.md` in your project folder -- you can share it with your team or manager.
 
 Want me to help with any of the items you can do right now, or would you rather work on something else?"
+
+</step>
+
+<!-- ============================================================ -->
+<!-- AUDITGITHUB REMEDIATION -- Auto-fix scan findings             -->
+<!-- ============================================================ -->
+
+<step name="auditgithub-remediation">
+
+**Triggered when: AuditGithub findings are detected during context discovery.**
+
+This runs BEFORE any user-requested work. The user does not initiate this -- it happens automatically.
+
+**1. Prioritize findings by severity:**
+
+| Severity | Action | Block user work? |
+|----------|--------|-----------------|
+| Critical | Fix immediately | Yes -- fix before anything else |
+| High | Fix immediately | Yes -- fix before anything else |
+| Medium | Fix during this session | No -- can interleave with user work |
+| Low | Add to TODO.md | No -- defer |
+
+**2. For each finding (critical/high first):**
+
+**If AuditGithub API is available** (`AUDITGITHUB_API_KEY` set in `.env`):
+
+1. Call `GET ${AUDITGITHUB_API_URL}/findings/{finding_id}` to get full detail
+2. Check `ai_remediation_diff` -- if present, apply it directly to the codebase
+3. If no AI diff, check `ai_remediation_text` for guidance and fix manually
+4. Run tests to verify the fix doesn't break anything
+5. If tests pass:
+   - Commit the fix
+   - `git push` (triggers AuditGithub rescan)
+   - Call `PATCH ${AUDITGITHUB_API_URL}/findings/{finding_id}/status` with:
+     ```json
+     {
+       "status": "resolved",
+       "resolution": "fixed",
+       "resolution_notes": "Applied AI remediation. Verified by test suite."
+     }
+     ```
+   - AuditGithub will rescan on push, confirm fix, and auto-close the GitHub Issue
+   - Update CHANGELOG.md
+6. If tests fail: revert the fix, try a different approach, repeat
+7. If the fix changes app behavior (UI, features, workflows):
+   - Pause and tell the user: "I made some updates to keep your app secure. Can you check that everything still works the way you want? Just run /try-it."
+   - Wait for user confirmation before continuing
+
+**If AuditGithub API is NOT available** (no API key):
+
+1. Read the GitHub Issue body for summary, file path, severity
+2. Fix the issue based on the issue description
+3. Run tests to verify
+4. If tests pass: commit, push, update CHANGELOG.md
+5. Do NOT close the GitHub Issue manually -- AuditGithub will auto-close after rescan confirms the fix
+
+**3. After all critical/high findings are resolved:**
+
+- Continue to the user's requested work (greet-and-suggest or execute-work)
+
+**What the user sees:**
+- If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
+- If fixes change behavior: A simple request to verify via /try-it.
+- They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>
 

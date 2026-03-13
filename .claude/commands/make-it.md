@@ -93,7 +93,7 @@ code --version 2>/dev/null
 **3. Ask the user about access items that can't be auto-detected:**
 
 Only ask if the automated checks suggest issues:
-- "Are you connected to the Sleep Number VPN right now?"
+- "Are you connected to your corporate VPN right now?"
 - "Have you been granted local admin rights on this machine?"
 
 **4. Categorize results into three buckets:**
@@ -111,7 +111,7 @@ If ALL GREEN:
 If YELLOW items exist (no RED):
 "Almost ready! I just need to set up a couple of things first."
 - For each yellow item, either install automatically or walk the user through it
-- For Docker specifically: guide them through the Dockyard setup process
+- For Docker specifically: guide them through the your organization's container runtime setup
 - After fixes: "All set now! Let's start building your app."
 -> Proceed to Phase 1
 
@@ -350,7 +350,10 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 
 5. **Cloud Infrastructure (Prompt #5)** -- Skip if prototype only
    - Tell user: "Setting up cloud infrastructure..."
-   - Generate Terraform configuration
+   - Generate Terraform configuration (DevOps handoff artifact -- user never applies this)
+   - Include backend.tf with Azure Storage Account state backend
+   - Include environments/ with per-environment tfvars (dev, staging, prod)
+   - All environments target subscription {AZURE_SUBSCRIPTION}, separated by resource group
 
 6. **Docker Support (Prompt #6)** -- Skip if single-runtime + no containers needed
    - Tell user: "Setting up development environment..."
@@ -750,13 +753,15 @@ Reference ship-it-guide.md for this phase.
 
 **When ready, explain in plain language:**
 
-"Your app is ready to go live! The next step is getting it deployed so [your team / your users / people] can use it.
+"Your app is ready to go live! The next step is getting it out there so others can use it.
 
-I'm going to hand you off to a deployment tool called /ship-it. It will:
-- Save your code safely
-- Set up the deployment pipeline
-- Create a review request for your team
-- Handle everything else automatically
+When you type /ship-it, here's what happens:
+- Your code gets saved and sent for review
+- Our automated systems check it for security and quality
+- If anything needs fixing, it gets fixed automatically -- you just verify your app still works
+- Once everything passes, it gets deployed
+
+You don't need to do anything technical -- just verify your app works the way you want at each checkpoint.
 
 When you're ready, just type: **/ship-it**
 

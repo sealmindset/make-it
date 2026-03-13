@@ -12,7 +12,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 1. **Ideation** -- Conversational Q&A to understand the app idea
 2. **Design** -- AI-driven technical decisions (invisible to user)
 3. **Build** -- Code generation following the AI Vibe Coded Design Pattern Guide
-4. **Ship** -- Handoff to `/ship-it` for CI/CD deployment
+4. **Ship** -- Handoff to `/ship-it` for deployment
 
 ## Key Principles
 
@@ -24,6 +24,8 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - Build-verify is a silent quality gate: starts the app, tests auth/API/pages/permissions, fixes issues -- the user never sees broken output
 - `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
+- The user never fixes code -- AuditGithub findings and DevOps issues are auto-remediated
+- The user only verifies their app works the way they envision it
 
 ## /try-it
 
@@ -40,12 +42,13 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 `/resume-it` picks up where `/make-it` left off. The user runs it from within the project directory.
 
-0. **Context Discovery** -- Reads `.make-it-state.md`, `CHANGELOG.md`, `TODO.md`, `CLAUDE.md`, git log
-1. **Greet + Suggest** -- Shows project status and suggests actionable next steps
-2. **Work** -- Helps with bug fixes, new features, TODO items, or anything the user describes
-3. **Readiness Check** -- Standup-style "what's done / what's blocked / what's next" assessment. Scans `app-context.json` and codebase to detect required infrastructure, env vars, tickets, and approvals. Generates a shareable `NEXT-STEPS.md` checklist.
-4. **Test** -- Scaffolds test infrastructure (pytest, Playwright) if needed, generates and runs tests
-5. **Ship** -- Handoff to `/ship-it` when ready
+0. **Context Discovery** -- Reads `.make-it-state.md`, `CHANGELOG.md`, `TODO.md`, `CLAUDE.md`, git log, AuditGithub findings
+1. **AuditGithub Remediation** -- Auto-fixes scan findings (invisible to user unless behavior changes)
+2. **Greet + Suggest** -- Shows project status and suggests actionable next steps
+3. **Work** -- Helps with new features, TODO items, or anything the user describes
+4. **Readiness Check** -- Standup-style "what's done / what's blocked / what's next" assessment. Scans `app-context.json` and codebase to detect required infrastructure, env vars, tickets, and approvals. Generates a shareable `NEXT-STEPS.md` checklist.
+5. **Test** -- Scaffolds test infrastructure (pytest, Playwright) if needed, generates and runs tests
+6. **Ship** -- Handoff to `/ship-it` when ready
 
 ### State Breadcrumb
 
@@ -131,7 +134,23 @@ Web applications additionally follow:
 - Input validation on all endpoints
 - Parameterized database queries
 - Security headers before production
-- Terraform for infrastructure as code
+- Terraform generated as DevOps handoff artifact (user never applies)
+
+## Deployment Lifecycle
+
+The user's world is simple: describe, verify, say "ready." Everything else is automated.
+
+```
+/make-it -> Build in Docker sandbox, push to GitHub
+/resume-it -> Iterate (AuditGithub auto-fixes, user verifies idea works)
+/ship-it -> Hand off to DevOps
+  DevOps BOT -> Scan, auto-remediate, send back for verification
+  /try-it -> User verifies app still works
+  /ship-it -> Recheck, deploy to dev
+  User confirms prod-ready -> DevOps prod checks -> Deploy to prod
+```
+
+See `ship-it-guide.md` for the full lifecycle, DevOps BOT contract, and AuditGithub integration.
 
 ## Build Quality
 

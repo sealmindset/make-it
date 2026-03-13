@@ -1,12 +1,24 @@
 # /ship-it Integration Guide
 
-This reference tells /make-it how and when to hand off to /ship-it for deployment.
+This reference tells /make-it how and when to hand off to /ship-it for deployment, and defines the full deployment lifecycle from local Docker sandbox to production.
+
+---
+
+## The User's World
+
+The vibe coder never touches infrastructure, never fixes code manually, and never interacts with DevOps directly. Their entire experience is:
+
+1. **Describe** what they want (via /make-it or /resume-it)
+2. **Verify** it works the way they envision (via /try-it)
+3. **Say "ready"** (via /ship-it)
+
+Everything else -- code quality, security scanning, infrastructure provisioning, deployment -- is automated or handled by DevOps.
 
 ---
 
 ## What /ship-it Does
 
-/ship-it is a Claude Code skill that automates the entire path from local code to a production-ready pull request. The developer runs one command: `/ship-it`. That's it.
+/ship-it is a Claude Code skill that automates the path from local code to a pull request. The developer runs one command: `/ship-it`. That's it.
 
 **Behind the scenes, /ship-it:**
 1. Detects the repo, branch, auth status, and project type
@@ -14,13 +26,340 @@ This reference tells /make-it how and when to hand off to /ship-it for deploymen
 3. Creates a branch, commits changes, pushes
 4. Generates a caller workflow referencing the org's shared reusable workflow
 5. Creates a PR with labels, reviewers, description, and go-live checklist
-6. Reports back: "Done! The team will let you know when it's live."
+6. Reports back: "Done! The team will take it from here."
 
 **Two modes:**
 | Command | What it does |
 |---------|-------------|
-| `/ship-it` | Ship to production. Creates PR, assigns reviewers, full safety checks. |
+| `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
 | `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No review. |
+
+---
+
+## Deployment Lifecycle
+
+The full path from local app to production. The user only participates at verification checkpoints.
+
+```
+LOCAL DEVELOPMENT (user's Docker sandbox)
+  /make-it        -> Build app, push code to GitHub
+  /resume-it      -> Iterate (features, AuditGithub fixes, testing)
+  /try-it         -> User verifies: "Does it do what I want?"
+                     |
+                     v
+CONTINUOUS QUALITY (automated, invisible to user)
+  AuditGithub     -> Scans repo continuously, reports issues
+  /resume-it      -> Auto-fixes scan findings, runs tests, verifies
+                     (user never sees this -- just confirms app still works)
+                     |
+                     v
+SHIP (user triggers)
+  /ship-it        -> Creates PR, hands off to DevOps
+                     |
+                     v
+DEVOPS PREFLIGHT (automated, DevOps-owned)
+  DevOps BOT      -> Scans PR: security, compliance, IaC, dependencies
+                     |
+                     +-- Issues found?
+                     |     -> BOT auto-remediates what it can
+                     |     -> DevOps team handles the rest
+                     |     -> Sends back to user for verification
+                     |        |
+                     |        v
+                     |     /try-it -> User verifies app still works
+                     |     /ship-it -> Back to DevOps for recheck
+                     |        |
+                     |        v
+                     |     (loop until clean)
+                     |
+                     +-- All clear?
+                           -> Deploy to dev ({AZURE_SUBSCRIPTION}, app resource group)
+                              |
+                              v
+DEV ENVIRONMENT
+  User tests in dev environment
+  User confirms: "This is ready for production"
+                     |
+                     v
+PRODUCTION GATE (DevOps-owned)
+  DevOps BOT      -> Production preflight (stricter checks)
+  DevOps team     -> Final review
+                     |
+                     +-- Passes -> Deploy to prod
+                     +-- Fails  -> Remediate, loop back to user verification
+```
+
+---
+
+## Phase Ownership
+
+| Phase | Owner | User's Role |
+|-------|-------|-------------|
+| Local development | User + /make-it + /resume-it | Describe what they want, verify it works |
+| AuditGithub scanning | Automated | None (invisible) |
+| AuditGithub remediation | /resume-it (automated) | Verify app still works after fixes |
+| /ship-it PR creation | Automated | Type `/ship-it` |
+| DevOps preflight scan | DevOps BOT (automated) | None (wait) |
+| Preflight remediation | DevOps BOT + DevOps team | Verify app still works after fixes |
+| Deploy to dev | DevOps | None (wait) |
+| Dev environment testing | User | "Does it work how I want?" |
+| Production gate | DevOps BOT + DevOps team | Confirm prod-ready |
+| Deploy to prod | DevOps | None (notified when live) |
+
+---
+
+## AuditGithub Integration
+
+AuditGithub is your organization's security scanning platform (FastAPI + PostgreSQL + 20+ scanners). It runs in Azure, scans repos on push and on schedule, and stores rich findings with AI-powered triage and remediation diffs.
+
+### Communication Protocol (Hybrid: GitHub Issues + REST API)
+
+AuditGithub and /resume-it communicate through two channels:
+
+```
+NOTIFICATION (AuditGithub → GitHub Issues):
+  Lightweight, always visible, triggers /resume-it awareness
+
+REMEDIATION (resume-it → AuditGithub REST API):
+  Rich finding data, AI diffs, status updates
+```
+
+**Why hybrid:** /resume-it is ephemeral (only runs when user invokes it). GitHub Issues provide persistent visibility. The REST API provides the rich data needed to actually fix things.
+
+### Channel 1: GitHub Issues (AuditGithub → repo)
+
+AuditGithub creates/updates GitHub Issues on the repo for each finding:
+
+**Issue format:**
+```markdown
+Title: [CRITICAL] Hardcoded AWS secret in config/settings.py
+Labels: auditgithub, severity:critical, type:secret
+Body:
+  **Finding ID:** f47ac10b-58cc-4372-a567-0e02b2c3d479
+  **Scanner:** gitleaks
+  **Severity:** critical
+  **Risk Score:** 92/100
+  **File:** config/settings.py:47
+  **First Seen:** 2026-03-10T14:30:00Z
+
+  **Summary:** Hardcoded AWS access key detected in configuration file.
+
+  **AI Recommendation:** Move secret to environment variable and .env file.
+  AI confidence: 0.95
+
+  ---
+  _This issue was created by AuditGithub. Do not close manually --
+  it will auto-close when the finding is resolved._
+```
+
+**Issue lifecycle:**
+- AuditGithub creates issue on new finding
+- AuditGithub updates issue body if finding changes (rescan updates risk score, AI retriage)
+- AuditGithub auto-closes issue when finding status becomes `resolved` (confirmed by rescan after push)
+- Labels updated if severity changes
+
+### Channel 2: REST API (/resume-it → AuditGithub)
+
+/resume-it calls the AuditGithub API for rich finding data and to report fixes.
+
+**Authentication:** API key per repo, stored in `.env`:
+```bash
+# .env (gitignored)
+AUDITGITHUB_API_URL=https://auditgh.{COMPANY_DOMAIN}
+AUDITGITHUB_API_KEY=agh_xxxxxxxxxxxxxxxxxxxx
+```
+
+**API calls /resume-it makes:**
+
+| Step | Method | Endpoint | Purpose |
+|------|--------|----------|---------|
+| 1. Discover | `GET` | `/findings/paginated?repo_name={repo}&status=open` | Get all open findings for this repo |
+| 2. Detail | `GET` | `/findings/{finding_id}` | Get full finding with `ai_remediation_diff` |
+| 3. Fix | _(local)_ | Apply `ai_remediation_diff` to codebase | Use AuditGithub's AI-generated fix |
+| 4. Verify | _(local)_ | Run tests | Confirm fix doesn't break anything |
+| 5. Push | _(local)_ | `git commit && git push` | Trigger AuditGithub rescan |
+| 6. Report | `PATCH` | `/findings/{finding_id}/status` | Mark as resolved with resolution notes |
+
+**Request/response examples:**
+
+```bash
+# Step 1: Get open findings
+GET /findings/paginated?repo_name=my-app&status=open&severity=critical,high
+Headers: Authorization: Bearer agh_xxxxxxxxxxxxxxxxxxxx
+         X-Organization-Name: {ORGANIZATION_NAME}
+
+Response: {
+  "items": [
+    {
+      "id": "f47ac10b-...",
+      "severity": "critical",
+      "title": "Hardcoded AWS secret in config/settings.py",
+      "file_path": "config/settings.py",
+      "line_start": 47,
+      "ai_remediation_text": "Move secret to environment variable...",
+      "ai_remediation_diff": "--- a/config/settings.py\n+++ b/config/settings.py\n@@ -45,3 +45,3 @@\n-AWS_KEY = 'AKIA...'\n+AWS_KEY = os.getenv('AWS_ACCESS_KEY_ID')",
+      "ai_triage_recommendation": "true_positive",
+      "ai_triage_confidence": 0.95,
+      "risk_score": 92
+    }
+  ],
+  "total": 3,
+  "page": 1
+}
+
+# Step 6: Mark resolved after fix
+PATCH /findings/f47ac10b-.../status
+Headers: Authorization: Bearer agh_xxxxxxxxxxxxxxxxxxxx
+Body: {
+  "status": "resolved",
+  "resolution": "fixed",
+  "resolution_notes": "Applied AI remediation diff. Secret moved to .env."
+}
+```
+
+### Full remediation flow
+
+```
+AuditGithub scans repo (on push or cron schedule)
+  → Stores findings in database (with AI triage + remediation diffs)
+  → Creates GitHub Issues on repo (one per finding)
+
+User runs /resume-it
+  → Step 1: gh issue list --label "auditgithub" --state open
+  → Step 2: For each issue, extract finding_id from issue body
+  → Step 3: GET /findings/{id} → full detail with ai_remediation_diff
+  → Step 4: Apply ai_remediation_diff to codebase
+  → Step 5: Run tests → verify fix doesn't break anything
+  → Step 6: git commit + push
+  → Step 7: PATCH /findings/{id}/status → resolved
+  → AuditGithub detects push → rescans → confirms finding resolved → auto-closes GitHub Issue
+
+If fix changes app behavior:
+  → Pause, tell user: "Run /try-it to check everything still works"
+```
+
+### What the user sees
+
+Nothing, unless a fix changes how the app behaves. Then they get:
+"I made some updates to keep your app secure. Can you check that everything still works the way you want? Just run /try-it."
+
+### What AuditGithub needs to build
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| GitHub Issue creation | Create issue per finding with finding_id in body, severity/type labels | Required |
+| GitHub Issue auto-close | Close issue when finding status → resolved (after rescan confirms) | Required |
+| GitHub Issue update | Update issue body/labels when finding changes (rescan, retriage) | Nice to have |
+| API key scoping | API keys scoped to specific repos (not org-wide) | Required |
+
+---
+
+## DevOps BOT Contract
+
+The DevOps BOT is an automated service that scans PRs created by /ship-it before code reaches any deployed environment. It is owned and operated by the DevOps team.
+
+### Trigger
+
+The BOT activates when:
+- A PR is created by /ship-it (detected by label, branch naming convention, or .ship-it.yml presence)
+- A PR is re-submitted after remediation (re-run on new commits)
+
+### What the BOT checks
+
+| Category | Checks | Severity |
+|----------|--------|----------|
+| **Security** | Dependency vulnerabilities (CVEs), secret detection, OWASP top 10 patterns | Critical / High |
+| **Compliance** | License compatibility, approved dependency list, org policy adherence | High |
+| **Infrastructure** | Terraform validation (`terraform validate`, `terraform plan`), resource naming conventions, tagging policy | High |
+| **Code Quality** | Linting rules, test coverage thresholds, build success | Medium |
+| **Container** | Dockerfile best practices, base image approval, no root user, image size | Medium |
+| **Configuration** | .env.example completeness, no hardcoded secrets, env var naming conventions | High |
+
+### Remediation flow
+
+```
+BOT scans PR
+  |
+  +-- Critical/High issues found?
+  |     |
+  |     +-- Auto-remediable? (dependency updates, lint fixes, Dockerfile adjustments)
+  |     |     -> BOT commits fix to PR branch
+  |     |     -> Re-runs checks
+  |     |
+  |     +-- Requires human judgment? (architecture changes, breaking updates, policy exceptions)
+  |           -> DevOps team reviews and fixes
+  |           -> Commits fix to PR branch
+  |
+  +-- Medium/Low issues found?
+  |     -> BOT commits auto-fixes where possible
+  |     -> Remaining items logged as follow-up (don't block deployment)
+  |
+  +-- After remediation:
+        -> Notify user: "We made some updates to your app for security/compliance.
+           Please verify it still works: run /try-it"
+        -> User runs /try-it, confirms
+        -> User runs /ship-it to re-submit
+        -> BOT re-scans (loop until clean)
+```
+
+### Communication contract
+
+**BOT -> User notifications** (via GitHub PR comments, plain language):
+- "Your app is being reviewed by our automation. You don't need to do anything -- we'll let you know when it's ready."
+- "We made a few updates to keep your app secure. Please check that everything still works by running `/try-it` in your project."
+- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test."
+
+**BOT -> DevOps team notifications** (via internal channels):
+- PR scan results with detailed findings
+- Items requiring human judgment
+- Deployment approval requests
+
+**User -> BOT** (implicit, via /ship-it):
+- Re-submitting a PR (new /ship-it after verification) signals "user has verified, ready for recheck"
+
+### What the BOT does NOT do
+
+- Modify application behavior or business logic
+- Change what the app does from the user's perspective
+- Deploy without passing all checks
+- Deploy to production without explicit DevOps team approval
+- Communicate in technical jargon to the user
+
+---
+
+## Infrastructure & Terraform
+
+/make-it generates Terraform configuration (Prompt #5) as a **DevOps handoff artifact**, not something the user applies.
+
+### What gets generated
+
+| File | Purpose |
+|------|---------|
+| `infrastructure/main.tf` | Azure resources the app needs |
+| `infrastructure/variables.tf` | Configurable values (resource names, SKUs, tags) |
+| `infrastructure/outputs.tf` | Values needed by the app (connection strings, URLs) |
+| `infrastructure/versions.tf` | Provider version constraints |
+| `infrastructure/backend.tf` | State backend (Azure Storage Account) |
+| `infrastructure/environments/` | Per-environment tfvars |
+
+### Environment model
+
+| Environment | Subscription | Resource Group | Applied By |
+|-------------|-------------|----------------|------------|
+| Dev | {AZURE_SUBSCRIPTION} | `rg-{app-name}-dev` | DevOps BOT / DevOps team |
+| Staging | {AZURE_SUBSCRIPTION} | `rg-{app-name}-staging` | DevOps team |
+| Prod | {AZURE_SUBSCRIPTION} | `rg-{app-name}-prod` | DevOps team (with approval gate) |
+
+### Terraform workflow (DevOps-owned)
+
+1. /make-it generates Terraform as part of the build
+2. /ship-it includes it in the PR
+3. DevOps BOT validates: `terraform fmt -check`, `terraform validate`, `terraform plan`
+4. Plan output posted as PR comment for DevOps team review
+5. After PR merge + deployment approval: `terraform apply` by pipeline
+6. Outputs (connection strings, URLs) fed into app's deployment config
+
+**The user never runs Terraform.** They don't need to know it exists.
 
 ---
 
@@ -29,9 +368,7 @@ This reference tells /make-it how and when to hand off to /ship-it for deploymen
 After the build phase completes and the user has a working local application, /make-it:
 
 1. **Confirms the app works locally** -- asks the user to verify
-2. **Explains what happens next** in plain language:
-   - "Your app is ready to go live. I'll now help you get it deployed."
-   - "This will create a pull request that your team can review and approve."
+2. **Explains what happens next** in plain language
 3. **Checks prerequisites:**
    - Git repo exists (should already from project setup)
    - Code is in a clean state
@@ -57,8 +394,18 @@ After the build phase completes and the user has a working local application, /m
 
 When transitioning from build to ship:
 
-"Your application is built and working locally. The next step is getting it deployed so others can use it. I'm going to hand you off to /ship-it, which will handle all the deployment steps automatically -- creating a branch, pushing your code, setting up the pipeline, and creating a pull request for review.
+"Your application is built and working locally. The next step is getting it out there so others can use it.
 
-All you need to do is type: /ship-it
+When you type /ship-it, here's what happens:
+- Your code gets saved and sent for review
+- Our automated systems check it for security and quality
+- If anything needs fixing, it gets fixed automatically -- you just verify your app still works
+- Once everything passes, it gets deployed
 
-If you want to save your progress first without deploying, type: /ship-it save"
+You don't need to do anything technical -- just verify your app works the way you want at each checkpoint.
+
+When you're ready, just type: **/ship-it**
+
+If you want to save your progress first without deploying, type: **/ship-it save**
+
+That's it -- you just built your first app!"

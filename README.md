@@ -49,7 +49,7 @@ Before running `/make-it`, you need the following on your machine. The skill wil
 |------|---------------|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` |
 | Git | `brew install git` |
-| Docker Desktop | Install via [Dockyard](https://dockyard.example.com) or [docker.com](https://www.docker.com/products/docker-desktop/) |
+| Docker Desktop | Install via your organization's software portal or [docker.com](https://www.docker.com/products/docker-desktop/) |
 | GitHub CLI | `brew install gh` then `gh auth login` |
 | Azure CLI | `brew install azure-cli` then `az login` |
 | VS Code | `brew install --cask visual-studio-code` |

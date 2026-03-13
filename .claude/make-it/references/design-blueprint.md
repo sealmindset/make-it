@@ -200,11 +200,23 @@ High-traffic API service
 - Is this a prototype/first version, or production from day one?
 
 **Decision rules:**
-- First deploy / prototype -> Manual Azure portal setup is OK, document what you clicked
-- Second deploy onward -> Terraform to reproduce
-- Ongoing -> All changes through Terraform
+- Always generate Terraform as part of the build -- it's a handoff artifact for DevOps
+- The user never runs Terraform. DevOps owns provisioning and deployment.
+- First deploy / prototype -> Terraform still generated (DevOps applies it)
+- All environments in a single Azure subscription ({AZURE_SUBSCRIPTION}), separated by resource groups
+
+**Environment model:**
+| Environment | Resource Group | Applied By |
+|-------------|----------------|------------|
+| Dev | `rg-{app-name}-dev` | DevOps BOT / DevOps team |
+| Staging | `rg-{app-name}-staging` | DevOps team |
+| Prod | `rg-{app-name}-prod` | DevOps team (with approval gate) |
+
+**State backend:** Azure Storage Account (configured in backend.tf, managed by DevOps)
 
 **Implementation generates:** infrastructure/ directory with main.tf, variables.tf, outputs.tf, versions.tf, backend.tf, environments/
+
+**DevOps handoff:** Terraform is included in the /ship-it PR. The DevOps BOT validates it (`terraform validate`, `terraform plan`), posts the plan as a PR comment, and the DevOps team reviews before applying. See ship-it-guide.md for the full lifecycle.
 
 ---
 
@@ -338,7 +350,7 @@ Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
 Default OIDC client: `mock-oidc-client` / `mock-oidc-secret`
 
 **mock-oidc architecture:**
-- Python 3.12 + FastAPI (NO Java -- Oracle licensing prohibited)
+- Python 3.12 + FastAPI (NO Java -- see guardrails.md Tier 0 no-Java policy)
 - Built-in internal/external URL split: discovery document returns browser-facing
   endpoints (authorization) with MOCK_OIDC_EXTERNAL_BASE_URL and server-to-server
   endpoints (token, userinfo, JWKS) with MOCK_OIDC_INTERNAL_BASE_URL
@@ -543,16 +555,18 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] Prompt management tier determined and implemented -- if using AI
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 
-### Before Production
+### Before Production (DevOps-owned -- user does NOT do these)
 - [ ] Mock services excluded from production deployment (docker-compose.override.yml or profiles)
 - [ ] All service client base URLs configured for production endpoints
 - [ ] Production .env / secrets store has real service URLs (no mock references)
 - [ ] Security headers configured
 - [ ] Audit logging for auth and admin actions
 - [ ] Secrets in Azure Key Vault
-- [ ] Terraform for infrastructure
+- [ ] Terraform applied by DevOps (infrastructure/ directory in repo)
 - [ ] HTTPS enforced
 - [ ] Session timeout enforcement
+- [ ] DevOps BOT preflight scan passed
+- [ ] AuditGithub findings resolved
 - [ ] Prompt version history enabled (Tier 2+) -- if using AI
 - [ ] Prompt audit logging active (Tier 2+) -- if using AI
 - [ ] Prompt testing capability available (Tier 2+) -- if using AI

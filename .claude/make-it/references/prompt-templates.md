@@ -26,6 +26,10 @@ Also create:
 - CHANGELOG.md with an initial "## [0.1.0] - [DATE]" entry listing the project setup
 - TODO.md with high/medium/low priority sections (populate during build)
 - .env.example with all required environment variables (commented with descriptions)
+  - Always include AuditGithub integration vars:
+    # AuditGithub (security scanning -- get API key from AuditGithub admin)
+    AUDITGITHUB_API_URL=https://auditgh.{COMPANY_DOMAIN}
+    AUDITGITHUB_API_KEY=
 - Copy .env.example to .env for local development (this file is gitignored)
 
 Dependency version rules:
@@ -153,6 +157,23 @@ Database setup:
 ```
 Create Terraform configuration for [PROJECT_NAME] on Azure.
 
+This is a DevOps handoff artifact -- the user never applies this. It will be
+reviewed and applied by the DevOps team via automated pipeline.
+
+Target: Azure subscription {AZURE_SUBSCRIPTION}, separated by resource group per environment.
+
+Directory structure:
+  infrastructure/
+    main.tf           -- Azure resources
+    variables.tf      -- Configurable values (resource names, SKUs, tags)
+    outputs.tf        -- Values needed by the app (connection strings, URLs)
+    versions.tf       -- Provider version constraints
+    backend.tf        -- Azure Storage Account state backend
+    environments/
+      dev.tfvars      -- Dev: rg-[PROJECT_NAME]-dev
+      staging.tfvars  -- Staging: rg-[PROJECT_NAME]-staging
+      prod.tfvars     -- Prod: rg-[PROJECT_NAME]-prod
+
 Services needed:
 - Web app for frontend
 - Functions for backend
@@ -164,6 +185,12 @@ Security requirements:
 - Private networking (no public access)
 - All secrets in Azure Key Vault
 - Encryption everywhere
+
+Tagging requirements (all resources):
+- app: [PROJECT_NAME]
+- environment: var.environment
+- managed-by: terraform
+- owner: [USER_OR_TEAM]
 ```
 
 **Required context:** database type, whether AI services needed
@@ -751,7 +778,7 @@ mock-oidc Dockerfile (mock-services/mock-oidc/Dockerfile):
   CMD ["uvicorn", "mock_oidc.main:app", "--host", "0.0.0.0", "--port", "10090"]
 
 IMPORTANT: Do NOT use Java-based OIDC servers (navikt/mock-oauth2-server or similar).
-Java dependencies are prohibited due to Oracle licensing costs. The Python mock-oidc
+Java dependencies are prohibited by organizational policy. The Python mock-oidc
 service provides the same OIDC functionality without any Java dependency.
 
 Environment variable wiring:

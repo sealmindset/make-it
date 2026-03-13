@@ -40,7 +40,7 @@ These apply to every project /make-it builds, no exceptions.
 9. **Input validation at system boundaries** -- Validate all external input (user input, API responses, file parsing, CLI arguments). Trust internal code; validate at the edges.
 10. **Mask/redact sensitive data in output** -- Logs, error messages, and UI never display full secrets, tokens, or credentials.
 11. **Latest stable dependencies** -- Always use the latest stable version of every dependency. No pinning to outdated majors. Check for known CVEs before proceeding.
-12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Oracle licensing costs prohibit Java in any part of the stack. Use Python, Node.js, Go, or Rust alternatives instead.
+12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Java runtime dependencies are prohibited by organizational policy. Use Python, Node.js, Go, or Rust alternatives instead.
 
 ### Architecture
 
@@ -94,7 +94,10 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Mock services for all external integrations
 - Mock service seed script (scripts/seed-mock-services.sh)
 - Service client endpoints verified against mock API contracts
-- Terraform for production infrastructure
+- Terraform generated as DevOps handoff artifact (user never applies)
+- Terraform targets subscription {AZURE_SUBSCRIPTION}, resource groups per environment
+- Terraform state backend configured for Azure Storage Account
+- All Terraform resources tagged (app, environment, managed-by, owner)
 
 ### Prompts
 - Execute all 14 prompts in order (#1-#14)

@@ -10,10 +10,10 @@ This is Phase 0 -- it runs BEFORE ideation begins.
 
 These are corporate access requests that take time to approve. The skill must check for these FIRST so the user isn't blocked mid-build.
 
-### 1. Sleep Number VPN
+### 1. Corporate VPN
 
 **Why needed:** Required to access Claude Code, Azure, GitHub, and all development services.
-**How to check:** Ask the user -- "Are you connected to the Sleep Number VPN right now?"
+**How to check:** Ask the user -- "Are you connected to your corporate VPN right now?"
 **If missing:**
 - Navigate to the Identity Now request center
 - Select "Request for Myself"
@@ -43,7 +43,7 @@ These are corporate access requests that take time to approve. The skill must ch
 - Navigate to the Identity Now request center
 - Select "Request for Myself"
 - Click "Entitlements"
-- Search for: `ZscalerPRD_DevopsZTunnel_AppC`
+- Search for: `{ZSCALER_DEVOPS_GROUP}`
 - Select the group, comment: "Need to install software libraries to support"
 - Submit the request
 - Note: Zscaler disablement is time-boxed to 15 minutes max. Use sparingly.
@@ -64,13 +64,13 @@ These are corporate access requests that take time to approve. The skill must ch
 
 ### 5. GitHub Access
 
-**Why needed:** All code must be stored in the company's approved Git repositories for backup, collaboration, version control, audit history, and security scanning.
+**Why needed:** All code must be stored in your organization's approved Git repositories for backup, collaboration, version control, audit history, and security scanning.
 **How to check:** `gh auth status 2>/dev/null`
 **If missing:**
 - Navigate to the Identity Now request center
 - Select "Request for Myself"
 - Click "Entitlements"
-- Search for: `githubSleepNumberIncSCIMPRD_GithubRW_AppC`
+- Search for: `{GITHUB_ACCESS_GROUP}`
 - Select the group, comment: "Need to maintain my code in a repo"
 - Submit the request
 - Approval goes to designated approvers
@@ -79,37 +79,28 @@ These are corporate access requests that take time to approve. The skill must ch
 
 ## Tool Prerequisites (can be checked and installed automatically)
 
-### 6. Docker (via Rancher Desktop)
+### 6. Docker / Container Runtime
 
 **Why needed:** Creates consistent, isolated local development environments that mirror production. Containers are ephemeral sandboxes -- safe for non-technical users to experiment without risk to their machine or the corporate network.
-**Why Rancher Desktop (not Docker Desktop):** Rancher Desktop is free and open source with no per-seat licensing. It provides the same `docker` and `docker compose` CLI, same container runtime, same images and Dockerfiles. It is the approved container runtime at Sleep Number, installed via the Dockyard setup.
+**Why Rancher Desktop (not Docker Desktop):** Rancher Desktop is a free, open-source alternative to Docker Desktop with no per-seat licensing. It provides the same `docker` and `docker compose` CLI. If your organization uses a specific container runtime setup tool, follow that process instead.
 **How to check:** `docker --version 2>/dev/null`
 **If missing (macOS):**
 - Must have all access prerequisites above first
-- Clone the Dockyard repository:
+- Follow your organization's container runtime setup instructions
   ```bash
-  mkdir -p ~/Documents/Github && cd ~/Documents/Github
-  git clone https://github.com/SleepNumberInc/Dockyard.git
-  cd Dockyard
-  chmod +x setup-macos.sh
-  ./setup-macos.sh
+  # Clone your organization's container runtime setup repo, or install Docker/Rancher Desktop directly
   ```
 - Follow on-screen prompts (approve installs/permissions as requested)
 - Restart Terminal after completion
-- Verify install using post-install checks in Dockyard README.md
 **If missing (Windows):**
 - Must have all access prerequisites above first
-- Clone the Dockyard repository:
+- Follow your organization's container runtime setup instructions
   ```powershell
-  cd ~\Documents\Github
-  git clone https://github.com/SleepNumberInc/Dockyard.git
-  cd Dockyard
-  .\setup-windows.ps1
+  # Clone your organization's container runtime setup repo, or install Docker/Rancher Desktop directly
   ```
 - Follow on-screen prompts (approve installs/permissions as requested)
 - Restart Terminal after completion
-- Verify install using post-install checks in Dockyard README.md
-- Note: Dockyard installs Rancher Desktop, which manages its own WSL integration internally. Users do NOT need to install or configure WSL separately.
+- Note: If using Rancher Desktop, it manages its own WSL integration. Users do NOT need to install or configure WSL separately.
 
 ### 7. Git
 
@@ -155,7 +146,7 @@ The skill should check prerequisites in this order (fast checks first, then bloc
    - Claude Code running? (implicit -- they're here)
 
 2. **Questions for the user (only if automated checks fail):**
-   - "Are you on the Sleep Number VPN?"
+   - "Are you on your corporate VPN?"
    - "Do you have local admin rights on this machine?"
 
 3. **Categorize results:**
