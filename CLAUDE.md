@@ -71,7 +71,37 @@ The user types `/make-it` and answers questions about their idea in plain Englis
       guardrails.md               # Tiered guardrail system (Tier 0-5)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
+    scaffolds/
+      fastapi-nextjs/             # Pre-built scaffold for FastAPI + Next.js web apps
+        backend/                  # FastAPI app (auth, RBAC, models, routers, schemas, Alembic)
+        frontend/                 # Next.js app (pages, components, lib, Tailwind, oklch theme)
+        mock-services/mock-oidc/  # Complete mock OIDC provider (copied as-is, never regenerated)
+        scripts/                  # seed-mock-services.sh template
+        docker-compose.yml        # Multi-service orchestration template
+        .env.example              # Environment variable documentation
+        .gitignore                # Standard Python + Node.js + Docker ignores
+        README.md                 # Scaffold documentation (placeholders, architecture, patterns)
 ```
+
+## Scaffolds
+
+Scaffolds are pre-built, battle-tested code foundations with `[BRACKET_PLACEHOLDERS]` for app-specific values. They encode every lesson learned from real builds so the same bugs never recur.
+
+### fastapi-nextjs (61 files)
+The primary scaffold for web applications. The Build phase copies it into the project, replaces placeholders, then generates domain-specific code on top. Provides:
+- **Auth**: Complete OIDC flow (login → mock-oidc → callback → JWT cookie → /me → logout)
+- **RBAC**: 4 tables (roles, permissions, role_permissions, users), require_permission middleware, admin UI
+- **Frontend**: Same-origin proxy, flat AuthMe, DataTable with Excel-like filtering, sidebar, breadcrumbs, quick search, mode toggle, oklch theming
+- **Docker**: Compose with health checks (127.0.0.1), entrypoint.sh for migrations, mock-oidc on dev profile
+- **Mock-oidc**: Copied as-is. RSA signing, internal/external URL split, user picker, admin API
+
+What the scaffold does NOT provide (generated fresh per app):
+- Domain models, migrations, and seed data
+- Domain API routes and schemas
+- Domain frontend pages
+- Dashboard widgets
+- External integration mock services
+- Terraform infrastructure
 
 ## Source Documents
 
@@ -96,7 +126,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 - OIDC authentication, database-driven RBAC, 4 system roles, permission matrix
 - Standard UI components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
 - Docker Compose with mock services, seed data, system fonts only
-- 14 Enterprise Prompts executed in order
+- Scaffold foundation + domain-specific code generation
 
 ### Tier 2: IDE Extension
 - Extension manifest complete, activation events scoped, SecretStorage for tokens
@@ -154,7 +184,8 @@ See `ship-it-guide.md` for the full lifecycle, CI/CD automation contract, and se
 
 ## Build Quality
 
-The build process has three layers:
-1. **Prevention** -- Prompts encode lessons learned from past builds (auth patterns, font rules, API contracts, seed data requirements)
-2. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
-3. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
+The build process has four layers:
+1. **Foundation** -- Scaffold provides pre-verified auth, RBAC, Docker, and UI components (these patterns were debugged once and never regenerated)
+2. **Prevention** -- Prompts and build instructions encode lessons learned (API contract verification, seed data alignment, Alembic syntax rules)
+3. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
+4. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism

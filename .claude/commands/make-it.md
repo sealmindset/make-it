@@ -35,6 +35,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/templates/app-context.md
+@~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
 </execution_context>
 
@@ -246,7 +247,11 @@ Based on ideation answers, classify the project type:
 - `library` -- Importable package, no standalone runtime
 - `api-service` -- Backend only, no frontend, serves other systems
 
-Record `project_type` and `active_tiers` in app-context.json. Apply Tier 0 (universal) guardrails unconditionally. Apply the matching higher tier from guardrails.md. Document any skipped guardrails in `skipped_guardrails`.
+Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply Tier 0 (universal) guardrails unconditionally. Apply the matching higher tier from guardrails.md. Document any skipped guardrails in `skipped_guardrails`.
+
+**Select scaffold (silently):**
+- `web-app` with Python backend → `scaffold: "fastapi-nextjs"` (uses pre-built scaffold)
+- All other combinations → `scaffold: null` (generate from prompt-templates.md)
 
 **Questions that MAY need user input (only ask if not already clear from ideation):**
 
@@ -311,183 +316,194 @@ Ready for me to start building? This will take a few minutes."
 
 <step name="build-project">
 
-Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [BRACKETS] from the app-context. The user sees progress updates, NOT the prompts themselves.
+**BUILD STRATEGY: Scaffold + Customize**
 
-**Execution order:**
+For `web-app` projects using FastAPI + Next.js, the build uses a pre-built scaffold at
+`~/.claude/make-it/scaffolds/fastapi-nextjs/` as the foundation. This scaffold contains
+battle-tested, internally-consistent code for auth, RBAC, Docker, mock-oidc, and standard
+UI components -- all verified to work together. The build copies the scaffold, replaces
+placeholders, then generates app-specific code on top.
 
-1. **Project Setup (Prompt #1)**
-   - Tell user: "Setting up your project structure..."
-   - Create project directory, initialize git, set up base structure
-   - Create .gitignore appropriate for the stack
-   - Create CHANGELOG.md with initial entry
-   - Create TODO.md with section headers (populate throughout build)
-   - Create .env.example with all required env vars (commented, placeholder values)
-   - Copy .env.example to .env (gitignored) for local development
-   - Auto-generate JWT_SECRET in .env (run: `openssl rand -hex 32`)
-   - .env.example should have `JWT_SECRET=` (empty) with a comment: "Generate with: openssl rand -hex 32"
+For other project types or stacks, fall back to generating from prompt-templates.md directly.
 
-2. **UI Design (Prompt #2)**
-   - Tell user: "Designing your pages and interface..."
-   - Generate all pages identified during ideation
-   - Ensure responsive design
-   - NEVER use external font CDNs (Google Fonts, Adobe Fonts) -- use system font stacks only
-   - Do NOT import from next/font/google -- SSL-inspecting proxies block external fonts during builds
-   - Use ONE shared authenticated layout (route group) -- do NOT create duplicate layouts per page
-   - The authenticated layout MUST include a header bar with: SidebarTrigger | Breadcrumbs | Spacer | QuickSearch | ModeToggle
+The user sees progress updates, NOT the technical details.
+
+**Execution order (FastAPI + Next.js web-app):**
+
+**PHASE A: Scaffold Foundation**
+
+0. **Copy scaffold and replace placeholders**
+   - Tell user: "Setting up your project foundation..."
+
+   a. **Select ports** -- BEFORE copying, check which ports are available:
+      ```bash
+      for PORT in 3000 8000 5432 10090; do lsof -i :$PORT >/dev/null 2>&1 && echo "$PORT in use"; done
+      ```
+      Pick unused ports for FRONTEND_PORT, BACKEND_PORT, DB_PORT, MOCK_OIDC_PORT.
+      Start from defaults (3000, 8000, 5432, 10090) and increment by 100 if in use.
+
+   b. **Create project directory and initialize git:**
+      ```bash
+      mkdir -p [PROJECT_DIR] && cd [PROJECT_DIR] && git init
+      ```
+
+   c. **Copy scaffold files** into the project directory:
+      ```bash
+      cp -r ~/.claude/make-it/scaffolds/fastapi-nextjs/* [PROJECT_DIR]/
+      cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore [PROJECT_DIR]/
+      cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.env.example [PROJECT_DIR]/
+      ```
+
+   d. **Copy mock-oidc as-is** (never regenerated -- most stable component):
+      The scaffold already includes `mock-services/mock-oidc/` -- it was copied in step c.
+
+   e. **Replace bracket placeholders** across all scaffold files using the app-context:
+      - `[APP_NAME]` → project name from ideation (e.g., "DeliverIt")
+      - `[APP_SLUG]` → kebab-case (e.g., "deliver-it")
+      - `[APP_TAGLINE]` → one-line description from ideation
+      - `[APP_ICON]` → first letter of app name (or emoji if appropriate)
+      - `[FRONTEND_PORT]` → selected port (e.g., 3100)
+      - `[BACKEND_PORT]` → selected port (e.g., 8100)
+      - `[DB_PORT]` → selected port (e.g., 5500)
+      - `[MOCK_OIDC_PORT]` → selected port (e.g., 10190)
+
+   f. **Generate .env from .env.example** with local dev values filled in:
+      ```bash
+      cp .env.example .env
+      # Fill in JWT_SECRET
+      JWT_SECRET=$(openssl rand -hex 32)
+      # Fill in local dev URLs, ports, OIDC config
+      ```
+      .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
+
+   g. **Create CHANGELOG.md** with initial entry and **TODO.md** with section headers.
+
+   Tell user: "Foundation is ready! Now building your specific features..."
+
+**PHASE B: App-Specific Code**
+
+The scaffold provides: auth flow, RBAC tables + API + admin UI, Docker orchestration,
+mock-oidc, standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle),
+sidebar, theme, api client, and login page. These are ALREADY DONE -- do not regenerate them.
+
+The following steps generate ONLY the app-specific code. Read the scaffold files first
+to understand the patterns, then generate new code that follows the same conventions.
+
+1. **Domain Models + Migration**
+   - Tell user: "Creating your data models..."
+   - Read the scaffold's `backend/app/models/` and `backend/alembic/versions/001_rbac_schema.py`
+     to understand the pattern (Base, UUID PKs, timestamps, relationships)
+   - Create new model files in `backend/app/models/` for each domain entity from ideation
+   - Create `backend/alembic/versions/002_domain_schema.py` migration for domain tables
+   - Update `backend/app/models/__init__.py` to export new models
+   - Add domain-specific permissions to the 001 RBAC seed data (or create 003_domain_permissions.py)
+
+2. **Domain API Routes**
+   - Tell user: "Building your API..."
+   - Read the scaffold's `backend/app/routers/users.py` and `backend/app/routers/roles.py`
+     to understand the pattern (prefix, schemas, require_permission, CRUD structure)
+   - Create new router files in `backend/app/routers/` for each domain resource
+   - Create matching schemas in `backend/app/schemas/`
+   - Every route handler MUST use `require_permission(resource, action)`
+   - Register routers in `backend/app/main.py` (replace `[DOMAIN_ROUTERS]` placeholder)
+
+3. **Domain Frontend Pages**
+   - Tell user: "Designing your pages..."
+   - Read the scaffold's admin pages (`users/page.tsx`, `roles/page.tsx`) and the
+     DataTable component to understand the pattern (apiGet, useAuth, DataTable, column defs)
+   - Create new page files in `frontend/app/(auth)/[page-name]/page.tsx`
    - All list pages MUST use the DataTable component (not plain HTML tables)
-   - Pages must fetch data through a service/API layer -- do NOT hardcode mock data in components
-   - If backend is not yet wired, create a mock service layer that returns sample data through the same interface the real API will use
+   - All pages MUST fetch data through `apiGet`/`apiPost`/`apiPut`/`apiDelete` from `@/lib/api`
+   - All pages MUST gate actions with `hasPermission(resource, action)` from `useAuth()`
+   - Do NOT hardcode mock data in page components
+   - NEVER use external font CDNs -- system font stacks only (Zscaler-safe)
+   - Use CSS variables (`var(--primary)`, etc.) or Tailwind semantic classes (`bg-primary`)
+     for all colors -- both work because tailwind.config.ts maps CSS variables
 
-3. **Tech Stack Configuration (Prompt #3)**
-   - Tell user: "Configuring the technology..."
-   - Install dependencies, configure frameworks
-   - This validates/implements the stack decision from Phase 2
-   - ALWAYS use the latest stable version of every dependency -- never pin to older majors
-   - Verify no known CVEs in chosen versions before proceeding
+4. **Wire Navigation**
+   - Update `frontend/components/sidebar.tsx` -- replace `[NAV_ITEMS]` with actual nav items
+     including domain pages. Each item needs: `label`, `href`, `icon`, `permission`
+   - Update `frontend/components/breadcrumbs.tsx` -- replace `[SEGMENT_LABELS]` with
+     labels for all pages (e.g., `{ "forecasts": "Forecasts", "admin": "Admin" }`)
+   - Update `frontend/components/quick-search.tsx` -- replace `[NAVIGATION_ITEMS]` with
+     all pages for the command palette
+   - Update `frontend/lib/types.ts` -- replace `[DOMAIN_TYPES]` with domain type definitions
 
-4. **Architecture (Prompt #4)**
-   - Tell user: "Setting up the architecture..."
-   - Define APIs, service boundaries, frontend-backend connection
-   - Apply M.A.C.H. principles
-   - If Python + SQLAlchemy: initialize Alembic and generate initial migration from models
-   - If Node + Prisma: initialize Prisma and generate initial migration
-   - Database must be usable after `docker-compose up` without manual migration steps
+5. **Dashboard**
+   - Tell user: "Setting up your dashboard..."
+   - Update `frontend/app/(auth)/dashboard/page.tsx` -- replace `[DASHBOARD_WIDGETS]` with
+     actual widgets that fetch real data from domain API endpoints
+   - Dashboard MUST show meaningful metrics, not placeholder text
 
-5. **Cloud Infrastructure (Prompt #5)** -- Skip if prototype only
+6. **Cloud Infrastructure** -- Skip if prototype only
    - Tell user: "Setting up cloud infrastructure..."
-   - Generate Terraform configuration (DevOps handoff artifact -- user never applies this)
-   - Include backend.tf with state backend for the user's cloud provider
-   - Include environments/ with per-environment tfvars (dev, staging, prod)
-   - Resources organized per cloud provider conventions (resource groups, accounts, projects)
+   - Generate Terraform configuration in `infrastructure/`
+   - Include backend.tf with state backend, environments/ with per-env tfvars
+   - This is a DevOps handoff artifact -- the user never applies it
 
-6. **Docker Support (Prompt #6)** -- Skip if single-runtime + no containers needed
-   - Tell user: "Setting up development environment..."
-   - Generate Dockerfile(s) and docker-compose.yml
-   - Use Docker Compose profiles: default profile for app services, "dev" profile for mock services
-   - Local development runs with `docker-compose --profile dev up`
-   - BEFORE choosing ports: check which ports are already in use on the host
-     (`lsof -i :PORT`) and pick alternatives for any conflicts
-   - Backend Dockerfile CMD MUST use entrypoint.sh (not uvicorn/node directly)
-     so database migrations run on every container start
-
-7. **Multi-Tenancy (Prompt #7)** -- Skip if not needed
+7. **Multi-Tenancy** -- Skip if not needed
    - Tell user: "Adding support for multiple organizations..."
-   - Add tenant_id, RLS policies
+   - Add tenant_id to domain models, RLS policies
 
-8. **Authentication (Prompt #8)** -- Skip if no auth needed
-   - Tell user: "Setting up secure login..."
-   - Implement OIDC with chosen provider
-   - Generate the COMPLETE auth flow (login, callback, token exchange, JWT, logout)
-   - Do NOT generate stub endpoints that return placeholder messages
-   - Auth callback MUST read roles from the APPLICATION DATABASE (not OIDC claims):
-     1. Exchange code for tokens, get userinfo from OIDC
-     2. Look up user in database by oidc_subject (fall back to email)
-     3. Read role from the DATABASE record
-     4. Sign a stateless JWT containing {sub, email, name, role_id, role_name}, set as httpOnly cookie
-   - Logout MUST be a POST endpoint that clears the JWT cookie
-   - Frontend logout button MUST call the backend API via POST, then redirect via router.push
-   - Do NOT implement logout as a GET link or <a href> (causes 404 or unintended behavior)
-   - Include a get_current_user dependency/middleware for protecting routes
-   - Wire OIDC config to read issuer URL, client ID, and secret from environment variables
-   - JWT_SECRET must be read from env var (auto-generated during project setup, never hardcoded)
-   - .env must point to mock-oidc for local development
-   - No if/else branching for mock vs real OIDC -- same code path, different env vars
-   - In docker-compose.yml, set OIDC_ISSUER_URL to the Docker network URL
-     (http://mock-oidc:10090) -- the mock-oidc discovery document handles
-     internal/external URL split natively (no OIDC_INTERNAL_URL needed)
+8. **External Integrations + Mock Services**
+   - Tell user: "Connecting to external systems..."
+   - For each external integration identified in ideation (Jira, Tempo, Oracle, etc.):
+     a. Create a service client in `backend/app/services/` with base URL from env var
+     b. Generate a mock service in `mock-services/mock-[name]/` implementing ONLY the
+        endpoints the service client calls
+     c. Add the mock service to `docker-compose.yml` (profile: dev)
+     d. Add the service URL env var to `.env` and `.env.example`
+   - CRITICAL: Read mock service route files to verify API contracts match client methods
+   - The scaffold already includes mock-oidc -- do NOT regenerate it
 
-9. **User Management + Permissions (Prompt #9)** -- Always runs
-   - Tell user: "Setting up user management and permissions..."
-   - Create database tables: roles, permissions, role_permissions + update users table
-   - Generate migration with schema + seed data (4 system roles, page-level CRUD permissions)
-   - Create permission service with in-memory cache and invalidation
-   - Create admin API: user CRUD, role CRUD, permission listing
-   - Create admin UI: User Management page (add/edit/deactivate users, assign roles),
-     Role Management page (create custom roles, permission matrix editor)
-   - Wire require_permission(resource, action) middleware to all route handlers
-   - Update auth callback to load role + permissions from database into JWT
-   - Update frontend sidebar to show/hide pages and actions based on user permissions
-   - Super Admin can create custom roles with any permission combination
-   - System roles (Super Admin, Admin, Manager, User) cannot be deleted
+9. **AI Features** -- Skip if no AI features
+   - Tell user: "Setting up AI features..."
+   - Determine tier from ai_usage_level in app-context:
+     - "minimal" → code + config overrides
+     - "moderate" → database + admin UI
+     - "heavy" → full management platform
+   - Reference prompt-templates.md Prompt #10 for implementation details per tier
 
-10. **AI Prompt Architecture (Prompt #10)** -- Skip if no AI features
-    - Determine tier from ai_usage_level in app-context:
-      - "minimal" -> Execute Prompt #10a (code + config override)
-      - "moderate" -> Execute Prompt #10b (database + admin UI)
-      - "heavy" -> Execute Prompt #10c (full management platform)
-    - Tell user: "Setting up AI features..." (all tiers)
-    - Tier 1: Create lib/prompts file with named constants and env var overrides
-    - Tier 2: Create schema (3 tables), API (6 routes), admin editor, runtime loader, seed data migration
-    - Tier 3: Create schema (6 tables), API (30+ routes), 5 frontend pages, 3-tier caching, seed data migration
-    - Tier 2/3: Generate a seed migration or script that inserts ALL AI prompts into the database on first run -- the prompt tables must NOT start empty
-
-11. **Security (Prompt #11)**
+10. **Security Hardening**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
+    - Reference prompt-templates.md Prompt #11
 
-12. **Mock Services (Prompt #12)** -- Always runs (at minimum, mock-oidc for auth)
-    - Tell user: "Setting up mock services so you can test everything locally..."
-    - Add mock-oidc to docker-compose.yml with pre-seeded test users matching the app's roles
-    - For each external integration (Jira, Oracle EBS, Tempo, etc.), generate a lightweight
-      mock service implementing only the endpoints the app calls
-    - CRITICAL: Verify service client methods call endpoints that EXIST on the mock services.
-      Read the mock service route files to confirm API contracts before writing clients.
-    - Generate scripts/seed-mock-services.sh that:
-      a. Waits for all mock services to be healthy
-      b. Registers app users in mock-oidc (matching database seed data)
-      c. Removes non-app users from mock-oidc
-      d. Updates mock-oidc client redirect URIs for the app's frontend port
-      e. Verifies all mock services return data
-    - Wire all service client base URLs to environment variables
-    - Set .env to point at mock service URLs, .env.example to document both mock and production URLs
-
-13. **Seed Data (Prompt #13)** -- Always runs
+11. **Seed Data**
     - Tell user: "Adding sample data so you can explore the app right away..."
-    - Generate a database seed script or migration that populates the app with realistic sample data
-    - The user should see a populated app on first login -- NOT empty pages, NOT blank dashboards
-    - Seed data must include:
-      a. **Users** -- one per role defined in app-context (matching mock-oidc test users)
-      b. **Core domain records** -- enough data to make every page meaningful:
-         - Dashboards show real numbers, charts, and metrics
-         - List pages have 10-20 items with varied statuses and dates
-         - Detail pages have enough related data to look realistic
-         - Charts and graphs have data points spanning a reasonable time range
-      c. **Integration data** -- sample records that look like they came from external systems
-         (e.g., synced Jira projects, Tempo worklogs, financial records)
-      d. **Activity/history** -- recent timestamps so the app looks "alive" not stale
-    - Seed data runs automatically on first startup (via Alembic migration, Prisma seed, or startup script)
-    - Seed data must NOT conflict with mock service data -- use the same DATA_SEED or naming
-      conventions so the app and mock services tell a consistent story
-    - The startup script (or migration) should be idempotent -- safe to run multiple times
+    - Generate `backend/alembic/versions/003_seed_data.py` (or next available number)
+    - Seed data MUST include:
+      a. **Users** -- one per role, with oidc_subject matching mock-oidc test users
+         (e.g., `mock-admin`, `mock-manager`, `mock-user`, `mock-viewer`)
+      b. **Core domain records** -- 10-20 items per list page with varied statuses and dates
+      c. **Dashboard data** -- enough for charts/metrics to show non-zero values
+      d. **Recent timestamps** -- so the app looks active, not stale
+    - Use `sa.text().bindparams()` for parameterized inserts (NOT op.execute() with 2+ args)
+    - Use f-string literals for deterministic UUIDs (NOT PostgreSQL `::uuid` cast syntax)
+    - Seed migration must be idempotent -- safe to run multiple times
 
-14. **Standard UI Components (Prompt #14)** -- Always runs
-    - Tell user: "Adding the finishing touches to your interface..."
-    - Generate the four standard UI components that every app includes:
-      a. **Breadcrumbs** (`components/breadcrumbs.tsx`) -- auto-generated from URL path
-         with SEGMENT_LABELS populated for all pages in this app
-      b. **DataTable** (`components/data-table.tsx`, `data-table-column-header.tsx`,
-         `data-table-toolbar.tsx`, `data-table-pagination.tsx`) -- TanStack React Table v8
-         with Excel-style column filters, multi-select, comparison operators, sorting,
-         grouping, pagination, localStorage persistence
-      c. **QuickSearch** (`components/quick-search.tsx`) -- ⌘K/Ctrl+K command palette
-         with NAVIGATION_ITEMS populated for all pages in this app
-      d. **ModeToggle** (`components/theme-provider.tsx`, `components/mode-toggle.tsx`)
-         -- light/dark/system theme toggle using next-themes with oklch CSS variables
-    - Wire all four into the authenticated layout header bar:
-      SidebarTrigger | Breadcrumbs | Spacer (flex-1) | QuickSearch | ModeToggle
-    - Ensure ThemeProvider wraps the entire app in the root layout with
-      `suppressHydrationWarning` on `<html>` and `<body>`
-    - Replace any plain HTML tables on list pages with the DataTable component
-    - Install dependencies: `@tanstack/react-table`, `next-themes`
+12. **Seed Script Customization**
+    - Tell user: "Configuring test users..."
+    - Update `scripts/seed-mock-services.sh` -- replace user placeholders:
+      - `[ROLE_1_OIDC_SUB]` → `mock-admin` (must match seed data oidc_subject)
+      - `[ROLE_1_EMAIL]` → `admin@[APP_SLUG].local`
+      - `[ROLE_1_DISPLAY_NAME]` → `Admin User`
+      - (repeat for all 4 roles)
+    - Replace `[APP_SLUG]` in script header
+    - Add `[ADDITIONAL_MOCK_SEED]` if external mock services need seeding
 
-**After each prompt execution:**
-- Verify the code was generated correctly
-- Fix any issues before moving to the next prompt
+**After each step:**
+- Verify the code follows scaffold conventions (imports, patterns, naming)
+- Fix any issues before moving to the next step
 - Keep a running tally of what's been built
 
 **Progress updates to user:**
-After every 2-3 prompts, give a brief update:
+After every 2-3 steps, give a brief update:
 "Making good progress! I've set up [what's done]. Now working on [what's next]..."
+
+**For non-FastAPI-Next.js stacks:**
+If the Design phase chose a different stack, fall back to generating from prompt-templates.md
+directly (Prompts #1 through #14 in order). The scaffold only applies to FastAPI + Next.js.
 
 </step>
 
