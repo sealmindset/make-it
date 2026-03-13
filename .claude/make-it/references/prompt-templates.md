@@ -26,10 +26,10 @@ Also create:
 - CHANGELOG.md with an initial "## [0.1.0] - [DATE]" entry listing the project setup
 - TODO.md with high/medium/low priority sections (populate during build)
 - .env.example with all required environment variables (commented with descriptions)
-  - Always include AuditGithub integration vars:
-    # AuditGithub (security scanning -- get API key from AuditGithub admin)
-    AUDITGITHUB_API_URL=https://auditgh.{COMPANY_DOMAIN}
-    AUDITGITHUB_API_KEY=
+  - If a security scanner is configured in app-context.json, include its integration vars:
+    # Security Scanner (optional -- configure if your org uses one)
+    # SECURITY_SCANNER_URL=
+    # SECURITY_SCANNER_API_KEY=
 - Copy .env.example to .env for local development (this file is gitignored)
 
 Dependency version rules:
@@ -78,8 +78,8 @@ Standard UI components (built into every app -- see Prompt #14 for details):
 
 Font rules:
 - NEVER use external font CDNs (Google Fonts, Adobe Fonts, Typekit, etc.)
-- Enterprise environments use SSL inspection proxies (Zscaler) that block external
-  font downloads during Docker builds, causing build failures
+- Enterprise environments use SSL-inspecting proxies (Zscaler, Netskope, GlobalProtect, etc.)
+  that block external font downloads during Docker builds, causing build failures
 - ALWAYS use system font stacks:
     --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
@@ -110,11 +110,11 @@ Requirements:
 - Security: [COMPLIANCE_NEEDS]
 - Special features: [SPECIAL_FEATURES]
 
-Suggest similar technologies to PULSE:
+Suggest a modern technology stack:
 - Next.js frontend
-- Azure Functions backend
-- PostgreSQL database
-- Azure cloud services
+- [BACKEND_FRAMEWORK] backend (FastAPI, Node.js/Express, or similar)
+- [DATABASE_TYPE] database
+- [CLOUD_PROVIDER] cloud services
 
 Version policy: Always use the latest stable release of each dependency.
 Do NOT pin to older major versions (e.g., Next.js 14 when 15 is stable).
@@ -155,24 +155,24 @@ Database setup:
 ## Prompt #5: Create Cloud Infrastructure
 
 ```
-Create Terraform configuration for [PROJECT_NAME] on Azure.
+Create Terraform configuration for [PROJECT_NAME] on [CLOUD_PROVIDER].
 
 This is a DevOps handoff artifact -- the user never applies this. It will be
 reviewed and applied by the DevOps team via automated pipeline.
 
-Target: Azure subscription {AZURE_SUBSCRIPTION}, separated by resource group per environment.
+Target: [CLOUD_PROVIDER]-specific resource organization, separated by environment.
 
 Directory structure:
   infrastructure/
-    main.tf           -- Azure resources
+    main.tf           -- [CLOUD_PROVIDER] resources
     variables.tf      -- Configurable values (resource names, SKUs, tags)
     outputs.tf        -- Values needed by the app (connection strings, URLs)
     versions.tf       -- Provider version constraints
-    backend.tf        -- Azure Storage Account state backend
+    backend.tf        -- Remote state backend configuration
     environments/
-      dev.tfvars      -- Dev: rg-[PROJECT_NAME]-dev
-      staging.tfvars  -- Staging: rg-[PROJECT_NAME]-staging
-      prod.tfvars     -- Prod: rg-[PROJECT_NAME]-prod
+      dev.tfvars      -- Dev environment
+      staging.tfvars  -- Staging environment
+      prod.tfvars     -- Production environment
 
 Services needed:
 - Web app for frontend
@@ -183,7 +183,7 @@ Services needed:
 
 Security requirements:
 - Private networking (no public access)
-- All secrets in Azure Key Vault
+- All secrets in a managed secrets service (e.g., Key Vault, Secrets Manager)
 - Encryption everywhere
 
 Tagging requirements (all resources):
@@ -301,8 +301,9 @@ Implementation requirements:
     6. Store {sub, email, name, role} in the session (role comes from DB)
     7. Redirect to the dashboard
   CRITICAL: User roles MUST come from the application database, NOT from OIDC
-  provider claims. The OIDC provider (mock-oidc or Azure AD) only provides identity
-  (sub, email, name). It does NOT provide application-specific roles.
+  provider claims. The OIDC provider (mock-oidc in dev, or your configured provider
+  in production) only provides identity (sub, email, name). It does NOT provide
+  application-specific roles.
 - /auth/me must return the current user from the session (or 401 if not authenticated)
 - /auth/logout must be a POST endpoint that clears the server-side session and returns
   a JSON response (e.g., {"message": "logged out"}). The frontend logout button must
@@ -324,7 +325,7 @@ Mock OIDC configuration for local development:
     OIDC_CLIENT_SECRET=mock-oidc-secret
 - The mock-oidc service provides a user picker with pre-seeded test users
   (admin, analyst, regular user) so developers can test all role-based flows
-- The same auth code works against real Azure AD in production -- only the
+- The same auth code works against any OIDC provider in production -- only the
   environment variables change
 - Do NOT add any if/else branching for "mock mode" vs "real mode" -- the OIDC
   protocol is identical regardless of provider
@@ -345,7 +346,7 @@ Docker OIDC networking:
     OIDC_ISSUER_URL: http://mock-oidc:10090
 - In .env (for local non-Docker development), use the host-mapped port:
     OIDC_ISSUER_URL=http://localhost:3007
-- In production, Azure AD is reachable from both browser and backend,
+- In production, most OIDC providers are reachable from both browser and backend,
   so no split is needed -- same URL works everywhere
 ```
 
@@ -462,9 +463,9 @@ User Management (require "users.view" / "users.create" / "users.edit" / "users.d
 
 GET    /api/admin/users              -- List all users with their roles
 POST   /api/admin/users              -- Add a new user (by email). Body: { email, name, role_id }
-                                       The user must exist in the OIDC provider (Entra ID).
-                                       Creates a user record with the given role, ready for
-                                       their first SSO login.
+                                       The user must exist in the OIDC provider (your org's
+                                       identity directory). Creates a user record with the
+                                       given role, ready for their first SSO login.
 GET    /api/admin/users/{id}         -- Get user details with role and permissions
 PUT    /api/admin/users/{id}         -- Update user (change role, update name)
 DELETE /api/admin/users/{id}         -- Deactivate user (soft delete -- set is_active=false,
@@ -505,7 +506,7 @@ After any role or role_permissions change, call invalidate_cache().
      - Email input (required)
      - Name input (required)
      - Role dropdown (all active roles)
-     - Note: "This person must have a company account (Entra ID) to sign in"
+     - Note: "This person must have an account in your OIDC provider to sign in"
    - Row actions: Edit Role (dropdown), Deactivate/Reactivate
    - Cannot deactivate yourself (prevent lockout)
    - Cannot change Super Admin role unless you are Super Admin
@@ -679,7 +680,7 @@ have: slug, name, description, content, system_message, category, agent_id,
 provider, model, default parameters. The database must NOT start empty.
 Include version 1 entries in prompt_versions for each seeded prompt.
 
-Reference architecture: auditgithub prompt management system.
+Reference architecture: production prompt management system.
 ```
 
 **Required context:** AI features, agents/models/providers, full prompt inventory
@@ -695,7 +696,7 @@ Implement security for [PROJECT_NAME] following Zero Trust principles.
 Protect:
 - Network: Use private connections for all services
 - Data: Encrypt everything in transit and at rest
-- Secrets: Store all passwords/keys in Azure Key Vault
+- Secrets: Store all passwords/keys in a managed secrets service
 - Input: Validate all user input
 [AI_SECURITY_LINE]
 - Access: Only authenticated users with right permissions
@@ -719,7 +720,7 @@ Mock services needed:
 
 For EACH mock service:
 - If a ready-made mock exists in the mocksvcs catalog, use it directly:
-  - mock-oidc (internal port 10090, host-mapped to 3007) -- Azure AD / OIDC
+  - mock-oidc (internal port 10090, host-mapped to 3007) -- OIDC Provider for local dev
   - mock-github (port 3006) -- GitHub REST API
   - mock-cribl (port 3005) -- Cribl Stream log ingestion
   - mock-jira (port 8443) -- Jira Software REST API v2/v3
@@ -778,7 +779,7 @@ mock-oidc Dockerfile (mock-services/mock-oidc/Dockerfile):
   CMD ["uvicorn", "mock_oidc.main:app", "--host", "0.0.0.0", "--port", "10090"]
 
 IMPORTANT: Do NOT use Java-based OIDC servers (navikt/mock-oauth2-server or similar).
-Java dependencies are prohibited by organizational policy. The Python mock-oidc
+Java dependencies are prohibited by project policy. The Python mock-oidc
 service provides the same OIDC functionality without any Java dependency.
 
 Environment variable wiring:
@@ -791,9 +792,9 @@ Environment variable wiring:
     JIRA_BASE_URL=http://localhost:8443
     TEMPO_BASE_URL=http://localhost:8444
     GITHUB_API_URL=http://localhost:3006
-    # Production (uncomment and set real values)
-    # OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
-    # JIRA_BASE_URL=https://jira.company.com
+    # Production (uncomment and set real values for your OIDC provider)
+    # OIDC_ISSUER_URL=https://your-oidc-provider.example.com
+    # JIRA_BASE_URL=https://jira.example.com
     # TEMPO_BASE_URL=https://api.tempo.io
     # GITHUB_API_URL=https://api.github.com
 

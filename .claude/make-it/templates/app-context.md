@@ -78,10 +78,20 @@ This template is populated by /make-it as the user answers questions. It becomes
     "custom_mocks": []
   },
   "integrations": [],
+  "cloud": {
+    "provider": "",
+    "region": "",
+    "cli_authenticated": false
+  },
   "deployment": {
-    "target": "azure",
+    "target": "",
     "containerize": false,
     "prototype_only": false
+  },
+  "security_scanner": {
+    "type": "",
+    "api_url": "",
+    "uses_github_issues": false
   },
   "pages": [],
   "prompts_to_run": [],
@@ -112,6 +122,7 @@ The `active_tiers` array determines which guardrails from `guardrails.md` are en
 | features | Ideation | "What should it do?" (iterative) |
 | users | Ideation | "Who will use it?" |
 | auth | Design | Inferred from users.internal_or_external |
+| auth.provider | Design | Valid values: "azure-ad" \| "auth0" \| "okta" \| "google" \| "github" \| "keycloak" \| "other" \| "" |
 | roles | Design | "What types of users?" |
 | permissions | Design | "What can each type do?" |
 | stack | Design | Inferred from app_type + features + project_type |
@@ -121,10 +132,13 @@ The `active_tiers` array determines which guardrails from `guardrails.md` are en
 | ai_features.prompt_management_tier | Design | 0 (none), 1 (code+config), 2 (db+admin), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
+| cloud.provider | Design | "Where would you like to host this?" (Azure, AWS, Google Cloud, or just local) -- values: "azure" \| "aws" \| "gcp" \| "none" |
+| cloud.region | Design | Inferred from provider choice or asked |
 | mock_services | Design | Auto-determined: mock_oidc if auth, mock_jira/mock_tempo/mock_github/mock_cribl if matching integration, custom mocks for others |
 | mock_services.custom_mocks | Design | One entry per integration without a ready-made mock: { name, port, endpoints_needed } |
 | compliance | Design | Only if enterprise/regulated |
-| deployment | Design | "Prototype or production?" |
+| deployment.target | Design | Populated from cloud.provider during Design |
+| security_scanner.type | Design / Enterprise config | Auto-detected from environment or asked in enterprise contexts -- values: "auditgithub" \| "github-advanced-security" \| "snyk" \| "sonarqube" \| "none" \| "" |
 | pages | Design | Derived from features |
 | skipped_guardrails | Design | Documents why non-active-tier guardrails were skipped |
 

@@ -40,7 +40,7 @@ These apply to every project /make-it builds, no exceptions.
 9. **Input validation at system boundaries** -- Validate all external input (user input, API responses, file parsing, CLI arguments). Trust internal code; validate at the edges.
 10. **Mask/redact sensitive data in output** -- Logs, error messages, and UI never display full secrets, tokens, or credentials.
 11. **Latest stable dependencies** -- Always use the latest stable version of every dependency. No pinning to outdated majors. Check for known CVEs before proceeding.
-12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Java runtime dependencies are prohibited by organizational policy. Use Python, Node.js, Go, or Rust alternatives instead.
+12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Java runtime dependencies are prohibited by project policy. Use Python, Node.js, Go, or Rust alternatives instead.
 
 ### Architecture
 
@@ -62,7 +62,7 @@ These apply to every project /make-it builds, no exceptions.
 Activate when `project_type == "web-app"`. These are the existing /make-it guardrails for browser-based applications with frontend + backend.
 
 ### Authentication & Authorization
-- OIDC authentication (Azure AD / Entra ID for enterprise)
+- OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
 - Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
@@ -94,10 +94,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Mock services for all external integrations
 - Mock service seed script (scripts/seed-mock-services.sh)
 - Service client endpoints verified against mock API contracts
-- Terraform generated as DevOps handoff artifact (user never applies)
-- Terraform targets subscription {AZURE_SUBSCRIPTION}, resource groups per environment
-- Terraform state backend configured for Azure Storage Account
-- All Terraform resources tagged (app, environment, managed-by, owner)
+- Terraform (or equivalent IaC) generated for the user's chosen cloud provider as DevOps handoff artifact (user never applies)
+- IaC state backend configured for the chosen cloud provider's state storage
+- All cloud resources tagged (app, environment, managed-by, owner)
 
 ### Prompts
 - Execute all 14 prompts in order (#1-#14)

@@ -43,12 +43,12 @@ The full path from local app to production. The user only participates at verifi
 ```
 LOCAL DEVELOPMENT (user's Docker sandbox)
   /make-it        -> Build app, push code to GitHub
-  /resume-it      -> Iterate (features, AuditGithub fixes, testing)
+  /resume-it      -> Iterate (features, security fixes, testing)
   /try-it         -> User verifies: "Does it do what I want?"
                      |
                      v
 CONTINUOUS QUALITY (automated, invisible to user)
-  AuditGithub     -> Scans repo continuously, reports issues
+  Security Scanner -> Scans repo continuously, reports issues (optional)
   /resume-it      -> Auto-fixes scan findings, runs tests, verifies
                      (user never sees this -- just confirms app still works)
                      |
@@ -58,7 +58,7 @@ SHIP (user triggers)
                      |
                      v
 DEVOPS PREFLIGHT (automated, DevOps-owned)
-  DevOps BOT      -> Scans PR: security, compliance, IaC, dependencies
+  CI/CD Automation -> Scans PR: security, compliance, IaC, dependencies
                      |
                      +-- Issues found?
                      |     -> BOT auto-remediates what it can
@@ -73,7 +73,7 @@ DEVOPS PREFLIGHT (automated, DevOps-owned)
                      |     (loop until clean)
                      |
                      +-- All clear?
-                           -> Deploy to dev ({AZURE_SUBSCRIPTION}, app resource group)
+                           -> Deploy to dev environment
                               |
                               v
 DEV ENVIRONMENT
@@ -82,8 +82,8 @@ DEV ENVIRONMENT
                      |
                      v
 PRODUCTION GATE (DevOps-owned)
-  DevOps BOT      -> Production preflight (stricter checks)
-  DevOps team     -> Final review
+  CI/CD Automation -> Production preflight (stricter checks)
+  DevOps team      -> Final review
                      |
                      +-- Passes -> Deploy to prod
                      +-- Fails  -> Remediate, loop back to user verification
@@ -96,39 +96,53 @@ PRODUCTION GATE (DevOps-owned)
 | Phase | Owner | User's Role |
 |-------|-------|-------------|
 | Local development | User + /make-it + /resume-it | Describe what they want, verify it works |
-| AuditGithub scanning | Automated | None (invisible) |
-| AuditGithub remediation | /resume-it (automated) | Verify app still works after fixes |
+| Security scanning | Automated (optional) | None (invisible) |
+| Security remediation | /resume-it (automated) | Verify app still works after fixes |
 | /ship-it PR creation | Automated | Type `/ship-it` |
-| DevOps preflight scan | DevOps BOT (automated) | None (wait) |
-| Preflight remediation | DevOps BOT + DevOps team | Verify app still works after fixes |
+| DevOps preflight scan | CI/CD automation | None (wait) |
+| Preflight remediation | CI/CD automation + DevOps team | Verify app still works after fixes |
 | Deploy to dev | DevOps | None (wait) |
 | Dev environment testing | User | "Does it work how I want?" |
-| Production gate | DevOps BOT + DevOps team | Confirm prod-ready |
+| Production gate | CI/CD automation + DevOps team | Confirm prod-ready |
 | Deploy to prod | DevOps | None (notified when live) |
 
 ---
 
-## AuditGithub Integration
+## Security Scanner Integration (Optional)
 
-AuditGithub is your organization's security scanning platform (FastAPI + PostgreSQL + 20+ scanners). It runs in Azure, scans repos on push and on schedule, and stores rich findings with AI-powered triage and remediation diffs.
+If your organization uses a security scanning platform, /resume-it can automatically remediate findings. The scanner integration is pluggable — configure it based on your tool.
 
-### Communication Protocol (Hybrid: GitHub Issues + REST API)
+### Supported Scanners
 
-AuditGithub and /resume-it communicate through two channels:
+Configure in `app-context.json`:
+
+| Scanner | Type | How Findings Arrive |
+|---------|------|-------------------|
+| AuditGithub | Custom platform | GitHub Issues (labeled) + REST API |
+| GitHub Advanced Security | Built-in | GitHub Security tab + API |
+| Snyk | SaaS | GitHub Issues or webhooks |
+| SonarQube | Self-hosted | API polling |
+| None | - | Manual security review |
+
+### Example Integration Pattern (Hybrid: GitHub Issues + REST API)
+
+This section describes one possible integration approach. Your organization may use a different pattern.
+
+Security scanners and /resume-it can communicate through two channels:
 
 ```
-NOTIFICATION (AuditGithub → GitHub Issues):
+NOTIFICATION (Scanner → GitHub Issues):
   Lightweight, always visible, triggers /resume-it awareness
 
-REMEDIATION (resume-it → AuditGithub REST API):
+REMEDIATION (resume-it → Scanner REST API):
   Rich finding data, AI diffs, status updates
 ```
 
 **Why hybrid:** /resume-it is ephemeral (only runs when user invokes it). GitHub Issues provide persistent visibility. The REST API provides the rich data needed to actually fix things.
 
-### Channel 1: GitHub Issues (AuditGithub → repo)
+### Channel 1: GitHub Issues (Scanner → repo)
 
-AuditGithub creates/updates GitHub Issues on the repo for each finding:
+The scanner creates/updates GitHub Issues on the repo for each finding:
 
 **Issue format:**
 ```markdown
@@ -148,25 +162,25 @@ Body:
   AI confidence: 0.95
 
   ---
-  _This issue was created by AuditGithub. Do not close manually --
+  _This issue was created by the security scanner. Do not close manually --
   it will auto-close when the finding is resolved._
 ```
 
 **Issue lifecycle:**
-- AuditGithub creates issue on new finding
-- AuditGithub updates issue body if finding changes (rescan updates risk score, AI retriage)
-- AuditGithub auto-closes issue when finding status becomes `resolved` (confirmed by rescan after push)
+- Scanner creates issue on new finding
+- Scanner updates issue body if finding changes (rescan updates risk score, AI retriage)
+- Scanner auto-closes issue when finding status becomes `resolved` (confirmed by rescan after push)
 - Labels updated if severity changes
 
-### Channel 2: REST API (/resume-it → AuditGithub)
+### Channel 2: REST API (/resume-it → Scanner)
 
-/resume-it calls the AuditGithub API for rich finding data and to report fixes.
+/resume-it calls the scanner API for rich finding data and to report fixes.
 
 **Authentication:** API key per repo, stored in `.env`:
 ```bash
 # .env (gitignored)
-AUDITGITHUB_API_URL=https://auditgh.{COMPANY_DOMAIN}
-AUDITGITHUB_API_KEY=agh_xxxxxxxxxxxxxxxxxxxx
+SECURITY_SCANNER_API_URL=https://your-scanner-domain.example.com
+SECURITY_SCANNER_API_KEY=scanner_xxxxxxxxxxxxxxxxxxxx
 ```
 
 **API calls /resume-it makes:**
@@ -175,9 +189,9 @@ AUDITGITHUB_API_KEY=agh_xxxxxxxxxxxxxxxxxxxx
 |------|--------|----------|---------|
 | 1. Discover | `GET` | `/findings/paginated?repo_name={repo}&status=open` | Get all open findings for this repo |
 | 2. Detail | `GET` | `/findings/{finding_id}` | Get full finding with `ai_remediation_diff` |
-| 3. Fix | _(local)_ | Apply `ai_remediation_diff` to codebase | Use AuditGithub's AI-generated fix |
+| 3. Fix | _(local)_ | Apply `ai_remediation_diff` to codebase | Use scanner's AI-generated fix |
 | 4. Verify | _(local)_ | Run tests | Confirm fix doesn't break anything |
-| 5. Push | _(local)_ | `git commit && git push` | Trigger AuditGithub rescan |
+| 5. Push | _(local)_ | `git commit && git push` | Trigger scanner rescan |
 | 6. Report | `PATCH` | `/findings/{finding_id}/status` | Mark as resolved with resolution notes |
 
 **Request/response examples:**
@@ -185,8 +199,7 @@ AUDITGITHUB_API_KEY=agh_xxxxxxxxxxxxxxxxxxxx
 ```bash
 # Step 1: Get open findings
 GET /findings/paginated?repo_name=my-app&status=open&severity=critical,high
-Headers: Authorization: Bearer agh_xxxxxxxxxxxxxxxxxxxx
-         X-Organization-Name: {ORGANIZATION_NAME}
+Headers: Authorization: Bearer scanner_xxxxxxxxxxxxxxxxxxxx
 
 Response: {
   "items": [
@@ -209,7 +222,7 @@ Response: {
 
 # Step 6: Mark resolved after fix
 PATCH /findings/f47ac10b-.../status
-Headers: Authorization: Bearer agh_xxxxxxxxxxxxxxxxxxxx
+Headers: Authorization: Bearer scanner_xxxxxxxxxxxxxxxxxxxx
 Body: {
   "status": "resolved",
   "resolution": "fixed",
@@ -217,7 +230,9 @@ Body: {
 }
 ```
 
-### Full remediation flow
+### Example: AuditGithub Remediation Flow
+
+AuditGithub is a custom security scanning platform. Here's how /resume-it integrates with it:
 
 ```
 AuditGithub scans repo (on push or cron schedule)
@@ -243,28 +258,31 @@ If fix changes app behavior:
 Nothing, unless a fix changes how the app behaves. Then they get:
 "I made some updates to keep your app secure. Can you check that everything still works the way you want? Just run /try-it."
 
-### What AuditGithub needs to build
+### Integration Requirements
+
+If building a custom scanner integration, the minimum requirements are:
 
 | Feature | Description | Priority |
 |---------|-------------|----------|
-| GitHub Issue creation | Create issue per finding with finding_id in body, severity/type labels | Required |
-| GitHub Issue auto-close | Close issue when finding status → resolved (after rescan confirms) | Required |
-| GitHub Issue update | Update issue body/labels when finding changes (rescan, retriage) | Nice to have |
-| API key scoping | API keys scoped to specific repos (not org-wide) | Required |
+| Finding notification | Notify /resume-it of findings (GitHub Issues, webhooks, or API polling) | Required |
+| Finding detail API | Provide full finding data including remediation guidance | Required |
+| Status update API | Accept status updates when findings are resolved | Required |
+| Authentication | API keys or OAuth scoped appropriately | Required |
+| Auto-close on resolve | Close notifications when findings confirmed resolved | Nice to have |
 
 ---
 
-## DevOps BOT Contract
+## CI/CD Automation Contract (Optional)
 
-The DevOps BOT is an automated service that scans PRs created by /ship-it before code reaches any deployed environment. It is owned and operated by the DevOps team.
+A CI/CD automation service (DevOps BOT, GitHub Actions workflow, or similar) can scan PRs created by /ship-it before code reaches any deployed environment. This is an optional but recommended pattern.
 
 ### Trigger
 
-The BOT activates when:
+The automation activates when:
 - A PR is created by /ship-it (detected by label, branch naming convention, or .ship-it.yml presence)
 - A PR is re-submitted after remediation (re-run on new commits)
 
-### What the BOT checks
+### What the automation checks
 
 | Category | Checks | Severity |
 |----------|--------|----------|
@@ -278,12 +296,12 @@ The BOT activates when:
 ### Remediation flow
 
 ```
-BOT scans PR
+Automation scans PR
   |
   +-- Critical/High issues found?
   |     |
   |     +-- Auto-remediable? (dependency updates, lint fixes, Dockerfile adjustments)
-  |     |     -> BOT commits fix to PR branch
+  |     |     -> Automation commits fix to PR branch
   |     |     -> Re-runs checks
   |     |
   |     +-- Requires human judgment? (architecture changes, breaking updates, policy exceptions)
@@ -291,7 +309,7 @@ BOT scans PR
   |           -> Commits fix to PR branch
   |
   +-- Medium/Low issues found?
-  |     -> BOT commits auto-fixes where possible
+  |     -> Automation commits auto-fixes where possible
   |     -> Remaining items logged as follow-up (don't block deployment)
   |
   +-- After remediation:
@@ -299,25 +317,25 @@ BOT scans PR
            Please verify it still works: run /try-it"
         -> User runs /try-it, confirms
         -> User runs /ship-it to re-submit
-        -> BOT re-scans (loop until clean)
+        -> Automation re-scans (loop until clean)
 ```
 
 ### Communication contract
 
-**BOT -> User notifications** (via GitHub PR comments, plain language):
+**Automation -> User notifications** (via GitHub PR comments, plain language):
 - "Your app is being reviewed by our automation. You don't need to do anything -- we'll let you know when it's ready."
 - "We made a few updates to keep your app secure. Please check that everything still works by running `/try-it` in your project."
 - "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test."
 
-**BOT -> DevOps team notifications** (via internal channels):
+**Automation -> DevOps team notifications** (via internal channels):
 - PR scan results with detailed findings
 - Items requiring human judgment
 - Deployment approval requests
 
-**User -> BOT** (implicit, via /ship-it):
+**User -> Automation** (implicit, via /ship-it):
 - Re-submitting a PR (new /ship-it after verification) signals "user has verified, ready for recheck"
 
-### What the BOT does NOT do
+### What the automation does NOT do
 
 - Modify application behavior or business logic
 - Change what the app does from the user's perspective
@@ -335,26 +353,26 @@ BOT scans PR
 
 | File | Purpose |
 |------|---------|
-| `infrastructure/main.tf` | Azure resources the app needs |
+| `infrastructure/main.tf` | Cloud resources the app needs |
 | `infrastructure/variables.tf` | Configurable values (resource names, SKUs, tags) |
 | `infrastructure/outputs.tf` | Values needed by the app (connection strings, URLs) |
 | `infrastructure/versions.tf` | Provider version constraints |
-| `infrastructure/backend.tf` | State backend (Azure Storage Account) |
+| `infrastructure/backend.tf` | State backend (configured for chosen cloud provider) |
 | `infrastructure/environments/` | Per-environment tfvars |
 
 ### Environment model
 
-| Environment | Subscription | Resource Group | Applied By |
-|-------------|-------------|----------------|------------|
-| Dev | {AZURE_SUBSCRIPTION} | `rg-{app-name}-dev` | DevOps BOT / DevOps team |
-| Staging | {AZURE_SUBSCRIPTION} | `rg-{app-name}-staging` | DevOps team |
-| Prod | {AZURE_SUBSCRIPTION} | `rg-{app-name}-prod` | DevOps team (with approval gate) |
+| Environment | Namespace | Applied By |
+|-------------|-----------|------------|
+| Dev | `{app-name}-dev` | CI/CD pipeline |
+| Staging | `{app-name}-staging` | DevOps team |
+| Prod | `{app-name}-prod` | DevOps team (with approval gate) |
 
 ### Terraform workflow (DevOps-owned)
 
 1. /make-it generates Terraform as part of the build
 2. /ship-it includes it in the PR
-3. DevOps BOT validates: `terraform fmt -check`, `terraform validate`, `terraform plan`
+3. CI/CD automation validates: `terraform fmt -check`, `terraform validate`, `terraform plan`
 4. Plan output posted as PR comment for DevOps team review
 5. After PR merge + deployment approval: `terraform apply` by pipeline
 6. Outputs (connection strings, URLs) fed into app's deployment config

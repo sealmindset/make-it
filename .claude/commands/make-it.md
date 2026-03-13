@@ -111,7 +111,7 @@ If ALL GREEN:
 If YELLOW items exist (no RED):
 "Almost ready! I just need to set up a couple of things first."
 - For each yellow item, either install automatically or walk the user through it
-- For Docker specifically: guide them through the your organization's container runtime setup
+- For Docker specifically: guide them through Docker Desktop or Rancher Desktop installation
 - After fixes: "All set now! Let's start building your app."
 -> Proceed to Phase 1
 
@@ -249,8 +249,8 @@ Record `project_type` and `active_tiers` in app-context.json. Apply Tier 0 (univ
 
 1. **If users were mentioned but auth details are unclear:**
    "You mentioned [user types]. Should they need to log in with their company account, or create their own username and password?"
-   - Company account -> Azure AD / OIDC
-   - Own account -> Consider auth provider options
+   - Company account -> Ask which identity provider (Azure AD, Okta, etc.) or default to OIDC
+   - Own account -> Consider auth provider options (Auth0, Google, GitHub, etc.)
    - Already answered during ideation -> Skip this question
 
 2. **If multiple user types were mentioned but permissions unclear:**
@@ -326,7 +326,7 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
    - Generate all pages identified during ideation
    - Ensure responsive design
    - NEVER use external font CDNs (Google Fonts, Adobe Fonts) -- use system font stacks only
-   - Do NOT import from next/font/google -- Zscaler SSL inspection blocks external fonts during builds
+   - Do NOT import from next/font/google -- SSL-inspecting proxies block external fonts during builds
    - Use ONE shared authenticated layout (route group) -- do NOT create duplicate layouts per page
    - The authenticated layout MUST include a header bar with: SidebarTrigger | Breadcrumbs | Spacer | QuickSearch | ModeToggle
    - All list pages MUST use the DataTable component (not plain HTML tables)
@@ -351,9 +351,9 @@ Execute the prompt templates from prompt-templates.md IN ORDER, filling in all [
 5. **Cloud Infrastructure (Prompt #5)** -- Skip if prototype only
    - Tell user: "Setting up cloud infrastructure..."
    - Generate Terraform configuration (DevOps handoff artifact -- user never applies this)
-   - Include backend.tf with Azure Storage Account state backend
+   - Include backend.tf with state backend for the user's cloud provider
    - Include environments/ with per-environment tfvars (dev, staging, prod)
-   - All environments target subscription {AZURE_SUBSCRIPTION}, separated by resource group
+   - Resources organized per cloud provider conventions (resource groups, accounts, projects)
 
 6. **Docker Support (Prompt #6)** -- Skip if single-runtime + no containers needed
    - Tell user: "Setting up development environment..."
@@ -577,11 +577,14 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 **PART B: Live verification (start the app and test it)**
 
-21. **Zscaler check** -- Before any Docker build or pull:
+21. **SSL-inspecting proxy check** -- Before any Docker build or pull:
     ```bash
-    pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1
+    # Check for common SSL-inspecting proxy processes
+    pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
+    pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
     ```
-    If detected, ask the user to pause Zscaler. Wait for confirmation. Remind them to
+    If detected (or if Docker build fails with TLS/certificate errors), ask the user to
+    temporarily disable their SSL-inspecting proxy. Wait for confirmation. Remind them to
     re-enable after Docker builds complete.
 
 22. **Build and start containers:**
@@ -649,7 +652,7 @@ Common issues and fixes:
 - Logout returns 404 -> change to POST endpoint, fix frontend button
 - Service client gets 404 from mock -> fix endpoint URL to match mock routes
 - Page shows empty data -> verify seed migration ran, check API endpoint
-- Docker build fails with TLS error -> prompt user to disable Zscaler
+- Docker build fails with TLS error -> prompt user to disable SSL-inspecting proxy (Zscaler, Netskope, etc.)
 - Health check fails with IPv6 -> use 127.0.0.1 instead of localhost in health checks
 - Port already allocated -> remap to unused port in docker-compose.yml + .env
 - Backend can't reach mock-oidc -> set OIDC_ISSUER_URL to http://mock-oidc:10090 in docker-compose

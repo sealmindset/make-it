@@ -205,27 +205,24 @@ Tell user the port if it changed:
 
 <step name="build-and-start">
 
-**1. Zscaler check (MANDATORY before any Docker build or pull):**
+**1. SSL-inspecting proxy check (MANDATORY before any Docker build or pull):**
 
-Zscaler's SSL inspection breaks Docker image pulls and builds. Before building:
+SSL-inspecting proxies break Docker image pulls and builds. Before building:
 
 ```bash
-# Check if Zscaler is running
-pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1
+# Check if common SSL-inspecting proxies are running
+pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
+pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
 ```
 
-If Zscaler is detected (or if a Docker build fails with TLS/certificate errors):
+If a proxy is detected (or if a Docker build fails with TLS/certificate errors):
 
-Tell user: "Before I can build your app, I need you to pause Zscaler for a few minutes.
-It interferes with downloading the pieces your app needs.
+Tell user: "Before I can build your app, I need you to temporarily pause your network security tool. It sometimes interferes with downloading the pieces your app needs. Right-click the security icon in your menu bar (it might look like a small shield), choose 'Disable' or 'Pause,' and pick the longest time option. Let me know when it's done!"
 
-Right-click the Zscaler icon in your menu bar (it looks like a small blue shield),
-choose 'Disable,' and pick the longest time option. Let me know when it's done!"
-
-**Wait for user confirmation before proceeding.** Do NOT attempt Docker builds while Zscaler is active.
+**Wait for user confirmation before proceeding.** Do NOT attempt Docker builds while the proxy is active.
 
 After all Docker builds and image pulls complete, remind the user:
-"All done with the heavy lifting! You can re-enable Zscaler now."
+"All done with the heavy lifting! You can re-enable your security tool now."
 
 **2. Build the containers:**
 
@@ -237,8 +234,8 @@ docker compose --profile dev build 2>&1
 
 **If build fails:**
 - Read the error silently
-- Diagnose: missing dependency? Dockerfile issue? Syntax error? TLS/certificate error (Zscaler)?
-- If TLS/certificate error: prompt user to disable Zscaler (see step 1 above)
+- Diagnose: missing dependency? Dockerfile issue? Syntax error? TLS/certificate error (SSL proxy)?
+- If TLS/certificate error: prompt user to disable their security tool (see step 1 above)
 - Fix the issue in the source code
 - Tell user: "I found a small issue and fixed it. Building again..."
 - Retry (up to 3 attempts)
@@ -700,14 +697,14 @@ Let me create it now..."
 - Start services one at a time instead of all at once
 - Skip non-essential mock services if memory is tight
 
-**If Docker build fails with TLS/certificate/SSL errors (Zscaler interference):**
-- Zscaler's SSL inspection breaks Docker image pulls and npm/pip installs inside containers
+**If Docker build fails with TLS/certificate/SSL errors (SSL proxy interference):**
+- SSL-inspecting proxies (Zscaler, Netskope, Palo Alto, etc.) break Docker image pulls and npm/pip installs inside containers
 - Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
-- Tell user: "It looks like Zscaler is blocking the download. I need you to pause it for a few minutes.
-  Right-click the Zscaler icon in your menu bar (the small blue shield), choose 'Disable,'
+- Tell user: "It looks like your network security tool is blocking the download. I need you to pause it for a few minutes.
+  Right-click the security icon in your menu bar (it might look like a small shield), choose 'Disable' or 'Pause,'
   and pick the longest time option. Let me know when it's done!"
-- **Wait for user confirmation before retrying.** Do NOT retry builds while Zscaler is active.
-- After Docker builds complete, remind user: "All done! You can re-enable Zscaler now."
+- **Wait for user confirmation before retrying.** Do NOT retry builds while the SSL proxy is active.
+- After Docker builds complete, remind user: "All done! You can re-enable your security tool now."
 
 **If port conflicts can't be resolved:**
 - Find the next 5 available ports

@@ -2,7 +2,7 @@
 
 ## Current State (What Works Today)
 
-AuditGithub is not deployed to the cloud. DevOps BOT does not exist. The user's world stops at /ship-it creating a PR -- everything after that is manual.
+No security scanner is deployed to the cloud. CI/CD automation does not exist. The user's world stops at /ship-it creating a PR -- everything after that is manual.
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +76,7 @@ sequenceDiagram
 
 ## Full Vision (Target State)
 
-AuditGithub deployed to Azure, scanning repos continuously. DevOps BOT automated. End-to-end from idea to production with the user only verifying at checkpoints.
+Security scanner deployed to cloud, scanning repos continuously. CI/CD automation operational. End-to-end from idea to production with the user only verifying at checkpoints.
 
 ```mermaid
 sequenceDiagram
@@ -87,9 +87,9 @@ sequenceDiagram
     participant GH as GitHub
     participant RI as /resume-it
     participant SI as /ship-it
-    participant AGH as AuditGithub<br/>(Cloud)
-    participant BOT as DevOps BOT
-    participant DEV as Dev Environment<br/>({AZURE_SUBSCRIPTION})
+    participant SCN as Security Scanner<br/>(Cloud)
+    participant BOT as CI/CD Automation
+    participant DEV as Dev Environment
     participant PROD as Production
 
     Note over User,PROD: === PHASE 1: BUILD ===
@@ -125,30 +125,30 @@ sequenceDiagram
 
     Note over User,PROD: === PHASE 3: CONTINUOUS QUALITY (invisible to user) ===
 
-    GH--)AGH: Webhook: push event
-    AGH->>AGH: Scan repo (20+ scanners)
-    AGH->>AGH: AI triage + generate remediation diffs
-    AGH->>GH: Create GitHub Issues (labeled auditgithub + severity)
+    GH--)SCN: Webhook: push event
+    SCN->>SCN: Scan repo (security scanners)
+    SCN->>SCN: AI triage + generate remediation diffs
+    SCN->>GH: Create GitHub Issues (labeled by scanner + severity)
 
     Note over User,PROD: === PHASE 4: ITERATE ===
 
     User->>RI: /resume-it
     RI->>RI: Context discovery (state, git log, TODO)
-    RI->>GH: gh issue list --label auditgithub --state open
+    RI->>GH: gh issue list --label security-scanner --state open
     GH-->>RI: 3 open findings (1 critical, 2 medium)
 
     rect rgb(255, 240, 240)
-        Note over RI,AGH: AuditGithub Remediation (automatic, before user work)
-        RI->>AGH: GET /findings/{id} (with API key)
-        AGH-->>RI: Finding detail + ai_remediation_diff
+        Note over RI,SCN: Security Scanner Remediation (automatic, before user work)
+        RI->>SCN: GET /findings/{id} (with API key)
+        SCN-->>RI: Finding detail + ai_remediation_diff
         RI->>Docker: Apply AI diff to codebase
         RI->>Docker: Run tests
         Docker-->>RI: Tests pass
         RI->>GH: git push (fix committed)
-        RI->>AGH: PATCH /findings/{id}/status = resolved
-        GH--)AGH: Webhook: push event
-        AGH->>AGH: Rescan confirms fix
-        AGH->>GH: Auto-close GitHub Issue
+        RI->>SCN: PATCH /findings/{id}/status = resolved
+        GH--)SCN: Webhook: push event
+        SCN->>SCN: Rescan confirms fix
+        SCN->>GH: Auto-close GitHub Issue
     end
 
     RI->>User: "Welcome back! Here's where things stand..."
@@ -161,10 +161,10 @@ sequenceDiagram
         User->>TI: /try-it
         User->>User: Verifies app works
         RI->>GH: git push
-        GH--)AGH: Webhook: push (triggers rescan)
+        GH--)SCN: Webhook: push (triggers rescan)
     end
 
-    alt AuditGithub fix changed app behavior
+    alt Security fix changed app behavior
         RI->>User: "I made security updates. Run /try-it to verify"
         User->>TI: /try-it
         User->>User: Verifies app still works
@@ -177,7 +177,7 @@ sequenceDiagram
     SI->>GH: Create PR with labels + reviewers
     SI->>User: "Your app is being reviewed. We'll let you know!"
 
-    Note over User,PROD: === PHASE 6: DEVOPS PREFLIGHT (automated) ===
+    Note over User,PROD: === PHASE 6: CI/CD PREFLIGHT (automated) ===
 
     GH--)BOT: PR created event
     BOT->>BOT: Scan PR (security, compliance, IaC, containers, config)
@@ -213,7 +213,7 @@ sequenceDiagram
 
     Note over User,PROD: === PHASE 7: DEPLOY TO DEV ===
 
-    BOT->>DEV: terraform apply (rg-{app}-dev)
+    BOT->>DEV: terraform apply (dev environment)
     BOT->>DEV: Deploy app to dev environment
     BOT->>User: "Your app is live in the dev environment!"
 
@@ -228,7 +228,7 @@ sequenceDiagram
     BOT->>BOT: DevOps team final review
 
     alt Passes
-        BOT->>PROD: terraform apply (rg-{app}-prod)
+        BOT->>PROD: terraform apply (prod environment)
         BOT->>PROD: Deploy app to production
         BOT->>User: "Your app is live! Here's the URL."
     end
@@ -253,34 +253,34 @@ graph LR
         B["/try-it skill"]
         C["/resume-it skill"]
         D["/ship-it skill"]
-        E["AuditGithub codebase"]
+        E["Security scanner codebase"]
         F["Docker sandbox"]
         G["GitHub repos"]
     end
 
     subgraph BLOCKED["Blocked on DevOps"]
         style BLOCKED fill:#f8d7da
-        H["DevOps BOT"]
+        H["CI/CD Automation"]
         I["Dev deployment pipeline"]
         J["Prod deployment pipeline"]
         K["Terraform apply pipeline"]
         L["PR auto-scan workflow"]
     end
 
-    subgraph NEEDS_BUILD["Needs Build (You)"]
+    subgraph NEEDS_BUILD["Needs Build"]
         style NEEDS_BUILD fill:#fff3cd
-        M["AuditGithub cloud deploy"]
-        N["AGH: GitHub Issue creation"]
-        O["AGH: Issue auto-close"]
-        P["AGH: API key per-repo scoping"]
-        Q["AGH: Push webhook listener"]
+        M["Security scanner cloud deploy"]
+        N["Scanner: GitHub Issue creation"]
+        O["Scanner: Issue auto-close"]
+        P["Scanner: API key per-repo scoping"]
+        Q["Scanner: Push webhook listener"]
     end
 
     subgraph CONFIG_ONLY["Config Only"]
         style CONFIG_ONLY fill:#cce5ff
-        R["AUDITGITHUB_API_URL in .env"]
-        S["AUDITGITHUB_API_KEY in .env"]
-        T["GitHub webhook to AGH"]
+        R["SECURITY_SCANNER_API_URL in .env"]
+        S["SECURITY_SCANNER_API_KEY in .env"]
+        T["GitHub webhook to scanner"]
     end
 
     A --> F
@@ -302,14 +302,14 @@ graph LR
 
 ```mermaid
 graph TD
-    A["AuditGithub cloud deploy"] --> B["GitHub Issue creation feature"]
+    A["Security scanner cloud deploy"] --> B["GitHub Issue creation feature"]
     A --> C["Push webhook listener"]
     B --> D["/resume-it reads Issues + calls API"]
     C --> E["Auto-rescan on push"]
     E --> F["Issue auto-close on resolved"]
     D --> G["Full automated remediation loop"]
 
-    H["DevOps BOT spec finalized"] --> I["DevOps team builds BOT"]
+    H["CI/CD Automation spec finalized"] --> I["DevOps team builds automation"]
     I --> J["PR auto-scan"]
     J --> K["Auto-remediation on PR"]
     K --> L["Deploy to dev pipeline"]
@@ -344,31 +344,31 @@ graph TD
 | Color | Meaning |
 |-------|---------|
 | Green | Exists or ready to wire up |
-| Yellow | Needs build (AuditGithub features -- your team) |
+| Yellow | Needs build (security scanner features) |
 | Red | Blocked on DevOps team |
 | Gray | End goal |
 
 ### Critical Path
 
-The two tracks are **independent** -- you don't need DevOps BOT to get AuditGithub working, and vice versa:
+The two tracks are **independent** -- you don't need CI/CD automation to get the security scanner working, and vice versa:
 
-**Track 1 (You -- unblocked now):**
-1. Deploy AuditGithub to Azure
+**Track 1 (Security Scanner -- unblocked now):**
+1. Deploy security scanner to cloud
 2. Build GitHub Issue creation feature
 3. Build push webhook listener + auto-rescan
 4. Build issue auto-close on resolved
 5. Add API key per-repo scoping
 6. Wire up /resume-it (already coded in the contract)
 
-**Track 2 (DevOps -- blocked on them):**
-1. Finalize DevOps BOT spec (contract is defined in ship-it-guide.md)
-2. DevOps team builds BOT
+**Track 2 (CI/CD Automation -- blocked on DevOps):**
+1. Finalize CI/CD automation spec (contract is defined in ship-it-guide.md)
+2. DevOps team builds automation
 3. PR scanning pipeline
 4. Dev/prod deployment pipelines
 5. Terraform apply automation
 
-**Track 1 delivers:** Automated security remediation loop (AuditGithub finds → /resume-it fixes → rescan confirms)
+**Track 1 delivers:** Automated security remediation loop (scanner finds -> /resume-it fixes -> rescan confirms)
 
-**Track 2 delivers:** Automated deployment pipeline (PR → scan → remediate → deploy)
+**Track 2 delivers:** Automated deployment pipeline (PR -> scan -> remediate -> deploy)
 
 **Together they deliver:** Idea to production with zero manual technical work from the user.

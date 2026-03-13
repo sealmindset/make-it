@@ -14,7 +14,7 @@ You describe what you want in plain English. The skill handles everything else -
 
 ### /make-it Flow
 
-0. **Preflight** -- Verifies your machine is ready (Git, Docker, GitHub CLI, Azure CLI, VS Code)
+0. **Preflight** -- Verifies your machine is ready (Git, Docker, GitHub CLI, Claude Code, VS Code)
 1. **Ideation** -- Asks about your app idea in plain English (one question at a time)
 2. **Design** -- Makes all technical decisions behind the scenes using the Design Pattern Guide
 3. **Build** -- Generates the full application (pages, API, auth, permissions, infrastructure)
@@ -45,15 +45,23 @@ Runs automatically after `/make-it` builds your app, or anytime standalone with 
 
 Before running `/make-it`, you need the following on your machine. The skill will check for these automatically and guide you through any missing items.
 
+### Required
+
 | Tool | How to Install |
 |------|---------------|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm install -g @anthropic-ai/claude-code` |
 | Git | `brew install git` |
-| Docker Desktop | Install via your organization's software portal or [docker.com](https://www.docker.com/products/docker-desktop/) |
+| Docker Desktop | [docker.com](https://www.docker.com/products/docker-desktop/) or Rancher Desktop |
 | GitHub CLI | `brew install gh` then `gh auth login` |
-| Azure CLI | `brew install azure-cli` then `az login` |
 | VS Code | `brew install --cask visual-studio-code` |
-| VPN access | Connect to your organization's VPN |
+
+### Enterprise (optional, auto-detected)
+
+| Tool | When Needed |
+|------|-------------|
+| Cloud CLI (Azure, AWS, or GCP) | If deploying to a cloud provider |
+| VPN access | If your organization requires VPN for GitHub or cloud access |
+| SSL proxy bypass | If behind Zscaler, Netskope, GlobalProtect, etc. (skill detects and guides you) |
 
 ## Installation
 
@@ -209,7 +217,7 @@ All generated applications follow a tiered guardrail system. **Tier 0 applies to
 - Git initialized with proper `.gitignore`
 
 ### Tier 1: Web Application (additional)
-- OIDC authentication (Azure AD / Entra ID)
+- OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Database-driven RBAC with 4 system roles and permission matrix
 - Standard UI components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
 - Mock services for local development (mock-oidc + per-integration mocks)
@@ -227,4 +235,4 @@ Each project type has its own guardrails. See `guardrails.md` for the complete r
 
 ## License
 
-Internal use.
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) -- free to use, share, and adapt with attribution.

@@ -29,16 +29,16 @@ Record `project_type` and `active_tiers` in app-context.json. Only apply design 
 
 ---
 
-## 1. Authentication (OIDC / Azure AD SSO)
+## 1. Authentication (OIDC)
 
 **What we need to know from the user:**
 - Will people need to log in?
 - Is this for people inside your company or outside (public)?
-- Do you already have a login system (Google, Microsoft, Okta)?
+- Do you already have a login system (Azure AD, Okta, Auth0, Keycloak, Google, GitHub)?
 
 **Decision rules:**
-- If login required + enterprise/internal -> Azure AD (Entra ID) via OIDC
-- If login required + public users -> Support multiple providers (Google, GitHub, etc.)
+- If login required + enterprise/internal -> Ask which identity provider (Azure AD/Entra ID, Okta, Keycloak, or other OIDC-compliant provider)
+- If login required + public users -> Support multiple providers (Google, GitHub, Auth0, etc.)
 - If no login needed -> Skip auth entirely (rare for business apps)
 
 **Stack mapping:**
@@ -47,10 +47,10 @@ Record `project_type` and `active_tiers` in app-context.json. Only apply design 
 | Next.js (full-stack) | NextAuth.js |
 | NestJS / Express | openid-client v5 |
 | FastAPI / Python | authlib |
-| .NET | Microsoft.Identity.Web |
+| .NET | IdentityModel.AspNetCore.OAuth2Introspection (for OIDC) or provider-specific SDKs |
 
 **Implementation generates:** Three endpoints: /auth/login, /auth/callback, /auth/me
-**Key principle:** Azure AD handles AUTHENTICATION. The app handles AUTHORIZATION. Never mix them.
+**Key principle:** The identity provider handles AUTHENTICATION. The app handles AUTHORIZATION. Never mix them.
 
 ---
 
@@ -79,10 +79,10 @@ Record `project_type` and `active_tiers` in app-context.json. Only apply design 
 4. `users` table gets a `role_id` foreign key to `roles` (one role per user)
 
 **User provisioning:**
-- Admin adds users to the app by email or OIDC lookup (person must exist in Entra ID)
+- Admin adds users to the app by email or OIDC lookup (person must exist in the identity provider)
 - Admin assigns a role to the new user
 - User logs in via SSO and their role + permissions are loaded from the database
-- Users who don't exist in Entra ID need an IT ticket first -- the app does NOT support
+- Users who don't exist in the identity provider need an IT ticket first -- the app does NOT support
   separate login methods or email-based invites
 
 **Admin UI pages (generated for every app):**
@@ -183,7 +183,7 @@ High-traffic API service
 **Before production (Tier 2):**
 - Security headers (X-Frame-Options, CSP, HSTS, X-Content-Type-Options)
 - Audit logging (login/logout, user management, settings changes, API key ops)
-- Secrets in Azure Key Vault (not .env files)
+- Secrets in cloud provider's secrets manager (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager) -- not .env files
 
 **Production hardening (Tier 3):**
 - Rate limiting on API endpoints
@@ -196,27 +196,32 @@ High-traffic API service
 ## 6. Infrastructure as Code
 
 **What we need to know from the user:**
-- Where will this be hosted? (Azure is default)
+- Where will this be hosted? (Azure, AWS, GCP, or local only)
 - Is this a prototype/first version, or production from day one?
 
 **Decision rules:**
 - Always generate Terraform as part of the build -- it's a handoff artifact for DevOps
 - The user never runs Terraform. DevOps owns provisioning and deployment.
 - First deploy / prototype -> Terraform still generated (DevOps applies it)
-- All environments in a single Azure subscription ({AZURE_SUBSCRIPTION}), separated by resource groups
+- Cloud provider determines Terraform provider:
+  - Azure -> Terraform with azurerm provider
+  - AWS -> Terraform with aws provider
+  - GCP -> Terraform with google provider
+  - None / Local only -> Skip IaC generation
+- All environments in a single cloud account/subscription, separated by cloud-specific naming conventions
 
 **Environment model:**
-| Environment | Resource Group | Applied By |
-|-------------|----------------|------------|
-| Dev | `rg-{app-name}-dev` | DevOps BOT / DevOps team |
-| Staging | `rg-{app-name}-staging` | DevOps team |
-| Prod | `rg-{app-name}-prod` | DevOps team (with approval gate) |
+| Environment | Resource Namespace | Applied By |
+|-------------|-------------------|------------|
+| Dev | `{app-name}-dev` (resource group / account / project) | CI/CD automation / DevOps team |
+| Staging | `{app-name}-staging` | DevOps team |
+| Prod | `{app-name}-prod` | DevOps team (with approval gate) |
 
-**State backend:** Azure Storage Account (configured in backend.tf, managed by DevOps)
+**State backend:** Configured for the chosen cloud provider (Azure Storage Account, S3 bucket, GCS bucket) -- managed by DevOps
 
 **Implementation generates:** infrastructure/ directory with main.tf, variables.tf, outputs.tf, versions.tf, backend.tf, environments/
 
-**DevOps handoff:** Terraform is included in the /ship-it PR. The DevOps BOT validates it (`terraform validate`, `terraform plan`), posts the plan as a PR comment, and the DevOps team reviews before applying. See ship-it-guide.md for the full lifecycle.
+**DevOps handoff:** Terraform is included in the /ship-it PR. CI/CD automation validates it (`terraform validate`, `terraform plan`), posts the plan as a PR comment, and the DevOps team reviews before applying. See ship-it-guide.md for the full lifecycle.
 
 ---
 
@@ -228,10 +233,16 @@ High-traffic API service
 **Decision tree:**
 ```
 Single runtime (just Node.js OR just Python)?
-  Yes -> Azure App Service (no container needed)
+  Yes -> Cloud provider's app service (no container needed)
+         Azure: App Service
+         AWS: Elastic Beanstalk or App Runner
+         GCP: App Engine
   No (e.g., Python backend + Node.js frontend)
     -> Docker Compose for local dev
-    -> Azure Container Apps for production
+    -> Cloud provider's container service for production
+       Azure: Container Apps
+       AWS: ECS/Fargate or App Runner
+       GCP: Cloud Run
 ```
 
 **Always generate:** Docker Compose for local development (even if deploying without containers)
@@ -274,7 +285,7 @@ AI features mentioned?
     -> Runtime loader with code fallback
 
   Heavy (Tier 3): 10+ prompts, AI-native app, multiple agents/models
-    -> Full prompt management platform (auditgithub reference)
+    -> Full prompt management platform (reference production prompt management platform)
     -> 6 tables with usage tracking, tagging, test cases
     -> 30+ API routes
     -> 5 frontend pages (registry, detail, editor, analytics, audit)
@@ -332,7 +343,7 @@ Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
 
 | Service | What It Mocks | Docker Port | When to Include |
 |---------|--------------|-------------|-----------------|
-| mock-oidc | Azure AD / Entra ID (full OIDC flow, Python/FastAPI) | 3007 (host) → 10090 (container) | Always (when auth needed) |
+| mock-oidc | OIDC Provider (Azure AD, Okta, Auth0, etc. - full OIDC flow, Python/FastAPI) | 3007 (host) → 10090 (container) | Always (when auth needed) |
 | mock-github | GitHub REST API (repos, PRs, checks, actions) | 3006 | When app integrates with GitHub |
 | mock-cribl | Cribl Stream HTTP Source (log ingestion) | 3005 | When app has structured logging |
 | mock-jira | Jira Software REST API v2/v3 (issues, projects, users, transitions, role assignments) | 8443 | When app integrates with Jira |
@@ -373,10 +384,20 @@ JIRA_BASE_URL=http://localhost:8443
 TEMPO_BASE_URL=http://localhost:8444
 GITHUB_API_URL=http://localhost:3006
 
-# .env.production (real services)
+# .env.production (real services - examples for different OIDC providers)
+# Azure AD / Entra ID
 OIDC_ISSUER_URL=https://login.microsoftonline.com/{tenant_id}/v2.0
+# Auth0
+# OIDC_ISSUER_URL=https://{domain}.auth0.com/
+# Okta
+# OIDC_ISSUER_URL=https://{org}.okta.com/oauth2/default
+# Google
+# OIDC_ISSUER_URL=https://accounts.google.com
+# Keycloak
+# OIDC_ISSUER_URL=https://keycloak.example.com/realms/{realm}
+
 OIDC_CLIENT_ID=<real-client-id>
-OIDC_CLIENT_SECRET=<from-key-vault>
+OIDC_CLIENT_SECRET=<from-secrets-manager>
 JIRA_BASE_URL=https://jira.company.com
 TEMPO_BASE_URL=https://api.tempo.io
 GITHUB_API_URL=https://api.github.com
@@ -561,12 +582,12 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] Production .env / secrets store has real service URLs (no mock references)
 - [ ] Security headers configured
 - [ ] Audit logging for auth and admin actions
-- [ ] Secrets in Azure Key Vault
+- [ ] Secrets in cloud secrets manager (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager)
 - [ ] Terraform applied by DevOps (infrastructure/ directory in repo)
 - [ ] HTTPS enforced
 - [ ] Session timeout enforcement
-- [ ] DevOps BOT preflight scan passed
-- [ ] AuditGithub findings resolved
+- [ ] CI/CD automation preflight scan passed (if configured)
+- [ ] Security scanner findings resolved (if scanner configured)
 - [ ] Prompt version history enabled (Tier 2+) -- if using AI
 - [ ] Prompt audit logging active (Tier 2+) -- if using AI
 - [ ] Prompt testing capability available (Tier 2+) -- if using AI

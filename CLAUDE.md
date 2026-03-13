@@ -8,7 +8,7 @@
 
 The user types `/make-it` and answers questions about their idea in plain English. The skill handles everything else:
 
-0. **Preflight** -- Verify machine readiness (VPN, local admin, GitHub, Azure, Docker)
+0. **Preflight** -- Verify machine readiness (Git, Docker, GitHub CLI, Claude Code, VS Code; enterprise extras if detected)
 1. **Ideation** -- Conversational Q&A to understand the app idea
 2. **Design** -- AI-driven technical decisions (invisible to user)
 3. **Build** -- Code generation following the AI Vibe Coded Design Pattern Guide
@@ -24,7 +24,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - Build-verify is a silent quality gate: starts the app, tests auth/API/pages/permissions, fixes issues -- the user never sees broken output
 - `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
-- The user never fixes code -- AuditGithub findings and DevOps issues are auto-remediated
+- The user never fixes code -- security scanner findings and CI/CD automation issues are auto-remediated
 - The user only verifies their app works the way they envision it
 
 ## /try-it
@@ -42,8 +42,8 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 `/resume-it` picks up where `/make-it` left off. The user runs it from within the project directory.
 
-0. **Context Discovery** -- Reads `.make-it-state.md`, `CHANGELOG.md`, `TODO.md`, `CLAUDE.md`, git log, AuditGithub findings
-1. **AuditGithub Remediation** -- Auto-fixes scan findings (invisible to user unless behavior changes)
+0. **Context Discovery** -- Reads `.make-it-state.md`, `CHANGELOG.md`, `TODO.md`, `CLAUDE.md`, git log, security scanner findings
+1. **Security Scanner Remediation** -- Auto-fixes scan findings (invisible to user unless behavior changes)
 2. **Greet + Suggest** -- Shows project status and suggests actionable next steps
 3. **Work** -- Helps with new features, TODO items, or anything the user describes
 4. **Readiness Check** -- Standup-style "what's done / what's blocked / what's next" assessment. Scans `app-context.json` and codebase to detect required infrastructure, env vars, tickets, and approvals. Generates a shareable `NEXT-STEPS.md` checklist.
@@ -115,7 +115,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 ## Standards Enforced (Tier 1: Web App)
 
 Web applications additionally follow:
-- OIDC authentication (Azure AD / Entra ID)
+- OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
 - Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
@@ -125,7 +125,7 @@ Web applications additionally follow:
 - User provisioning from OIDC directory only (no email invites)
 - require_permission(resource, action) middleware on all route handlers (never role string checks)
 - M.A.C.H. architecture principles
-- System fonts only (no external font CDNs -- Zscaler-safe)
+- System fonts only (no external font CDNs -- safe behind SSL-inspecting proxies)
 - Mock services for local development (mock-oidc + per-integration mocks)
 - Mock service seed script (scripts/seed-mock-services.sh)
 - Service client endpoints verified against mock API contracts
@@ -142,15 +142,15 @@ The user's world is simple: describe, verify, say "ready." Everything else is au
 
 ```
 /make-it -> Build in Docker sandbox, push to GitHub
-/resume-it -> Iterate (AuditGithub auto-fixes, user verifies idea works)
-/ship-it -> Hand off to DevOps
-  DevOps BOT -> Scan, auto-remediate, send back for verification
+/resume-it -> Iterate (security scanner auto-fixes, user verifies idea works)
+/ship-it -> Hand off to CI/CD
+  CI/CD Automation -> Scan, auto-remediate, send back for verification
   /try-it -> User verifies app still works
   /ship-it -> Recheck, deploy to dev
-  User confirms prod-ready -> DevOps prod checks -> Deploy to prod
+  User confirms prod-ready -> Production checks -> Deploy to prod
 ```
 
-See `ship-it-guide.md` for the full lifecycle, DevOps BOT contract, and AuditGithub integration.
+See `ship-it-guide.md` for the full lifecycle, CI/CD automation contract, and security scanner integration.
 
 ## Build Quality
 
