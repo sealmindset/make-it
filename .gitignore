@@ -8,6 +8,9 @@
 .DS_Store
 Thumbs.db
 
+# Claude Code local settings (machine-specific permission cache)
+.claude/settings.local.json
+
 # Temp files
 temp
 .backup
