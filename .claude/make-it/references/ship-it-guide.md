@@ -381,6 +381,95 @@ Automation scans PR
 
 ---
 
+## .ship-it.yml Configuration
+
+/ship-it uses a single config file with three sections, each owned by a different role:
+
+```yaml
+# APP -- What is being deployed (auto-populated by /make-it, or filled by developer)
+app:
+  name: "TaskHub"
+  slug: "task-hub"
+  stack: "fastapi-nextjs"
+  services:
+    - name: backend
+      dockerfile: backend/Dockerfile
+      port: 8000
+      health_check: /health
+    - name: frontend
+      dockerfile: frontend/Dockerfile
+      port: 3000
+      health_check: /
+  database:
+    engine: postgresql
+    version: "16"
+  auth:
+    provider: oidc
+
+# INFRA -- Where and how to deploy (filled by DevOps)
+infra:
+  provider: aws            # aws | azure | ""
+  aws:
+    region: us-east-1
+    account_id: "123456789012"
+    ecr_registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+    ecs:
+      cluster_name: "apps-cluster"
+
+# DEPLOYMENT -- How the pipeline behaves
+deployment:
+  environments:
+    dev: dev
+    production: production
+  reviewers:
+    - devops-lead
+  strategy: rolling
+```
+
+### Config Merge Priority (highest wins)
+
+1. `.ship-it.yml` values (DevOps overrides everything)
+2. `app-context.json` values (from /make-it)
+3. Auto-detected values (stack detection from package.json, requirements.txt, etc.)
+4. Sensible defaults
+
+### What /make-it Provides
+
+When /ship-it runs on a project built by /make-it, it reads:
+
+| Source | What It Provides |
+|--------|-----------------|
+| `.make-it/app-context.json` | App name, slug, stack, services, database, auth |
+| `.make-it-state.md` | Build-verify status (confirms app works locally) |
+| Project files | Stack auto-detection (fallback if app-context missing) |
+
+/ship-it auto-generates the `app` section of `.ship-it.yml` from app-context.json. The `infra` section starts empty -- DevOps fills it in after the first PR.
+
+### Intent Classification
+
+/ship-it asks up to 3 yes/no questions to classify intent:
+
+| Intent | Label | Deploy Target |
+|--------|-------|---------------|
+| Experiment | `intent:experiment` | None |
+| Shareable | `intent:shareable` | Dev only |
+| Prod-ready | `intent:prod-ready` | Dev + Prod |
+
+With a /make-it project, most questions are skipped (stack, services, auth already known).
+
+### Workflow Generation
+
+/ship-it generates a GitHub Actions workflow based on the `infra` section:
+
+| Infra State | Workflow Generated |
+|-------------|-------------------|
+| `infra.provider: aws` | ECR login, Docker build per service, ECS update-service |
+| `infra.provider: azure` | ACR login, Docker build, kubectl set image |
+| `infra.provider: ""` (empty) | Placeholder with "Deployment pending DevOps configuration" |
+| `deployment.reusableWorkflow` set | Thin caller referencing the shared workflow |
+
+---
+
 ## When /make-it Hands Off to /ship-it
 
 After the build phase completes and the user has a working local application, /make-it:
