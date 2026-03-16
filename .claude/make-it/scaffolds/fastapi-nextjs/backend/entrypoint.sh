@@ -8,16 +8,7 @@ echo "Waiting for database..."
 DB_HOST=$(echo "$DATABASE_URL" | sed -E 's|.*@([^:]+):([0-9]+)/.*|\1|')
 DB_PORT=$(echo "$DATABASE_URL" | sed -E 's|.*@([^:]+):([0-9]+)/.*|\2|')
 
-until python3 -c "
-import socket
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    s.connect(('${DB_HOST}', ${DB_PORT}))
-    s.close()
-    exit(0)
-except:
-    exit(1)
-"; do
+until python3 -c "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('${DB_HOST}', ${DB_PORT})); s.close()" 2>/dev/null; do
     echo "Database not ready, retrying in 2s..."
     sleep 2
 done
