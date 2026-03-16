@@ -23,10 +23,12 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
 **Behind the scenes, /ship-it:**
 1. Detects the repo, branch, auth status, and project type
 2. Reads the DevOps-managed .ship-it.yml config
-3. Creates a branch, commits changes, pushes
-4. Generates a caller workflow referencing the org's shared reusable workflow
-5. Creates a PR with labels, reviewers, description, and go-live checklist
-6. Reports back: "Done! The team will take it from here."
+3. **Scans dependencies for known vulnerabilities** (pip-audit for Python, npm audit for Node.js)
+4. **Auto-fixes vulnerable packages** by upgrading to patched versions
+5. Creates a branch, commits changes (including security fixes), pushes
+6. Generates a caller workflow referencing the org's shared reusable workflow
+7. Creates a PR with labels, reviewers, description, security audit summary, and go-live checklist
+8. Reports back: "Done! The team will take it from here."
 
 **Two modes:**
 | Command | What it does |
