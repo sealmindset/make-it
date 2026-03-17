@@ -606,9 +606,67 @@ Update the frontend sidebar/navigation to:
 
 ---
 
-## Prompt #10: Design AI Prompt Architecture
+## Prompt #10: Design AI Architecture
 
-**This prompt adapts based on the AI usage level determined during design.**
+**This prompt has two parts: provider setup (always runs if AI is used) and prompt
+management (tier-dependent). The provider setup runs FIRST, then the appropriate
+prompt management tier.**
+
+### Prompt #10-provider: AI Provider Abstraction (always runs if AI features exist)
+
+```
+Set up the AI provider abstraction layer for [PROJECT_NAME].
+
+Primary provider: [AI_PROVIDER] (e.g., anthropic_foundry, anthropic, openai, ollama)
+Fallback provider: [AI_FALLBACK_PROVIDER] (optional)
+
+Model tiering:
+- Heavy tasks (complex reasoning, multi-step analysis): [AI_MODEL_HEAVY]
+- Standard tasks (summarization, classification): [AI_MODEL_STANDARD]
+- Light tasks (simple completion, routing): [AI_MODEL_LIGHT]
+
+Create the provider abstraction layer:
+
+lib/ai/
+├── provider.ts (or provider.py)     # Abstract interface
+│   - complete(prompt, options): string
+│   - stream(prompt, options): AsyncIterator
+│   - embed(text): number[] (optional, only if embeddings needed)
+├── providers/
+│   ├── anthropic-foundry.ts         # Azure AI Foundry with Claude models
+│   ├── anthropic-direct.ts          # Direct Anthropic API
+│   ├── openai.ts                    # OpenAI API (or Azure OpenAI)
+│   └── ollama.ts                    # Local Ollama for development
+├── model-tier.ts                    # Maps feature complexity to model
+│   - getModel(tier: 'heavy'|'standard'|'light'): string
+│   - Reads from AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT env vars
+│   - Falls back to sensible defaults per provider
+└── index.ts                         # Factory function
+    - Reads AI_PROVIDER env var
+    - Returns configured provider instance
+    - Throws clear error if provider is not configured
+
+Rules:
+- Business logic (agents, services, routes) MUST import from lib/ai/index.ts
+  -- NEVER import provider SDKs directly
+- Each agent/service declares its model tier (heavy, standard, or light)
+- The factory resolves the actual provider + model at runtime from env vars
+- All provider-specific configuration comes from environment variables
+- If AI_PROVIDER is not set, throw a helpful error with setup instructions
+  (do NOT silently fall back to a hardcoded provider)
+
+Environment variables to add to .env.example:
+AI_PROVIDER=[AI_PROVIDER]
+AI_MODEL_HEAVY=[AI_MODEL_HEAVY]
+AI_MODEL_STANDARD=[AI_MODEL_STANDARD]
+AI_MODEL_LIGHT=[AI_MODEL_LIGHT]
+[PROVIDER_SPECIFIC_VARS]
+```
+
+**Required context:** AI provider choice, model tier assignments, provider-specific config
+**Runs when:** ai_features.needed = true (any AI usage level)
+
+---
 
 ### Prompt #10a: Tier 1 -- Minimal AI (1-3 prompts)
 

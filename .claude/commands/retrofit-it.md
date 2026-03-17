@@ -121,6 +121,7 @@ cat .make-it/app-context.json 2>/dev/null
 | Auth (if any) | Auth-related deps, middleware, login routes, JWT/session config |
 | Containerization | Dockerfile, docker-compose.yml |
 | Cloud/infra | terraform/, CDK, serverless.yml, .github/workflows |
+| AI/LLM usage | AI SDK imports, agent classes, hardcoded system prompts, LLM provider config |
 
 **3. Understand the architecture:**
 
@@ -207,6 +208,22 @@ For each gap, assign a risk weight:
 | 36-60 | High | Phased retrofit (Phase 5b) -- user verifies between phases |
 | 61+ | Very High | Phased retrofit with migration recommendation |
 
+**Calibration notes (from real retrofits):**
+
+| App | Profile | Score | Strategy Used | Outcome |
+|-----|---------|-------|---------------|---------|
+| TPRMAI | Next.js monolith, no auth, no Docker, 6 AI agents | ~40 (High) | Phased (A-F) | Success. Auth phase (C) had 2 bugs: callback redirect used request.url (internal Docker addr), cookie Secure flag derived from NODE_ENV instead of URL protocol. Both caught in verification. |
+
+**Lessons learned:**
+- Auth "Wrap" changes (weight 3) are the highest-risk category in practice. The Docker
+  networking layer introduces address translation issues that don't surface in unit tests.
+  Always run the live auth smoke test (see guardrails.md) after auth changes.
+- "Add" changes (weight 1) are genuinely low-risk. Docker, CHANGELOG, .env.example never
+  caused breakage across any retrofit.
+- AI Prompt Management "Enhance" (weight 2) went smoothly when done AFTER auth + RBAC.
+  The dependency order matters: prompts depend on auth (for admin permissions) and DB
+  (for storage). Phase F position is correct.
+
 **Build the gap inventory:**
 
 For each /make-it standard, record:
@@ -221,14 +238,20 @@ RATIONALE: [Why this matters for production]
 
 **Categorize gaps into retrofit phases (used if phased mode triggered):**
 
-| Phase | What's included | Why this order |
-|-------|----------------|----------------|
-| Phase A: Foundation | .env config, .gitignore, Docker, CHANGELOG, TODO | Zero risk to existing code |
-| Phase B: Data | Database migrations, RBAC tables, seed data | Schema changes before auth |
-| Phase C: Auth | OIDC authentication, permission middleware | Depends on RBAC tables |
-| Phase D: UI | Standard components, layout, theme | Visual changes, low risk to logic |
-| Phase E: Integration | Mock services, service clients, seed script | External service abstraction |
-| Phase F: Security | Security headers, input validation, secret management | Final hardening |
+INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technical labels):
+
+| Internal Label | Technical Scope | User-Facing Name |
+|----------------|----------------|------------------|
+| Phase A | .env config, .gitignore, Docker, CHANGELOG, TODO | "Setting up your development environment" |
+| Phase B | Database migrations, RBAC tables, seed data | "Preparing your database for users and permissions" |
+| Phase C | OIDC authentication, permission middleware | "Adding secure login and user permissions" |
+| Phase D | Standard components, layout, theme | "Polishing the interface" |
+| Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
+| Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
+| Phase G | Security headers, input validation, secret management | "Final security checks and deployment prep" |
+
+When presenting phases to the user, ALWAYS use the "User-Facing Name" column.
+Log internal labels to `.make-it-state.md` only.
 
 </step>
 
@@ -291,37 +314,65 @@ Potential clarification questions (ask only if needed):
 
 **Present the plan in plain language with the risk assessment.**
 
+CRITICAL: Use the user-facing phase names from the gap-analysis table. NEVER show
+internal labels (Phase A, Phase B...) or technical jargon (OIDC, RBAC, middleware,
+migration, schema) to the user. Translate everything into what it MEANS for them.
+
 "Here's what I'd like to add to make your app production-ready:
 
-**Risk Level: [Low / Medium / High / Very High]** (score: [X])
+**Risk Level: [Low / Medium / High / Very High]**
 
 **What stays the same:**
 - [List what won't change -- reassure the user]
 - Your [pages/features/business logic] will work exactly as they do now
 
 **What I'll add:**
-- [Gap 1]: [Plain language explanation + why it matters]
-- [Gap 2]: [Plain language explanation + why it matters]
+- [Gap 1]: [What it gives the user + why it matters. E.g., "Secure login -- so only
+  authorized people can access your app" NOT "OIDC authentication with JWT cookies"]
+- [Gap 2]: [Same plain-language pattern]
 - ...
 
-**What I'll modify:**
-- [Change 1]: [What changes and why, what stays]
-- [Change 2]: [What changes and why, what stays]
+**What I'll adjust:**
+- [Change 1]: [What the user will notice, if anything. E.g., "Your tables will get
+  sorting and filtering built in" NOT "Replace HTML tables with DataTable component"]
 - ...
 
 [If phased mode:]
-**I'll do this in [N] phases, checking with you between each one:**
-- Phase A: [Foundation changes] -- no risk to your existing features
-- Phase B: [Data changes] -- I'll verify your app still works before continuing
-- Phase C: [Auth changes] -- the biggest change, I'll test everything thoroughly
-- ...
+**I'll do this in [N] steps, checking with you between each one:**
+1. **Setting up your development environment** -- no risk to your existing features
+2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
+3. **Adding secure login and user permissions** -- the biggest change, I'll test thoroughly
+4. **Polishing the interface** -- your app will look the same, just with a few upgrades
+5. **Setting up test services** -- so you can develop without needing real external systems
+6. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+7. **Final security checks and deployment prep** -- locking everything down
+
+I'll check with you after each step before moving on.
 
 [If single-pass mode:]
 **I'll do all of this in one pass, then verify everything works.**
 
-Ready for me to start? This will take [estimate]."
+Ready for me to start?"
 
 **Wait for user approval before proceeding.**
+
+**After user approves, create a pre-retrofit snapshot:**
+
+```bash
+# Create a tag marking the exact state before any retrofit changes
+git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+```
+
+Tell user (only if they have uncommitted changes):
+"I noticed you have some unsaved changes. Let me save those first so we have a clean
+starting point."
+```bash
+git add -A && git commit -m "Save pre-retrofit state"
+git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+```
+
+This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
+the exact state before any retrofit changes were made.
 
 </step>
 
@@ -355,6 +406,10 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Generate seed migration with 4 system roles + permissions for discovered pages
 
 4. **Auth (Prompt #8 adapted):**
+   - Target pattern: design-blueprint.md section 1 (OIDC flow diagram + critical auth rules)
+   - The auth implementation must match the reference patterns in Prompt #8 and #9 exactly:
+     require_permission middleware, permission service with cache, JWT with flat payload,
+     cookie Secure from URL protocol, logout via POST, admin UI for users/roles
    - **If no auth exists:** Add complete OIDC flow (login, callback, JWT, logout, middleware)
    - **If auth exists and effort to wrap is reasonable:** Wrap existing auth:
      - Keep existing user model, add OIDC fields (oidc_subject, oidc_issuer)
@@ -398,34 +453,60 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Add security headers
    - Update dependencies to latest stable versions
 
-10. **Infrastructure (Prompt #5 adapted):**
+10. **AI Prompt Management (Prompt #10 adapted):**
+    - Detect AI usage: scan for LLM/AI provider calls, agent classes, hardcoded system prompts
+    - If AI agents or prompts exist, determine the tier:
+      - 1-3 prompts -> Tier 1 (prompts in code with env var override)
+      - 4-10 prompts -> Tier 2 (database-stored prompts, admin UI, version history)
+      - 10+ prompts -> Tier 3 (full prompt management platform)
+    - For Tier 2/3: add managed_prompts and prompt_versions tables, API routes,
+      admin UI (prompt registry, editor, version history), seed all existing
+      hardcoded prompts into the database, refactor agents/services to load
+      prompts from DB with code fallback
+    - CRITICAL: hardcoded prompt strings in agent/service files are a gap.
+      Every AI prompt must be editable without a code deploy.
+
+11. **Infrastructure (Prompt #5 adapted):**
     - Generate Terraform as DevOps handoff artifact
     - Generate .ship-it.yml from app-context
 
 **5b. Phased retrofit (High/Very High risk, score 36+):**
 
-Same changes as 5a, but grouped into phases with user verification between each:
+Same changes as 5a, but grouped into phases with user verification between each.
 
-**Phase A: Foundation (risk-free)**
-- Steps 1-2 (foundation + Docker)
+CRITICAL: When communicating with the user, use the plain-language phase names below.
+The internal labels (Phase A, Phase B...) and step numbers are for the skill's use only.
+
+**Step 1: "Setting up your development environment" (risk-free)**
+- Internal: Steps 1-2 (foundation + Docker)
 - Verify: app still works in Docker
+- Tell user: "Your development environment is set up. Your app is running just like before, but now in a proper sandbox."
 
-**Phase B: Data + Auth (highest risk)**
-- Steps 3-5 (database, auth, permissions)
+**Step 2: "Adding secure login and user permissions" (highest risk)**
+- Internal: Steps 3-5 (database, auth, permissions)
 - Verify: login works, roles work, all pages accessible
+- Tell user: "Secure login is working! You can now control who can access what in your app."
 
-**Phase C: UI + Integration (moderate risk)**
-- Steps 6-8 (UI components, mock services, seed data)
+**Step 3: "Polishing the interface and setting up test services" (moderate risk)**
+- Internal: Steps 6-8 (UI components, mock services, seed data)
 - Verify: all pages render correctly, mock services respond
+- Tell user: "Your interface got a few upgrades, and I set up test services so you can develop without needing real external systems."
 
-**Phase D: Security + Infra (low risk)**
-- Steps 9-10 (security hardening, Terraform)
+**Step 4: "Making your AI prompts editable" (if app uses AI)**
+- Internal: Step 10 (AI prompt management)
+- Verify: prompts load from DB, admin UI works
+- Tell user: "Your AI prompts can now be edited through the admin panel without changing any code."
+- Skip this step entirely if the app doesn't use AI/LLM features.
+
+**Step 5: "Final security checks and deployment prep" (low risk)**
+- Internal: Steps 9, 11 (security hardening, Terraform)
 - Verify: final build-verify pass
+- Tell user: "Security is locked down and your deployment files are ready for your DevOps team."
 
-After each phase:
-"Phase [X] is complete. Let me verify everything still works..."
-[Run targeted verification for that phase]
-"Everything looks good. Ready for me to continue with Phase [Y]?"
+After each step:
+"[Step name] is done. Let me verify everything still works..."
+[Run targeted verification for that step]
+"Everything looks good. Ready for me to continue with [next step name]?"
 
 **Adaptation rules for existing code:**
 

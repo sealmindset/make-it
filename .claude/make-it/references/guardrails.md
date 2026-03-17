@@ -67,11 +67,18 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Logout via POST to backend API (NOT GET links)
 - Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
 - Page-level CRUD permissions (resource.action format, auto-generated per page)
-- 4 system roles (Super Admin, Admin, Manager, User) seeded in migration
+- 4 system roles (Super Admin, Admin, Manager, User) seeded in migration, is_system=true
 - Custom roles with dynamic permission sets via admin UI permission matrix
 - User provisioning from OIDC directory only (no email invites)
-- `require_permission(resource, action)` middleware on all route handlers
-- Mock-oidc for local development with pre-seeded test users
+- `require_permission(resource, action)` middleware on ALL route handlers (no exceptions)
+- Permission service with in-memory cache + invalidation on role/permission changes
+- Anti-pattern: `if (user.role === 'admin')` -- ALWAYS use `has_permission()` instead
+- JWT payload: { sub, email, name, role_id, role_name, permissions[] } -- FLAT, no nesting
+- Auth callback redirects use EXTERNAL frontend URL env var, NOT request.url
+- Cookie Secure flag derived from URL protocol, NOT NODE_ENV
+- Mock-oidc for local development with pre-seeded test users (Python/FastAPI, no Java)
+- Seed users' oidc_subjects must match mock-oidc subject IDs exactly
+- Admin UI: User Management + Role Management pages with permission matrix
 
 ### UI & Frontend
 - System fonts only (no external font CDNs -- Zscaler-safe)
@@ -98,6 +105,27 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - IaC state backend configured for the chosen cloud provider's state storage
 - All cloud resources tagged (app, environment, managed-by, owner)
 
+### AI Provider Architecture (if app uses AI/LLM features)
+- AI provider MUST be configurable via AI_PROVIDER environment variable
+- No provider-specific SDK imports in business logic -- only in the provider abstraction layer
+- Model selection MUST be configurable per feature complexity tier via env vars
+  (AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT)
+- Provider abstraction layer: lib/ai/ with abstract interface + per-provider implementations
+- Supported providers: anthropic_foundry (Azure AI Foundry), anthropic (direct), openai, ollama
+- Build-verify: confirm AI features work by calling the provider abstraction (not a specific SDK)
+
+### AI Prompt Management (if app uses AI/LLM features)
+- Determine ai_usage_level: none, minimal (1-3), moderate (4-10), heavy (10+)
+- Tier 1 (minimal): prompts in code with env var override, single prompts file
+- Tier 2 (moderate): managed_prompts + prompt_versions tables, admin UI for editing,
+  version history, seed all prompts into DB, agents/services load from DB with code fallback
+- Tier 3 (heavy): full prompt management platform per Prompt #10c
+- CRITICAL: hardcoded prompt strings in agent/service files are ALWAYS a gap for Tier 2/3.
+  Every AI prompt must be editable without a code deploy.
+- Prompt seed data mandatory -- managed_prompts table must not start empty
+- Build-verify: confirm agents load prompts from DB, admin UI lists all prompts,
+  editing a prompt and re-running the agent uses the updated text
+
 ### Prompts
 - Execute all 14 prompts in order (#1-#14)
 - All [BRACKETS] filled from app-context.json
@@ -116,6 +144,30 @@ Additional OIDC/auth/type checks (CRITICAL -- these prevent recurring issues acr
 - Frontend API calls use paths without /api prefix (BASE_URL adds it)
 - Frontend TypeScript types match backend Pydantic schema field names exactly
 - Backend list endpoints: frontend uses T[] not PaginatedResponse<T> (unless backend actually paginates)
+- Auth callback redirects use the EXTERNAL frontend URL (NEXTAUTH_URL / FRONTEND_URL
+  env var), NOT request.url. Inside Docker, request.url resolves to the internal
+  container address (e.g., http://0.0.0.0:3000) which is unreachable from the browser.
+- Cookie Secure flag MUST be derived from the frontend URL protocol, NOT NODE_ENV.
+  In Docker dev, NODE_ENV=production but frontend is http://localhost -- if Secure=true,
+  the browser silently rejects the cookie, causing an auth redirect loop. Use:
+  secure = FRONTEND_URL.startsWith("https")
+
+Live auth flow smoke test (CRITICAL -- must run during build-verify):
+- After docker-compose --profile dev up and mock-oidc seeding, run a curl-based
+  end-to-end auth flow test that:
+  1. Hits /api/auth/login and captures the 302 redirect to mock-oidc
+  2. Simulates user selection via /authorize/callback on mock-oidc
+  3. Follows the code redirect back to the app's /api/auth/callback
+  4. ASSERTS the final redirect URL starts with the EXTERNAL frontend URL
+     (e.g., http://localhost:3020/dashboard), NOT the internal Docker address
+  5. ASSERTS a JWT cookie named "token" is set
+  6. ASSERTS the cookie Secure flag matches the frontend URL protocol
+     (Secure=false for http://, Secure=true for https://). A mismatch causes
+     the browser to silently reject the cookie, creating an auth loop that
+     curl-based tests won't catch unless they explicitly check the flag.
+- If ANY assertion fails: diagnose the root cause, fix it, rebuild if needed,
+  and re-run the test. Do NOT proceed to handoff with a broken auth flow.
+- This is a self-healing loop: test -> fail -> fix -> rebuild -> retest until green.
 
 ---
 

@@ -50,6 +50,27 @@ This template is populated by /make-it as the user answers questions. It becomes
     "who_edits_prompts": "developers",
     "prompt_management_tier": 0
   },
+  "ai_providers": {
+    "needed": false,
+    "primary": "",
+    "fallback": "",
+    "model_tiers": {
+      "heavy": "",
+      "standard": "",
+      "light": ""
+    },
+    "provider_config": {
+      "anthropic_foundry": {
+        "endpoint": "",
+        "uses_managed_identity": false
+      },
+      "anthropic": {},
+      "openai": {},
+      "ollama": {
+        "base_url": "http://localhost:11434"
+      }
+    }
+  },
   "compliance": [],
   "special_features": [],
   "mock_services": {
@@ -119,6 +140,7 @@ The `scaffold` field determines whether the Build phase uses a pre-built scaffol
 | Condition | `scaffold` value | Build strategy |
 |-----------|-----------------|----------------|
 | `web-app` + Python backend | `"fastapi-nextjs"` | Copy scaffold, replace placeholders, generate domain code on top |
+| `web-app` + Node.js full-stack (API routes) | `"nextjs-fullstack"` | Copy scaffold, replace placeholders, generate domain code on top |
 | All other combinations | `null` | Generate from prompt-templates.md (Prompts #1-#14) |
 
 When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, mock-oidc, and standard UI components — these come pre-built from the scaffold. Only domain-specific code is generated fresh.
@@ -131,7 +153,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | purpose | Ideation | "What problem does it solve?" |
 | project_type | Design | Auto-classified from ideation answers (user never sees this) |
 | active_tiers | Design | Auto-set from project_type |
-| scaffold | Design | Auto-set: `"fastapi-nextjs"` for web-app + Python backend, `null` otherwise |
+| scaffold | Design | Auto-set: `"fastapi-nextjs"` for web-app + Python backend, `"nextjs-fullstack"` for web-app + Node.js full-stack, `null` otherwise |
 | features | Ideation | "What should it do?" (iterative) |
 | users | Ideation | "Who will use it?" |
 | auth | Design | Inferred from users.internal_or_external |
@@ -144,6 +166,9 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_features.usage_level | Design | Inferred: none / minimal / moderate / heavy |
 | ai_features.prompt_management_tier | Design | 0 (none), 1 (code+config), 2 (db+admin), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
+| ai_providers | Design | Auto-determined when ai_features.needed is true |
+| ai_providers.primary | Design | Inferred from cloud.provider + enterprise context: "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama" |
+| ai_providers.model_tiers | Design | Inferred from ai_features.agents complexity; defaults to latest Claude models |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
 | cloud.provider | Design | "Where would you like to host this?" (Azure, AWS, Google Cloud, or just local) -- values: "azure" \| "aws" \| "gcp" \| "none" |
 | cloud.region | Design | Inferred from provider choice or asked |

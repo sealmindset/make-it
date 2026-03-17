@@ -2,7 +2,7 @@
 
 A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill suite that takes anyone from an app idea to a fully working application through guided conversational Q&A. No programming knowledge required.
 
-You describe what you want in plain English. The skills handle everything else -- technical decisions, code generation, testing, and deployment.
+You describe what you want in plain English. The skills handle everything else -- technical decisions, code generation, testing, and deployment. Already have an app? `/retrofit-it` upgrades it with production-ready foundations.
 
 ---
 
@@ -14,6 +14,7 @@ You describe what you want in plain English. The skills handle everything else -
 - [How /make-it Works](#how-make-it-works)
 - [How /try-it Works](#how-try-it-works)
 - [How /resume-it Works](#how-resume-it-works)
+- [How /retrofit-it Works](#how-retrofit-it-works)
 - [What Gets Built](#what-gets-built)
 - [Supported Project Types](#supported-project-types)
 - [Architecture](#architecture)
@@ -95,10 +96,11 @@ git clone https://github.com/sealmindset/make-it.git ~/.claude/make-it-repo
 # Create the commands directory if it doesn't exist
 mkdir -p ~/.claude/commands
 
-# Copy the three skill entry points
+# Copy the four skill entry points
 cp ~/.claude/make-it-repo/.claude/commands/make-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/try-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/resume-it.md ~/.claude/commands/
+cp ~/.claude/make-it-repo/.claude/commands/retrofit-it.md ~/.claude/commands/
 
 # Copy the references, templates, and scaffolds
 cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
@@ -110,7 +112,7 @@ cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
 claude
 ```
 
-Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it` or `/resume-it` to verify those are available too.
+Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it`, `/resume-it`, or `/retrofit-it` to verify those are available too.
 
 ### Updating
 
@@ -129,6 +131,7 @@ bash install.sh             # re-copies updated files
 | `/make-it` | Builds a new app from scratch through conversational Q&A | Starting a brand new project |
 | `/try-it` | Spins up your app locally, tests everything, lets you explore in the browser | After `/make-it` finishes, or anytime you want to see your app running |
 | `/resume-it` | Picks up where you left off -- add features, fix bugs, run tests, deploy | Any time after the initial build |
+| `/retrofit-it` | Upgrades an existing app with production foundations (auth, RBAC, Docker, security) | You have an app that works but needs enterprise-grade infrastructure |
 
 ---
 
@@ -187,6 +190,7 @@ The result is saved as `app-context.json` -- a complete blueprint for the Build 
 The skill generates your entire application:
 
 - **For web apps with Python backends**, it starts from a pre-built scaffold (FastAPI + Next.js) that includes proven auth, RBAC, Docker, and UI patterns. Domain-specific code (your pages, APIs, and data models) is generated on top.
+- **For web apps with Node.js full-stack** (Next.js API routes), it uses the Next.js full-stack scaffold -- same auth, RBAC, and Docker patterns but with Prisma ORM and a single container instead of separate frontend/backend services.
 - **For all other project types**, everything is generated from 14 enterprise prompt templates.
 
 You see progress updates like "Setting up your project structure..." and "Designing your pages..." but never raw code or error messages.
@@ -307,6 +311,53 @@ resume-it: [scaffolds pytest + Playwright if first time, runs all tests]
 
 ---
 
+## How /retrofit-it Works
+
+`/retrofit-it` upgrades an existing application with production-ready foundations. Unlike `/make-it` (which builds from scratch), `/retrofit-it` reverse-engineers your app first, then adds what's missing surgically.
+
+### When to Use It
+
+- You have a working app but it lacks proper authentication, RBAC, or Docker setup
+- Your app was built outside of `/make-it` and you want to bring it up to the same standard
+- You want to add enterprise foundations (OIDC login, role-based permissions, mock services) to an existing codebase
+
+### What It Does
+
+1. **Discovery** -- Scans your codebase to understand what's already built: framework, database, auth, folder structure, AI features
+2. **Gap Analysis** -- Compares what you have against the make-it guardrails and identifies what's missing
+3. **Risk Score** -- Calculates a risk score (0-100) based on the size and complexity of changes needed. Calibrated with real-world retrofit data
+4. **Plan** -- Presents the upgrade plan in plain language with phases like "Setting up your development environment" and "Adding secure login and user permissions"
+5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) so you can always roll back
+6. **Retrofit** -- Applies changes in safe, verifiable phases. Each phase is tested before moving to the next
+7. **Verify** -- Runs the same build-verify checks as `/make-it` to ensure everything works
+
+### Two Retrofit Modes
+
+- **Phased retrofit** (recommended for higher risk scores) -- applies changes in 5 ordered steps, each verified before proceeding
+- **Single-pass retrofit** (for lower risk scores) -- applies all changes at once with a comprehensive verification pass
+
+### Usage
+
+```bash
+cd ~/Documents/GitHub/my-existing-app
+claude
+> /retrofit-it
+```
+
+### What Gets Added
+
+Depending on what's missing, `/retrofit-it` can add:
+
+- Environment-based configuration (`.env`, Docker Compose)
+- Database migrations and RBAC tables (roles, permissions, users)
+- OIDC authentication with your chosen provider
+- Standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle)
+- Mock services for external integrations
+- AI prompt management (if your app uses AI features)
+- Security headers, input validation, and deployment prep
+
+---
+
 ## What Gets Built
 
 ### Web Applications (Tier 1)
@@ -316,11 +367,13 @@ A complete, production-ready web application with:
 | Layer | What's Included |
 |-------|----------------|
 | **Frontend** | Next.js with TypeScript, Tailwind CSS, oklch theming (light/dark mode), responsive layout |
-| **Backend** | FastAPI with async SQLAlchemy, Pydantic validation, Alembic migrations |
+| **Backend** | FastAPI + SQLAlchemy (Python scaffold) or Next.js API routes + Prisma (Node.js scaffold) |
 | **Database** | PostgreSQL with role-based access control tables, seed data |
-| **Auth** | OIDC authentication (Azure AD, Auth0, Okta, Google, GitHub, Keycloak) with JWT sessions |
+| **Auth** | OIDC authentication (Azure AD, Auth0, Okta, Google, GitHub, Keycloak) with stateless JWT sessions |
 | **RBAC** | 4 system roles (Super Admin, Admin, Manager, User), page-level CRUD permissions, permission matrix admin UI |
 | **UI Components** | DataTable with Excel-like filtering, breadcrumbs, command palette (Cmd+K), sidebar navigation, dark mode toggle |
+| **AI Providers** | Multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with model tiering (heavy/standard/light) -- only if your app uses AI features |
+| **AI Prompt Management** | Database-stored prompts with version history and admin UI for editing -- scales from code-only (1-3 prompts) to full management platform (10+ prompts) |
 | **Docker** | Multi-service Compose with health checks, migration auto-run, mock services on dev profile |
 | **Mock Services** | Mock OIDC provider for local auth, plus mock services for any external integrations (Jira, Tempo, etc.) |
 | **Seed Data** | Realistic sample data so every page is populated on first launch |
@@ -343,7 +396,8 @@ The skill automatically classifies your project during the Design phase based on
 
 | Type | Detected When You Say... | Tech Stack |
 |------|-------------------------|------------|
-| **Web App** | "dashboard", "login", "users can...", "CRUD", "reports" | FastAPI + Next.js + PostgreSQL (scaffold) |
+| **Web App** (Python backend) | "dashboard", "login", "data processing", "Python" | FastAPI + Next.js + PostgreSQL (scaffold) |
+| **Web App** (Node.js full-stack) | "dashboard", "login", "CRUD", "AI features", "TypeScript only" | Next.js API routes + Prisma + PostgreSQL (scaffold) |
 | **IDE Extension** | "VS Code plugin", "editor tool", "code analysis" | TypeScript + VS Code API |
 | **CLI Tool** | "command line", "terminal tool", "script" | Python or Node.js |
 | **Library** | "importable package", "SDK", "shared module" | TypeScript or Python |
@@ -361,23 +415,26 @@ The skill automatically classifies your project during the Design phase based on
     make-it.md                    # Main skill -- idea to working app
     try-it.md                     # Try skill -- spin up, test, explore
     resume-it.md                  # Resume skill -- continue, test, fix, ship
+    retrofit-it.md                # Retrofit skill -- upgrade existing apps
   make-it/
     references/
       prerequisites.md            # Machine setup checks
-      design-blueprint.md         # Architectural decision framework
-      prompt-templates.md         # 14 enterprise build prompts
+      design-blueprint.md         # Architectural decision framework (OIDC flow, AI providers, etc.)
+      prompt-templates.md         # 14+ enterprise build prompts (includes AI provider prompt)
       ship-it-guide.md            # Deployment handoff reference
       guardrails.md               # Tiered guardrail system (Tier 0-5)
     templates/
-      app-context.md              # Template for tracking user answers
+      app-context.md              # Template for tracking user answers (includes AI provider config)
     scaffolds/
-      fastapi-nextjs/             # Pre-built scaffold (61 files)
+      fastapi-nextjs/             # Pre-built scaffold (61 files) -- Python backend
         backend/                  # FastAPI: auth, RBAC, models, routers, Alembic
         frontend/                 # Next.js: pages, components, Tailwind, oklch theme
         mock-services/mock-oidc/  # Complete mock OIDC provider
         scripts/                  # seed-mock-services.sh template
         docker-compose.yml        # Multi-service orchestration template
         .env.example              # Environment variable documentation
+      nextjs-fullstack/           # Pre-built scaffold -- Node.js full-stack
+        README.md                 # Architecture, auth flow, RBAC, placeholders
 docs/
   sequence-diagrams.md            # Mermaid diagrams of the full lifecycle
 CLAUDE.md                         # Project instructions for Claude Code
@@ -399,20 +456,24 @@ These files are generated inside the app you build -- not in this repo:
 | `CHANGELOG.md` | Running log of all changes across sessions |
 | `TODO.md` | Outstanding work items |
 
-### How the Scaffold Works
+### How the Scaffolds Work
 
-For web applications with Python backends, the Build phase uses a **pre-built scaffold** instead of generating everything from scratch. This is how recurring bugs are eliminated:
+For web applications, the Build phase uses a **pre-built scaffold** instead of generating everything from scratch. This is how recurring bugs are eliminated:
 
-1. **Design phase** determines the app name, ports, users, roles, and integrations
-2. **Build phase** copies the scaffold (61 files) into the project directory
+1. **Design phase** determines the app name, ports, users, roles, integrations, and backend type
+2. **Build phase** selects the right scaffold (Python backend or Node.js full-stack)
 3. All `[BRACKET_PLACEHOLDERS]` are replaced with values from `app-context.json`
 4. Domain-specific code (your pages, APIs, models, seed data) is generated on top
 5. The scaffold's auth, RBAC, Docker, and UI components are never regenerated
 
-The scaffold provides:
+| Scaffold | When Selected | Backend | ORM | Containers |
+|----------|--------------|---------|-----|------------|
+| **fastapi-nextjs** | Python backend, data processing, ML features | FastAPI (Python) | SQLAlchemy + Alembic | 4 (frontend, backend, db, mock-oidc) |
+| **nextjs-fullstack** | Node.js only, AI via Node SDKs, simple CRUD | Next.js API routes (TypeScript) | Prisma | 3 (app, db, mock-oidc) |
+
+Both scaffolds provide the same core foundations:
 - Complete OIDC auth flow (login, callback, JWT cookie, /me, logout)
 - Database-driven RBAC (4 tables, permission middleware, admin UI)
-- Same-origin API proxy (Next.js rewrites to FastAPI)
 - DataTable with Excel-like column filtering
 - Sidebar, breadcrumbs, command palette, dark mode toggle
 - Docker Compose with health checks and migration auto-run
@@ -456,6 +517,11 @@ Layer 4: Demo           -- /try-it presents the working app; its fix cycle is a 
 - Every page loads with content
 - Permission boundaries enforced (403 for unauthorized access)
 - Logout clears JWT cookie
+- **Auth smoke test** -- end-to-end curl-based test that verifies the full OIDC flow:
+  - Login redirects to the identity provider
+  - Callback redirect goes to the correct external URL (not a Docker-internal address)
+  - JWT cookie is set with the correct Secure flag for the protocol
+  - Cookie Secure flag matches the frontend URL (prevents silent browser rejection)
 
 Issues found during build-verify are fixed automatically (up to 3 cycles). You never see a broken app.
 
@@ -466,16 +532,18 @@ Issues found during build-verify are fixed automatically (up to 3 cycles). You n
 Your experience is simple: **describe what you want, verify it works, say "ready."**
 
 ```
-/make-it    --> Build your app, verify it works
-/try-it     --> Explore it in the browser
-/resume-it  --> Iterate (add features, fix things, run tests)
-/ship-it    --> Deploy (creates PR, triggers CI/CD)
+/make-it      --> Build a new app from scratch, verify it works
+/retrofit-it  --> Upgrade an existing app with production foundations
+/try-it       --> Explore it in the browser
+/resume-it    --> Iterate (add features, fix things, run tests)
+/ship-it      --> Deploy (creates PR, triggers CI/CD)
 ```
 
 The full lifecycle with CI/CD automation:
 
 ```
-/make-it -> Build in Docker, push to GitHub
+/make-it (new app) or /retrofit-it (existing app)
+  -> Build/upgrade in Docker, push to GitHub
 /resume-it -> Iterate (security auto-fixes, you verify your app still works)
 /ship-it -> Create PR, trigger CI/CD
   CI/CD -> Scan, auto-remediate, send back for verification
@@ -504,13 +572,15 @@ Every app built by `/make-it` follows a tiered guardrail system. **Tier 0 applie
 ### Tier 1: Web Application
 
 All of Tier 0, plus:
-- OIDC authentication with chosen provider
+- OIDC authentication with chosen provider (callback redirect, cookie Secure flag, and JWT format all verified by live smoke test)
 - Database-driven RBAC with 4 system roles and permission matrix
 - Standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle)
 - Docker Compose with mock services and seed data
 - System fonts only (no external font CDNs -- safe behind corporate proxies)
 - Parameterized database queries, security headers
 - Terraform generated as DevOps handoff artifact
+- **AI provider abstraction** (if app uses AI) -- configurable via env var, supports Azure AI Foundry, Anthropic, OpenAI, Ollama
+- **AI prompt management** (if app uses AI) -- scales from code-only to database-managed with admin UI based on prompt count
 
 ### Tier 2: IDE Extension
 
@@ -536,7 +606,7 @@ All of Tier 0, plus: health check endpoint, OpenAPI spec, structured logging, co
 No. The entire experience is conversational. You describe what you want in plain English, and the skill builds it.
 
 **What languages/frameworks does it use?**
-For web apps: Python (FastAPI) backend, TypeScript (Next.js) frontend, PostgreSQL database. Other project types use the language best suited for the task.
+For web apps: either Python (FastAPI) backend with Next.js frontend, or Node.js full-stack (Next.js API routes with Prisma). Both use PostgreSQL. Other project types use the language best suited for the task.
 
 **Can I customize the generated code later?**
 Yes. The generated code is standard, well-structured code in your project directory. Any developer can modify it. `/resume-it` helps you make changes without coding knowledge.
@@ -558,6 +628,12 @@ When your app requires login, the skill generates a local mock identity provider
 
 **Where does my code live?**
 In a standard Git repository in the directory where you ran `/make-it`. It gets pushed to GitHub when you run `/ship-it`.
+
+**I already have an app -- can I still use these skills?**
+Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first so you can always roll back.
+
+**Does it support AI-powered apps?**
+Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI.
 
 ---
 

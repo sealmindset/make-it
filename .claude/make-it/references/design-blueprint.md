@@ -49,8 +49,57 @@ Record `project_type` and `active_tiers` in app-context.json. Only apply design 
 | FastAPI / Python | authlib |
 | .NET | IdentityModel.AspNetCore.OAuth2Introspection (for OIDC) or provider-specific SDKs |
 
-**Implementation generates:** Three endpoints: /auth/login, /auth/callback, /auth/me
+**Implementation generates:** Four endpoints: /auth/login, /auth/callback, /auth/me, /auth/logout (POST)
 **Key principle:** The identity provider handles AUTHENTICATION. The app handles AUTHORIZATION. Never mix them.
+
+**OIDC flow (reference implementation):**
+```
+Browser                    App Backend                mock-oidc / Real OIDC Provider
+  |                            |                                |
+  |-- GET /auth/login -------->|                                |
+  |                            |-- Discover OIDC endpoints ---->|
+  |                            |<-- authorization_endpoint -----|
+  |<-- 302 Redirect -----------|                                |
+  |-- GET /authorize ------------------------------------------>|
+  |                            |                                |-- User picks identity
+  |<-- 302 Redirect (code) -----------------------------------------|
+  |-- GET /auth/callback?code= |                                |
+  |                            |-- POST /token (exchange code)->|
+  |                            |<-- { id_token, access_token } -|
+  |                            |-- GET /userinfo (optional) --->|
+  |                            |<-- { sub, email, name } -------|
+  |                            |                                |
+  |                            |-- Lookup user in DATABASE ----->|
+  |                            |   (by oidc_subject)            |
+  |                            |-- Read role from DATABASE ---->|
+  |                            |   (NOT from OIDC claims)       |
+  |                            |                                |
+  |                            |-- Sign JWT { sub, email, name, |
+  |                            |     role_id, role_name,        |
+  |                            |     permissions[] }            |
+  |                            |-- Set httpOnly cookie "token"  |
+  |<-- 302 Redirect to /dashboard --|                           |
+  |                            |                                |
+  |-- GET /auth/me ----------->|                                |
+  |                            |-- Validate JWT from cookie     |
+  |<-- { sub, email, name,    -|                                |
+  |      role_id, role_name,   |                                |
+  |      permissions[] }       |                                |
+  |                            |                                |
+  |-- POST /auth/logout ------>|                                |
+  |                            |-- Clear cookie (maxAge=0)      |
+  |<-- { message: "logged out" } --|                            |
+```
+
+**Critical auth rules:**
+- Auth callback redirects use EXTERNAL frontend URL (NEXTAUTH_URL / FRONTEND_URL env var),
+  NOT request.url. Inside Docker, request.url resolves to the internal container address.
+- Cookie Secure flag derived from frontend URL protocol, NOT NODE_ENV.
+  `secure = FRONTEND_URL.startsWith("https")`
+- Logout is POST (not GET -- browsers prefetch GET, causing unintended logouts)
+- JWT is STATELESS -- no server-side session store (no Redis, no DB sessions)
+- /auth/me returns FLAT object: { sub, email, name, role_id, role_name, permissions[] }
+  -- no .user wrapper, no nested Role object
 
 **Frontend proxy pattern (prevents cross-origin cookie blocking):**
 - Next.js rewrites in next.config.ts proxy /api/* to the backend
@@ -267,7 +316,94 @@ Single runtime (just Node.js OR just Python)?
 
 ---
 
-## 9. AI Prompt Management
+## 9. AI Provider Architecture
+
+**What we need to know from the user:**
+- (Inferred from features -- does the app use AI/LLM features?)
+- Which AI provider does your organization use? (Azure AI Foundry, direct Anthropic, OpenAI, or local?)
+- Do different features need different AI models? (complex reasoning vs simple classification)
+
+**Decision rules -- provider selection:**
+```
+AI features mentioned?
+  No  -> Skip AI provider entirely
+  Yes -> Determine primary provider:
+
+  Enterprise / corporate environment:
+    -> Azure AI Foundry with Claude (primary -- complies with enterprise data policies)
+    -> Fallback: OpenAI via Azure OpenAI Service
+
+  Individual developer / startup:
+    -> Direct Anthropic API (Claude)
+    -> OR OpenAI API
+    -> OR local Ollama (for privacy / offline development)
+
+  Always:
+    -> Provider MUST be configurable via environment variable (AI_PROVIDER)
+    -> Model MUST be configurable per feature tier (AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT)
+    -> No provider names hardcoded in business logic -- only in the provider abstraction layer
+```
+
+**Multi-provider abstraction pattern:**
+
+Every app that uses AI gets a provider abstraction layer. The business logic calls
+`aiProvider.complete(prompt)` -- it never imports a specific SDK directly.
+
+```
+lib/ai/
+├── provider.ts (or provider.py)     # Abstract interface: complete(), stream(), embed()
+├── providers/
+│   ├── anthropic-foundry.ts         # Azure AI Foundry with Claude
+│   ├── anthropic-direct.ts          # Direct Anthropic API
+│   ├── openai.ts                    # OpenAI API (direct or Azure)
+│   └── ollama.ts                    # Local Ollama for development
+├── model-tier.ts                    # Maps feature complexity to model selection
+└── index.ts                         # Factory: reads AI_PROVIDER env var, returns provider
+```
+
+**Model tiering (per-feature complexity):**
+
+| Tier | Use Case | Claude Model | OpenAI Equivalent | Env Var |
+|------|----------|-------------|-------------------|---------|
+| Heavy | Complex reasoning, multi-step analysis, code generation | claude-opus-4-6 | gpt-4.1 | AI_MODEL_HEAVY |
+| Standard | Summarization, classification, structured extraction | claude-sonnet-4-6 | gpt-4.1-mini | AI_MODEL_STANDARD |
+| Light | Simple completion, routing, fast classification | claude-haiku-4-5 | gpt-4.1-nano | AI_MODEL_LIGHT |
+
+Each AI feature/agent declares its tier. The model-tier module resolves the actual model
+name from environment variables, falling back to sensible defaults.
+
+**Environment variables (added to .env.example):**
+```bash
+# AI Provider Configuration
+AI_PROVIDER=anthropic_foundry          # anthropic_foundry | anthropic | openai | ollama
+AI_MODEL_HEAVY=claude-opus-4-6    # Complex reasoning tasks
+AI_MODEL_STANDARD=claude-sonnet-4-6  # Standard tasks
+AI_MODEL_LIGHT=claude-haiku-4-5     # Simple/fast tasks
+
+# Provider-specific settings (only configure the provider you're using)
+# Azure AI Foundry (anthropic_foundry)
+AZURE_AI_FOUNDRY_ENDPOINT=https://your-endpoint.services.ai.azure.com
+AZURE_AI_FOUNDRY_API_KEY=
+
+# Direct Anthropic (anthropic)
+ANTHROPIC_API_KEY=
+
+# OpenAI (openai)
+OPENAI_API_KEY=
+
+# Ollama (ollama -- local development, no key needed)
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+**Implementation generates:**
+- Provider abstraction layer (lib/ai/)
+- Model tier configuration
+- Environment variables in .env.example
+- Factory that reads AI_PROVIDER and returns the correct provider instance
+
+---
+
+## 10. AI Prompt Management
 
 **What we need to know from the user:**
 - (Inferred from features -- does the app use AI/LLM features?)
@@ -313,7 +449,7 @@ AI features mentioned?
 
 ---
 
-## 10. Mock Services & Local Development
+## 11. Mock Services & Local Development
 
 **What we need to know from the user:**
 - (Mostly inferred -- user doesn't need to answer this directly)
@@ -457,7 +593,7 @@ generate a lightweight mock service using the mock-apisrvr pattern:
 
 ---
 
-## 11. Standard UI Components (Built-In Defaults)
+## 12. Standard UI Components (Built-In Defaults)
 
 **Applied by default for all apps (no user questions needed).**
 
@@ -579,6 +715,9 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] QuickSearch (⌘K) populated with all navigation items and app actions
 - [ ] ThemeProvider wraps app, ModeToggle in header, oklch CSS variables for light/dark
 - [ ] CHANGELOG.md and TODO.md maintained
+- [ ] AI provider abstraction layer created (lib/ai/) -- if using AI
+- [ ] AI_PROVIDER, AI_MODEL_HEAVY/STANDARD/LIGHT env vars configured -- if using AI
+- [ ] No provider SDK imports outside lib/ai/providers/ -- if using AI
 - [ ] AI prompts externalized (not hardcoded in business logic) -- if using AI
 - [ ] Prompt management tier determined and implemented -- if using AI
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
