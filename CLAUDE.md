@@ -38,6 +38,37 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 4. **Report** -- Generates `TRY-IT-REPORT.md` with test results, screenshots, and access instructions
 5. **Handoff** -- Tells user how to explore their app in the browser, stays available to fix issues they find
 
+## /retrofit-it
+
+`/retrofit-it` takes an existing application (not built by /make-it) and upgrades it with production-ready foundations. Instead of asking interview questions, it reverse-engineers the codebase first, then asks targeted clarifying questions only when the code is ambiguous.
+
+0. **Preflight** -- Same machine readiness checks as /make-it
+1. **Discovery** -- Reverse-engineer the app (stack, architecture, features, auth, data model, integrations)
+2. **Gap Analysis** -- Compare what exists vs /make-it standards, calculate a retrofit risk score
+3. **Clarification** -- Ask targeted questions about ambiguities (NOT a full interview -- max 3-5 questions)
+4. **Plan** -- Present the retrofit plan with risk assessment, get user approval
+5. **Retrofit** -- Execute changes (single-pass if risk score <= 35, phased with user verification if higher)
+6. **Verify** -- Build-verify identical to /make-it, plus preservation checks (existing features still work)
+7. **Ship** -- Hand off to /ship-it
+
+### Risk Score System
+
+Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure (4), Replace (5), Rewrite (8). Total score determines strategy:
+- 0-15: Low risk, single-pass
+- 16-35: Medium risk, single-pass with extra verification
+- 36-60: High risk, phased retrofit (user verifies between phases)
+- 61+: Very high risk, phased + migration recommendation
+
+### Key Principles
+
+- Reverse-engineer first, ask questions second
+- Never break existing functionality (the #1 rule)
+- Preserve the user's design intent -- add foundations UNDER existing design
+- Existing code is additive (keep tests, CI, custom components)
+- Auth wrapping preferred over replacement, unless wrapping costs more
+- Stack migration is a last resort (only if framework is incompatible or EOL)
+- Generates app-context.json for /resume-it and /ship-it compatibility
+
 ## /resume-it
 
 `/resume-it` picks up where `/make-it` left off. The user runs it from within the project directory.
@@ -62,6 +93,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
     make-it.md                    # Main skill -- idea to working app
     try-it.md                     # Try skill -- spin up, test, explore in browser
     resume-it.md                  # Resume skill -- continue, test, fix, ship
+    retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
   make-it/
     references/
       prerequisites.md             # Preflight checks (from Vibe Code Quick Start)
@@ -171,7 +203,8 @@ Web applications additionally follow:
 The user's world is simple: describe, verify, say "ready." Everything else is automated.
 
 ```
-/make-it -> Build in Docker sandbox, push to GitHub
+/make-it -> Build new app in Docker sandbox, push to GitHub
+/retrofit-it -> Upgrade existing app with production foundations (OIDC, RBAC, Docker, etc.)
 /resume-it -> Iterate (security scanner auto-fixes, user verifies idea works)
 /ship-it -> Hand off to CI/CD
   CI/CD Automation -> Scan, auto-remediate, send back for verification

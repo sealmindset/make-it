@@ -44,7 +44,7 @@ mkdir -p "$MAKEIT_DIR"
 
 # Copy skill entry points
 echo "  Copying skill commands..."
-for cmd in make-it.md try-it.md resume-it.md; do
+for cmd in make-it.md try-it.md resume-it.md retrofit-it.md; do
   if [ -f "$REPO_DIR/.claude/commands/$cmd" ]; then
     cp "$REPO_DIR/.claude/commands/$cmd" "$COMMANDS_DIR/"
     echo "    + $cmd"
@@ -72,9 +72,10 @@ echo ""
 echo "Installed successfully!"
 echo ""
 echo "  Skills installed:"
-echo "    /make-it    -- Build a new app from scratch"
-echo "    /try-it     -- Spin up and test your app"
-echo "    /resume-it  -- Continue working on your app"
+echo "    /make-it      -- Build a new app from scratch"
+echo "    /try-it       -- Spin up and test your app"
+echo "    /resume-it    -- Continue working on your app"
+echo "    /retrofit-it  -- Upgrade an existing app with production foundations"
 echo ""
 echo "  Files copied to:"
 echo "    $COMMANDS_DIR/make-it.md"
