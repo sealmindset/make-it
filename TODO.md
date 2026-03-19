@@ -31,6 +31,17 @@ _All low priority items completed._
 
 ## Completed
 
+### /nemo-it: Standalone security attestation skill ✓
+Created /nemo-it as a completely separate skill from /make-it and /ship-it. Scans any
+project against NeMo Guardrails AI safety (6 categories) and OWASP Testing Guide (all 11
+categories). Uses pytest, Playwright, OWASP ZAP, semgrep, Bandit/ESLint, Trivy, SQLMap
+(passive), npm audit, and pip-audit. Non-destructive testing only -- detects susceptibility
+without exploiting. Generates versioned attestation at docs/attestations/nemo-it/YYYY-MM-DD-vN.md
+with executive summary, risk matrix (likelihood x impact), compensating controls, and
+OWASP Top 10 mapping. Optional JSON and JUnit XML output for CI/CD. Preflight auto-installs
+missing tools with user consent. Created: nemo-it.md (skill), owasp-testing-guide.md
+(reference), nemo-it-attestation.md (template). Updated: README.md.
+
 ### NeMo Guardrails -- AI Safety Testing integration ✓
 Added NeMo Guardrails as mandatory AI safety gate for all AI-powered apps. 6 test
 categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage,

@@ -15,6 +15,7 @@ You describe what you want in plain English. The skills handle everything else -
 - [How /try-it Works](#how-try-it-works)
 - [How /resume-it Works](#how-resume-it-works)
 - [How /retrofit-it Works](#how-retrofit-it-works)
+- [How /nemo-it Works](#how-nemo-it-works)
 - [What Gets Built](#what-gets-built)
 - [Supported Project Types](#supported-project-types)
 - [Architecture](#architecture)
@@ -101,9 +102,11 @@ cp ~/.claude/make-it-repo/.claude/commands/make-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/try-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/resume-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/retrofit-it.md ~/.claude/commands/
+cp ~/.claude/make-it-repo/.claude/commands/nemo-it.md ~/.claude/commands/
 
 # Copy the references, templates, and scaffolds
 cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
+cp -r ~/.claude/make-it-repo/.claude/nemo-it ~/.claude/nemo-it
 ```
 
 ### Verify Installation
@@ -112,7 +115,7 @@ cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
 claude
 ```
 
-Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it`, `/resume-it`, or `/retrofit-it` to verify those are available too.
+Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it`, `/resume-it`, `/retrofit-it`, or `/nemo-it` to verify those are available too.
 
 ### Updating
 
@@ -132,6 +135,7 @@ bash install.sh             # re-copies updated files
 | `/try-it` | Spins up your app locally, tests everything, lets you explore in the browser | After `/make-it` finishes, or anytime you want to see your app running |
 | `/resume-it` | Picks up where you left off -- add features, fix bugs, run tests, deploy | Any time after the initial build |
 | `/retrofit-it` | Upgrades an existing app with production foundations (auth, RBAC, Docker, security) | You have an app that works but needs enterprise-grade infrastructure |
+| `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
 
 ---
 
@@ -358,6 +362,58 @@ Depending on what's missing, `/retrofit-it` can add:
 
 ---
 
+## How /nemo-it Works
+
+`/nemo-it` is a standalone security attestation skill that scans any application -- not just apps built by `/make-it`. It reports findings but never fixes them. Think of it as a security audit that produces a detailed report.
+
+### Scan Modes
+
+| Command | What It Scans |
+|---------|--------------|
+| `/nemo-it` or `/nemo-it full` | Everything: NeMo AI safety + OWASP + Dependencies + Static Analysis |
+| `/nemo-it guardrails` | NeMo Guardrails AI safety testing only (6 categories) |
+| `/nemo-it owasp` | OWASP Testing Guide (all 11 categories) + dynamic analysis |
+| `/nemo-it deps` | Dependency vulnerabilities + container image scanning |
+| `/nemo-it sast` | Static code analysis only (no running app needed) |
+
+### What It Does
+
+1. **Preflight** -- Detects your project type, installs security tools (with permission), checks if the app is running
+2. **Static Analysis** -- Scans source code with semgrep, Bandit (Python), ESLint security (JS/TS) for vulnerability patterns
+3. **Dependency Scanning** -- Runs npm audit, pip-audit, and Trivy to find vulnerable libraries and container images
+4. **Dynamic Analysis** -- Tests the running app with OWASP ZAP, Playwright, and pytest for auth bypass, XSS, injection, and more
+5. **AI Safety Testing** -- If AI features are detected, runs NeMo Guardrails tests across 6 categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination). If no AI features, marks all as N/A
+6. **Attestation Generation** -- Produces a versioned report at `docs/attestations/nemo-it/YYYY-MM-DD-vN.md`
+
+### Safety Guarantees
+
+- All testing is non-destructive -- no DoS, no buffer overflows, no brute force
+- SQL injection and other dangerous tests run in detect-only mode
+- Production environments trigger a warning and are limited to passive scans
+- Optional JSON and JUnit XML output for CI/CD integration (`--format json` or `--format junit`)
+
+### What the Attestation Includes
+
+- Executive summary for GRC leadership
+- OWASP Top 10 (2021) coverage mapping
+- Risk matrix (likelihood x impact) for every finding
+- Detailed analysis per finding: what, where, how, root cause, remediation
+- Compensating controls for issues that need technological solutions (WAF, rate limiting, etc.)
+- Historical comparison with prior scans
+- Exceptions register for accepted risks
+
+### Usage
+
+```bash
+cd ~/Documents/GitHub/any-app
+claude
+> /nemo-it              # full scan
+> /nemo-it owasp        # OWASP only
+> /nemo-it sast         # static analysis only (no running app needed)
+```
+
+---
+
 ## What Gets Built
 
 ### Web Applications (Tier 1)
@@ -417,6 +473,7 @@ The skill automatically classifies your project during the Design phase based on
     try-it.md                     # Try skill -- spin up, test, explore
     resume-it.md                  # Resume skill -- continue, test, fix, ship
     retrofit-it.md                # Retrofit skill -- upgrade existing apps
+    nemo-it.md                    # Security attestation skill -- scan any app
   make-it/
     references/
       prerequisites.md            # Machine setup checks
@@ -426,6 +483,7 @@ The skill automatically classifies your project during the Design phase based on
       guardrails.md               # Tiered guardrail system (Tier 0-5)
     templates/
       app-context.md              # Template for tracking user answers (includes AI provider config)
+      nemo-it-attestation.md      # Security attestation report template
     scaffolds/
       fastapi-nextjs/             # Pre-built scaffold (61 files) -- Python backend
         backend/                  # FastAPI: auth, RBAC, models, routers, Alembic
@@ -436,6 +494,9 @@ The skill automatically classifies your project during the Design phase based on
         .env.example              # Environment variable documentation
       nextjs-fullstack/           # Pre-built scaffold -- Node.js full-stack
         README.md                 # Architecture, auth flow, RBAC, placeholders
+  nemo-it/
+    references/
+      owasp-testing-guide.md      # OWASP Testing Guide v4 mapped to automated test strategies
 docs/
   sequence-diagrams.md            # Mermaid diagrams of the full lifecycle
 CLAUDE.md                         # Project instructions for Claude Code
@@ -454,6 +515,7 @@ These files are generated inside the app you build -- not in this repo:
 | `TRY-IT-REPORT.md` | Test results, screenshots, and browser access instructions |
 | `.try-it/screenshots/` | Screenshots of every page per user role |
 | `NEXT-STEPS.md` | Shareable checklist of infrastructure, tickets, and env vars needed |
+| `docs/attestations/nemo-it/` | Versioned security attestation reports from `/nemo-it` scans |
 | `CHANGELOG.md` | Running log of all changes across sessions |
 | `TODO.md` | Outstanding work items |
 
@@ -537,6 +599,7 @@ Your experience is simple: **describe what you want, verify it works, say "ready
 /retrofit-it  --> Upgrade an existing app with production foundations
 /try-it       --> Explore it in the browser
 /resume-it    --> Iterate (add features, fix things, run tests)
+/nemo-it      --> Security attestation (scan any app, generate report)
 /ship-it      --> Deploy (creates PR, triggers CI/CD)
 ```
 
