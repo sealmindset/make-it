@@ -31,6 +31,15 @@ _All low priority items completed._
 
 ## Completed
 
+### NeMo Guardrails -- AI Safety Testing integration ✓
+Added NeMo Guardrails as mandatory AI safety gate for all AI-powered apps. 6 test
+categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage,
+hallucination). Basic suite (18 tests) runs during build-verify, full suite (60 tests)
+runs during /ship-it. Self-healing remediation loop. Attestation template generates
+GRC-required sign-off document in docs/. Updated: guardrails.md, design-blueprint.md
+(section 11), prompt-templates.md (Prompt #10d), app-context.md (nemo_guardrails config),
+ship-it-guide.md (pre-ship gate), README.md. Created: templates/ai-safety-attestation.md.
+
 ### /retrofit-it: Plain-language phase presentation ✓
 Rewrote Phase 4 (Plan) and Phase 5b (Phased retrofit) to use user-friendly language.
 Phase table now has "User-Facing Name" column. Internal labels only in state files.

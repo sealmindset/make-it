@@ -25,10 +25,18 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
 2. Reads the DevOps-managed .ship-it.yml config
 3. **Scans dependencies for known vulnerabilities** (pip-audit for Python, npm audit for Node.js)
 4. **Auto-fixes vulnerable packages** by upgrading to patched versions
-5. Creates a branch, commits changes (including security fixes), pushes
-6. Generates a caller workflow referencing the org's shared reusable workflow
-7. Creates a PR with labels, reviewers, description, security audit summary, and go-live checklist
-8. Reports back: "Done! The team will take it from here."
+5. **Runs NeMo Guardrails full test suite** (if AI features exist) -- 60+ test cases across
+   6 categories: prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage,
+   hallucination. Failures are auto-remediated; unresolvable findings documented with
+   root cause analysis and recommended compensating controls.
+6. **Generates AI Safety Attestation** (if AI features exist) -- docs/attestations/YYYY-MM-DD-vN.md
+   with pass/fail per category, test details, and any unresolved findings. This attestation
+   is the GRC-required acceptance qualification for production deployment.
+7. Creates a branch, commits changes (including security fixes + attestation), pushes
+8. Generates a caller workflow referencing the org's shared reusable workflow
+9. Creates a PR with labels, reviewers, description, security audit summary, AI safety
+   attestation summary, and go-live checklist
+10. Reports back: "Done! The team will take it from here."
 
 **Two modes:**
 | Command | What it does |
@@ -56,7 +64,7 @@ CONTINUOUS QUALITY (automated, invisible to user)
                      |
                      v
 SHIP (user triggers)
-  /ship-it        -> Creates PR, hands off to DevOps
+  /ship-it        -> NeMo Guardrails full suite (if AI) -> Attestation -> PR
                      |
                      v
 DEVOPS PREFLIGHT (automated, DevOps-owned)

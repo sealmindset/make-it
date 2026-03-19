@@ -374,6 +374,7 @@ A complete, production-ready web application with:
 | **UI Components** | DataTable with Excel-like filtering, breadcrumbs, command palette (Cmd+K), sidebar navigation, dark mode toggle |
 | **AI Providers** | Multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with model tiering (heavy/standard/light) -- only if your app uses AI features |
 | **AI Prompt Management** | Database-stored prompts with version history and admin UI for editing -- scales from code-only (1-3 prompts) to full management platform (10+ prompts) |
+| **AI Safety Testing** | NeMo Guardrails with 6 test categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination) -- generates a GRC-required attestation document |
 | **Docker** | Multi-service Compose with health checks, migration auto-run, mock services on dev profile |
 | **Mock Services** | Mock OIDC provider for local auth, plus mock services for any external integrations (Jira, Tempo, etc.) |
 | **Seed Data** | Realistic sample data so every page is populated on first launch |
@@ -581,6 +582,7 @@ All of Tier 0, plus:
 - Terraform generated as DevOps handoff artifact
 - **AI provider abstraction** (if app uses AI) -- configurable via env var, supports Azure AI Foundry, Anthropic, OpenAI, Ollama
 - **AI prompt management** (if app uses AI) -- scales from code-only to database-managed with admin UI based on prompt count
+- **AI safety testing** (if app uses AI) -- NeMo Guardrails with 6 mandatory test categories; generates GRC-required attestation for production deployment
 
 ### Tier 2: IDE Extension
 

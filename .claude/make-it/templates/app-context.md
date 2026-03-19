@@ -71,6 +71,22 @@ This template is populated by /make-it as the user answers questions. It becomes
       }
     }
   },
+  "nemo_guardrails": {
+    "enabled": false,
+    "version": "latest",
+    "attestation_mode": "snapshot",
+    "categories": [
+      "prompt_injection",
+      "jailbreak",
+      "toxicity_bias",
+      "topic_boundaries",
+      "pii_leakage",
+      "hallucination"
+    ],
+    "topic_domain": "",
+    "last_run": "",
+    "last_result": ""
+  },
   "compliance": [],
   "special_features": [],
   "mock_services": {
@@ -169,6 +185,9 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_providers | Design | Auto-determined when ai_features.needed is true |
 | ai_providers.primary | Design | Inferred from cloud.provider + enterprise context: "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama" |
 | ai_providers.model_tiers | Design | Inferred from ai_features.agents complexity; defaults to latest Claude models |
+| nemo_guardrails.enabled | Design | Auto-set to true when ai_features.needed = true |
+| nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each /ship-it) |
+| nemo_guardrails.topic_domain | Design | Inferred from project purpose -- defines the AI's allowed scope (e.g., "vendor risk management") |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
 | cloud.provider | Design | "Where would you like to host this?" (Azure, AWS, Google Cloud, or just local) -- values: "azure" \| "aws" \| "gcp" \| "none" |
 | cloud.region | Design | Inferred from provider choice or asked |

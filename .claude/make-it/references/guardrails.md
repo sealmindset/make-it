@@ -114,6 +114,29 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Supported providers: anthropic_foundry (Azure AI Foundry), anthropic (direct), openai, ollama
 - Build-verify: confirm AI features work by calling the provider abstraction (not a specific SDK)
 
+### NeMo Guardrails -- AI Safety Testing (if app uses AI/LLM features)
+- MANDATORY for all apps with ai_features.needed = true -- required by GRC for production deployment
+- Install nemoguardrails as a dev dependency (pip install nemoguardrails)
+- Create guardrails/ directory with config.yml and Colang rail files
+- 6 test categories (ALL required):
+  1. Prompt injection resistance -- adversarial input cannot override system instructions
+  2. Jailbreak resistance -- role-play, encoding tricks, and multi-turn escalation are blocked
+  3. Toxicity / bias detection -- AI outputs are free of toxic, offensive, or biased content
+  4. Topic boundary enforcement -- AI stays within its defined domain scope
+  5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
+  6. Hallucination detection -- AI does not fabricate facts or present unverified claims
+- Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
+- /ship-it runs FULL suite (minimum 10 test cases per category = 60 tests)
+- Self-healing: failures trigger automatic remediation (prompt hardening, rail adjustments,
+  output filters). Re-test after each fix attempt (up to 3 cycles).
+- Unresolvable failures: document with full root cause analysis, impact assessment,
+  and recommended compensating controls (WAF rules, rate limiting, human-in-the-loop, etc.)
+- Attestation: generate docs/ai-safety-attestation.md (or versioned snapshot in
+  docs/attestations/) from test results. Template: templates/ai-safety-attestation.md
+- Attestation mode configurable in app-context.json:
+  "snapshot" (default) = versioned file per run, "latest" = overwrite on each /ship-it
+- The attestation IS the sign-off -- no additional human approval required
+
 ### AI Prompt Management (if app uses AI/LLM features)
 - Determine ai_usage_level: none, minimal (1-3), moderate (4-10), heavy (10+)
 - Tier 1 (minimal): prompts in code with env var override, single prompts file
