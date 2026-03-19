@@ -515,6 +515,25 @@ else:
 fi
 ```
 
+**5. Transitive vs direct dependency classification:**
+
+When reporting dependency CVEs, distinguish between direct and transitive dependencies.
+This materially affects risk scoring:
+
+| Dependency Type | Description | Risk Adjustment |
+|----------------|-------------|-----------------|
+| **Direct (runtime)** | Listed in dependencies, imported by app code, runs at runtime | Full severity as reported by scanner |
+| **Direct (dev-only)** | Listed in devDependencies, used only during build/test | Reduce likelihood by 1 (build tooling, not runtime) |
+| **Transitive (runtime)** | Indirect dependency of a direct runtime dependency | Full severity, but note remediation requires upstream update |
+| **Transitive (build-only)** | Indirect dependency of build tooling (npm, bundler internals) | Reduce effective risk: these exist in the container filesystem but are not invoked by application code. Classify by tool-reported severity but add context note. |
+
+For container image scans (Trivy image), many HIGH/CRITICAL CVEs are in npm's own
+transitive dependencies (cross-spawn, glob, minimatch, etc.) that exist in the container
+but are never called by application code at runtime. These should be reported at their
+tool-assigned severity with an explanatory note: "This vulnerability exists in build
+tooling packaged in the container image, not in application runtime code. Effective
+risk is lower than the CVE severity suggests."
+
 Update user: "Dependency and container scanning complete. Found [N] vulnerable dependencies and [M] container issues."
 
 </step>
@@ -644,10 +663,17 @@ Generate and execute pytest scripts for API endpoint testing:
 - Test for out-of-order workflow steps
 - Check for mass assignment vulnerabilities
 
-**Rate limiting detection:**
+**Rate limiting detection (MUST BE LAST in Phase 2):**
+- CRITICAL: Rate limit testing sends many rapid requests that WILL trigger the app's
+  rate limiter. If run before other DAST tests, it blocks subsequent tests (logout,
+  session fixation, OIDC state validation, etc.) until the rate limit window resets.
+  Always run rate limit detection as the FINAL dynamic test.
 - Send 50 rapid requests to the same endpoint
 - Check if rate limiting kicks in (429 responses)
 - Record whether rate limiting is present and at what threshold
+- After rate limit testing completes, wait for the rate limit window to reset
+  (typically 60 seconds) before proceeding to Phase 3. This ensures AI safety
+  endpoint tests are not blocked by the rate limiter from Phase 2.
 
 ```bash
 # Execute pytest
@@ -703,6 +729,39 @@ Mark all categories as "N/A -- no AI features detected" and skip to Phase 4.
 If AI features WERE detected:
 
 Tell the user: "I detected AI features in your project. I am now running NeMo Guardrails AI safety tests across six categories. These tests check whether your AI integration can be manipulated, tricked, or misused."
+
+**0. Determine AI testing mode (code-level vs behavioral):**
+
+Before attempting live AI calls, check whether the AI provider is actually accessible:
+
+```bash
+# Check if AI provider env vars are set and reachable
+# Look for configured endpoints/keys in .env
+grep -i "AZURE_OPENAI_ENDPOINT\|ANTHROPIC_API_KEY\|OPENAI_API_KEY\|OLLAMA_BASE_URL" .env 2>/dev/null
+```
+
+- If AI provider IS configured and reachable: run **behavioral tests** (send actual
+  prompts to AI endpoints and evaluate responses). This is the full NeMo Guardrails suite.
+- If AI provider is NOT configured (common in dev/CI environments): run **code-level
+  verification** instead. This verifies all safety controls are correctly wired in code
+  without making actual AI calls. Code-level verification checks:
+  1. `sanitizePromptInput()` exists and is called by BaseAgent/all agent routes
+  2. `validateAgentOutput()` exists and is called after AI responses
+  3. `aiRateLimit()` middleware is applied to all AI routes
+  4. `maskPII()` / `unmaskPII()` is called in the AI pipeline
+  5. `sanitizeAIError()` wraps all AI route catch blocks
+  6. `SAFETY_PREAMBLE` is prepended to all system prompts
+  7. `validatePromptTemplate()` is called on prompt save endpoints
+  8. Delimiter tags (`<user_input>`) are used in prompt construction
+  9. Prompt size validation enforces AI_MAX_PROMPT_CHARS
+  10. API probing: send injection payloads to AI endpoints and verify the
+      input sanitization layer strips them (returns 400 or sanitized response,
+      not a raw AI pass-through)
+
+Code-level results are marked as "PASS (code-level)" in the attestation with a note:
+"Full behavioral testing requires a live AI provider connection. Code-level verification
+confirms safety controls are correctly implemented. Run behavioral tests when the AI
+provider is available in a test environment."
 
 **1. Configure NeMo Guardrails for testing:**
 
@@ -1264,4 +1323,23 @@ Remember: this report identifies issues but does not fix them. Share this attest
 
 8. **Scan mode determines scope.** Only run the phases that the user's selected mode requires. Do not run unnecessary scans.
 
+9. **Rate limit testing is ALWAYS last in DAST.** Sending rapid requests to detect rate limiting will trigger the app's rate limiter, blocking all subsequent requests until the window resets. Run rate limit detection as the very last DAST test. After rate limit testing, wait for the rate limit window to reset (typically 60 seconds) before proceeding to AI safety testing (Phase 3).
+
+10. **AI safety has two modes: behavioral and code-level.** If the AI provider is not configured or reachable in the scan environment (common in dev/CI), fall back to code-level verification. This checks that all safety controls are correctly wired in code. Mark results as "PASS (code-level)" with a note recommending behavioral testing when a live provider is available.
+
 </important_reminders>
+
+<calibration_notes>
+
+**Lessons learned from real scans (update as new patterns emerge):**
+
+| Stack | Key Lesson |
+|-------|------------|
+| Next.js 16 + Prisma + AI agents | Rate limit testing (100 req/min) at request ~78 blocked all subsequent DAST tests. Had to wait 60s for window reset. Now enforced: rate limit testing is always last. |
+| Same | AI provider not configured in dev environment. AI endpoints returned 400/500 on calls. Code-level verification proved all safety controls were present and wired. Added code-level as a formal testing mode. |
+| Same | Trivy container image scan found HIGH CVEs in npm transitive dependencies (cross-spawn, glob, minimatch). These are in build tooling, not runtime code. Added transitive CVE classification guidance. |
+| Same | Next.js 16 strips Set-Cookie from 307 redirects. OIDC state cookie required HTML redirect workaround. Now a /make-it guardrail. |
+| Same | Module-level `throw` for secret validation killed Next.js production build (NODE_ENV=production during build). ENFORCE_SECRETS env var pattern resolved this. Now a /make-it Tier 0 guardrail. |
+| Same | Docker layer caching served stale compiled output after source fixes. `--no-cache` flag required. Now a /make-it build-verify guardrail. |
+
+</calibration_notes>

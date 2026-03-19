@@ -212,7 +212,7 @@ For each gap, assign a risk weight:
 
 | App | Profile | Score | Strategy Used | Outcome |
 |-----|---------|-------|---------------|---------|
-| TPRMAI | Next.js monolith, no auth, no Docker, 6 AI agents | ~40 (High) | Phased (A-F) | Success. Auth phase (C) had 2 bugs: callback redirect used request.url (internal Docker addr), cookie Secure flag derived from NODE_ENV instead of URL protocol. Both caught in verification. |
+| Next.js TPRM app | Next.js monolith, no auth, no Docker, 6 AI agents | ~40 (High) | Phased (A-F) | Success. Auth phase (C) had 2 bugs: callback redirect used request.url (internal Docker addr), cookie Secure flag derived from NODE_ENV instead of URL protocol. Both caught in verification. |
 
 **Lessons learned:**
 - Auth "Wrap" changes (weight 3) are the highest-risk category in practice. The Docker
@@ -223,6 +223,16 @@ For each gap, assign a risk weight:
 - AI Prompt Management "Enhance" (weight 2) went smoothly when done AFTER auth + RBAC.
   The dependency order matters: prompts depend on auth (for admin permissions) and DB
   (for storage). Phase F position is correct.
+- Next.js 16+ strips Set-Cookie from redirect (307) responses. The OIDC login route
+  MUST use the HTML redirect workaround (return 200 with Set-Cookie header + meta-refresh
+  + JS redirect). This affects OIDC state cookie and any other cookie set during redirects.
+  See guardrails.md Tier 1 auth rules.
+- Secret validation with module-level `throw` kills Next.js builds because Next.js evaluates
+  all modules during `next build` with NODE_ENV=production. Use the ENFORCE_SECRETS pattern:
+  deferred runtime assertion functions, gated by a dedicated env var (not NODE_ENV).
+  See guardrails.md Tier 0 rules #13 and #14.
+- Docker layer caching can serve stale compiled output after source fixes. Always rebuild
+  with `--no-cache` during fix cycles. See guardrails.md build-verify section.
 
 **Build the gap inventory:**
 

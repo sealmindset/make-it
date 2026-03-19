@@ -7,8 +7,8 @@ with Next.js as both frontend AND backend (API routes). No separate backend serv
 This pattern is ideal for internal business tools, CRUD apps, and AI-powered apps
 that don't need a separate Python backend.
 
-**Reference implementation:** TPRMAI (AI-powered Third Party Risk Management) was built
-with this exact pattern and validated through a complete /retrofit-it cycle.
+**Validated pattern:** This scaffold was battle-tested through a full /retrofit-it cycle
+on a production Next.js 16 app with Prisma, OIDC auth, RBAC, and 6 AI agents.
 
 ## When to Use This Scaffold
 
@@ -136,20 +136,35 @@ Client-side: `useAuth()` hook with `hasPermission(resource, action)`.
 
 | Placeholder | Description | Example |
 |-------------|-------------|---------|
-| `[APP_NAME]` | Human-readable app name | AI TPRM |
-| `[APP_SLUG]` | Kebab-case identifier | tprmai |
-| `[APP_PORT]` | Host port mapped to container port 3000 | 3020 |
-| `[DB_PORT]` | Host port mapped to PostgreSQL port 5432 | 5438 |
-| `[MOCK_OIDC_PORT]` | Host port mapped to mock-oidc port 10090 | 10091 |
+| `[APP_NAME]` | Human-readable app name | My App |
+| `[APP_SLUG]` | Kebab-case identifier | my-app |
+| `[APP_PORT]` | Host port mapped to container port 3000 | 3000 |
+| `[DB_PORT]` | Host port mapped to PostgreSQL port 5432 | 5432 |
+| `[MOCK_OIDC_PORT]` | Host port mapped to mock-oidc port 10090 | 10090 |
 | `[SEED_USERS]` | JSON array of test users | See fastapi-nextjs README |
-| `[DOMAIN_MODELS]` | Prisma models for domain entities | Vendor, Assessment, etc. |
-| `[DOMAIN_PAGES]` | App-specific pages to generate | vendors, assessments, etc. |
-| `[AI_AGENTS]` | AI agent definitions (if AI) | VERA, CARA, DORA, etc. |
+| `[DOMAIN_MODELS]` | Prisma models for domain entities | Project, Task, etc. |
+| `[DOMAIN_PAGES]` | App-specific pages to generate | projects, tasks, etc. |
+| `[AI_AGENTS]` | AI agent definitions (if AI) | Analyst, Reviewer, etc. |
 
 ## Status
 
-**SCAFFOLD STRUCTURE DEFINED -- template files to be populated from TPRMAI reference.**
+**SCAFFOLD STRUCTURE DEFINED -- template files pending.**
 
 The shared files (mock-oidc, .gitignore, seed script) are copied from the fastapi-nextjs
-scaffold. The Next.js-specific template files will be extracted from the TPRMAI codebase
-as the reference implementation.
+scaffold. The Next.js-specific template files need to be created as generic templates
+with bracket placeholders, following the same pattern as the fastapi-nextjs scaffold.
+
+### Key Patterns to Encode in Templates
+
+These patterns were validated through real-world retrofits and security scans:
+
+- **OIDC state parameter (RFC 6749 Section 10.12):** Login route generates random state,
+  stores in httpOnly cookie, passes to authorization URL. Callback validates match.
+- **Next.js 16 Set-Cookie workaround:** Login returns HTML page (200) with Set-Cookie header
+  + meta-refresh + JS redirect (not 307), because Next.js 16 strips Set-Cookie from redirects.
+- **ENFORCE_SECRETS pattern:** Use dedicated `ENFORCE_SECRETS=true` env var (not NODE_ENV)
+  to gate fatal secret assertions. Docker always builds with NODE_ENV=production.
+- **Runtime-deferred assertions:** All secret/config validation in functions called from
+  handlers, never at module scope (Next.js evaluates modules during build).
+- **Cookie Secure from URL protocol:** `secure = NEXTAUTH_URL.startsWith('https')`
+  (not NODE_ENV, which is always 'production' in Docker).

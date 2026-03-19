@@ -41,6 +41,31 @@ These apply to every project /make-it builds, no exceptions.
 10. **Mask/redact sensitive data in output** -- Logs, error messages, and UI never display full secrets, tokens, or credentials.
 11. **Latest stable dependencies** -- Always use the latest stable version of every dependency. No pinning to outdated majors. Check for known CVEs before proceeding.
 12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Java runtime dependencies are prohibited by project policy. Use Python, Node.js, Go, or Rust alternatives instead.
+13. **ENFORCE_SECRETS pattern for secret validation** -- Never use `NODE_ENV === 'production'`
+    or equivalent to gate secret assertions, because Docker/container builds always set
+    NODE_ENV=production. Instead, add a dedicated `ENFORCE_SECRETS=true` env var that is ONLY
+    set in actual production deployments. Secret validation logic:
+    - If secret has a default/mock value AND `ENFORCE_SECRETS === 'true'`: throw fatal error
+    - If secret has a default/mock value AND `ENFORCE_SECRETS !== 'true'`: log a warning (dev mode)
+    - Add `ENFORCE_SECRETS=false` to `.env.example`
+14. **No module-level throws in Next.js** -- Next.js evaluates all modules during build (even in
+    production mode). Any `throw` at module scope (top-level, outside a function) will kill the
+    build. Secret assertions, config validation, and env var checks MUST be deferred to runtime
+    by wrapping them in functions called from route handlers or middleware. Pattern:
+    ```
+    // WRONG: kills Next.js build
+    if (!process.env.MY_SECRET) throw new Error('MY_SECRET required')
+
+    // RIGHT: runs only when the code path executes
+    function assertMySecret() {
+      if (!process.env.MY_SECRET && process.env.ENFORCE_SECRETS === 'true') {
+        throw new Error('MY_SECRET required in production')
+      }
+    }
+    export function handler() { assertMySecret(); ... }
+    ```
+    This applies to middleware.ts, auth.ts, oidc.ts, and any other module that validates
+    secrets or configuration at import time.
 
 ### Architecture
 
@@ -76,6 +101,14 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - JWT payload: { sub, email, name, role_id, role_name, permissions[] } -- FLAT, no nesting
 - Auth callback redirects use EXTERNAL frontend URL env var, NOT request.url
 - Cookie Secure flag derived from URL protocol, NOT NODE_ENV
+- OIDC state parameter (RFC 6749 Section 10.12): login generates random state, stores in
+  httpOnly cookie, passes to authorization URL. Callback validates state matches cookie.
+  This prevents CSRF on the login flow. Missing state validation = HIGH severity finding.
+- Next.js 16+ Set-Cookie workaround: login route returns HTML page (200) with Set-Cookie
+  header + meta-refresh + JS redirect instead of 307, because Next.js strips Set-Cookie
+  from redirect responses. This is the standard pattern for /auth/login in Next.js 16+.
+- ENFORCE_SECRETS pattern: use dedicated env var, not NODE_ENV (see Tier 0 rule #13)
+- No module-level throws for secret/config assertions (see Tier 0 rule #14)
 - Mock-oidc for local development with pre-seeded test users (Python/FastAPI, no Java)
 - Seed users' oidc_subjects must match mock-oidc subject IDs exactly
 - Admin UI: User Management + Role Management pages with permission matrix
@@ -317,7 +350,8 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 **Provider & Architecture:**
 - [ ] AI provider abstraction exists in lib/ai/ with factory function
 - [ ] No provider SDK imports outside lib/ai/providers/
-- [ ] AI_PROVIDER env var is required (throws error if missing, no silent fallback)
+- [ ] AI_PROVIDER env var is required (runtime assertion throws error if missing -- NOT
+      module-level, see Tier 0 rule #14. Check in factory function or first AI call.)
 - [ ] AI features work by calling provider abstraction (not specific SDK)
 
 **Input Safety (Secure by Design):**
@@ -394,19 +428,33 @@ Additional OIDC/auth/type checks (CRITICAL -- these prevent recurring issues acr
   the browser silently rejects the cookie, causing an auth redirect loop. Use:
   secure = FRONTEND_URL.startsWith("https")
 
+Docker build cache invalidation (CRITICAL -- prevents stale compiled output):
+- When source files change during a fix cycle, Docker layer caching can serve stale
+  compiled output even though the source was modified. This happens because the COPY
+  layer hash may not change if the file timestamp is the only difference.
+- After ANY source code fix during build-verify, rebuild with `--no-cache` flag:
+  `docker compose --profile dev build --no-cache <service>`
+- Without this, you may verify against old code and miss regressions or believe
+  fixes didn't work when they actually did.
+
 Live auth flow smoke test (CRITICAL -- must run during build-verify):
 - After docker-compose --profile dev up and mock-oidc seeding, run a curl-based
   end-to-end auth flow test that:
-  1. Hits /api/auth/login and captures the 302 redirect to mock-oidc
-  2. Simulates user selection via /authorize/callback on mock-oidc
-  3. Follows the code redirect back to the app's /api/auth/callback
-  4. ASSERTS the final redirect URL starts with the EXTERNAL frontend URL
+  1. Hits /api/auth/login and captures the response (may be HTML page with
+     Set-Cookie + redirect in Next.js 16+, or 302 in other frameworks)
+  2. ASSERTS an `oidc_state` cookie is set in the login response (CSRF protection)
+  3. ASSERTS the redirect target includes a `state=` query parameter
+  4. Simulates user selection via /authorize/callback on mock-oidc
+  5. Follows the code redirect back to the app's /api/auth/callback
+  6. ASSERTS the final redirect URL starts with the EXTERNAL frontend URL
      (e.g., http://localhost:3020/dashboard), NOT the internal Docker address
-  5. ASSERTS a JWT cookie named "token" is set
-  6. ASSERTS the cookie Secure flag matches the frontend URL protocol
+  7. ASSERTS a JWT cookie named "token" is set
+  8. ASSERTS the cookie Secure flag matches the frontend URL protocol
      (Secure=false for http://, Secure=true for https://). A mismatch causes
      the browser to silently reject the cookie, creating an auth loop that
      curl-based tests won't catch unless they explicitly check the flag.
+  9. Tests state mismatch rejection: send callback with mismatched state value,
+     ASSERT redirect to /login?error=state_mismatch (not a successful login)
 - If ANY assertion fails: diagnose the root cause, fix it, rebuild if needed,
   and re-run the test. Do NOT proceed to handoff with a broken auth flow.
 - This is a self-healing loop: test -> fail -> fix -> rebuild -> retest until green.

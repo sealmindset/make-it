@@ -100,6 +100,17 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
 - JWT is STATELESS -- no server-side session store (no Redis, no DB sessions)
 - /auth/me returns FLAT object: { sub, email, name, role_id, role_name, permissions[] }
   -- no .user wrapper, no nested Role object
+- OIDC state parameter MANDATORY (RFC 6749 Section 10.12): /auth/login generates a random
+  state value (`crypto.randomBytes(16).toString('hex')`), stores it in an httpOnly cookie
+  (`oidc_state`), and passes it to the authorization URL. /auth/callback validates the
+  returned state matches the cookie value. Reject with `error=state_mismatch` if they
+  differ. This prevents CSRF attacks on the login flow.
+- Next.js 16+ strips Set-Cookie headers from redirect (307) responses -- ALL approaches
+  fail (NextResponse.redirect().cookies.set(), cookies() from next/headers, raw headers).
+  Workaround: return an HTML page (status 200) with Set-Cookie header +
+  `<meta http-equiv="refresh" content="0;url=...">` + `window.location.href` JavaScript
+  redirect instead of a 307. This is the ONLY reliable way to set cookies during the
+  OIDC login redirect in Next.js 16+. Apply this pattern to /auth/login.
 
 **Frontend proxy pattern (prevents cross-origin cookie blocking):**
 - Next.js rewrites in next.config.ts proxy /api/* to the backend
