@@ -826,6 +826,59 @@ If generated, machine-readable artifacts are stored alongside this attestation:
 
 ---
 
+## Secure-by-Design Coverage (/make-it Cross-Reference)
+
+This section maps each finding to whether it **would have been prevented** if the application
+had been built (or retrofitted) using the `/make-it` skill's guardrails. This helps teams
+understand the value of secure-by-design practices vs. post-hoc scanning.
+
+### Prevention Classification
+
+| Classification | Meaning |
+|---------------|---------|
+| **Prevented by /make-it** | This finding would NOT exist in an app built by /make-it. The guardrail or safety control is built into the framework by default. |
+| **Reduced by /make-it** | /make-it includes controls that reduce the severity or likelihood of this finding, but cannot fully eliminate it (e.g., dependency vulnerabilities that emerge after build time). |
+| **Not covered by /make-it** | This is a net-new gap that /make-it does not currently address. Consider proposing an enhancement to the /make-it guardrails. |
+
+### Finding Prevention Matrix
+
+| Finding ID | Severity | Category | Prevention Status | /make-it Control |
+|-----------|----------|----------|-------------------|-----------------|
+| [FINDING_ID] | [SEV] | [CATEGORY] | [PREVENTED / REDUCED / NOT_COVERED] | [GUARDRAIL_REFERENCE or "N/A"] |
+
+### AI Safety Prevention Summary (if AI features present)
+
+| AI Safety Control | /make-it Provides | Status in This App |
+|-------------------|-------------------|-------------------|
+| Input sanitization (sanitizePromptInput) | Yes -- lib/ai/sanitize.ts, called by BaseAgent | [PRESENT / ABSENT] |
+| Delimiter tags (`<user_input>`) | Yes -- all prompts use delimiter pattern | [PRESENT / ABSENT] |
+| System prompt hardening (anti-injection) | Yes -- safety block appended to all agent prompts | [PRESENT / ABSENT] |
+| Output validation (validateAgentOutput) | Yes -- lib/ai/validate.ts, schema + range checks | [PRESENT / ABSENT] |
+| Output encoding (XSS prevention) | Yes -- escaped rendering, no dangerouslySetInnerHTML | [PRESENT / ABSENT] |
+| AI rate limiting (per-user) | Yes -- lib/ai/rate-limit.ts middleware on AI routes | [PRESENT / ABSENT] |
+| Prompt size validation | Yes -- enforced in BaseAgent before AI call | [PRESENT / ABSENT] |
+| PII masking before AI submission | Yes -- lib/ai/pii-masker.ts with pseudonymization | [PRESENT / ABSENT] |
+| AI error sanitization | Yes -- lib/ai/errors.ts, generic client messages | [PRESENT / ABSENT] |
+| Conversation history limits | Yes -- AI_MAX_HISTORY_TURNS with server-side storage | [PRESENT / ABSENT] |
+| NeMo Guardrails test suite | Yes -- 18 tests at build, 60 at ship | [PRESENT / ABSENT] |
+| AI safety attestation | Yes -- auto-generated in docs/attestations/ | [PRESENT / ABSENT] |
+
+### Coverage Statistics
+
+| Metric | Count | Percentage |
+|--------|-------|-----------|
+| Findings prevented by /make-it | [COUNT] | [PCT]% |
+| Findings reduced by /make-it | [COUNT] | [PCT]% |
+| Findings not covered by /make-it | [COUNT] | [PCT]% |
+| Total findings | [TOTAL] | 100% |
+
+> **Interpretation:** If [PCT_PREVENTED]% of findings would have been prevented by /make-it,
+> this demonstrates the value of secure-by-design development practices. The remaining
+> [PCT_NOT_COVERED]% represent areas where operational controls, dependency management,
+> or /make-it enhancements are needed.
+
+---
+
 ## Appendix A: Tool Versions and Configuration
 
 | Tool            | Version              | Configuration / Rulesets                  |
@@ -854,4 +907,4 @@ If generated, machine-readable artifacts are stored alongside this attestation:
 
 *This attestation is informational only and does not constitute a release gate. It is intended to support GRC oversight and continuous risk monitoring. Findings should be triaged through the organization's standard vulnerability management process.*
 
-*Template version: 1.0.0 | Skill: /nemo-it*
+*Template version: 1.1.0 | Skill: /nemo-it | Added: Secure-by-Design Coverage cross-reference*

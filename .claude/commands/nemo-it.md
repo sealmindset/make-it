@@ -61,6 +61,7 @@ You are a professional security auditor conducting a thorough but approachable a
 - When a scan phase completes, give a brief status update before moving on.
 
 **What you NEVER do:**
+- Fix, patch, or modify any application code, configuration, or infrastructure
 - Exploit vulnerabilities beyond safe detection (no DoS, no data corruption, no brute force)
 - Store or transmit discovered vulnerabilities to external services
 - Skip phases without informing the user
@@ -966,6 +967,59 @@ For each category, report: number of findings, highest severity finding, pass/fa
 
 **5. Store all analyzed findings for attestation generation.**
 
+**6. Classify findings against /make-it Secure-by-Design controls:**
+
+For each finding, determine whether it would have been prevented or reduced if the app had been built with /make-it guardrails. Reference the controls in `~/.claude/make-it/references/guardrails.md` and `~/.claude/make-it/references/design-blueprint.md`.
+
+Classification categories:
+
+| Classification | Meaning |
+|---------------|---------|
+| **Prevented** | /make-it guardrails would have eliminated this vulnerability entirely. The build-verify checklist explicitly checks for this. |
+| **Reduced** | /make-it guardrails reduce the likelihood or impact but do not fully prevent it. Defense-in-depth applies. |
+| **Not covered** | This is an operational, environmental, or domain-specific finding that /make-it does not address. |
+
+Apply these classification rules:
+
+| Finding Category | /make-it Control | Classification |
+|-----------------|-----------------|----------------|
+| SQL injection | Prisma ORM (parameterized queries) | Prevented |
+| XSS (reflected/stored) | Output encoding in templates, CSP headers | Prevented |
+| Hardcoded secrets | .env pattern, build-verify check #5 | Prevented |
+| Missing security headers | Helmet/security middleware, build-verify | Prevented |
+| Missing CSRF protection | SameSite cookies, CORS config | Prevented |
+| Broken authentication | OIDC integration (never custom auth) | Prevented |
+| Missing RBAC | Database-driven RBAC, require_permission() | Prevented |
+| Vulnerable dependencies | Latest stable versions, build-verify check | Reduced |
+| Missing rate limiting (general) | Not in base guardrails | Not covered |
+| AI: No prompt injection resistance | sanitizePromptInput() in Prompt #10e | Prevented |
+| AI: No prompt size validation | AI_MAX_PROMPT_CHARS in Prompt #10e | Prevented |
+| AI: PII sent to AI unmasked | maskPII()/unmaskPII() in Prompt #10e | Prevented |
+| AI: No output validation | validateAgentOutput() in Prompt #10e | Prevented |
+| AI: No output encoding | XSS-safe rendering of AI output | Prevented |
+| AI: Error message leakage | sanitizeAIError() in Prompt #10e | Prevented |
+| AI: No rate limiting on AI endpoints | aiRateLimit middleware in Prompt #10e | Prevented |
+| AI: No conversation history limits | AI_MAX_HISTORY_TURNS in Prompt #10e | Prevented |
+| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |
+| AI: No system prompt hardening | System prompt safety block in Prompt #10e | Prevented |
+| AI: Admin prompt template injection | validatePromptTemplate() + immutable preamble (Prompt #10e Part 9) | Prevented |
+| AI: No test-before-publish on prompts | Draft/active workflow + mandatory testing (Prompt #10e Part 9) | Prevented |
+| AI: Variable interpolation injection | renderPromptSafe() sanitizes variables (Prompt #10e Part 9) | Prevented |
+| AI: Jailbreak susceptibility | NeMo Guardrails test suite (Prompt #10d) | Reduced |
+| AI: Hallucination | NeMo Guardrails test suite (Prompt #10d) | Reduced |
+| AI: Topic boundary violations | NeMo Guardrails test suite (Prompt #10d) | Reduced |
+| AI: Toxicity/bias | NeMo Guardrails test suite (Prompt #10d) | Reduced |
+| Container misconfiguration | Trivy scan in build-verify | Reduced |
+| Insecure deserialization | Framework defaults, input validation | Reduced |
+| SSRF | Not in base guardrails | Not covered |
+| Business logic flaws | Domain-specific, not generalizable | Not covered |
+
+Store the classification for each finding. Calculate summary statistics:
+- Total findings prevented by /make-it
+- Total findings reduced by /make-it
+- Total findings not covered by /make-it
+- Prevention rate = (prevented + reduced) / total
+
 Update user: "Analysis complete. I found [N] total issues: [X] critical, [Y] high, [Z] medium, [W] low, [V] informational. Generating your attestation now."
 
 </step>
@@ -1074,6 +1128,54 @@ The attestation document structure:
 
 ### Long-term (Low/Informational)
 [Prioritized list]
+
+---
+
+## Secure-by-Design Coverage (/make-it Cross-Reference)
+
+This section shows which findings would have been prevented or reduced if the application
+had been built using /make-it guardrails and AI Operational Safety Controls.
+
+### Prevention Classification
+
+| Classification | Count | Percentage |
+|---------------|-------|------------|
+| Prevented | [N] | [X%] |
+| Reduced | [N] | [X%] |
+| Not covered | [N] | [X%] |
+
+### Finding Prevention Matrix
+
+| # | Finding | Severity | Classification | /make-it Control |
+|---|---------|----------|---------------|-----------------|
+| 1 | [Finding title] | [CRITICAL/HIGH/...] | [Prevented/Reduced/Not covered] | [Control name or N/A] |
+| ... | ... | ... | ... | ... |
+
+### AI Safety Prevention Summary
+
+If AI features were detected, show which AI operational safety controls would apply:
+
+| Control | Status | /make-it Reference |
+|---------|--------|-------------------|
+| Prompt input sanitization | [Prevented/Missing] | Prompt #10e Part 1 |
+| Prompt size validation | [Prevented/Missing] | Prompt #10e Part 4 |
+| AI output validation | [Prevented/Missing] | Prompt #10e Part 2 |
+| AI output encoding (XSS) | [Prevented/Missing] | Prompt #10e Part 2 |
+| AI rate limiting | [Prevented/Missing] | Prompt #10e Part 3 |
+| PII masking | [Prevented/Missing] | Prompt #10e Part 5 |
+| AI error sanitization | [Prevented/Missing] | Prompt #10e Part 6 |
+| System prompt hardening | [Prevented/Missing] | Prompt #10e Part 7 |
+| Conversation history limits | [Prevented/Missing] | Prompt #10e Part 8 |
+| Fallback model safety | [Prevented/Missing] | Build-verify checklist |
+| NeMo Guardrails test suite | [Reduced/Missing] | Prompt #10d |
+| OIDC authentication | [Prevented/Missing] | Tier 1 guardrails |
+
+### Coverage Statistics
+
+- **Overall prevention rate:** [X%] of findings would have been prevented or reduced
+- **Critical findings prevented:** [N] of [M]
+- **High findings prevented:** [N] of [M]
+- **AI safety gaps closed:** [N] of [M] (if applicable)
 
 ---
 

@@ -29,14 +29,20 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
    6 categories: prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage,
    hallucination. Failures are auto-remediated; unresolvable findings documented with
    root cause analysis and recommended compensating controls.
-6. **Generates AI Safety Attestation** (if AI features exist) -- docs/attestations/YYYY-MM-DD-vN.md
+6. **Checks prompt template safety** (if AI features + Tier 2/3 prompt management) --
+   queries `prompt_audit_log` for any `risk_flag=true` entries since the last deployment.
+   If found: adds a "Prompt Safety Review Required" section to the PR description listing
+   each flagged edit (who, when, which prompt, what warning was triggered). This flags the
+   changes for security review before merge. Does NOT block the PR -- security team reviews
+   and approves or requests changes.
+7. **Generates AI Safety Attestation** (if AI features exist) -- docs/attestations/YYYY-MM-DD-vN.md
    with pass/fail per category, test details, and any unresolved findings. This attestation
    is the GRC-required acceptance qualification for production deployment.
-7. Creates a branch, commits changes (including security fixes + attestation), pushes
-8. Generates a caller workflow referencing the org's shared reusable workflow
-9. Creates a PR with labels, reviewers, description, security audit summary, AI safety
+8. Creates a branch, commits changes (including security fixes + attestation), pushes
+9. Generates a caller workflow referencing the org's shared reusable workflow
+10. Creates a PR with labels, reviewers, description, security audit summary, AI safety
    attestation summary, and go-live checklist
-10. Reports back: "Done! The team will take it from here."
+11. Reports back: "Done! The team will take it from here."
 
 **Two modes:**
 | Command | What it does |

@@ -91,3 +91,23 @@ table, suggests Tier 2/3 prompt management if gaps found.
 ### AI Prompt Management phase in /retrofit-it ✓
 Added Phase F (AI Prompts) to gap analysis and phased retrofit. Added step 10
 (AI Prompt Management) to single-pass retrofit sequence.
+
+### AI Operational Safety Controls (v1.2.0) ✓
+Added runtime safety stack for every AI invocation, closing 6 gaps found during
+TPRMAI security attestation. Prompt #10e (8 parts): input sanitization, output
+validation, rate limiting, prompt size validation, PII masking, error sanitization,
+system prompt hardening, conversation history management. lib/ai/ module architecture
+in design-blueprint.md. AI Build-Verify Checklist in guardrails.md. Phase F2 + Step 11
+in retrofit-it.md. Secure-by-Design cross-reference in nemo-it attestation template
+(v1.1.0). Updated: guardrails.md, design-blueprint.md, prompt-templates.md,
+retrofit-it.md, nemo-it-attestation.md, both nemo-it.md files.
+
+### AI Prompt Template Content Validation (v1.3.0) ✓
+Protects admin prompt editing surface against supply-chain injection. validatePromptTemplate()
+hybrid blocklist, immutable safety preamble (runtime-prepended, invisible to UI), draft/test/
+publish workflow with mandatory testing, renderPromptSafe() with variable interpolation
+sanitization, testPromptDraft() with mini NeMo check, risk_flag audit logging with /ship-it
+PR integration. Updated: guardrails.md (10 new build-verify checks), design-blueprint.md
+(Section 10a), prompt-templates.md (Part 9 + #10b/#10c/#11), ship-it-guide.md (step 6),
+retrofit-it.md (Steps 11j-m + Step 4.5), both nemo-it.md files (3 new classification entries).
+README.md updated with AI Security Architecture section.

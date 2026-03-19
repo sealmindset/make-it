@@ -17,12 +17,14 @@ You describe what you want in plain English. The skills handle everything else -
 - [How /retrofit-it Works](#how-retrofit-it-works)
 - [How /nemo-it Works](#how-nemo-it-works)
 - [What Gets Built](#what-gets-built)
+- [AI Security Architecture](#ai-security-architecture)
 - [Supported Project Types](#supported-project-types)
 - [Architecture](#architecture)
 - [Build Quality](#build-quality)
 - [Deployment Lifecycle](#deployment-lifecycle)
 - [FAQ](#faq)
 - [Related Skills](#related-skills)
+- [Version History](#version-history)
 - [License](#license)
 
 ---
@@ -358,6 +360,8 @@ Depending on what's missing, `/retrofit-it` can add:
 - Standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle)
 - Mock services for external integrations
 - AI prompt management (if your app uses AI features)
+- AI operational safety controls: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if your app uses AI features)
+- AI prompt template validation: content blocklist, immutable preamble, draft/publish workflow, variable sanitization (if Tier 2/3 prompt management)
 - Security headers, input validation, and deployment prep
 
 ---
@@ -399,6 +403,7 @@ Depending on what's missing, `/retrofit-it` can add:
 - Risk matrix (likelihood x impact) for every finding
 - Detailed analysis per finding: what, where, how, root cause, remediation
 - Compensating controls for issues that need technological solutions (WAF, rate limiting, etc.)
+- **Secure-by-Design cross-reference** -- classifies each finding as Prevented, Reduced, or Not covered by /make-it guardrails. Shows the prevention rate and which AI safety controls would have caught the issue
 - Historical comparison with prior scans
 - Exceptions register for accepted risks
 
@@ -429,7 +434,9 @@ A complete, production-ready web application with:
 | **RBAC** | 4 system roles (Super Admin, Admin, Manager, User), page-level CRUD permissions, permission matrix admin UI |
 | **UI Components** | DataTable with Excel-like filtering, breadcrumbs, command palette (Cmd+K), sidebar navigation, dark mode toggle |
 | **AI Providers** | Multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with model tiering (heavy/standard/light) -- only if your app uses AI features |
-| **AI Prompt Management** | Database-stored prompts with version history and admin UI for editing -- scales from code-only (1-3 prompts) to full management platform (10+ prompts) |
+| **AI Prompt Management** | Database-stored prompts with version history and admin UI for editing -- scales from code-only (1-3 prompts) to full management platform (10+ prompts). Includes content validation, immutable safety preamble, and mandatory test-before-publish workflow |
+| **AI Operational Safety** | Runtime safety stack: input sanitization, output validation, rate limiting, PII masking, error sanitization, prompt size validation, system prompt hardening, conversation history management |
+| **AI Prompt Template Validation** | Supply-chain injection protection: `validatePromptTemplate()` blocklist, immutable safety preamble auto-prepended at runtime, draft/test/publish workflow, variable interpolation sanitization, risk-flagged edits flagged for security review at deploy time |
 | **AI Safety Testing** | NeMo Guardrails with 6 test categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination) -- generates a GRC-required attestation document |
 | **Docker** | Multi-service Compose with health checks, migration auto-run, mock services on dev profile |
 | **Mock Services** | Mock OIDC provider for local auth, plus mock services for any external integrations (Jira, Tempo, etc.) |
@@ -444,6 +451,107 @@ A complete, production-ready web application with:
 | **CLI Tool** (Tier 3) | Command-line tool with argument parser, --help/--version, exit codes, structured output (--json) |
 | **Library** (Tier 4) | Importable package with type declarations, explicit public API, package manifest |
 | **API Service** (Tier 5) | Backend-only service with health check, OpenAPI spec, structured logging, consistent error format |
+
+---
+
+## AI Security Architecture
+
+When your app uses AI features, /make-it implements a comprehensive safety stack that protects against prompt injection, data leakage, and supply-chain attacks -- all invisible to the user.
+
+### Three Layers of AI Protection
+
+```
+Layer 1: Runtime Controls          -- Protect every AI call at execution time
+Layer 2: Prompt Template Validation -- Protect the admin editing surface
+Layer 3: NeMo Guardrails Testing    -- Verify safety through adversarial testing
+```
+
+### Layer 1: Runtime Controls (Prompt #10e Parts 1-8)
+
+Every AI invocation passes through a safety pipeline implemented in `lib/ai/`:
+
+| Module | What It Does |
+|--------|-------------|
+| `sanitize.ts` | Strips injection patterns from user input, wraps in `<user_input>` delimiter tags, decodes and re-scans encoded payloads (Base64, Unicode homoglyphs, ROT13) |
+| `validate.ts` | Validates AI responses against schemas + value ranges before storage. Strips HTML/script tags from free-text responses. Detects system prompt leakage |
+| `rate-limit.ts` | Per-user request and token budget on AI endpoints. Returns 429 with Retry-After header when limits exceeded |
+| `pii-masker.ts` | Pseudonymizes names, emails, phones, financial figures before submission to external AI providers. Reverses on response |
+| `errors.ts` | Maps AI provider errors to generic safe messages. No API keys, model names, or provider details ever reach the client |
+
+Additional controls in BaseAgent:
+- **Prompt size validation** -- Rejects inputs exceeding `AI_MAX_PROMPT_CHARS` (default 100K) before they reach the AI provider
+- **System prompt hardening** -- Anti-injection and anti-jailbreak instructions automatically appended to every agent's system prompt
+- **Conversation history management** -- Server-side storage with max depth (`AI_MAX_HISTORY_TURNS`), session isolation, PII masking on stored history
+
+### Layer 2: Prompt Template Content Validation (Prompt #10e Part 9)
+
+When administrators can edit AI prompts through the UI (Tier 2/3 prompt management), the saved content becomes part of the system prompt at runtime. This creates a **supply-chain injection surface** -- a compromised or careless admin edit could override safety controls. /make-it protects against this while keeping the experience frictionless:
+
+**Immutable Safety Preamble:**
+- Every prompt has two parts at runtime: a **locked safety preamble** (system-managed) + **prompt content** (admin-editable)
+- The preamble contains anti-injection and anti-jailbreak instructions -- admins never see it
+- The runtime ALWAYS prepends the preamble. There is no code path that skips it
+
+**Content Validation on Save:**
+- `validatePromptTemplate()` runs a hybrid blocklist on every save:
+  - **Blocked** (hard reject): injection overrides ("ignore previous instructions"), role manipulation ("you are now"), system token spoofing, code injection (`<script>`, `eval(`, shell metacharacters), encoded payloads, safety preamble tampering
+  - **Warned** (soft flag): references to prompt architecture, unusual encoding, meta-instructions
+- Friendly, plain-language warnings -- no jargon. E.g., "This wording could let users override the AI's instructions. Try rephrasing: [highlighted text]"
+
+**Mandatory Test-Before-Publish:**
+- New edits save as `status: draft` (not active -- agents never see draft prompts)
+- The admin must click "Test" before "Publish" becomes enabled
+- Test runs: blocklist check + sanitize rendered output + all saved test cases + mini NeMo Guardrails check (3 injection + 2 jailbreak adversarial inputs)
+- All tests must pass before the prompt version can go live
+
+**Variable Interpolation Safety:**
+- Template variables (`{{vendor_name}}`, `{user_input}`) are sanitized through `sanitizePromptInput()` at render time
+- HTML entities escaped in all interpolated values
+- Prevents injection through template variables even when the template itself is clean
+
+**Security Review Integration:**
+- Risk-flagged edits (override warnings, system-category prompts) are logged with `risk_flag: true`
+- `/ship-it` checks for risk-flagged edits since last deploy and adds a "Prompt Safety Review Required" section to the PR for security team review
+
+### Layer 3: NeMo Guardrails Testing (Prompt #10d)
+
+Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
+
+| Category | What It Tests | Minimum Cases |
+|----------|--------------|--------------|
+| Prompt Injection | Can adversarial input override system instructions? | 10 |
+| Jailbreak | Can the AI be convinced to operate outside boundaries? | 10 |
+| Toxicity/Bias | Does the AI produce harmful or biased content? | 10 |
+| Topic Boundaries | Does the AI stay within its intended domain? | 10 |
+| PII Leakage | Does the AI reveal personal or system information? | 10 |
+| Hallucination | Does the AI generate false or fabricated information? | 10 |
+
+- Basic suite (18 tests) runs during build-verify
+- Full suite (60+ tests) runs during `/ship-it`
+- Self-healing remediation loop for failures
+- Generates GRC-required AI Safety Attestation in `docs/`
+
+### AI Prompt Management Tiers
+
+Prompt management scales with the app's AI complexity:
+
+| Tier | When | Storage | Admin UI | Content Validation |
+|------|------|---------|----------|--------------------|
+| 1 (Minimal) | 1-3 prompts, devs only | Code + env var override | None | N/A (no admin editing) |
+| 2 (Moderate) | 4-10 prompts, product team edits | 3 DB tables | Edit, test, version diff, rollback, audit trail | `validatePromptTemplate()` + draft/publish + immutable preamble |
+| 3 (Heavy) | 10+ prompts, AI-native app | 6 DB tables | Full platform: registry, editor, analytics, audit | All Tier 2 controls + import validation + system prompt locking + risk escalation |
+
+### Environment Variables (AI Features)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AI_PROVIDER` | (required) | AI provider name -- throws error if missing, no silent fallback |
+| `AI_RATE_LIMIT_REQUESTS_PER_MINUTE` | 20 | Per-user request limit on AI endpoints |
+| `AI_RATE_LIMIT_TOKENS_PER_MINUTE` | 50000 | Per-user token budget |
+| `AI_MAX_PROMPT_CHARS` | 100000 | Max prompt length before AI submission |
+| `AI_MAX_DOCUMENT_CHARS` | 500000 | Max document length for analysis features |
+| `AI_MAX_HISTORY_TURNS` | 20 | Max conversation history depth |
+| `AI_PII_MASKING_ENABLED` | true | Enable PII pseudonymization for external AI |
 
 ---
 
@@ -477,13 +585,14 @@ The skill automatically classifies your project during the Design phase based on
   make-it/
     references/
       prerequisites.md            # Machine setup checks
-      design-blueprint.md         # Architectural decision framework (OIDC flow, AI providers, etc.)
-      prompt-templates.md         # 14+ enterprise build prompts (includes AI provider prompt)
-      ship-it-guide.md            # Deployment handoff reference
-      guardrails.md               # Tiered guardrail system (Tier 0-5)
+      design-blueprint.md         # Architectural decision framework (13 areas + AI safety)
+      prompt-templates.md         # 14+ enterprise build prompts (includes AI safety controls)
+      ship-it-guide.md            # Deployment handoff reference (includes prompt safety gate)
+      guardrails.md               # Tiered guardrail system (Tier 0-5 + AI operational safety)
     templates/
       app-context.md              # Template for tracking user answers (includes AI provider config)
-      nemo-it-attestation.md      # Security attestation report template
+      ai-safety-attestation.md    # AI safety attestation report template
+      nemo-it-attestation.md      # Security attestation report template (v1.1.0, includes Secure-by-Design cross-ref)
     scaffolds/
       fastapi-nextjs/             # Pre-built scaffold (61 files) -- Python backend
         backend/                  # FastAPI: auth, RBAC, models, routers, Alembic
@@ -571,6 +680,8 @@ Layer 4: Demo           -- /try-it presents the working app; its fix cycle is a 
 - Service client endpoints match mock API contracts
 - Docker env var names match backend config
 - Port availability checked
+- AI safety controls wired: `sanitizePromptInput()`, `validateAgentOutput()`, rate limiting middleware, PII masking, error sanitization, system prompt hardening (if AI features)
+- Prompt template validation: `validatePromptTemplate()` on save endpoints, immutable preamble prepended by runtime, draft/test/publish workflow, variable interpolation sanitized (if Tier 2/3 prompt management)
 
 **Live checks (app running in Docker):**
 - All containers healthy
@@ -644,8 +755,10 @@ All of Tier 0, plus:
 - Parameterized database queries, security headers
 - Terraform generated as DevOps handoff artifact
 - **AI provider abstraction** (if app uses AI) -- configurable via env var, supports Azure AI Foundry, Anthropic, OpenAI, Ollama
-- **AI prompt management** (if app uses AI) -- scales from code-only to database-managed with admin UI based on prompt count
+- **AI operational safety** (if app uses AI) -- runtime safety stack in `lib/ai/`: input sanitization, output validation, rate limiting, PII masking, error sanitization, prompt size validation, system prompt hardening, conversation history management
+- **AI prompt management** (if app uses AI) -- scales from code-only to database-managed with admin UI based on prompt count. Tier 2/3 includes content validation with blocklist, immutable safety preamble, mandatory test-before-publish workflow, and variable interpolation sanitization
 - **AI safety testing** (if app uses AI) -- NeMo Guardrails with 6 mandatory test categories; generates GRC-required attestation for production deployment
+- **Prompt safety review gate** (if app uses AI + Tier 2/3 prompts) -- `/ship-it` checks for risk-flagged prompt edits and includes them in the PR for security team review before merge
 
 ### Tier 2: IDE Extension
 
@@ -698,7 +811,16 @@ In a standard Git repository in the directory where you ran `/make-it`. It gets 
 Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first so you can always roll back.
 
 **Does it support AI-powered apps?**
-Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI.
+Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
+
+**What prevents someone from injecting malicious prompts through the admin UI?**
+Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that runs adversarial NeMo Guardrails tests against every draft prompt before it can go live. Additionally, template variables are sanitized at render time, risk-flagged edits are logged, and `/ship-it` flags them in the PR for security review.
+
+**What if the AI returns something dangerous (XSS, hallucinated data, etc.)?**
+Every AI response passes through `validateAgentOutput()` before it reaches the database or the UI. Structured responses are validated against schemas with value range checks. Free-text responses are scanned for HTML/script tags, markdown injection, and system prompt leakage. AI-generated content in the frontend uses escaped rendering -- never `dangerouslySetInnerHTML`.
+
+**Is PII protected when using external AI providers?**
+Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and financial figures before any data leaves for an external AI provider. The `unmaskPII()` function reverses the masking on the response. This means external providers like OpenAI or Anthropic never see real personal data. Controlled by the `AI_PII_MASKING_ENABLED` environment variable.
 
 ---
 
@@ -707,6 +829,61 @@ Yes. If your app uses AI features, the skill automatically adds a multi-provider
 | Skill | Purpose | Repo |
 |-------|---------|------|
 | `/ship-it` | CI/CD deployment -- commits, pushes, creates PR with shared GHA workflows | [sealmindset/ship-it](https://github.com/sealmindset/ship-it) |
+
+---
+
+## Version History
+
+### v1.3.0 -- Prompt Template Content Validation
+
+Protects the admin prompt editing surface against supply-chain injection attacks.
+
+- Added `validatePromptTemplate()` hybrid blocklist for admin-editable prompts (Tier 2/3)
+- Added immutable safety preamble (auto-prepended at runtime, invisible to admin UI)
+- Added draft/test/publish workflow (mandatory testing before activation)
+- Added `renderPromptSafe()` with variable interpolation sanitization via `sanitizePromptInput()`
+- Added `testPromptDraft()` with mini NeMo Guardrails safety check (5 adversarial inputs)
+- Added `risk_flag` audit logging with `/ship-it` PR integration for security review
+- Updated Prompt #10b (Tier 2) and #10c (Tier 3) with validation requirements
+- Updated Prompt #10e with Part 9 (template content validation)
+- Updated Prompt #11 with template validation verification steps
+- Updated guardrails.md with 10 new build-verify checks
+- Updated design-blueprint.md Section 10a (validation architecture)
+- Updated ship-it-guide.md with prompt safety review gate (step 6)
+- Updated retrofit-it.md Steps 11j-m (gap detection) and Step 4.5 (phased verification)
+- Updated nemo-it cross-reference classification (3 new prevention entries)
+
+### v1.2.0 -- AI Operational Safety Controls
+
+Adds runtime safety controls for every AI invocation, closing 6 gaps identified during the TPRMAI security attestation.
+
+- Added Prompt #10e with 8 parts: input sanitization, output validation, rate limiting, prompt size validation, PII masking, error sanitization, system prompt hardening, conversation history management
+- Added `lib/ai/` module architecture to design-blueprint.md Section 11b: `sanitize.ts`, `validate.ts`, `rate-limit.ts`, `pii-masker.ts`, `errors.ts`
+- Added BaseAgent safety pipeline: sanitize -> validate size -> mask PII -> call AI -> unmask -> validate output
+- Added AI Operational Safety Controls section to guardrails.md with consolidated AI Build-Verify Checklist
+- Added 6 new environment variables for AI safety configuration
+- Updated Prompt #11 (Secure Everything) with AI safety control verification
+- Updated retrofit-it.md with Phase F2 gap analysis + Step 11 (AI operational safety) + Step 4.5 (phased retrofit)
+- Updated nemo-it attestation template with Secure-by-Design cross-reference section (v1.1.0)
+- Updated both nemo-it.md skill files with Step 6 classification logic
+
+### v1.1.0 -- NeMo Guardrails Integration
+
+- Added Prompt #10d: NeMo Guardrails AI safety testing with 6 categories
+- Added 60+ test cases (10 per category) with self-healing remediation loop
+- Added AI Safety Attestation template (GRC-required for production)
+- Added /ship-it pre-deploy gate: full NeMo suite must pass before PR creation
+
+### v1.0.0 -- Initial Release
+
+- 5-phase build process (preflight, ideation, design, build, ship)
+- FastAPI + Next.js scaffold with OIDC auth and database-driven RBAC
+- 14 build prompts with tiered guardrails (6 project types)
+- /try-it, /resume-it, /retrofit-it, /nemo-it companion skills
+- Mock services for offline development
+- Standard UI components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
+- Build-verify quality gate with automated fix cycle
+- /ship-it deployment pipeline integration
 
 ---
 

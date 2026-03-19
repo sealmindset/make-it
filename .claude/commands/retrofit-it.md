@@ -248,6 +248,7 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase D | Standard components, layout, theme | "Polishing the interface" |
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
+| Phase F2 | AI operational safety: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if AI) | "Securing your AI features" (skip if no AI) |
 | Phase G | Security headers, input validation, secret management | "Final security checks and deployment prep" |
 
 When presenting phases to the user, ALWAYS use the "User-Facing Name" column.
@@ -466,6 +467,54 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - CRITICAL: hardcoded prompt strings in agent/service files are a gap.
       Every AI prompt must be editable without a code deploy.
 
+11. **AI Operational Safety (Prompt #10e adapted -- if AI features detected):**
+    - Scan for AI safety gaps by checking for the ABSENCE of these controls:
+      a. Input sanitization: grep for sanitizePromptInput or equivalent. If missing,
+         user input flows directly into AI prompts = prompt injection vulnerability
+      b. Output validation: grep for validateAgentOutput or equivalent. If missing,
+         AI responses are saved to DB without range/schema checks = hallucination risk
+      c. Delimiter tags: grep for `<user_input>` in prompt templates. If missing,
+         system instructions and user data are not separated = injection risk
+      d. System prompt hardening: read all agent system prompts. If they lack
+         anti-injection/anti-jailbreak instructions = jailbreak vulnerability
+      e. Rate limiting: check if AI routes have rate limiting middleware. If missing
+         = resource exhaustion and cost runaway risk
+      f. Prompt size validation: check if prompts are validated before AI submission.
+         If missing = token overflow and cost risk
+      g. PII masking: check if vendor/user data is masked before AI submission.
+         If missing = data leakage to external AI providers
+      h. Error sanitization: check if AI provider errors are mapped to safe messages.
+         If missing = provider/model/key details leak to clients
+      i. Output encoding: check if AI-generated content uses dangerouslySetInnerHTML.
+         If yes = XSS via AI output
+      j. Prompt template validation (Tier 2/3 only): check if prompt management save
+         endpoints call validatePromptTemplate(). If missing = admin prompt injection risk
+      k. Immutable safety preamble (Tier 2/3 only): check if get_prompt() prepends a
+         locked safety preamble. If missing = admins can overwrite safety instructions
+      l. Draft/publish workflow (Tier 2/3 only): check if managed_prompts has a status
+         column and if there's a test-before-publish gate. If missing = untested prompts
+         go live immediately
+      m. Variable interpolation safety (Tier 2/3 only): check if render_prompt() sanitizes
+         variable values through sanitizePromptInput(). If missing = injection via template vars
+    - For each gap found, implement the fix per design-blueprint.md section 11b + 10a:
+      a. Create lib/ai/sanitize.ts with sanitizePromptInput()
+      b. Create lib/ai/validate.ts with validateAgentOutput()
+      c. Create lib/ai/rate-limit.ts with aiRateLimit middleware
+      d. Create lib/ai/pii-masker.ts with maskPII() and unmaskPII()
+      e. Create lib/ai/errors.ts with sanitizeAIError()
+      f. Update BaseAgent to call sanitize -> validate -> mask pipeline
+      g. Append safety instructions to all agent system prompts
+      h. Apply rate limiting middleware to all AI routes
+      i. Add AI safety env vars to .env.example
+      j. Create lib/ai/validate-template.ts with validatePromptTemplate(),
+         renderPromptSafe(), testPromptDraft() (Tier 2/3 only)
+      k. Add immutable safety preamble to runtime prompt loader (Tier 2/3 only)
+      l. Add status column to managed_prompts, update admin UI with draft/test/publish
+         workflow (Tier 2/3 only)
+      m. Update render_prompt() to sanitize all interpolated variables (Tier 2/3 only)
+    - Risk weight: "Enhance" (2) for each control added -- these are additive,
+      they don't replace existing code
+
 11. **Infrastructure (Prompt #5 adapted):**
     - Generate Terraform as DevOps handoff artifact
     - Generate .ship-it.yml from app-context
@@ -498,8 +547,22 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Tell user: "Your AI prompts can now be edited through the admin panel without changing any code."
 - Skip this step entirely if the app doesn't use AI/LLM features.
 
+**Step 4.5: "Securing your AI features" (if app uses AI)**
+- Internal: Step 11 (AI operational safety)
+- Verify: sanitizePromptInput() called by BaseAgent, validateAgentOutput() runs after
+  every AI response, rate limiting returns 429, prompt size limits enforced, AI errors
+  return generic messages, system prompts include safety instructions, PII masking active
+- Verify (Tier 2/3 prompt mgmt): validatePromptTemplate() blocks injection patterns on save,
+  safety preamble prepended by get_prompt(), draft/test/publish workflow enforced,
+  render_prompt() sanitizes interpolated variables, risk_flag logged for suspicious edits
+- Tell user: "Your AI features are now protected against prompt injection, data leakage,
+  and other AI-specific security risks."
+- Skip this step entirely if the app doesn't use AI/LLM features.
+- Run NeMo Guardrails basic test suite (18 tests) after this step to confirm the safety
+  controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
+
 **Step 5: "Final security checks and deployment prep" (low risk)**
-- Internal: Steps 9, 11 (security hardening, Terraform)
+- Internal: Steps 9, 12 (security hardening, Terraform)
 - Verify: final build-verify pass
 - Tell user: "Security is locked down and your deployment files are ready for your DevOps team."
 
