@@ -493,7 +493,36 @@ to understand the patterns, then generate new code that follows the same convent
    - Use CSS variables (`var(--primary)`, etc.) or Tailwind semantic classes (`bg-primary`)
      for all colors -- both work because tailwind.config.ts maps CSS variables
 
-4. **Wire Navigation**
+4. **Application Settings (Database-Backed)**
+   - Tell user: "Setting up application settings management..."
+   - The scaffold already includes: `backend/app/models/app_setting.py` (AppSetting + AppSettingAuditLog),
+     `backend/app/schemas/app_setting.py`, `backend/app/services/settings_service.py`,
+     `backend/app/routers/settings.py`, and `frontend/app/(auth)/admin/settings/page.tsx`
+   - Wire the settings router:
+     a. Register settings router in `backend/app/main.py`
+     b. Uncomment `require_permission` and `CurrentUser` dependencies in the router
+     c. Replace `[REPLACE_WITH_USER_EMAIL]` with actual user email from auth
+   - Create `backend/alembic/versions/002_app_settings.py` migration:
+     a. Creates app_settings and app_setting_audit_logs tables
+     b. Seeds ALL .env variables from the project into app_settings with metadata:
+        - group_name: Database / Authentication / Security / URLs / Application / AI Provider
+        - display_name: human-readable version of the key
+        - description: what the setting does
+        - value_type: string / int / bool (inferred from the value)
+        - is_sensitive: true for JWT_SECRET, API keys, passwords, client secrets
+        - requires_restart: true for DATABASE_URL, JWT_SECRET, OIDC_*, false for AI models, rate limits
+   - Add `app_settings.view` and `app_settings.edit` permissions to the RBAC seed migration
+   - Grant both permissions to Super Admin and Admin roles only
+   - Generate the full Admin Settings page:
+     a. Tab/section grouping by group_name
+     b. Sensitive values masked with eye icon to reveal (requires app_settings.edit)
+     c. Inline editing with save per group (bulk update)
+     d. "Requires restart" badge on settings with requires_restart=true
+     e. Audit log tab with DataTable (timestamp, key, old value, new value, changed by)
+     f. Permission gating: page hidden from sidebar without app_settings.view,
+        edit controls disabled without app_settings.edit
+
+5. **Wire Navigation**
    - Update `frontend/components/sidebar.tsx` -- replace `[NAV_ITEMS]` with actual nav items
      including domain pages. Each item needs: `label`, `href`, `icon`, `permission`
    - Update `frontend/components/breadcrumbs.tsx` -- replace `[SEGMENT_LABELS]` with

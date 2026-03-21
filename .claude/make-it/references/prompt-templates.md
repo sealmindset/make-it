@@ -606,6 +606,160 @@ Update the frontend sidebar/navigation to:
 
 ---
 
+## Prompt #9b: Database-Backed Application Settings
+
+```
+Create the database-backed application settings system for [PROJECT_NAME].
+This is a STANDARD component of every web app -- not optional.
+
+Stack: [STACK]
+Database: [DATABASE]
+
+--- DATABASE SCHEMA ---
+
+Create these 2 tables:
+
+1. app_settings
+   - id: UUID primary key
+   - key: VARCHAR(255) unique, not null, indexed (matches .env variable name)
+   - value: TEXT nullable (null = use .env fallback)
+   - group_name: VARCHAR(100) not null, indexed
+   - display_name: VARCHAR(255) not null (human-readable label)
+   - description: TEXT nullable
+   - value_type: VARCHAR(20) not null, default "string" (string | int | bool)
+   - is_sensitive: BOOLEAN default false
+   - requires_restart: BOOLEAN default false
+   - updated_by: VARCHAR(255) nullable
+   - created_at, updated_at: TIMESTAMP WITH TIMEZONE
+
+2. app_setting_audit_logs
+   - id: UUID primary key
+   - setting_id: UUID FK -> app_settings, not null
+   - old_value: TEXT nullable (masked for sensitive settings)
+   - new_value: TEXT nullable (masked for sensitive settings)
+   - changed_by: VARCHAR(255) not null
+   - created_at: TIMESTAMP WITH TIMEZONE
+
+Generate an Alembic migration (or Prisma migration) that creates both tables
+and seeds all .env variables as settings rows.
+
+--- SEED DATA ---
+
+Seed ALL .env variables from the project's .env.example into app_settings with
+appropriate metadata. Group them logically:
+
+| Group | Example Keys | requires_restart | is_sensitive |
+|-------|-------------|-----------------|-------------|
+| Database | DATABASE_URL, DB_POOL_SIZE | true | DATABASE_URL=true |
+| Authentication | OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, JWT_SECRET | true | CLIENT_SECRET=true, JWT_SECRET=true |
+| Security | ENFORCE_SECRETS, CORS_ORIGINS | true | false |
+| URLs | FRONTEND_URL, BACKEND_URL | true | false |
+| Application | APP_NAME, LOG_LEVEL | false | false |
+| AI Provider | AI_PROVIDER, AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT | false | false |
+| AI Safety | AI_RATE_LIMIT_*, AI_MAX_*, AI_PII_MASKING_ENABLED | false | false |
+| AI Credentials | ANTHROPIC_API_KEY, OPENAI_API_KEY, AZURE_AI_FOUNDRY_API_KEY | false | true |
+
+Rules:
+- Settings that affect startup (DATABASE_URL, JWT_SECRET, OIDC_*) -> requires_restart=true
+- Settings that can be hot-reloaded (AI models, rate limits, log level) -> requires_restart=false
+- Credentials and secrets -> is_sensitive=true
+- display_name = human-readable version of the key (e.g., "JWT Secret" for JWT_SECRET)
+- description = what the setting does and valid values
+
+The seed migration must be idempotent (INSERT ... ON CONFLICT DO NOTHING).
+
+--- SETTINGS SERVICE ---
+
+Create a settings service (backend/app/services/settings_service.py or equivalent):
+
+1. In-memory cache with 60-second TTL
+2. get_setting(db, key, default) -> cascading precedence:
+   a. Check cache (if not expired)
+   b. Query app_settings table
+   c. Fall back to os.getenv(key)
+   d. Fall back to code default
+3. invalidate_cache(key?) -> clear one key or entire cache
+4. mask_sensitive(value, is_sensitive) -> returns "********" for sensitive values
+
+The app MUST work without any DB settings rows. .env is always the fallback.
+This means a fresh deployment with an empty app_settings table still functions
+correctly using .env values.
+
+--- RBAC PERMISSIONS ---
+
+Add to the RBAC seed data:
+- app_settings.view -- "View application settings"
+- app_settings.edit -- "Edit application settings"
+
+Grant to:
+- Super Admin: app_settings.view + app_settings.edit
+- Admin: app_settings.view + app_settings.edit
+- Manager: (none)
+- User: (none)
+
+--- API ENDPOINTS ---
+
+All endpoints require authentication. Permission checks via require_permission().
+
+GET    /api/admin/settings          -- List all settings grouped by group_name.
+                                      Sensitive values masked as "********".
+                                      Requires: app_settings.view
+
+PUT    /api/admin/settings/{key}    -- Update a single setting.
+                                      Creates an audit log entry.
+                                      Invalidates cache for that key.
+                                      Requires: app_settings.edit
+
+PUT    /api/admin/settings          -- Bulk update multiple settings.
+                                      Body: { settings: [{ key, value }] }
+                                      Creates audit log entry per setting.
+                                      Invalidates entire cache.
+                                      Requires: app_settings.edit
+
+GET    /api/admin/settings/{key}/reveal
+                                    -- Return the actual (unmasked) value of a
+                                      sensitive setting. Requires: app_settings.edit
+
+GET    /api/admin/settings/audit-log
+                                    -- List recent audit log entries (newest first).
+                                      Sensitive values masked in old_value/new_value.
+                                      Requires: app_settings.view
+
+--- ADMIN UI PAGE ---
+
+Create /admin/settings page with:
+
+1. Tab/section grouping by group_name (e.g., Database, Authentication, Security, URLs, AI Provider)
+   - Each group is a collapsible card/section
+   - Settings within each group displayed as a form
+
+2. Setting row layout:
+   - Display name (bold) + description (muted text below)
+   - Value input (text field, or toggle for bool, or number input for int)
+   - For sensitive settings: value shows "********" with an eye icon button to reveal
+     (clicking eye calls /reveal endpoint, requires app_settings.edit permission)
+   - "Requires restart" badge (orange/yellow) on settings with requires_restart=true
+
+3. Save per group:
+   - Each group section has a "Save" button that bulk-updates all settings in the group
+   - Success toast: "Settings saved" or "Settings saved. Restart required for some changes."
+
+4. Audit log tab:
+   - Separate tab at the top: "Settings" | "Audit Log"
+   - DataTable showing: timestamp, setting key, old value, new value, changed by
+   - Sensitive values show "********" in the audit log
+
+5. Permission gating:
+   - Page requires app_settings.view (hide from sidebar if user lacks this permission)
+   - Edit controls disabled if user lacks app_settings.edit
+   - Reveal button hidden if user lacks app_settings.edit
+```
+
+**Required context:** stack, database, list of all .env variables from the project
+**Always runs:** Yes -- every web app gets database-backed settings management
+
+---
+
 ## Prompt #10: Design AI Architecture
 
 **This prompt has two parts: provider setup (always runs if AI is used) and prompt

@@ -183,6 +183,78 @@ runtime permission loader with caching, middleware for route protection
 
 ---
 
+## 2b. Database-Backed Application Settings
+
+**Applied by default for all web-app projects (no user questions needed).** Every web app includes a database-backed settings management system that allows admins to configure application behavior without code changes or redeployment.
+
+**Cascading precedence:** DB value > .env value > code default. The app always works without any DB settings rows -- .env is the fallback.
+
+**Database schema (2 tables):**
+
+1. `app_settings`
+   - id: UUID primary key
+   - key: VARCHAR(255) unique, not null, indexed (matches .env var name, e.g., `OIDC_ISSUER_URL`)
+   - value: TEXT nullable (null = use .env fallback)
+   - group_name: VARCHAR(100) not null, indexed (e.g., "Database", "Authentication", "Security", "URLs", "AI Provider")
+   - display_name: VARCHAR(255) not null (human-readable, e.g., "OIDC Issuer URL")
+   - description: TEXT nullable (explains what the setting does)
+   - value_type: VARCHAR(20) not null, default "string" (one of: string, int, bool)
+   - is_sensitive: BOOLEAN default false (JWT secrets, API keys, passwords)
+   - requires_restart: BOOLEAN default false (DATABASE_URL, JWT_SECRET, OIDC_* = true; AI models, RAG params = false)
+   - updated_by: VARCHAR(255) nullable (email of last editor)
+   - created_at, updated_at: TIMESTAMP WITH TIMEZONE
+
+2. `app_setting_audit_logs`
+   - id: UUID primary key
+   - setting_id: UUID FK -> app_settings, not null
+   - old_value: TEXT nullable (masked as "********" for sensitive settings)
+   - new_value: TEXT nullable (masked as "********" for sensitive settings)
+   - changed_by: VARCHAR(255) not null
+   - created_at: TIMESTAMP WITH TIMEZONE
+
+**Settings service (in-memory cache, 60s TTL):**
+- `get_setting(db, key, default)` -- cascading lookup: cache -> DB -> .env -> code default
+- `invalidate_cache(key?)` -- clear one key or entire cache
+- `mask_sensitive(value, is_sensitive)` -- returns "********" for sensitive values
+- Cache automatically expires after 60 seconds (no explicit invalidation needed for hot-reloaded settings)
+
+**RBAC permissions:**
+- `app_settings.view` -- granted to Super Admin and Admin only
+- `app_settings.edit` -- granted to Super Admin and Admin only
+- Reveal endpoint (actual value of sensitive settings) requires `app_settings.edit`
+
+**API endpoints:**
+- GET /api/admin/settings -- list all settings (sensitive values masked)
+- PUT /api/admin/settings/{key} -- update a single setting + audit log
+- PUT /api/admin/settings -- bulk update multiple settings + audit log
+- GET /api/admin/settings/{key}/reveal -- reveal actual value of sensitive setting (requires edit permission)
+- GET /api/admin/settings/audit-log -- list recent audit log entries
+
+**Admin UI page (/admin/settings):**
+- Tab/section grouping by group_name (e.g., Database, Authentication, Security, URLs, AI Provider)
+- Sensitive values masked by default with an eye icon to reveal (requires app_settings.edit)
+- Inline editing with save per group (bulk save support)
+- "Requires restart" badge on settings that need a server restart to take effect
+- Audit log tab showing who changed what, when, with old/new values (sensitive values masked)
+
+**Seed migration:**
+- All .env variables seeded into app_settings with appropriate metadata
+- Settings that affect startup (DATABASE_URL, JWT_SECRET, OIDC_*) marked requires_restart=true
+- Settings that can be hot-reloaded (AI_MODEL_*, AI_RATE_LIMIT_*) marked requires_restart=false
+- Sensitive settings (JWT_SECRET, API keys, passwords) marked is_sensitive=true
+- Grouped logically: Database, Authentication, Security, URLs, Application, AI Provider (if applicable)
+
+**Design rules:**
+- .env is always the fallback -- the app works without any DB settings rows
+- Sensitive values masked in API responses and audit logs ("********")
+- The reveal endpoint requires edit permission
+- No application code reads .env directly -- all reads go through the settings service
+- Cache TTL of 60s means hot-reloaded settings take effect within 1 minute
+
+**Implementation generates:** Settings model, audit log model, migration, service with cache, API router, admin UI page, seed data, RBAC permissions
+
+---
+
 ## 3. Technology Stack
 
 **What we need to know from the user:**
@@ -1020,6 +1092,11 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] QuickSearch (⌘K) populated with all navigation items and app actions
 - [ ] ThemeProvider wraps app, ModeToggle in header, oklch CSS variables for light/dark
 - [ ] CHANGELOG.md and TODO.md maintained
+- [ ] Database-backed settings: app_settings + app_setting_audit_logs tables exist
+- [ ] Settings service with in-memory cache and cascading precedence (DB > .env > default)
+- [ ] All .env variables seeded into app_settings with metadata (group, type, sensitive, restart)
+- [ ] Admin Settings page (/admin/settings) with grouped tabs, masking, inline editing, audit log
+- [ ] app_settings.view and app_settings.edit permissions granted to Super Admin and Admin only
 - [ ] AI provider abstraction layer created (lib/ai/) -- if using AI
 - [ ] AI_PROVIDER, AI_MODEL_HEAVY/STANDARD/LIGHT env vars configured -- if using AI
 - [ ] No provider SDK imports outside lib/ai/providers/ -- if using AI

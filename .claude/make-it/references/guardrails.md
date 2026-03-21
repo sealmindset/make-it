@@ -122,6 +122,19 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - ThemeProvider wraps app with oklch CSS variables
 - Pages fetch data through service/API layer (no hardcoded mock data)
 
+### Database-Backed Application Settings
+- app_settings and app_setting_audit_logs tables exist in a migration
+- Settings service with in-memory cache (60s TTL) and cascading precedence: DB > .env > code default
+- All .env variables seeded into app_settings with metadata (group_name, display_name, description, value_type, is_sensitive, requires_restart)
+- Settings that affect startup (DATABASE_URL, JWT_SECRET, OIDC_*) marked requires_restart=true
+- Sensitive settings (JWT_SECRET, API keys, passwords) marked is_sensitive=true
+- Admin Settings page at /admin/settings with tab grouping, masked sensitive values, inline editing, audit log
+- app_settings.view and app_settings.edit permissions granted to Super Admin and Admin only
+- Reveal endpoint requires app_settings.edit permission
+- Sensitive values masked as "********" in list responses and audit logs
+- App works without any DB settings rows (.env is always the fallback)
+- Audit log tracks every setting change with old_value, new_value, changed_by, timestamp
+
 ### Data & Backend
 - Database migrations generated (Alembic or Prisma -- not just models)
 - Seed data mandatory -- app starts with populated pages, not empty screens
@@ -402,8 +415,22 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] Risk warnings displayed for blocklist-adjacent patterns; overrides logged with risk_flag
 - [ ] /ship-it flags risk_flag audit entries in PR description for security review
 
+### Settings Build-Verify Checklist
+- [ ] app_settings table exists with correct columns (key, value, group_name, display_name, description, value_type, is_sensitive, requires_restart, updated_by, timestamps)
+- [ ] app_setting_audit_logs table exists with correct columns (setting_id, old_value, new_value, changed_by, timestamp)
+- [ ] All .env variables seeded into app_settings with appropriate metadata
+- [ ] Settings service exists with get_setting(), invalidate_cache(), mask_sensitive()
+- [ ] GET /api/admin/settings returns all settings with sensitive values masked
+- [ ] PUT /api/admin/settings/{key} updates a setting and creates an audit log entry
+- [ ] GET /api/admin/settings/{key}/reveal returns the actual value of a sensitive setting
+- [ ] GET /api/admin/settings/audit-log returns recent change history
+- [ ] Admin Settings page exists at /admin/settings with group tabs, masking, and inline editing
+- [ ] app_settings.view and app_settings.edit permissions exist in RBAC seed data
+- [ ] Settings page hidden from sidebar for users without app_settings.view permission
+- [ ] App starts correctly with an empty app_settings table (falls back to .env values)
+
 ### Prompts
-- Execute all 14 prompts in order (#1-#14)
+- Execute all 14 prompts in order (#1-#14), plus Prompt #9b (Settings)
 - All [BRACKETS] filled from app-context.json
 
 ### Build-Verify (Web App)
@@ -607,6 +634,7 @@ The Design phase summary to the user should reflect the project type without usi
 | Docker Compose | | Y | | | | Y |
 | Mock services | | Y | | | | Y |
 | Seed data | | Y | | | | Y |
+| DB-backed settings | | Y | | | | Y |
 | Standard UI components | | Y | | | | |
 | System fonts only | | Y | | | | |
 | Extension manifest | | | Y | | | |
