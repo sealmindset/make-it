@@ -40,7 +40,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 ## /retrofit-it
 
-`/retrofit-it` takes an existing application (not built by /make-it) and upgrades it with production-ready foundations. Instead of asking interview questions, it reverse-engineers the codebase first, then asks targeted clarifying questions only when the code is ambiguous.
+`/retrofit-it` takes an existing application (not built by /make-it) and upgrades it with production-ready foundations. Instead of asking interview questions, it reverse-engineers the codebase first, then asks targeted clarifying questions only when the code is ambiguous. Foundations include OIDC auth, database-driven RBAC, database-backed application settings, Docker Compose, mock services, and security hardening.
 
 0. **Preflight** -- Same machine readiness checks as /make-it
 1. **Discovery** -- Reverse-engineer the app (stack, architecture, features, auth, data model, integrations)
@@ -66,6 +66,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Preserve the user's design intent -- add foundations UNDER existing design
 - Existing code is additive (keep tests, CI, custom components)
 - Auth wrapping preferred over replacement, unless wrapping costs more
+- Settings management added after auth + RBAC (depends on permission gating)
 - Stack migration is a last resort (only if framework is incompatible or EOL)
 - Generates app-context.json for /resume-it and /ship-it compatibility
 
