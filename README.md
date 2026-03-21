@@ -523,6 +523,7 @@ A complete, production-ready web application with:
 | **AI Operational Safety** | Runtime safety stack: input sanitization, output validation, rate limiting, PII masking, error sanitization, prompt size validation, system prompt hardening, conversation history management |
 | **AI Prompt Template Validation** | Supply-chain injection protection: `validatePromptTemplate()` blocklist, immutable safety preamble auto-prepended at runtime, draft/test/publish workflow, variable interpolation sanitization, risk-flagged edits flagged for security review at deploy time |
 | **AI Safety Testing** | NeMo Guardrails with 6 test categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination) -- generates a GRC-required attestation document |
+| **Application Settings** | Database-backed settings management with in-memory cache (60s TTL), cascading precedence (DB > .env > default), Admin Settings page with tab grouping, sensitive value masking, inline editing, and audit log |
 | **Docker** | Multi-service Compose with health checks, migration auto-run, mock services on dev profile |
 | **Mock Services** | Mock OIDC provider for local auth, plus mock services for any external integrations (Jira, Tempo, etc.) |
 | **Seed Data** | Realistic sample data so every page is populated on first launch |
@@ -839,6 +840,7 @@ All of Tier 0, plus:
 - Database-driven RBAC with 4 system roles and permission matrix
 - Standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle)
 - Docker Compose with mock services and seed data
+- Database-backed application settings with Admin UI (cascading precedence, sensitive value masking, audit log)
 - System fonts only (no external font CDNs -- safe behind corporate proxies)
 - Parameterized database queries, security headers
 - Terraform generated as DevOps handoff artifact
@@ -883,6 +885,9 @@ Yes. The skill detects SSL-inspecting proxies during Preflight and guides you th
 **What if I want to change my app idea mid-build?**
 Minor changes (UI tweaks, adding a page) are handled seamlessly. Major changes (different architecture) trigger a conversation about what needs to change before proceeding.
 
+**How does application settings management work?**
+Every web app gets a database-backed settings system. All `.env` variables are seeded into an `app_settings` table during migration. Settings follow a cascading precedence: database value wins over `.env`, which wins over code defaults. The Admin Settings page lets authorized users view, edit, and audit settings -- sensitive values (passwords, API keys) are masked unless explicitly revealed. Changes are logged in an audit trail with before/after values. An in-memory cache with 60-second TTL keeps reads fast.
+
 **How do roles and permissions work?**
 Every web app gets database-driven RBAC: 4 system roles (Super Admin, Admin, Manager, User) with page-level CRUD permissions. Super Admins can create custom roles with any combination of permissions via an admin UI. Roles are stored in the application database, not the identity provider.
 
@@ -921,6 +926,21 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 ---
 
 ## Version History
+
+### v1.6.0 -- Database-Backed Application Settings
+
+Adds database-backed settings management as a standard feature for all Tier 1 (web app) projects.
+
+- Added `app_settings` and `app_setting_audit_logs` tables to scaffold (SQLAlchemy models, Pydantic schemas)
+- Added settings service with in-memory cache (60s TTL) and cascading precedence (DB > .env > code default)
+- Added settings FastAPI router with RBAC-gated endpoints (list, update, bulk update, reveal sensitive, audit log)
+- Added Admin Settings page placeholder in scaffold (replaced during build with full tab-grouped UI)
+- Added Prompt #9b to prompt-templates.md with full generation instructions for settings feature
+- Added Section 2b to design-blueprint.md with schema, service, API, and UI specification
+- Added 11 guardrail rules and 12 build-verify checks for settings to guardrails.md
+- Added build step 4 "Application Settings (Database-Backed)" to make-it.md build phase
+- Seed migration auto-populates `app_settings` from all `.env` variables with category, sensitivity, and description
+- Sensitive values masked in API responses and audit logs; reveal requires explicit permission
 
 ### v1.5.0 -- Self-Update and Curl Install
 
