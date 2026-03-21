@@ -44,7 +44,7 @@ mkdir -p "$MAKEIT_DIR"
 
 # Copy skill entry points
 echo "  Copying skill commands..."
-for cmd in make-it.md try-it.md resume-it.md retrofit-it.md; do
+for cmd in make-it.md try-it.md resume-it.md retrofit-it.md nemo-it.md fix-it.md; do
   if [ -f "$REPO_DIR/.claude/commands/$cmd" ]; then
     cp "$REPO_DIR/.claude/commands/$cmd" "$COMMANDS_DIR/"
     echo "    + $cmd"
@@ -76,11 +76,15 @@ echo "    /make-it      -- Build a new app from scratch"
 echo "    /try-it       -- Spin up and test your app"
 echo "    /resume-it    -- Continue working on your app"
 echo "    /retrofit-it  -- Upgrade an existing app with production foundations"
+echo "    /nemo-it      -- Security attestation (scan any app)"
+echo "    /fix-it       -- Auto-fix security findings from /nemo-it"
 echo ""
 echo "  Files copied to:"
 echo "    $COMMANDS_DIR/make-it.md"
 echo "    $COMMANDS_DIR/try-it.md"
 echo "    $COMMANDS_DIR/resume-it.md"
+echo "    $COMMANDS_DIR/nemo-it.md"
+echo "    $COMMANDS_DIR/fix-it.md"
 echo "    $MAKEIT_DIR/ (references, templates, scaffolds)"
 echo ""
 echo "  IMPORTANT: Restart Claude Code for the skills to take effect."

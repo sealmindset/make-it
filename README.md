@@ -16,6 +16,7 @@ You describe what you want in plain English. The skills handle everything else -
 - [How /resume-it Works](#how-resume-it-works)
 - [How /retrofit-it Works](#how-retrofit-it-works)
 - [How /nemo-it Works](#how-nemo-it-works)
+- [How /fix-it Works](#how-fix-it-works)
 - [What Gets Built](#what-gets-built)
 - [AI Security Architecture](#ai-security-architecture)
 - [Supported Project Types](#supported-project-types)
@@ -105,6 +106,7 @@ cp ~/.claude/make-it-repo/.claude/commands/try-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/resume-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/retrofit-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/nemo-it.md ~/.claude/commands/
+cp ~/.claude/make-it-repo/.claude/commands/fix-it.md ~/.claude/commands/
 
 # Copy the references, templates, and scaffolds
 cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
@@ -117,7 +119,7 @@ cp -r ~/.claude/make-it-repo/.claude/nemo-it ~/.claude/nemo-it
 claude
 ```
 
-Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it`, `/resume-it`, `/retrofit-it`, or `/nemo-it` to verify those are available too.
+Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you. Type `/try-it`, `/resume-it`, `/retrofit-it`, `/nemo-it`, or `/fix-it` to verify those are available too.
 
 ### Updating
 
@@ -138,6 +140,7 @@ bash install.sh             # re-copies updated files
 | `/resume-it` | Picks up where you left off -- add features, fix bugs, run tests, deploy | Any time after the initial build |
 | `/retrofit-it` | Upgrades an existing app with production foundations (auth, RBAC, Docker, security) | You have an app that works but needs enterprise-grade infrastructure |
 | `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
+| `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
 
 ---
 
@@ -419,6 +422,66 @@ claude
 
 ---
 
+## How /fix-it Works
+
+`/fix-it` reads the most recent `/nemo-it` attestation, classifies each finding as auto-fixable or manual-only, applies all safe fixes, verifies nothing broke, and re-scans to produce an updated attestation showing the improvement.
+
+### Severity Modes
+
+| Command | What It Fixes |
+|---------|--------------|
+| `/fix-it` or `/fix-it high` | All CRITICAL + HIGH findings (default) |
+| `/fix-it critical` | Only CRITICAL findings |
+| `/fix-it medium` | CRITICAL + HIGH + MEDIUM findings |
+| `/fix-it all` | Everything including LOW and INFO |
+
+### What It Does
+
+1. **Preflight** -- Locates the latest attestation in `docs/attestations/nemo-it/`, parses all findings, detects your project stack
+2. **Triage** -- Classifies every finding as AUTO (mechanical fix), SEMI-AUTO (needs your review), MANUAL (needs human judgment), or SKIP. Presents the plan and waits for your approval
+3. **Fix** -- Applies changes in risk order: dependencies first, then config, then code patterns, then AI safety wiring, then rate limiting. Shows diffs for SEMI-AUTO fixes
+4. **Verify** -- Runs syntax checks, tests, and builds to ensure nothing broke. Self-healing loop fixes any regressions (up to 3 cycles)
+5. **Re-scan** -- Runs `/nemo-it` again to produce an updated attestation with before/after delta
+6. **Report** -- Presents what was fixed, what remains, and the risk posture change
+
+### Fix Strategies
+
+The skill includes 12 automated fix strategies:
+
+| Strategy | Example |
+|----------|---------|
+| Dependency upgrades | `npm audit fix`, pip version bumps |
+| SSL/TLS fixes | `verify=False` to configurable env var |
+| Request timeouts | Add `timeout=30` to HTTP calls |
+| SQL injection | f-strings to parameterized queries + table allowlists |
+| Weak cryptography | MD5 to SHA-256 or `usedforsecurity=False` |
+| HTML injection / XSS | Add `html.escape()` or DOMPurify |
+| Pickle deserialization | Replace with JSON serialization |
+| AI safety integration | Wire sanitize/mask/validate pipeline into LLM calls |
+| Rate limiting | Add slowapi or express-rate-limit to AI endpoints |
+| Config fixes | Terraform TLS versions, file permissions |
+| Temp file fixes | `mktemp()` to `mkstemp()` |
+| Hardcoded secrets | Extract to env vars + `.env.example` |
+
+### Git Strategy
+
+Before making changes, `/fix-it` creates a rollback point (`git tag pre-fix-it`). You choose how to commit:
+1. New `fix-it/YYYY-MM-DD` branch
+2. Current branch, single commit
+3. Current branch, one commit per fix category
+
+### Usage
+
+```bash
+cd ~/Documents/GitHub/my-app
+claude
+> /fix-it                # fix CRITICAL + HIGH (default)
+> /fix-it all            # fix everything
+> /fix-it medium         # fix CRITICAL + HIGH + MEDIUM
+```
+
+---
+
 ## What Gets Built
 
 ### Web Applications (Tier 1)
@@ -582,6 +645,7 @@ The skill automatically classifies your project during the Design phase based on
     resume-it.md                  # Resume skill -- continue, test, fix, ship
     retrofit-it.md                # Retrofit skill -- upgrade existing apps
     nemo-it.md                    # Security attestation skill -- scan any app
+    fix-it.md                     # Fix skill -- auto-fix /nemo-it findings
   make-it/
     references/
       prerequisites.md            # Machine setup checks
@@ -589,6 +653,7 @@ The skill automatically classifies your project during the Design phase based on
       prompt-templates.md         # 14+ enterprise build prompts (includes AI safety controls)
       ship-it-guide.md            # Deployment handoff reference (includes prompt safety gate)
       guardrails.md               # Tiered guardrail system (Tier 0-5 + AI operational safety)
+      fix-strategies.md            # 12 automated fix strategies for /fix-it
     templates/
       app-context.md              # Template for tracking user answers (includes AI provider config)
       ai-safety-attestation.md    # AI safety attestation report template
@@ -711,6 +776,7 @@ Your experience is simple: **describe what you want, verify it works, say "ready
 /try-it       --> Explore it in the browser
 /resume-it    --> Iterate (add features, fix things, run tests)
 /nemo-it      --> Security attestation (scan any app, generate report)
+/fix-it       --> Automatically fix security findings from /nemo-it
 /ship-it      --> Deploy (creates PR, triggers CI/CD)
 ```
 
@@ -833,6 +899,19 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 ---
 
 ## Version History
+
+### v1.4.0 -- /fix-it Automated Security Remediation
+
+Bridges the gap between `/nemo-it` scanning and `/ship-it` deployment by automatically fixing security findings.
+
+- Added `/fix-it` skill with 6-phase workflow: preflight, triage, fix, verify, re-scan, report
+- Added `fix-strategies.md` reference with 12 automated fix strategies (dependencies, SSL/TLS, timeouts, SQL injection, weak crypto, HTML/XSS, pickle, AI safety, rate limiting, config, temp files, secrets)
+- Classification system: AUTO (mechanical), SEMI-AUTO (needs review), MANUAL (needs human), SKIP
+- Risk-ordered fix execution: dependencies first, then config, code patterns, AI safety, rate limiting
+- Self-healing verification loop (up to 3 cycles) after each fix category
+- Before/after attestation comparison with delta reporting
+- Git rollback safety: `pre-fix-it` tag created before any changes
+- Severity modes: `/fix-it critical`, `/fix-it` (default: CRIT+HIGH), `/fix-it medium`, `/fix-it all`
 
 ### v1.3.0 -- Prompt Template Content Validation
 
