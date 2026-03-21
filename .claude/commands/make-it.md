@@ -25,7 +25,80 @@ This skill has 5 phases:
 3. **Build** -- Generate and execute the application code
 4. **Ship** -- Hand off to /ship-it for deployment
 
+**Special command: `/make-it update`** -- Updates all skills to the latest version.
+
 </objective>
+
+<!-- ============================================================ -->
+<!-- UPDATE INTERCEPTOR -- Check if user said "update"             -->
+<!-- ============================================================ -->
+
+<update-interceptor>
+
+**BEFORE doing anything else**, check if the user's input contains the word "update" (case-insensitive).
+
+If the user said "update", "Update", "/make-it update", or any variation:
+
+1. **Check installed version:**
+   ```bash
+   cat ~/.claude/make-it/VERSION 2>/dev/null || echo "none"
+   ```
+
+2. **Check latest version from GitHub:**
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>/dev/null || echo "unknown"
+   ```
+
+3. **Compare versions and report:**
+
+   If versions match:
+   "You're already on the latest version (v[VERSION]). Everything is up to date!"
+   -> Stop here. Do NOT proceed to Preflight or Ideation.
+
+   If update is available:
+   "There's an update available! v[CURRENT] -> v[LATEST]
+
+   Updating now..."
+
+4. **Run the update:**
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+   ```
+
+5. **Report results:**
+   Read the output from install.sh and relay it to the user in plain language:
+
+   "All done! Here's what was updated:
+   - [List any new skills that were added]
+   - All existing skills updated to v[NEW_VERSION]
+
+   **Important:** Please restart Claude Code for the changes to take effect.
+   After restarting, just type /make-it to start building!"
+
+   -> Stop here. Do NOT proceed to Preflight or Ideation.
+
+   If the update fails (network error, curl not found, etc.):
+   "I couldn't update automatically. Here are two easy ways to update manually:
+
+   **Option 1** -- Run this in your terminal:
+   ```
+   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+   ```
+
+   **Option 2** -- If you have the repo cloned:
+   ```
+   cd ~/Documents/GitHub/make-it
+   git pull
+   bash install.sh
+   ```
+
+   After either option, restart Claude Code and you'll be on the latest version."
+
+   -> Stop here. Do NOT proceed to Preflight or Ideation.
+
+**If the user did NOT say "update"**, skip this section entirely and proceed to Phase 0 (Preflight).
+
+</update-interceptor>
 
 <execution_context>
 

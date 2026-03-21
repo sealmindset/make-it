@@ -10,6 +10,7 @@ You describe what you want in plain English. The skills handle everything else -
 
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [Updating](#updating)
 - [Skills Overview](#skills-overview)
 - [How /make-it Works](#how-make-it-works)
 - [How /try-it Works](#how-try-it-works)
@@ -36,17 +37,13 @@ You describe what you want in plain English. The skills handle everything else -
 # 1. Install Claude Code (if you haven't already)
 npm install -g @anthropic-ai/claude-code
 
-# 2. Clone this repo
-git clone https://github.com/sealmindset/make-it.git
+# 2. Install the skills (one command -- no clone needed)
+curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
 
-# 3. Install the skills into Claude Code
-cd make-it
-bash install.sh   # or follow the manual steps below
-
-# 4. Go to where you want your new project
+# 3. Go to where you want your new project
 cd ~/Documents/GitHub
 
-# 5. Start Claude Code and build your app
+# 4. Start Claude Code and build your app
 claude
 > /make-it
 ```
@@ -81,7 +78,17 @@ Before running `/make-it`, you need these tools on your machine. The skill check
 
 ### Install Steps
 
-#### Option A: Automated Install
+#### Option A: One-Line Install (recommended)
+
+No clone needed. Just run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+```
+
+This downloads the latest release and installs all skills into `~/.claude/`.
+
+#### Option B: Clone and Install
 
 ```bash
 git clone https://github.com/sealmindset/make-it.git
@@ -89,9 +96,7 @@ cd make-it
 bash install.sh
 ```
 
-The install script copies skill commands and references into your Claude Code configuration directory (`~/.claude/`).
-
-#### Option B: Manual Install
+#### Option C: Manual Install
 
 ```bash
 # Clone the repo
@@ -100,7 +105,7 @@ git clone https://github.com/sealmindset/make-it.git ~/.claude/make-it-repo
 # Create the commands directory if it doesn't exist
 mkdir -p ~/.claude/commands
 
-# Copy the four skill entry points
+# Copy all skill entry points
 cp ~/.claude/make-it-repo/.claude/commands/make-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/try-it.md ~/.claude/commands/
 cp ~/.claude/make-it-repo/.claude/commands/resume-it.md ~/.claude/commands/
@@ -123,10 +128,26 @@ Inside Claude Code, type `/make-it` -- you should see the skill activate and gre
 
 ### Updating
 
+The easiest way to update is from inside Claude Code:
+
+```
+> /make-it update
+```
+
+This checks your installed version against the latest release, downloads and installs any updates (including new skills), and tells you what changed. You just need to restart Claude Code afterward.
+
+You can also update from the terminal:
+
 ```bash
-cd ~/.claude/make-it-repo   # or wherever you cloned it
+curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+```
+
+Or if you have the repo cloned:
+
+```bash
+cd ~/path/to/make-it
 git pull
-bash install.sh             # re-copies updated files
+bash install.sh
 ```
 
 ---
@@ -136,6 +157,7 @@ bash install.sh             # re-copies updated files
 | Skill | What It Does | When to Use It |
 |-------|-------------|----------------|
 | `/make-it` | Builds a new app from scratch through conversational Q&A | Starting a brand new project |
+| `/make-it update` | Updates all installed skills to the latest version | When you want the latest features and fixes |
 | `/try-it` | Spins up your app locally, tests everything, lets you explore in the browser | After `/make-it` finishes, or anytime you want to see your app running |
 | `/resume-it` | Picks up where you left off -- add features, fix bugs, run tests, deploy | Any time after the initial build |
 | `/retrofit-it` | Upgrades an existing app with production foundations (auth, RBAC, Docker, security) | You have an app that works but needs enterprise-grade infrastructure |
@@ -899,6 +921,18 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 ---
 
 ## Version History
+
+### v1.5.0 -- Self-Update and Curl Install
+
+Adds seamless update capability and one-line installation -- no git clone required.
+
+- Added `/make-it update` subcommand: checks installed vs latest version, downloads and installs updates, reports what changed
+- Added curl one-liner install: `curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash`
+- Rewrote `install.sh` to work from cloned repo OR via curl (auto-detects context)
+- Added `VERSION` file for version tracking (installed version stored at `~/.claude/make-it/VERSION`)
+- Auto-discovers new skills on update (no hardcoded skill list -- any new `*.md` in commands/ gets installed)
+- Fallback to tarball download if git is not installed (curl-only machines)
+- Update interceptor in `make-it.md` catches "update" keyword before Preflight phase
 
 ### v1.4.0 -- /fix-it Automated Security Remediation
 
