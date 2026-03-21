@@ -1,6 +1,6 @@
 ---
 name: retrofit-it
-description: Retrofit an existing application with production-ready foundations (OIDC, RBAC, Docker, security) by reverse-engineering first, then upgrading surgically.
+description: Retrofit an existing application with production-ready foundations (OIDC, RBAC, settings management, Docker, security) by reverse-engineering first, then upgrading surgically.
 allowed-tools:
   - Read
   - Write
@@ -255,6 +255,7 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase A | .env config, .gitignore, Docker, CHANGELOG, TODO | "Setting up your development environment" |
 | Phase B | Database migrations, RBAC tables, seed data | "Preparing your database for users and permissions" |
 | Phase C | OIDC authentication, permission middleware | "Adding secure login and user permissions" |
+| Phase C2 | app_settings + audit_log tables, settings service, settings router, Admin Settings page | "Adding application settings management" |
 | Phase D | Standard components, layout, theme | "Polishing the interface" |
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
@@ -353,10 +354,11 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 1. **Setting up your development environment** -- no risk to your existing features
 2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
 3. **Adding secure login and user permissions** -- the biggest change, I'll test thoroughly
-4. **Polishing the interface** -- your app will look the same, just with a few upgrades
-5. **Setting up test services** -- so you can develop without needing real external systems
-6. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
-7. **Final security checks and deployment prep** -- locking everything down
+4. **Adding application settings management** -- so admins can change configuration without editing files
+5. **Polishing the interface** -- your app will look the same, just with a few upgrades
+6. **Setting up test services** -- so you can develop without needing real external systems
+7. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+8. **Final security checks and deployment prep** -- locking everything down
 
 I'll check with you after each step before moving on.
 
@@ -439,7 +441,31 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Generate admin UI: User Management + Role Management pages
    - Wire sidebar to show/hide based on permissions
 
-6. **UI Components (Prompt #14 adapted):**
+6. **Application Settings (Prompt #9b adapted):**
+   - Scan for existing settings management: grep for settings tables, admin settings pages,
+     config management endpoints, or similar patterns
+   - **If no settings management exists:** Add complete settings feature:
+     a. Add `app_settings` and `app_setting_audit_logs` tables via migration
+     b. Create settings service with in-memory cache (60s TTL) and cascading
+        precedence (DB > .env > code default)
+     c. Create settings router with RBAC-gated endpoints (list, update, bulk update,
+        reveal sensitive, audit log)
+     d. Generate Admin Settings page with tab grouping, sensitive value masking,
+        inline editing, and audit log viewer
+     e. Add `app_settings.view` and `app_settings.edit` permissions to RBAC seed
+     f. Create seed migration populating `app_settings` from all `.env` variables
+        with category, sensitivity flag, and description
+   - **If partial settings management exists:** Enhance it:
+     a. Add missing tables (audit log if absent)
+     b. Add cascading precedence if settings are DB-only (no .env fallback)
+     c. Add sensitive value masking if missing
+     d. Add RBAC permissions if settings page is unprotected
+     e. Seed any .env variables not yet in the settings table
+   - CRITICAL: Settings depend on auth + RBAC (for permission gating) and database
+     (for storage). Must run AFTER steps 3-5.
+   - Risk weight: "Add" (1) if no settings exist, "Enhance" (2) if partial
+
+7. **UI Components (Prompt #14 adapted):**
    - Add missing standard components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
    - Add shared authenticated layout with header bar (if missing)
    - Replace plain HTML tables with DataTable on list pages
@@ -458,13 +484,13 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Generate seed data for domain tables (use existing data patterns if any)
    - Ensure seed users match mock-oidc test users
 
-9. **Security (Prompt #11 adapted):**
+10. **Security (Prompt #11 adapted):**
    - Fix any hardcoded secrets found during discovery
    - Add input validation where missing
    - Add security headers
    - Update dependencies to latest stable versions
 
-10. **AI Prompt Management (Prompt #10 adapted):**
+11. **AI Prompt Management (Prompt #10 adapted):**
     - Detect AI usage: scan for LLM/AI provider calls, agent classes, hardcoded system prompts
     - If AI agents or prompts exist, determine the tier:
       - 1-3 prompts -> Tier 1 (prompts in code with env var override)
@@ -477,7 +503,7 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - CRITICAL: hardcoded prompt strings in agent/service files are a gap.
       Every AI prompt must be editable without a code deploy.
 
-11. **AI Operational Safety (Prompt #10e adapted -- if AI features detected):**
+12. **AI Operational Safety (Prompt #10e adapted -- if AI features detected):**
     - Scan for AI safety gaps by checking for the ABSENCE of these controls:
       a. Input sanitization: grep for sanitizePromptInput or equivalent. If missing,
          user input flows directly into AI prompts = prompt injection vulnerability
@@ -525,7 +551,7 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - Risk weight: "Enhance" (2) for each control added -- these are additive,
       they don't replace existing code
 
-11. **Infrastructure (Prompt #5 adapted):**
+13. **Infrastructure (Prompt #5 adapted):**
     - Generate Terraform as DevOps handoff artifact
     - Generate .ship-it.yml from app-context
 
@@ -546,19 +572,26 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Verify: login works, roles work, all pages accessible
 - Tell user: "Secure login is working! You can now control who can access what in your app."
 
+**Step 2.5: "Adding application settings management"**
+- Internal: Step 6 (application settings)
+- Verify: settings table seeded, Admin Settings page loads, settings API responds,
+  sensitive values masked, audit log records changes, RBAC permissions enforced
+- Tell user: "Your app now has a settings management system. Authorized admins can
+  view and change configuration through the admin panel instead of editing config files."
+
 **Step 3: "Polishing the interface and setting up test services" (moderate risk)**
-- Internal: Steps 6-8 (UI components, mock services, seed data)
+- Internal: Steps 7-9 (UI components, mock services, seed data)
 - Verify: all pages render correctly, mock services respond
 - Tell user: "Your interface got a few upgrades, and I set up test services so you can develop without needing real external systems."
 
 **Step 4: "Making your AI prompts editable" (if app uses AI)**
-- Internal: Step 10 (AI prompt management)
+- Internal: Step 11 (AI prompt management)
 - Verify: prompts load from DB, admin UI works
 - Tell user: "Your AI prompts can now be edited through the admin panel without changing any code."
 - Skip this step entirely if the app doesn't use AI/LLM features.
 
 **Step 4.5: "Securing your AI features" (if app uses AI)**
-- Internal: Step 11 (AI operational safety)
+- Internal: Step 12 (AI operational safety)
 - Verify: sanitizePromptInput() called by BaseAgent, validateAgentOutput() runs after
   every AI response, rate limiting returns 429, prompt size limits enforced, AI errors
   return generic messages, system prompts include safety instructions, PII masking active
@@ -572,7 +605,7 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
   controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
 
 **Step 5: "Final security checks and deployment prep" (low risk)**
-- Internal: Steps 9, 12 (security hardening, Terraform)
+- Internal: Steps 10, 13 (security hardening, Terraform)
 - Verify: final build-verify pass
 - Tell user: "Security is locked down and your deployment files are ready for your DevOps team."
 
@@ -654,6 +687,7 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 - Secure login with [OIDC provider]
 - Role-based permissions ([N] roles, [N] permissions)
+- Application settings management (database-backed, admin UI)
 - A proper development environment with Docker
 - Mock services for testing without real dependencies
 - Security hardening throughout

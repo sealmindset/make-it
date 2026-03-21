@@ -381,6 +381,7 @@ Depending on what's missing, `/retrofit-it` can add:
 
 - Environment-based configuration (`.env`, Docker Compose)
 - Database migrations and RBAC tables (roles, permissions, users)
+- Database-backed application settings with Admin UI (cascading precedence, sensitive value masking, audit log)
 - OIDC authentication with your chosen provider
 - Standard UI components (DataTable, Breadcrumbs, QuickSearch, ModeToggle)
 - Mock services for external integrations
