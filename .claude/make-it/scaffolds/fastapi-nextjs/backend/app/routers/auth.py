@@ -19,6 +19,16 @@ from app.schemas.auth import LogoutResponse, UserInfo
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _is_trusted_url(url: str) -> bool:
+    """Validate that a URL shares the same scheme+host as the configured OIDC issuer."""
+    parsed = urllib.parse.urlparse(url)
+    issuer_parsed = urllib.parse.urlparse(settings.OIDC_ISSUER_URL)
+    return (
+        parsed.scheme in ("http", "https")
+        and parsed.hostname == issuer_parsed.hostname
+    )
+
+
 async def _get_oidc_discovery() -> dict:
     """Fetch OIDC discovery document from issuer."""
     async with httpx.AsyncClient() as client:
@@ -34,6 +44,12 @@ async def login():
     """Redirect to OIDC provider authorization endpoint."""
     discovery = await _get_oidc_discovery()
     authorization_endpoint = discovery["authorization_endpoint"]
+
+    if not _is_trusted_url(authorization_endpoint):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC discovery returned untrusted authorization endpoint.",
+        )
 
     params = {
         "client_id": settings.OIDC_CLIENT_ID,
@@ -54,6 +70,12 @@ async def callback(
     discovery = await _get_oidc_discovery()
     token_endpoint = discovery["token_endpoint"]
     userinfo_endpoint = discovery["userinfo_endpoint"]
+
+    if not _is_trusted_url(token_endpoint) or not _is_trusted_url(userinfo_endpoint):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="OIDC discovery returned untrusted endpoint URLs.",
+        )
 
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:

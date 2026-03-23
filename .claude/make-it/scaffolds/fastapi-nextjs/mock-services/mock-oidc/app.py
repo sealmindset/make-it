@@ -21,6 +21,7 @@ Config via environment variables:
 
 import base64
 import hashlib
+import html as html_mod
 import json
 import os
 import secrets
@@ -93,6 +94,15 @@ AUTH_CODE_TTL = 300  # 5 minutes
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Mock OIDC Provider", version="1.0.0")
+
+
+def _validate_redirect_uri(client_id: str, redirect_uri: str) -> None:
+    """Reject redirect_uri values not registered for the client."""
+    client = _clients.get(client_id)
+    if not client or redirect_uri not in client.get("redirect_uris", []):
+        raise HTTPException(
+            400, f"redirect_uri not registered for client: {redirect_uri}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -182,22 +192,23 @@ def _render_login_page(
     nonce: Optional[str],
 ) -> HTMLResponse:
     """Render HTML login form showing registered users."""
+    esc = html_mod.escape
     user_buttons = ""
     for sub, user in _users.items():
         user_buttons += f"""
-        <button type="submit" name="sub" value="{sub}"
+        <button type="submit" name="sub" value="{esc(sub, quote=True)}"
                 style="display:block;width:100%;padding:12px 16px;margin:8px 0;
                        font-size:16px;cursor:pointer;border:1px solid #ccc;
                        border-radius:6px;background:#fff;text-align:left;">
-            <strong>{user['name']}</strong><br>
-            <small style="color:#666;">{user['email']}</small>
+            <strong>{esc(user['name'])}</strong><br>
+            <small style="color:#666;">{esc(user['email'])}</small>
         </button>
         """
 
     if not user_buttons:
         user_buttons = "<p style='color:#999;'>No users registered. Run the seed script first.</p>"
 
-    html = f"""<!DOCTYPE html>
+    page_html = f"""<!DOCTYPE html>
 <html>
 <head>
     <title>Mock OIDC - Sign In</title>
@@ -216,16 +227,16 @@ def _render_login_page(
         <h2>Sign In</h2>
         <p class="subtitle">Mock OIDC Provider - Select a user:</p>
         <form method="POST" action="/authorize">
-            <input type="hidden" name="redirect_uri" value="{redirect_uri}">
-            <input type="hidden" name="client_id" value="{client_id}">
-            <input type="hidden" name="state" value="{state or ''}">
-            <input type="hidden" name="nonce" value="{nonce or ''}">
+            <input type="hidden" name="redirect_uri" value="{esc(redirect_uri, quote=True)}">
+            <input type="hidden" name="client_id" value="{esc(client_id, quote=True)}">
+            <input type="hidden" name="state" value="{esc(state or '', quote=True)}">
+            <input type="hidden" name="nonce" value="{esc(nonce or '', quote=True)}">
             {user_buttons}
         </form>
     </div>
 </body>
 </html>"""
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=page_html)
 
 
 @app.get("/authorize")
@@ -246,6 +257,9 @@ async def authorize_get(
     """
     if response_type != "code":
         raise HTTPException(400, "Only response_type=code is supported")
+
+    # Validate redirect_uri against registered URIs to prevent open redirect
+    _validate_redirect_uri(client_id, redirect_uri)
 
     # If login_hint matches a known user, auto-approve
     if login_hint and login_hint in _users:
@@ -269,6 +283,9 @@ async def authorize_post(
     """Authorization endpoint (POST) -- form submission from login page."""
     if sub not in _users:
         raise HTTPException(400, f"Unknown user: {sub}")
+
+    # Validate redirect_uri against registered URIs to prevent open redirect
+    _validate_redirect_uri(client_id, redirect_uri)
 
     code = _generate_auth_code(
         sub, redirect_uri, client_id, nonce if nonce else None
