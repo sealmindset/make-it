@@ -158,6 +158,16 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   (AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT)
 - Provider abstraction layer: lib/ai/ with abstract interface + per-provider implementations
 - Supported providers: anthropic_foundry (Azure AI Foundry), anthropic (direct), openai, ollama
+- **Azure AI Foundry (anthropic_foundry) supports dual-mode auth:**
+  1. API key (preferred): If `AZURE_AI_FOUNDRY_API_KEY` is set, pass it directly to the
+     Anthropic SDK. No Azure-specific SDK needed.
+  2. DefaultAzureCredential (fallback): If no API key, use `azure-identity` to obtain a
+     bearer token via managed identity (production) or Azure CLI `az login` (local dev).
+     The provider calls `credential.get_token("https://cognitiveservices.azure.com/.default")`.
+  Env vars: `AZURE_AI_FOUNDRY_ENDPOINT` (required), `AZURE_AI_FOUNDRY_API_KEY` (optional).
+  Add `azure-identity` to dependencies only if supporting DefaultAzureCredential fallback.
+- Other providers (anthropic, openai) require their respective API keys
+- Ollama requires no authentication (local only)
 - Build-verify: confirm AI features work by calling the provider abstraction (not a specific SDK)
 
 ### NeMo Guardrails -- AI Safety Testing (if app uses AI/LLM features)
@@ -248,7 +258,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   - All others -> "AI processing failed. Please try again."
 - Log the full provider error server-side for debugging
 - NEVER expose provider name, model name, token counts, or API keys in error responses
-- Build-verify: force an AI error (invalid API key); confirm client sees generic message
+- Build-verify: force an AI error (invalid endpoint or misconfigured credentials); confirm client sees generic message
 
 #### Conversation History Management (if app has multi-turn AI)
 - Maximum conversation history depth: configurable via AI_MAX_HISTORY_TURNS env var (default: 20)
@@ -265,14 +275,15 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   guarantee passing on fallback
 - Build-verify runs against primary model only (speed); /ship-it runs against ALL configured models
 
-### AI Prompt Management (if app uses AI/LLM features)
-- Determine ai_usage_level: none, minimal (1-3), moderate (4-10), heavy (10+)
-- Tier 1 (minimal): prompts in code with env var override, single prompts file
-- Tier 2 (moderate): managed_prompts + prompt_versions tables, admin UI for editing,
-  version history, seed all prompts into DB, agents/services load from DB with code fallback
+### AI Prompt Management (MANDATORY for any app with AI features)
+- **Tier 2 is the MINIMUM for any AI-powered app.** Tier 1 (code-only prompts) is eliminated.
+- Determine ai_usage_level: none, moderate (1-10 prompts), heavy (10+)
+- Tier 2 (MINIMUM -- any AI app): managed_prompts + prompt_versions + prompt_audit_log tables,
+  admin UI for editing, version history, safety preamble, content validation, adversarial testing,
+  save/test/publish workflow, seed all prompts into DB, agents/services load from DB with code fallback
 - Tier 3 (heavy): full prompt management platform per Prompt #10c
-- CRITICAL: hardcoded prompt strings in agent/service files are ALWAYS a gap for Tier 2/3.
-  Every AI prompt must be editable without a code deploy.
+- CRITICAL: hardcoded prompt strings in agent/service files are NEVER acceptable.
+  Every AI prompt must be editable without a code deploy. This is a mandatory build requirement.
 - Prompt seed data mandatory -- managed_prompts table must not start empty
 - Build-verify: confirm agents load prompts from DB, admin UI lists all prompts,
   editing a prompt and re-running the agent uses the updated text
@@ -357,6 +368,20 @@ frictionless for non-technical users (80% of the audience).
 - [ ] Risk warnings appear for blocklist-adjacent patterns; overrides logged with risk_flag
 - [ ] /ship-it checks prompt_audit_log for risk_flag entries since last deploy
 
+### Settings Build-Verify Checklist
+- [ ] app_settings table exists with correct columns (key, value, group_name, display_name, description, value_type, is_sensitive, requires_restart, updated_by, timestamps)
+- [ ] app_setting_audit_logs table exists with correct columns (setting_id, old_value, new_value, changed_by, timestamp)
+- [ ] All .env variables seeded into app_settings with appropriate metadata
+- [ ] Settings service exists with get_setting(), invalidate_cache(), mask_sensitive()
+- [ ] GET /api/admin/settings returns all settings with sensitive values masked
+- [ ] PUT /api/admin/settings/{key} updates a setting and creates an audit log entry
+- [ ] GET /api/admin/settings/{key}/reveal returns the actual value of a sensitive setting
+- [ ] GET /api/admin/settings/audit-log returns recent change history
+- [ ] Admin Settings page exists at /admin/settings with group tabs, masking, and inline editing
+- [ ] app_settings.view and app_settings.edit permissions exist in RBAC seed data
+- [ ] Settings page hidden from sidebar for users without app_settings.view permission
+- [ ] App starts correctly with an empty app_settings table (falls back to .env values)
+
 ### AI Build-Verify Checklist (consolidated -- all AI checks in one place)
 When ai_features.needed = true, the build-verify phase MUST verify ALL of the following:
 
@@ -366,6 +391,9 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] AI_PROVIDER env var is required (runtime assertion throws error if missing -- NOT
       module-level, see Tier 0 rule #14. Check in factory function or first AI call.)
 - [ ] AI features work by calling provider abstraction (not specific SDK)
+- [ ] If AI_PROVIDER=anthropic_foundry: dual-mode auth -- uses AZURE_AI_FOUNDRY_API_KEY
+      if set (API key passed directly to Anthropic SDK), falls back to DefaultAzureCredential
+      if no API key (azure-identity required in dependencies for fallback mode)
 
 **Input Safety (Secure by Design):**
 - [ ] sanitizePromptInput() utility exists in lib/ai/ and strips injection patterns
@@ -398,10 +426,12 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] Basic test suite passes (minimum 3 per category = 18 tests)
 - [ ] AI Safety Attestation generated in docs/
 
-**Prompt Management:**
+**Prompt Management (Tier 2 MANDATORY for any AI app):**
 - [ ] Prompts externalized (not hardcoded in business logic)
-- [ ] Prompt management tier determined and implemented
-- [ ] Prompt seed data generated (Tier 2/3)
+- [ ] Tier 2 prompt management implemented (minimum): managed_prompts, prompt_versions,
+      prompt_audit_log tables, admin API with save/test/publish, admin UI page
+- [ ] Prompt seed data generated -- every agent/service has a published prompt in DB
+- [ ] Safety preamble, content validation, and adversarial testing implemented
 
 **Prompt Template Content Validation (Tier 2/3 only):**
 - [ ] validatePromptTemplate() exists in lib/ai/ and is called on all prompt save endpoints
@@ -415,22 +445,8 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] Risk warnings displayed for blocklist-adjacent patterns; overrides logged with risk_flag
 - [ ] /ship-it flags risk_flag audit entries in PR description for security review
 
-### Settings Build-Verify Checklist
-- [ ] app_settings table exists with correct columns (key, value, group_name, display_name, description, value_type, is_sensitive, requires_restart, updated_by, timestamps)
-- [ ] app_setting_audit_logs table exists with correct columns (setting_id, old_value, new_value, changed_by, timestamp)
-- [ ] All .env variables seeded into app_settings with appropriate metadata
-- [ ] Settings service exists with get_setting(), invalidate_cache(), mask_sensitive()
-- [ ] GET /api/admin/settings returns all settings with sensitive values masked
-- [ ] PUT /api/admin/settings/{key} updates a setting and creates an audit log entry
-- [ ] GET /api/admin/settings/{key}/reveal returns the actual value of a sensitive setting
-- [ ] GET /api/admin/settings/audit-log returns recent change history
-- [ ] Admin Settings page exists at /admin/settings with group tabs, masking, and inline editing
-- [ ] app_settings.view and app_settings.edit permissions exist in RBAC seed data
-- [ ] Settings page hidden from sidebar for users without app_settings.view permission
-- [ ] App starts correctly with an empty app_settings table (falls back to .env values)
-
 ### Prompts
-- Execute all 14 prompts in order (#1-#14), plus Prompt #9b (Settings)
+- Execute all 14 prompts in order (#1-#14)
 - All [BRACKETS] filled from app-context.json
 
 ### Build-Verify (Web App)
@@ -634,7 +650,6 @@ The Design phase summary to the user should reflect the project type without usi
 | Docker Compose | | Y | | | | Y |
 | Mock services | | Y | | | | Y |
 | Seed data | | Y | | | | Y |
-| DB-backed settings | | Y | | | | Y |
 | Standard UI components | | Y | | | | |
 | System fonts only | | Y | | | | |
 | Extension manifest | | | Y | | | |

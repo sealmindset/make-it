@@ -62,7 +62,8 @@ This template is populated by /make-it as the user answers questions. It becomes
     "provider_config": {
       "anthropic_foundry": {
         "endpoint": "",
-        "uses_managed_identity": false
+        "uses_default_credential": true,
+        "note": "No API key -- uses DefaultAzureCredential (managed identity / az login)"
       },
       "anthropic": {},
       "openai": {},
@@ -179,8 +180,8 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | stack | Design | Inferred from app_type + features + project_type |
 | multi_tenancy | Design | Inferred from users description |
 | ai_features | Ideation + Design | Detected from features keywords |
-| ai_features.usage_level | Design | Inferred: none / minimal / moderate / heavy |
-| ai_features.prompt_management_tier | Design | 0 (none), 1 (code+config), 2 (db+admin), 3 (full platform) |
+| ai_features.usage_level | Design | Inferred: none / moderate / heavy (minimal is eliminated -- minimum is moderate) |
+| ai_features.prompt_management_tier | Design | 0 (none -- no AI), 2 (db+admin -- MINIMUM for any AI app), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | ai_providers | Design | Auto-determined when ai_features.needed is true |
 | ai_providers.primary | Design | Inferred from cloud.provider + enterprise context: "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama" |

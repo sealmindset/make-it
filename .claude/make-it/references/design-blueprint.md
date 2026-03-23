@@ -455,6 +455,57 @@ lib/ai/
 Each AI feature/agent declares its tier. The model-tier module resolves the actual model
 name from environment variables, falling back to sensible defaults.
 
+**Authentication per provider:**
+
+| Provider | Auth Method | Env Vars Needed |
+|----------|-----------|-----------------|
+| `anthropic_foundry` | API key **or** `DefaultAzureCredential` (dual-mode) | `AZURE_AI_FOUNDRY_ENDPOINT` + optionally `AZURE_AI_FOUNDRY_API_KEY` |
+| `anthropic` | API key | `ANTHROPIC_API_KEY` |
+| `openai` | API key | `OPENAI_API_KEY` |
+| `ollama` | None (local) | `OLLAMA_BASE_URL` |
+
+**Azure AI Foundry supports TWO authentication modes.** The provider MUST try both
+in priority order:
+
+1. **API key** (if `AZURE_AI_FOUNDRY_API_KEY` is set and non-empty): Pass it directly
+   to the Anthropic SDK as `api_key`. This is the simplest approach and works in all
+   environments (local dev, Docker containers, CI/CD). The Anthropic SDK handles the
+   rest -- no Azure-specific SDK needed for this mode.
+
+2. **DefaultAzureCredential** (fallback when no API key): Uses `azure-identity` SDK
+   to obtain a bearer token from Azure AD. Picks up credentials from:
+   - Managed Identity (production on Azure)
+   - Azure CLI (`az login` -- local development)
+   - Environment variables (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`)
+   - Visual Studio / VS Code credentials
+   The provider calls `credential.get_token("https://cognitiveservices.azure.com/.default")`
+   and passes the token as `api_key` to the Anthropic SDK.
+
+**Why dual-mode matters:** Some Azure AI Foundry endpoints accept API keys directly
+(e.g., `sn-aifoundry-dev.services.ai.azure.com`), while others require Azure AD JWT
+tokens (e.g., endpoints behind Azure API Management). The provider auto-detects which
+to use based on whether `AZURE_AI_FOUNDRY_API_KEY` is set.
+
+Add `azure-identity` to dependencies ONLY if supporting the DefaultAzureCredential
+fallback. If the project only uses API key auth, `azure-identity` is not required.
+
+**Provider implementation pattern (Python):**
+```python
+class AnthropicFoundryProvider(AIProvider):
+    def __init__(self):
+        api_key = settings.AZURE_AI_FOUNDRY_API_KEY
+        if not api_key:
+            # Fallback to DefaultAzureCredential
+            from azure.identity import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
+            api_key = token.token
+        self.client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=settings.AZURE_AI_FOUNDRY_ENDPOINT,
+        )
+```
+
 **Environment variables (added to .env.example):**
 ```bash
 # AI Provider Configuration
@@ -464,9 +515,9 @@ AI_MODEL_STANDARD=claude-sonnet-4-6  # Standard tasks
 AI_MODEL_LIGHT=claude-haiku-4-5     # Simple/fast tasks
 
 # Provider-specific settings (only configure the provider you're using)
-# Azure AI Foundry (anthropic_foundry)
-AZURE_AI_FOUNDRY_ENDPOINT=https://your-endpoint.services.ai.azure.com
-AZURE_AI_FOUNDRY_API_KEY=
+# Azure AI Foundry (anthropic_foundry) -- supports API key or DefaultAzureCredential
+AZURE_AI_FOUNDRY_ENDPOINT=https://your-endpoint.services.ai.azure.com/anthropic
+AZURE_AI_FOUNDRY_API_KEY=             # If set, uses API key auth. If empty, falls back to DefaultAzureCredential.
 
 # Direct Anthropic (anthropic)
 ANTHROPIC_API_KEY=
@@ -498,17 +549,20 @@ OLLAMA_BASE_URL=http://localhost:11434
 ```
 AI features mentioned?
   No  -> ai_usage_level = "none", skip prompt management entirely
-  Yes -> Classify by signals:
+  Yes -> MINIMUM Tier 2 prompt management is MANDATORY.
+         Prompt management is a REQUIRED part of AI-powered app builds, not optional.
+         Every AI prompt must be editable without a code deploy.
 
-  Minimal (Tier 1): 1-3 prompts, developers manage, rarely change
-    -> Prompts in code with env var override
-    -> Single file: lib/prompts.py or lib/prompts.ts
+  Classify by signals to determine Tier 2 vs Tier 3:
 
-  Moderate (Tier 2): 4-10 prompts, product team edits, change weekly/monthly
+  Moderate (Tier 2 -- MINIMUM for any AI app): 1-10 prompts, any audience
     -> Database-stored prompts with basic admin UI
     -> 3 tables: managed_prompts, managed_prompt_versions, prompt_audit_log
     -> 6 API routes + admin editor page
     -> Runtime loader with code fallback
+    -> Safety preamble, content validation, adversarial testing
+    -> Save -> Test -> Publish workflow
+    -> Prompt seeding (every agent/service starts with a published prompt)
 
   Heavy (Tier 3): 10+ prompts, AI-native app, multiple agents/models
     -> Full prompt management platform (reference production prompt management platform)
@@ -518,16 +572,18 @@ AI features mentioned?
     -> 3-tier runtime: Redis cache -> DB -> seed fallback
 ```
 
-**Signals that push toward a higher tier:**
-- "Non-technical people need to edit prompts" -> at least Tier 2
-- "Multiple AI models or providers" -> at least Tier 2
-- "AI personas, agents, or evaluators" -> likely Tier 3
-- "Prompts will change frequently" -> at least Tier 2
+**IMPORTANT: Tier 1 (code-only prompts) is ELIMINATED.** Any app with AI features gets
+at minimum Tier 2 prompt management built during the /make-it process. Hardcoded prompts
+in agent/service files are never acceptable -- they make prompt tuning require a code deploy,
+which blocks non-developers from iterating on AI behavior.
+
+**Signals that push toward Tier 3 (above the Tier 2 minimum):**
+- "AI personas, agents, or evaluators" with 10+ distinct prompts -> Tier 3
 - "Need analytics on AI usage" -> Tier 3
+- "A/B testing prompts" -> Tier 3
 
 **Implementation generates:**
-- Tier 1: lib/prompts.py with named constants + env var overrides
-- Tier 2: Schema (3 tables), API (6 routes), admin UI, runtime loader with fallback
+- Tier 2: Schema (3 tables), API (6 routes), admin UI, runtime loader with fallback, safety preamble, content validation, adversarial testing, seed data
 - Tier 3: Schema (6 tables), API (30+ routes), 5 frontend pages, 3-tier caching, seed system, RBAC (4 permission scopes)
 
 ### 10a. Prompt Template Content Validation (Tier 2/3)
@@ -1092,11 +1148,6 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] QuickSearch (⌘K) populated with all navigation items and app actions
 - [ ] ThemeProvider wraps app, ModeToggle in header, oklch CSS variables for light/dark
 - [ ] CHANGELOG.md and TODO.md maintained
-- [ ] Database-backed settings: app_settings + app_setting_audit_logs tables exist
-- [ ] Settings service with in-memory cache and cascading precedence (DB > .env > default)
-- [ ] All .env variables seeded into app_settings with metadata (group, type, sensitive, restart)
-- [ ] Admin Settings page (/admin/settings) with grouped tabs, masking, inline editing, audit log
-- [ ] app_settings.view and app_settings.edit permissions granted to Super Admin and Admin only
 - [ ] AI provider abstraction layer created (lib/ai/) -- if using AI
 - [ ] AI_PROVIDER, AI_MODEL_HEAVY/STANDARD/LIGHT env vars configured -- if using AI
 - [ ] No provider SDK imports outside lib/ai/providers/ -- if using AI
