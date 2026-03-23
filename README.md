@@ -78,7 +78,33 @@ Before running `/make-it`, you need these tools on your machine. The skill check
 
 ### Install Steps
 
-#### Option A: One-Line Install (recommended)
+#### Windows
+
+See the complete **[Windows Setup Guide](WINDOWS-SETUP.md)** -- covers Node.js, Git for Windows, Azure CLI, Docker, Claude Code configuration, and troubleshooting.
+
+Quick version:
+
+```powershell
+# 1. Install prerequisites
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install Microsoft.AzureCLI
+
+# 2. Set git-bash path (adjust path to your actual bash.exe location)
+[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe", "User")
+
+# 3. Install Claude Code (reopen PowerShell first)
+npm install -g @anthropic-ai/claude-code
+
+# 4. Configure ~/.claude/settings.json (see Windows Setup Guide for details)
+
+# 5. Install skills
+irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+```
+
+#### macOS / Linux
+
+##### Option A: One-Line Install (recommended)
 
 No clone needed. Just run:
 
@@ -88,7 +114,7 @@ curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh
 
 This downloads the latest release and installs all skills into `~/.claude/`.
 
-#### Option B: Clone and Install
+##### Option B: Clone and Install
 
 ```bash
 git clone https://github.com/sealmindset/make-it.git
@@ -96,7 +122,7 @@ cd make-it
 bash install.sh
 ```
 
-#### Option C: Manual Install
+#### Option C: Manual Install (macOS / Linux)
 
 ```bash
 # Clone the repo
