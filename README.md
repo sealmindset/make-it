@@ -80,27 +80,14 @@ Before running `/make-it`, you need these tools on your machine. The skill check
 
 #### Windows
 
-See the complete **[Windows Setup Guide](WINDOWS-SETUP.md)** -- covers Node.js, Git for Windows, Azure CLI, Docker, Claude Code configuration, and troubleshooting.
-
-Quick version:
+The install script handles everything automatically: Node.js, Git, Azure CLI, Docker, Claude Code, configuration files, and skills. If a restart is needed, it saves progress and picks up where it left off.
 
 ```powershell
-# 1. Install prerequisites
-winget install OpenJS.NodeJS.LTS
-winget install Git.Git
-winget install Microsoft.AzureCLI
-
-# 2. Set git-bash path (adjust path to your actual bash.exe location)
-[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe", "User")
-
-# 3. Install Claude Code (reopen PowerShell first)
-npm install -g @anthropic-ai/claude-code
-
-# 4. Configure ~/.claude/settings.json (see Windows Setup Guide for details)
-
-# 5. Install skills
+Set-ExecutionPolicy -Scope Process Bypass
 irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 ```
+
+See the complete **[Windows Setup Guide](WINDOWS-SETUP.md)** for manual steps, daily workflow, and troubleshooting.
 
 #### macOS / Linux
 
