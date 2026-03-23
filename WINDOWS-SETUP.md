@@ -160,27 +160,31 @@ claude --version
 
 Claude Code needs to authenticate against Azure AI Foundry. This requires two files in your `.claude` directory.
 
+### Find your username
+
+You'll need your Windows username for the file paths below. Run this in PowerShell:
+
+```powershell
+$env:USERNAME
+```
+
+In all examples below, replace `YourName` with this value.
+
 ### Create the token helper script
 
 Create the file `C:\Users\YourName\.claude\get-claude-token.ps1` with this content:
 
 ```powershell
-# Get access token for Azure Cognitive Services
-# IMPORTANT: You must run "az login" BEFORE starting Claude Code.
-# This script cannot open a browser interactively -- it only retrieves
-# a token from an existing Azure CLI session.
-
-$token = az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv 2>$null
-
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($token)) {
-    Write-Error "Azure CLI not logged in. Run 'az login' in PowerShell before starting Claude Code."
-    exit 1
+# Check if already logged in to Azure CLI
+$null = az account get-access-token 2>$null
+if ($LASTEXITCODE -ne 0) {
+    # Not logged in, so login
+    az login | Out-Null
 }
 
-Write-Output $token
+# Get access token for Azure Cognitive Services
+az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
 ```
-
-> **Why no `az login` in the script?** Claude Code calls this script in a background subprocess that cannot open a browser window. You must log in to Azure CLI yourself before launching Claude Code.
 
 ### Create the settings file
 
@@ -306,38 +310,77 @@ winget install Git.Git
 
 ### "401 Azure AD JWT not present"
 
-This means Claude Code couldn't get a valid Azure token. The most common cause: you didn't run `az login` before starting Claude Code.
+This means Claude Code couldn't get a valid Azure token. Work through these checks in order:
 
-**Fix:** Exit Claude Code, then:
+**Check 1: Are you logged in to Azure?**
 
 ```powershell
-# 1. Log in to Azure
-az login
-
-# 2. Verify the token works (should print a long string)
 az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
-
-# 3. Restart Claude Code
-claude
 ```
 
-If the token command fails, your account may not have access to Azure Cognitive Services. Contact your Azure administrator.
-
-> **Token expiry:** Azure tokens expire after ~1-2 hours. If Claude Code suddenly stops working mid-session, exit Claude Code, run `az login` again, and restart.
-
-### Other authentication errors
-
-Verify your `settings.json` has the correct username in the `apiKeyHelper` path:
+If this fails or prints an error, log in first:
 
 ```powershell
-# Check your actual username
-$env:USERNAME
+az login
+```
 
-# The path in settings.json must match
+Then retry the token command. It should print a long string (the token).
+
+**Check 2: Does your settings.json have your actual username?**
+
+```powershell
+$env:USERNAME
 Get-Content "$env:USERPROFILE\.claude\settings.json"
 ```
 
-Make sure the path to `get-claude-token.ps1` uses double backslashes (`\\`) in the JSON file.
+The `apiKeyHelper` path must contain your real username, not the literal `YourName` placeholder. The path must use double backslashes (`\\`).
+
+**Check 3: Does the token script exist at the path in settings.json?**
+
+```powershell
+Test-Path "$env:USERPROFILE\.claude\get-claude-token.ps1"
+```
+
+If `False`, create the script (see [Step 6](#step-6-configure-claude-code-for-azure-ai-foundry)).
+
+**Check 4: Does the token script run cleanly?**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\get-claude-token.ps1"
+```
+
+This should print ONLY a token string -- no warnings, no extra text. If you see extra output (Azure CLI warnings, profile messages, etc.), that corrupts the token. Replace your `get-claude-token.ps1` with this hardened version:
+
+```powershell
+$ErrorActionPreference = "Stop"
+try {
+    $token = (az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv) 2>$null
+    if (-not $token) { throw "empty token" }
+    [Console]::Out.Write($token.Trim())
+} catch {
+    [Console]::Error.WriteLine("ERROR: Run 'az login' before starting Claude Code.")
+    exit 1
+}
+```
+
+And update `settings.json` to use `-NoProfile` (prevents PowerShell profile from printing extra output):
+
+```json
+{
+  "apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\YourName\\.claude\\get-claude-token.ps1",
+  ...
+}
+```
+
+**Check 5: Restart Claude Code**
+
+After fixing any of the above, close Claude Code completely and reopen it:
+
+```powershell
+claude
+```
+
+> **Token expiry:** Azure tokens expire after ~1-2 hours. If Claude Code suddenly stops working mid-session, exit, run `az login` again, and restart.
 
 ### Docker errors
 
