@@ -58,8 +58,8 @@ function Get-RemoteVersion {
 function Detect-Source {
     $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
 
-    $commandsPath = Join-Path $scriptDir ".claude" "commands"
-    $makeitPath = Join-Path $scriptDir ".claude" "make-it"
+    $commandsPath = Join-Path (Join-Path $scriptDir ".claude") "commands"
+    $makeitPath = Join-Path (Join-Path $scriptDir ".claude") "make-it"
 
     if ((Test-Path $commandsPath) -and (Test-Path $makeitPath)) {
         return @{ Source = "local"; RepoDir = $scriptDir }
@@ -106,8 +106,8 @@ function Download-Repo {
     }
 
     # Verify download
-    $commandsPath = Join-Path $repoDir ".claude" "commands"
-    $makeitPath = Join-Path $repoDir ".claude" "make-it"
+    $commandsPath = Join-Path (Join-Path $repoDir ".claude") "commands"
+    $makeitPath = Join-Path (Join-Path $repoDir ".claude") "make-it"
     if (-not (Test-Path $commandsPath)) { Fail "Download incomplete -- .claude/commands not found." }
     if (-not (Test-Path $makeitPath))   { Fail "Download incomplete -- .claude/make-it not found." }
 
@@ -125,7 +125,7 @@ function Install-Skills($repoDir) {
     # Auto-discover all skill files (*.md) in commands directory
     Write-Host "  Copying skill commands..."
     $skillCount = 0
-    $cmdFiles = Get-ChildItem -Path (Join-Path $repoDir ".claude" "commands") -Filter "*.md" -File
+    $cmdFiles = Get-ChildItem -Path (Join-Path (Join-Path $repoDir ".claude") "commands") -Filter "*.md" -File
     foreach ($cmdFile in $cmdFiles) {
         Copy-Item -Path $cmdFile.FullName -Destination $COMMANDS_DIR -Force
         Ok $cmdFile.Name
@@ -141,7 +141,7 @@ function Install-Skills($repoDir) {
     if (Test-Path $MAKEIT_DIR) {
         Remove-Item -Path $MAKEIT_DIR -Recurse -Force
     }
-    Copy-Item -Path (Join-Path $repoDir ".claude" "make-it") -Destination $MAKEIT_DIR -Recurse -Force
+    Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $MAKEIT_DIR -Recurse -Force
 
     # Verify
     $refsDir = Join-Path $MAKEIT_DIR "references"
