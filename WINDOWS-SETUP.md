@@ -1,150 +1,195 @@
 # Windows Setup Guide for Claude Code + /make-it
 
-Complete instructions to install and run Claude Code with /make-it skills on Windows.
+This guide walks you through setting up Claude Code and /make-it skills on a Windows computer, step by step. No technical experience required -- just follow each step in order.
 
 ---
 
-## Prerequisites
+## Before You Start
 
-You need four things installed before Claude Code will work on Windows:
+- You will need **administrator access** on your computer for some steps (the guide tells you when)
+- Some steps require you to **close and reopen PowerShell** -- this is how Windows picks up newly installed programs
+- The entire setup takes about 20-30 minutes, depending on your internet speed
+- **You must restart your computer once** during this process (after Docker Desktop)
 
-| # | Tool | Purpose |
-|---|------|---------|
-| 1 | **Node.js (LTS)** | Runtime for Claude Code |
-| 2 | **Git for Windows** | Version control + provides git-bash (required by Claude Code) |
-| 3 | **Azure CLI** | Authentication to Azure AI Foundry (enterprise AI backend) |
-| 4 | **Docker Desktop** | Runs your apps locally in containers |
+---
 
-Optional but recommended:
+## How to Open PowerShell
 
-| Tool | Purpose |
-|------|---------|
-| **GitHub CLI** | Push code and create pull requests from the terminal |
-| **VS Code** | Code editor |
+You will use PowerShell for every step in this guide.
+
+1. Click the **Start** button (or press the Windows key)
+2. Type **PowerShell**
+3. Click **Windows PowerShell**
+
+> **When a step says "Open PowerShell as Administrator":** Right-click **Windows PowerShell** and choose **Run as administrator**, then click **Yes** when prompted.
+
+---
+
+## Important: Run This First in Every PowerShell Window
+
+Every time you open a new PowerShell window during this guide, **run this command first**:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+This allows PowerShell to run the scripts needed for installation. It only affects the current window -- it resets when you close it. You do not need administrator access for this command.
+
+> **Why?** Windows blocks scripts by default as a security measure. This temporarily allows them for just this window.
 
 ---
 
 ## Step 1: Install Node.js
 
+Node.js is the runtime that Claude Code needs to run.
+
 Open PowerShell and run:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 winget install OpenJS.NodeJS.LTS
 ```
 
-**Close and reopen PowerShell**, then verify:
+When it finishes, **close PowerShell and open a new PowerShell window**, then verify it worked:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 node --version
 npm --version
 ```
 
-You should see version numbers (e.g., `v22.x.x` and `10.x.x`).
+You should see version numbers (e.g., `v22.x.x` and `10.x.x`). If you see an error instead, try closing and reopening PowerShell one more time.
 
-> **If `winget` is not available** (older Windows 10), download the LTS installer from https://nodejs.org and run it manually.
+> **If `winget` is not available** (older Windows 10): Open a browser, go to https://nodejs.org, download the **LTS** installer, and run it. Accept all defaults.
 
 ---
 
 ## Step 2: Install Git for Windows
 
+Git is version control software. Claude Code also needs the "git-bash" shell that comes with it.
+
+In PowerShell:
+
 ```powershell
 winget install Git.Git
 ```
 
-**Close and reopen PowerShell**, then verify:
+**Close PowerShell and open a new PowerShell window**, then verify:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 git --version
 ```
 
-### Find your bash.exe path
+You should see something like `git version 2.x.x`.
 
-Claude Code requires git-bash. Find where it was installed:
+### Find where bash.exe was installed
+
+Claude Code needs to know where git-bash is on your computer. Run this:
 
 ```powershell
 Get-Command git | Select-Object -ExpandProperty Source
 ```
 
-This shows something like:
+You will see a path like one of these:
 
 ```
 C:\Users\YourName\AppData\Local\Programs\Git\cmd\git.exe
+C:\Program Files\Git\cmd\git.exe
 ```
 
-Replace `\cmd\git.exe` with `\bin\bash.exe` to get the bash path. For example:
+Take that path and replace `\cmd\git.exe` at the end with `\bin\bash.exe`. For example:
 
-```
-C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe
-```
+- If you got `C:\Users\YourName\AppData\Local\Programs\Git\cmd\git.exe`
+  - Your bash path is: `C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe`
+- If you got `C:\Program Files\Git\cmd\git.exe`
+  - Your bash path is: `C:\Program Files\Git\bin\bash.exe`
 
-If you're not sure, search for it:
+### Tell Claude Code where bash.exe is
 
-```powershell
-Get-ChildItem -Path "C:\Program Files", "C:\Program Files (x86)", "$env:LOCALAPPDATA\Programs" -Recurse -Filter "bash.exe" -ErrorAction SilentlyContinue | Select-Object FullName
-```
-
-Look for a path containing `\Git\bin\bash.exe` (not `\WinSxS\` -- those are WSL, not git-bash).
-
-### Set the environment variable
-
-Replace the path below with **your actual bash.exe path** from the previous step:
+Run this command, replacing the path with **your actual bash.exe path** from above:
 
 ```powershell
 [System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe", "User")
 ```
 
-**Close and reopen PowerShell** for this to take effect.
-
-> **Common paths** (check which one exists on your machine):
-> - `C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe` (user install)
-> - `C:\Program Files\Git\bin\bash.exe` (system install)
+**Close PowerShell and open a new PowerShell window** for this to take effect.
 
 ---
 
 ## Step 3: Install Azure CLI
 
+Azure CLI lets your computer talk to Azure AI Foundry (the AI service that powers Claude Code in your organization).
+
+In PowerShell:
+
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 winget install Microsoft.AzureCLI
 ```
 
-**Close and reopen PowerShell**, then log in:
+**Close PowerShell and open a new PowerShell window**, then log in to Azure:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 az login
 ```
 
-This opens a browser window. Sign in with your corporate account.
+A browser window will open. **Sign in with your corporate/work account** (the same one you use for email and Teams).
 
-Verify:
+After signing in, go back to PowerShell and verify it worked:
 
 ```powershell
 az account show --query name -o tsv
 ```
 
+You should see your organization's Azure subscription name.
+
 ---
 
 ## Step 4: Install Docker Desktop
 
+Docker runs your apps in isolated containers on your computer. **This step requires administrator access and a restart.**
+
+In PowerShell:
+
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 winget install Docker.DockerDesktop
 ```
 
-After installation, **restart your computer** (Docker requires a reboot). Then open Docker Desktop from the Start menu and wait for it to finish starting.
+**Restart your computer** after installation (Docker requires this).
 
-Verify:
+After restarting:
+
+1. Open **Docker Desktop** from the Start menu
+2. Wait for it to finish starting (you will see "Docker Desktop is running" in the system tray near the clock)
+3. If it asks you to accept a license agreement, click **Accept**
+
+Open a new PowerShell window and verify:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 docker --version
 docker compose version
 ```
 
-> **Note:** If you see errors about WSL 2, run `wsl --install` in an elevated PowerShell and restart.
+You should see version numbers for both commands.
+
+> **If you see errors about WSL 2:** Open **PowerShell as Administrator** and run:
+> ```powershell
+> wsl --install
+> ```
+> Then restart your computer again.
 
 ---
 
 ## Step 5: Install Claude Code
 
+In PowerShell:
+
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 npm install -g @anthropic-ai/claude-code
 ```
 
@@ -158,21 +203,27 @@ claude --version
 
 ## Step 6: Configure Claude Code for Azure AI Foundry
 
-Claude Code needs to authenticate against Azure AI Foundry. This requires two files in your `.claude` directory.
+Claude Code needs two configuration files to connect to your organization's AI service. You will create both files in this step.
 
-### Find your username
+### Find your Windows username
 
-You'll need your Windows username for the file paths below. Run this in PowerShell:
+Run this in PowerShell and write down the result -- you will need it below:
 
 ```powershell
 $env:USERNAME
 ```
 
-In all examples below, replace `YourName` with this value.
+This prints something like `BARKNX` or `jsmith`. In all examples below, replace `YourName` with **your actual username**.
 
 ### Create the token helper script
 
-Create the file `C:\Users\YourName\.claude\get-claude-token.ps1` with this content:
+This script gets a security token so Claude Code can talk to Azure AI Foundry.
+
+1. Open **File Explorer**
+2. Navigate to `C:\Users\YourName\.claude\` (replace `YourName` with your username)
+   - If the `.claude` folder does not exist, create it
+3. Create a new file called `get-claude-token.ps1`
+4. Open it in Notepad and paste this content:
 
 ```powershell
 # Check if already logged in to Azure CLI
@@ -186,13 +237,18 @@ if ($LASTEXITCODE -ne 0) {
 az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
 ```
 
+5. Save the file
+
+> **Tip:** If Notepad adds `.txt` to the filename (making it `get-claude-token.ps1.txt`), rename it to remove the `.txt` extension. In File Explorer, make sure "File name extensions" is checked under the **View** tab so you can see the full filename.
+
 ### Create the settings file
 
-Create or edit `C:\Users\YourName\.claude\settings.json`:
+1. In the same `.claude` folder, create a new file called `settings.json`
+2. Open it in Notepad and paste this content, **replacing `YourName` with your actual username**:
 
 ```json
 {
-  "apiKeyHelper": "powershell -ExecutionPolicy Bypass -File C:\\Users\\YourName\\.claude\\get-claude-token.ps1",
+  "apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\YourName\\.claude\\get-claude-token.ps1",
   "env": {
     "CLAUDE_CODE_USE_FOUNDRY": "1",
     "ANTHROPIC_FOUNDRY_BASE_URL": "https://snapistg-scus.azure.sleepnumber.com/anthropic",
@@ -203,21 +259,31 @@ Create or edit `C:\Users\YourName\.claude\settings.json`:
 }
 ```
 
-**Important:** Replace `YourName` with your actual Windows username in both the script path and the `apiKeyHelper` value. Use double backslashes (`\\`) in the JSON file.
+3. Save the file
+
+**Double-check:** The `apiKeyHelper` line must have your real username and use double backslashes (`\\`). For example, if your username is `BARKNX`, the line should read:
+
+```
+"apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\BARKNX\\.claude\\get-claude-token.ps1",
+```
 
 ---
 
 ## Step 7: Install /make-it Skills
 
-### Option A: One-line install (no clone needed)
+In PowerShell:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 ```
 
-### Option B: Clone and install
+You should see a list of installed skills when it finishes.
+
+**Alternative** -- if you prefer to clone the repository first:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 git clone https://github.com/sealmindset/make-it.git
 cd make-it
 .\install.ps1
@@ -227,36 +293,48 @@ cd make-it
 
 ## Step 8: Verify Everything Works
 
-**Close and reopen PowerShell**, then:
+**Close PowerShell and open a new PowerShell window**, then:
 
 ```powershell
-# 1. Log in to Azure (required EVERY time you open a new PowerShell session,
-#    or whenever your token expires -- typically every 1-2 hours)
-az login
+Set-ExecutionPolicy -Scope Process Bypass
 
-# 2. Verify the token works
+# Log in to Azure (you need to do this each time you open a new PowerShell window)
+az login
+```
+
+A browser window will open. Sign in with your corporate account. Then go back to PowerShell:
+
+```powershell
+# Verify the token works (should print a long string of letters and numbers)
 az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
 
-# 3. Start Claude Code
+# Go to your projects folder (create it first if it doesn't exist)
+mkdir ~\Documents\GitHub -ErrorAction SilentlyContinue
 cd ~\Documents\GitHub
+
+# Start Claude Code
 claude
 ```
 
-Inside Claude Code, type `/make-it` -- you should see the skill activate.
+Inside Claude Code, type `/make-it` -- you should see the skill activate and greet you.
 
-> **Important:** You must run `az login` before starting Claude Code each session. The token helper script retrieves your existing token -- it cannot open a browser to log you in.
+**Congratulations -- you are all set!**
 
 ---
 
 ## Optional: Install GitHub CLI
 
+GitHub CLI lets you push your code to GitHub and create pull requests from the terminal.
+
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 winget install GitHub.cli
 ```
 
-**Close and reopen PowerShell**, then authenticate:
+**Close PowerShell and open a new PowerShell window**, then authenticate:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 gh auth login
 ```
 
@@ -266,90 +344,116 @@ Follow the prompts to authenticate with your GitHub account.
 
 ## Optional: Install VS Code
 
+VS Code is a code editor. Not required, but helpful if you ever want to look at the generated code.
+
 ```powershell
 winget install Microsoft.VisualStudioCode
 ```
 
 ---
 
+## Your Daily Workflow
+
+Every time you want to use Claude Code, open PowerShell and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+az login
+cd ~\Documents\GitHub
+claude
+```
+
+Inside Claude Code:
+
+```
+/make-it          Build a new app from scratch
+/try-it           Test your app in the browser
+/resume-it        Continue working on your app
+/retrofit-it      Upgrade an existing app
+/make-it update   Update to the latest version of the skills
+```
+
+> **Note:** Azure login tokens expire after about 1-2 hours. If Claude Code suddenly stops responding or shows errors, close it, run `az login` again in PowerShell, and restart `claude`.
+
+---
+
 ## Troubleshooting
+
+### "Running scripts is disabled on this system" or "execution policy" errors
+
+You forgot to run the execution policy command. Run this first:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+Then retry the command that failed. You need to do this every time you open a new PowerShell window.
 
 ### "claude is not recognized"
 
-Node.js isn't in your PATH. Close and reopen PowerShell. If that doesn't work, verify Node.js is installed:
+Node.js is not installed or not in your PATH.
 
-```powershell
-node --version
-```
-
-If `node` also isn't found, reinstall Node.js and make sure "Add to PATH" is checked during installation.
+1. Close and reopen PowerShell
+2. Run `Set-ExecutionPolicy -Scope Process Bypass`
+3. Try `node --version` -- if this also fails, reinstall Node.js (Step 1)
 
 ### "Claude Code was unable to find CLAUDE_CODE_GIT_BASH_PATH"
 
-The path in your environment variable doesn't match where bash.exe actually is. Find the real path:
+The path you set does not match where bash.exe actually is on your computer.
+
+1. Find the real path:
 
 ```powershell
 Get-ChildItem -Path "C:\Program Files", "C:\Program Files (x86)", "$env:LOCALAPPDATA\Programs" -Recurse -Filter "bash.exe" -ErrorAction SilentlyContinue | Select-Object FullName
 ```
 
-Look for a result containing `\Git\bin\bash.exe` and update the environment variable:
+2. Look for a result containing `\Git\bin\bash.exe` (ignore any `\WinSxS\` results -- those are something else)
+3. Set the correct path:
 
 ```powershell
-[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "<actual path>", "User")
+[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "paste-your-actual-path-here", "User")
 ```
 
-Then close and reopen PowerShell.
-
-### "bash.exe found but only WinSxS paths"
-
-Those are WSL (Windows Subsystem for Linux), not git-bash. You need to install Git for Windows:
-
-```powershell
-winget install Git.Git
-```
+4. Close and reopen PowerShell
 
 ### "401 Azure AD JWT not present"
 
-This means Claude Code couldn't get a valid Azure token. Work through these checks in order:
+This means Claude Code could not get a valid security token from Azure. Work through these checks in order:
 
 **Check 1: Are you logged in to Azure?**
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+az login
 az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
 ```
 
-If this fails or prints an error, log in first:
+The second command should print a long string of letters and numbers (the token). If it shows an error instead, your account may not have access to Azure Cognitive Services -- contact your Azure administrator.
 
-```powershell
-az login
-```
-
-Then retry the token command. It should print a long string (the token).
-
-**Check 2: Does your settings.json have your actual username?**
+**Check 2: Does your settings.json have your real username?**
 
 ```powershell
 $env:USERNAME
 Get-Content "$env:USERPROFILE\.claude\settings.json"
 ```
 
-The `apiKeyHelper` path must contain your real username, not the literal `YourName` placeholder. The path must use double backslashes (`\\`).
+Compare the username printed by the first command with what is in the `apiKeyHelper` line. They must match. If you see `YourName` instead of your actual username, edit the file and fix it.
 
-**Check 3: Does the token script exist at the path in settings.json?**
+**Check 3: Does the token script file exist?**
 
 ```powershell
 Test-Path "$env:USERPROFILE\.claude\get-claude-token.ps1"
 ```
 
-If `False`, create the script (see [Step 6](#step-6-configure-claude-code-for-azure-ai-foundry)).
+If this prints `False`, go back to Step 6 and create the file.
 
-**Check 4: Does the token script run cleanly?**
+**Check 4: Does the token script work on its own?**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\get-claude-token.ps1"
 ```
 
-This should print ONLY a token string -- no warnings, no extra text. If you see extra output (Azure CLI warnings, profile messages, etc.), that corrupts the token. Replace your `get-claude-token.ps1` with this hardened version:
+This should print ONLY a long token string -- nothing else. If you see warnings, errors, or extra text mixed in, replace the contents of `get-claude-token.ps1` with this version:
 
 ```powershell
 $ErrorActionPreference = "Stop"
@@ -363,76 +467,36 @@ try {
 }
 ```
 
-And update `settings.json` to use `-NoProfile` (prevents PowerShell profile from printing extra output):
-
-```json
-{
-  "apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\YourName\\.claude\\get-claude-token.ps1",
-  ...
-}
-```
-
 **Check 5: Restart Claude Code**
 
-After fixing any of the above, close Claude Code completely and reopen it:
+After fixing any of the above, close Claude Code completely, then in PowerShell:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+az login
 claude
 ```
 
-> **Token expiry:** Azure tokens expire after ~1-2 hours. If Claude Code suddenly stops working mid-session, exit, run `az login` again, and restart.
-
 ### Docker errors
 
-Make sure Docker Desktop is running (check the system tray). If you see WSL errors:
+Make sure Docker Desktop is running -- look for the whale icon in the system tray (near the clock at the bottom right of your screen).
+
+If Docker Desktop won't start or shows WSL errors:
+
+1. Open **PowerShell as Administrator** (right-click, Run as administrator)
+2. Run:
 
 ```powershell
 wsl --install
 ```
 
-Restart your computer after installing WSL.
-
-### PowerShell execution policy errors
-
-If scripts are blocked by execution policy:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
+3. Restart your computer
 
 ### install.ps1 fails with "Join-Path" errors
 
-You're running an older version of the install script. Pull the latest:
+You have an older version of the install script. Use the one-line installer which always gets the latest:
 
 ```powershell
-git pull
-.\install.ps1
-```
-
-Or use the one-line installer which always gets the latest version:
-
-```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
-```
-
----
-
-## Quick Reference
-
-Once everything is installed, your day-to-day workflow is:
-
-```powershell
-az login                # Always first -- authenticate to Azure
-cd ~\Documents\GitHub
-claude                  # Start Claude Code
-> /make-it              # Build a new app
-> /try-it               # Test your app in the browser
-> /resume-it            # Continue working on your app
-> /retrofit-it          # Upgrade an existing app
-```
-
-To update the skills later:
-
-```
-> /make-it update
 ```
