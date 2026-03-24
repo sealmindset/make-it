@@ -70,13 +70,13 @@ Inside Claude Code:
 
 ## Manual Setup (If You Prefer Step-by-Step)
 
-If you prefer to install each piece yourself instead of using the automated script, follow these steps in order.
+If you prefer to install each piece yourself instead of using the automated script, follow these 6 steps. They match what the script does automatically.
 
 ### Before You Start
 
 - You will need **administrator access** on your computer for Docker Desktop and WSL
 - The entire setup takes about 20-30 minutes
-- **You must restart your computer once** (after Docker Desktop)
+- **You must restart your computer once** (after Docker Desktop in Step 1)
 - Every time you open a new PowerShell window, **run this command first**:
 
 ```powershell
@@ -93,43 +93,57 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 > **When a step says "Open PowerShell as Administrator":** Right-click **Windows PowerShell** and choose **Run as administrator**, then click **Yes** when prompted.
 
-### Step 1: Install Node.js
+### Step 1 of 6: Install Required Software
 
-Node.js is the runtime that Claude Code needs to run.
+Install all software first, then restart once for Docker.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
+
+# Node.js (runtime for Claude Code)
 winget install OpenJS.NodeJS.LTS
+
+# Git for Windows (version control + git-bash shell)
+winget install Git.Git
+
+# Azure CLI (connects to your organization's AI service)
+winget install Microsoft.AzureCLI
+
+# Docker Desktop (runs your apps in containers)
+winget install Docker.DockerDesktop
+
+# GitHub CLI (optional -- push code and create pull requests)
+winget install GitHub.cli
 ```
 
-**Close PowerShell and open a new one**, then verify:
+> **If `winget` is not available** (older Windows 10): Install each tool manually from its website -- Node.js from https://nodejs.org, Git from https://git-scm.com, Azure CLI from https://aka.ms/installazurecliwindows, Docker from https://www.docker.com/products/docker-desktop/
+
+**Restart your computer** (required for Docker Desktop).
+
+After restarting:
+
+1. Open **Docker Desktop** from the Start menu
+2. Wait for it to say "Docker Desktop is running" (whale icon near the clock)
+3. If asked to accept a license agreement, click **Accept**
+
+> **If you see errors about WSL 2:** Open **PowerShell as Administrator** and run `wsl --install`, then restart your computer again.
+
+Open a new PowerShell window and verify everything installed:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 node --version
-npm --version
-```
-
-You should see version numbers (e.g., `v22.x.x` and `10.x.x`).
-
-> **If `winget` is not available** (older Windows 10): Open a browser, go to https://nodejs.org, download the **LTS** installer, and run it. Accept all defaults.
-
-### Step 2: Install Git for Windows
-
-Git is version control software. Claude Code also needs the "git-bash" shell that comes with it.
-
-```powershell
-winget install Git.Git
-```
-
-**Close PowerShell and open a new one**, then verify:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
 git --version
+az --version
+docker --version
+docker compose version
 ```
 
-#### Find where bash.exe was installed
+You should see version numbers for each command.
+
+### Step 2 of 6: Configure Git-Bash Path
+
+Claude Code needs to know where git-bash is on your computer. Find it by running:
 
 ```powershell
 Get-Command git | Select-Object -ExpandProperty Source
@@ -147,9 +161,7 @@ Take that path and replace `\cmd\git.exe` at the end with `\bin\bash.exe`:
 C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe
 ```
 
-#### Tell Claude Code where bash.exe is
-
-Replace the path below with **your actual bash.exe path**:
+Now tell Claude Code where it is. Replace the path below with **your actual bash.exe path**:
 
 ```powershell
 [System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "C:\Users\YourName\AppData\Local\Programs\Git\bin\bash.exe", "User")
@@ -157,54 +169,7 @@ Replace the path below with **your actual bash.exe path**:
 
 **Close PowerShell and open a new one** for this to take effect.
 
-### Step 3: Install Azure CLI
-
-Azure CLI lets your computer talk to Azure AI Foundry (the AI service that powers Claude Code in your organization).
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-winget install Microsoft.AzureCLI
-```
-
-**Close PowerShell and open a new one**, then log in:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-az login
-```
-
-A browser window will open. **Sign in with your corporate/work account.** Then verify:
-
-```powershell
-az account show --query name -o tsv
-```
-
-### Step 4: Install Docker Desktop
-
-Docker runs your apps in isolated containers. **This step requires a restart.**
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-winget install Docker.DockerDesktop
-```
-
-**Restart your computer.** After restarting:
-
-1. Open **Docker Desktop** from the Start menu
-2. Wait for it to say "Docker Desktop is running" (whale icon near the clock)
-3. If asked to accept a license agreement, click **Accept**
-
-Open PowerShell and verify:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-docker --version
-docker compose version
-```
-
-> **If you see errors about WSL 2:** Open **PowerShell as Administrator** and run `wsl --install`, then restart your computer again.
-
-### Step 5: Install Claude Code
+### Step 3 of 6: Install Claude Code
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -217,9 +182,9 @@ Verify:
 claude --version
 ```
 
-### Step 6: Configure Claude Code for Azure AI Foundry
+### Step 4 of 6: Configure Azure AI Foundry Authentication
 
-Claude Code needs two configuration files. First, find your Windows username:
+Claude Code needs two configuration files and an Azure login. First, find your Windows username:
 
 ```powershell
 $env:USERNAME
@@ -264,14 +229,30 @@ Create `C:\Users\YourName\.claude\settings.json` with this content (**replace `Y
 
 **Double-check:** The `apiKeyHelper` line must have your real username with double backslashes (`\\`).
 
-### Step 7: Install /make-it Skills
+#### Log in to Azure
+
+```powershell
+az login
+```
+
+A browser window will open. **Sign in with your corporate/work account** (the same one you use for email and Teams). Then verify the token works:
+
+```powershell
+az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv
+```
+
+You should see a long string of letters and numbers (the token).
+
+### Step 5 of 6: Install /make-it Skills
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 ```
 
-### Step 8: Verify Everything Works
+You should see a list of installed skills when it finishes.
+
+### Step 6 of 6: Verify Everything Works
 
 **Close PowerShell and open a new one:**
 
@@ -284,33 +265,19 @@ claude
 
 Inside Claude Code, type `/make-it` -- you should see the skill activate.
 
----
+Verify these are all working:
 
-## Optional Tools
-
-### GitHub CLI
-
-Push code and create pull requests from the terminal:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-winget install GitHub.cli
-```
-
-**Close PowerShell and open a new one**, then authenticate:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-gh auth login
-```
-
-### VS Code
-
-Code editor (not required, but helpful for browsing generated code):
-
-```powershell
-winget install Microsoft.VisualStudioCode
-```
+| Component | How to Check |
+|-----------|-------------|
+| Node.js | `node --version` shows a version number |
+| Git | `git --version` shows a version number |
+| Azure CLI | `az account show` shows your subscription |
+| Docker | `docker --version` shows a version number |
+| Claude Code | `claude --version` shows a version number |
+| Git-bash path | Claude Code starts without "CLAUDE_CODE_GIT_BASH_PATH" error |
+| Token script | `powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\get-claude-token.ps1"` prints a token |
+| Settings file | `Get-Content "$env:USERPROFILE\.claude\settings.json"` shows your username (not `YourName`) |
+| Skills | `/make-it` activates inside Claude Code |
 
 ---
 
