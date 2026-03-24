@@ -362,6 +362,80 @@ High-traffic API service
 
 **DevOps handoff:** Terraform is included in the /ship-it PR. CI/CD automation validates it (`terraform validate`, `terraform plan`), posts the plan as a PR comment, and the DevOps team reviews before applying. See ship-it-guide.md for the full lifecycle.
 
+### Secret Management (Infrastructure Layer)
+
+Secrets live in the **infrastructure layer, not the application layer**. The app never calls a secrets SDK directly -- the platform injects secrets as environment variables transparently.
+
+**The pattern:**
+
+```
+Terraform stores secret --> Cloud Secrets Manager
+Container starts --> Managed Identity fetches from Secrets Manager --> Injects as env var
+App reads process.env.MY_SECRET --> Gets the real secret value
+```
+
+**How it works per cloud provider:**
+
+| Layer | Azure | AWS | GCP |
+|-------|-------|-----|-----|
+| Secret store | Key Vault | Secrets Manager | Secret Manager |
+| Identity | User-Assigned Managed Identity | IAM Task Role | Workload Identity |
+| Role grant | "Key Vault Secrets User" on the vault | `secretsmanager:GetSecretValue` policy | `secretmanager.secretAccessor` role |
+| Injection | Container App secret_kv_vars | ECS secrets valueFrom | Cloud Run secret env vars |
+
+**Azure example (Terraform):**
+
+1. **Key Vault with secrets** -- Terraform creates the vault and populates secrets:
+   ```hcl
+   resource "azurerm_key_vault_secret" "jira_api_token" {
+     name         = "jira-api-token"
+     value        = var.jira_api_token
+     key_vault_id = azurerm_key_vault.main.id
+   }
+   ```
+
+2. **Managed Identity with role assignment** -- Identity granted read access to the vault:
+   ```hcl
+   resource "azurerm_user_assigned_identity" "ca" {
+     name                = "${var.app_name}-identity"
+     resource_group_name = azurerm_resource_group.main.name
+     location            = azurerm_resource_group.main.location
+   }
+
+   resource "azurerm_role_assignment" "kv_secrets_user" {
+     scope                = azurerm_key_vault.main.id
+     role_definition_name = "Key Vault Secrets User"
+     principal_id         = azurerm_user_assigned_identity.ca.principal_id
+   }
+   ```
+
+3. **Container App pulls secrets at runtime** -- Platform injects as env vars:
+   ```hcl
+   secret_kv_vars = {
+     "JIRA_API_TOKEN" = {
+       key_vault_secret_id = azurerm_key_vault_secret.jira_api_token.id
+       identity            = azurerm_user_assigned_identity.ca.id
+     }
+   }
+   ```
+
+4. **App code reads env vars** -- No SDK, no Key Vault client, no secret fetching logic:
+   ```typescript
+   const token = process.env.JIRA_API_TOKEN;  // Injected by platform
+   ```
+
+**Key principles:**
+- App code NEVER imports a secrets SDK (no `@azure/keyvault-secrets`, no `aws-sdk/secrets-manager`)
+- Terraform creates secrets with placeholder values; DevOps populates real values
+- Managed identity eliminates credential rotation for service-to-vault auth
+- Local development uses `.env` files (mock values); production uses the secrets manager
+- The same `process.env.MY_SECRET` code works in both environments -- zero code branching
+
+**Decision rules:**
+- Every secret referenced in `.env.example` gets a corresponding Terraform secret resource
+- Every Terraform secret gets wired to the container runtime via managed identity injection
+- If the app needs a new secret, add it to `.env.example` AND `infrastructure/key_vault.tf` (or equivalent)
+
 ---
 
 ## 7. Containerization
