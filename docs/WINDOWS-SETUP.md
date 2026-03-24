@@ -286,6 +286,25 @@ Verify these are all working:
 
 ## Troubleshooting
 
+### winget fails with "Data required by the source is missing" or "Failed when searching source"
+
+A network security tool (like Zscaler, Netskope, or GlobalProtect) is interfering with winget's ability to download package information.
+
+**Fix:**
+
+1. **Pause your security tool** -- look for its icon near the clock in the bottom-right corner of your screen. Right-click it and choose **Disable** or **Pause**, then pick the longest time option.
+2. Reset the winget package index:
+
+```powershell
+winget source reset --force
+winget source update
+```
+
+3. Try the install command again
+4. **Re-enable your security tool** when you're done installing
+
+> **Can't pause it yourself?** You may need to ask your IT department to temporarily disable it, or request an exception for winget downloads.
+
 ### "Running scripts is disabled on this system"
 
 Run this first in every new PowerShell window:

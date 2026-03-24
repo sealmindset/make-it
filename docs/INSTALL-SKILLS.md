@@ -285,3 +285,4 @@ Read-Host "Press Enter to close"
 | "Permission denied" | Windows | Right-click PowerShell, choose "Run as Administrator", then try again. |
 | Skill doesn't appear in Claude | Both | Close Claude Code completely and reopen it. Skills only load at startup. |
 | "repository not found" or "access denied" | Both | Make sure you are on VPN and have access to the SleepNumberInc GitHub organization. |
+| winget fails with "Data required by the source is missing" | Windows | A security tool (Zscaler, Netskope, etc.) is blocking downloads. Pause it, run `winget source reset --force` then `winget source update`, and try again. Re-enable when done. |

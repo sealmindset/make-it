@@ -156,6 +156,36 @@ function Install-Software($state) {
 
     $needReboot = $false
 
+    # --- SSL-inspecting proxy check (Zscaler, Netskope, etc.) ---
+    # These tools break winget source updates and Docker image pulls.
+    $proxyRunning = $false
+    $proxyName = ""
+    foreach ($name in @("Zscaler", "ZscalerApp", "ZSATunnel", "Netskope", "GlobalProtect", "pangpa")) {
+        if (Get-Process -Name $name -ErrorAction SilentlyContinue) {
+            $proxyRunning = $true
+            $proxyName = $name
+            break
+        }
+    }
+
+    if ($proxyRunning) {
+        Warn "Network security tool detected ($proxyName)."
+        Info ""
+        Info "This tool can block software downloads. If installs fail below, you may"
+        Info "need to temporarily pause it:"
+        Info "  - Look for the security icon in your system tray (near the clock)"
+        Info "  - Right-click it and choose 'Disable' or 'Pause'"
+        Info "  - Pick the longest time option"
+        Info "  - Run this script again"
+        Info "  - Re-enable it when the script finishes"
+        Info ""
+
+        # Try to fix winget source index (often corrupted by SSL inspection)
+        Step "Resetting winget package index (sometimes needed with security tools)..."
+        winget source reset --force 2>$null
+        winget source update 2>$null
+    }
+
     # --- Node.js ---
     if (Is-StepDone $state "nodejs") {
         Ok "Node.js -- already done"
