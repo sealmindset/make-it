@@ -101,6 +101,15 @@ in retrofit-it.md. Secure-by-Design cross-reference in nemo-it attestation templ
 (v1.1.0). Updated: guardrails.md, design-blueprint.md, prompt-templates.md,
 retrofit-it.md, nemo-it-attestation.md, both nemo-it.md files.
 
+### Activity Logs -- In-Memory Observability (v1.4.0) ✓
+New standard component for every web app. Circular buffer LogStore captures all
+inbound API requests and outbound HTTP calls with no external dependencies. LogService
+singleton, request/outbound middleware, URL sanitization (strips tokens/keys from query
+params), RBAC-gated admin UI (stats cards, filters, auto-refresh, clear buffer). Added:
+design-blueprint.md (Section 9a -- architecture + middleware + admin UI spec),
+guardrails.md (Activity Logs checklist + tier matrix entry), prompt-templates.md
+(Prompt #9c with full implementation spec for any stack).
+
 ### AI Prompt Template Content Validation (v1.3.0) ✓
 Protects admin prompt editing surface against supply-chain injection. validatePromptTemplate()
 hybrid blocklist, immutable safety preamble (runtime-prepended, invisible to UI), draft/test/
