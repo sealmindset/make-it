@@ -6,7 +6,7 @@ This guide gets Claude Code and /make-it skills running on your Windows computer
 
 ## Automated Setup (Recommended)
 
-The install script handles everything: Node.js, Git, Azure CLI, Docker, Claude Code, and all configuration. If it needs to restart your computer (for Docker), it saves progress and picks up where it left off.
+The install script handles everything: Node.js, Git, Azure CLI, Rancher Desktop, Claude Code, and all configuration. If it needs to restart your computer (for Rancher Desktop), it saves progress and picks up where it left off.
 
 ### First Run
 
@@ -23,10 +23,10 @@ irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 
 ### If the Script Says "Restart Required"
 
-Docker Desktop needs a restart to finish installing. Here is what to do:
+Rancher Desktop needs a restart to finish installing. Here is what to do:
 
 1. Restart your computer
-2. After restarting, open **Docker Desktop** from the Start menu and wait for it to say "Docker Desktop is running" (look near the clock for a whale icon)
+2. After restarting, open **Rancher Desktop** from the Start menu and wait for it to finish starting (you'll see a green icon near the clock)
 3. Open **PowerShell** again
 4. Run the same two commands:
 
@@ -74,9 +74,9 @@ If you prefer to install each piece yourself instead of using the automated scri
 
 ### Before You Start
 
-- You will need **administrator access** on your computer for Docker Desktop and WSL
+- You will need **administrator access** on your computer for Rancher Desktop and WSL
 - The entire setup takes about 20-30 minutes
-- **You must restart your computer once** (after Docker Desktop in Step 1)
+- **You must restart your computer once** (after Rancher Desktop in Step 1)
 - Every time you open a new PowerShell window, **run this command first**:
 
 ```powershell
@@ -95,7 +95,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 ### Step 1 of 6: Install Required Software
 
-Install all software first, then restart once for Docker.
+Install all software first, then restart once for Rancher Desktop.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -109,22 +109,25 @@ winget install Git.Git
 # Azure CLI (connects to your organization's AI service)
 winget install Microsoft.AzureCLI
 
-# Docker Desktop (runs your apps in containers)
-winget install Docker.DockerDesktop
+# Rancher Desktop (runs your apps in containers -- no paid license required)
+winget install suse.RancherDesktop
 
 # GitHub CLI (optional -- push code and create pull requests)
 winget install GitHub.cli
 ```
 
-> **If `winget` is not available** (older Windows 10): Install each tool manually from its website -- Node.js from https://nodejs.org, Git from https://git-scm.com, Azure CLI from https://aka.ms/installazurecliwindows, Docker from https://www.docker.com/products/docker-desktop/
+> **If `winget` is not available** (older Windows 10): Install each tool manually from its website -- Node.js from https://nodejs.org, Git from https://git-scm.com, Azure CLI from https://aka.ms/installazurecliwindows, Rancher Desktop from https://rancherdesktop.io/
 
-**Restart your computer** (required for Docker Desktop).
+**Restart your computer** (required for Rancher Desktop).
 
 After restarting:
 
-1. Open **Docker Desktop** from the Start menu
-2. Wait for it to say "Docker Desktop is running" (whale icon near the clock)
-3. If asked to accept a license agreement, click **Accept**
+1. Open **Rancher Desktop** from the Start menu
+2. Wait for it to finish starting (you'll see a green icon near the clock)
+3. On the first launch, Rancher Desktop will ask you to configure settings:
+   - **Container Engine:** Choose **dockerd (moby)** -- this makes it work the same way as Docker
+   - **Kubernetes:** Turn this **off** (you don't need it)
+   - Click **Accept** or **OK** to save
 
 > **If you see errors about WSL 2:** Open **PowerShell as Administrator** and run `wsl --install`, then restart your computer again.
 
@@ -344,7 +347,7 @@ The `apiKeyHelper` path must contain your real username, not the `YourName` plac
 Test-Path "$env:USERPROFILE\.claude\get-claude-token.ps1"
 ```
 
-If `False`, go back to Step 6 and create it.
+If `False`, go back to Step 4 and create it.
 
 **Check 4: Does the token script work on its own?**
 
@@ -358,10 +361,23 @@ Should print ONLY a long token string -- no warnings or extra text.
 
 Close Claude Code, run `az login`, then start `claude` again.
 
-### Docker errors
+### Container runtime errors
 
-Make sure Docker Desktop is running (whale icon near the clock). If it shows WSL errors:
+Make sure Rancher Desktop is running (green icon near the clock). If it shows WSL errors:
 
 1. Open **PowerShell as Administrator**
 2. Run `wsl --install`
 3. Restart your computer
+
+### "docker" command not found after installing Rancher Desktop
+
+Rancher Desktop provides the `docker` command, but it might not be in your PATH yet.
+
+1. Close and reopen PowerShell
+2. Try `docker --version` again
+3. If still not found, open Rancher Desktop and check that the container engine is set to **dockerd (moby)** (not containerd)
+4. If the issue persists, restart your computer
+
+### Already have Docker Desktop installed?
+
+If you already have Docker Desktop installed, the setup script will detect it and skip the container runtime step. Both Docker Desktop and Rancher Desktop provide the same `docker` command, so either one works. **You do not need to uninstall Docker Desktop** -- but be aware that Docker Desktop requires a paid license for enterprises, while Rancher Desktop is free.

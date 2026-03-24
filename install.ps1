@@ -216,17 +216,18 @@ function Install-Software($state) {
         $state = Mark-StepDone $state "azure-cli"
     }
 
-    # --- Docker Desktop ---
+    # --- Container Runtime (Rancher Desktop or Docker Desktop) ---
     if (Is-StepDone $state "docker") {
-        Ok "Docker Desktop -- already done"
+        Ok "Container runtime -- already done"
     } elseif (Test-CommandExists "docker") {
-        Ok "Docker Desktop -- already installed"
+        # Docker CLI exists -- could be Docker Desktop or Rancher Desktop, either works
+        Ok "Container runtime -- already installed (docker CLI found)"
         $state = Mark-StepDone $state "docker"
     } else {
-        Step "Installing Docker Desktop (runs your apps in containers)..."
+        Step "Installing Rancher Desktop (runs your apps in containers)..."
         Info "This may take a few minutes..."
 
-        # Check if WSL is available -- Docker needs it
+        # Check if WSL is available -- Rancher Desktop needs it
         $wslInstalled = $false
         try {
             $wslOutput = wsl --status 2>$null
@@ -234,7 +235,7 @@ function Install-Software($state) {
         } catch {}
 
         if (-not $wslInstalled) {
-            Step "Installing WSL 2 (required by Docker Desktop)..."
+            Step "Installing WSL 2 (required by Rancher Desktop)..."
             Info "This may require administrator access. If prompted, click Yes."
             try {
                 wsl --install --no-distribution 2>$null
@@ -246,12 +247,30 @@ function Install-Software($state) {
             }
         }
 
-        winget install Docker.DockerDesktop --accept-source-agreements --accept-package-agreements 2>$null
+        winget install suse.RancherDesktop --accept-source-agreements --accept-package-agreements 2>$null
         if ($LASTEXITCODE -ne 0) {
-            Warn "winget install failed. Please install Docker Desktop from https://www.docker.com/products/docker-desktop/"
+            Warn "winget install failed. Please install Rancher Desktop from https://rancherdesktop.io/"
             Info "After installing, restart your computer and run this script again."
             exit 1
         }
+
+        # Configure Rancher Desktop: use dockerd (moby) engine, disable Kubernetes
+        $rdSettingsDir = Join-Path $env:APPDATA "rancher-desktop"
+        if (-not (Test-Path $rdSettingsDir)) {
+            New-Item -ItemType Directory -Path $rdSettingsDir -Force | Out-Null
+        }
+        $rdSettingsFile = Join-Path $rdSettingsDir "settings.json"
+        $rdSettings = @{
+            version         = 6
+            containerEngine = @{
+                name = "moby"
+            }
+            kubernetes      = @{
+                enabled = $false
+            }
+        } | ConvertTo-Json -Depth 4
+        Set-Content -Path $rdSettingsFile -Value $rdSettings -Encoding UTF8
+        Ok "Rancher Desktop configured (Docker-compatible mode, Kubernetes off)"
 
         $needReboot = $true
         $state = Mark-StepDone $state "docker"
@@ -283,12 +302,12 @@ function Install-Software($state) {
         Save-SetupState $state
 
         Banner "Restart Required"
-        Info "Docker Desktop was just installed and needs a restart to finish setup."
+        Info "Rancher Desktop was just installed and needs a restart to finish setup."
         Info ""
         Info "Here's what to do:"
         Info "  1. Restart your computer"
-        Info "  2. After restarting, open Docker Desktop from the Start menu"
-        Info "     (wait for it to say 'Docker Desktop is running')"
+        Info "  2. After restarting, open Rancher Desktop from the Start menu"
+        Info "     (wait for it to finish starting -- you'll see a green icon near the clock)"
         Info "  3. Open PowerShell"
         Info "  4. Run:  Set-ExecutionPolicy -Scope Process Bypass"
         Info "  5. Run this script again -- it will pick up where it left off"
@@ -684,7 +703,7 @@ function Verify-Setup($state) {
     if (Test-CommandExists "docker") {
         Ok "Docker: $(docker --version 2>$null)"
     } else {
-        Warn "Docker: NOT FOUND (you can still use Claude Code, but /make-it builds need Docker)"
+        Warn "Docker CLI: NOT FOUND (you can still use Claude Code, but /make-it builds need a container runtime)"
         # Don't fail -- Docker is only needed for /make-it builds, not Claude Code itself
     }
 
