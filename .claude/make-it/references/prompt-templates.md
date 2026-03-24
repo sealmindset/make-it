@@ -760,6 +760,211 @@ Create /admin/settings page with:
 
 ---
 
+## Prompt #9c: Activity Logs (In-Memory Observability)
+
+```
+Create the in-memory activity log system for [PROJECT_NAME].
+This is a STANDARD component of every web app and API service -- not optional.
+
+Stack: [STACK]
+External integrations: [INTEGRATIONS_LIST]
+
+The activity log captures ALL inbound API requests and ALL outbound HTTP calls
+to external services in a circular buffer. It provides real-time observability
+without external dependencies. All data is ephemeral -- lost on restart.
+
+--- CORE: LOG STORE (framework-agnostic) ---
+
+Create a LogStore class (NOT a database model -- pure in-memory):
+
+Fields per event:
+- id: string (auto-incrementing counter)
+- timestamp: string (ISO 8601 UTC, auto-set on add)
+- type: 'request' | 'outbound'
+
+Request fields (type='request'):
+- method, path, statusCode, durationMs
+- userEmail, userRole (from JWT), ip, userAgent (truncated 200 chars)
+
+Outbound fields (type='outbound'):
+- service (e.g., 'jira', 'tempo'), url (sanitized), requestMethod
+- responseStatus, responseDurationMs, error (truncated 500 chars)
+
+LogStore methods:
+- add(event) -- push to buffer, FIFO evict when > maxEvents
+- query(filters) -- filter by type, service, method, path, status range,
+  userEmail, since timestamp, free text search; paginate with limit/offset;
+  return newest first
+- stats() -- totalReceived, bufferSize, bufferMax, bufferUsagePct,
+  eventsByType, eventsByService, eventsByStatus (bucketed: 2xx/4xx/5xx),
+  recentErrorCount (last 5 minutes, status >= 400)
+- clear() -- empty the buffer
+
+Constructor: maxEvents parameter, defaults to parseInt(LOG_BUFFER_SIZE || '10000')
+
+--- CORE: LOG SERVICE (injectable singleton) ---
+
+Wraps LogStore. Exposes:
+- logRequest(event) -- adds event with type='request'
+- logOutbound(event) -- adds event with type='outbound'
+- query(filters), stats(), clear() -- delegates to LogStore
+
+The service MUST be globally available (injected into any module that needs it):
+- NestJS: @Global() @Module() with LogService as provider + export
+- FastAPI: singleton dependency via Depends()
+- Express: module-level singleton export
+
+--- INBOUND REQUEST MIDDLEWARE ---
+
+Create middleware that logs all inbound API requests:
+
+1. Record start time on request entry
+2. On response 'finish' event, capture:
+   - method, path (originalUrl), statusCode, durationMs
+   - userEmail and userRole from JWT on request object (if populated by auth middleware)
+   - ip (req.ip or socket.remoteAddress), userAgent (truncated to 200 chars)
+3. Skip noise (do NOT log these paths):
+   - /health, /health/*, /healthz
+   - /_next/*, *.js, *.css, *.ico, *.png, *.svg, *.map
+4. Call logService.logRequest() with captured data
+
+Wire the middleware to run on ALL routes:
+- NestJS: configure() in AppModule applying to all routes
+- FastAPI: app.add_middleware()
+- Express: app.use()
+
+--- OUTBOUND HTTP INTERCEPTOR ---
+
+Create an interceptor factory function: attachOutboundLogger(httpClient, serviceName, logService)
+
+For Axios (Node.js):
+1. Request interceptor: stamp config._logStartTime = Date.now()
+2. Response interceptor (success): calculate duration, call logService.logOutbound()
+3. Response interceptor (error): calculate duration, extract error message, call logService.logOutbound()
+
+For httpx (Python):
+1. Create a custom transport or event hook that captures timing and status
+2. Same capture fields as Axios pattern
+
+URL sanitization (MUST apply before logging):
+- Parse the full URL (resolve relative URLs against baseURL)
+- For each query parameter, if key contains 'token', 'key', 'secret', or 'password'
+  (case-insensitive), replace the value with '***'
+- Return the sanitized URL string
+
+Error message extraction:
+- Try: response.data.errorMessages[0], response.data.message, error.message
+- Truncate to 500 characters
+
+CRITICAL: Attach the outbound logger at EVERY point where an HTTP client instance is created:
+- Service constructor (initial client creation)
+- Connection update methods (when URL/credentials change)
+- OAuth token refresh (when a new client is created with fresh tokens)
+- Any method that creates a new axios/httpx instance
+
+For each service client in the app ([INTEGRATIONS_LIST]):
+- Read the service class to find ALL locations where axios.create() or httpx.AsyncClient()
+  is called
+- Attach outbound logger at each location with the correct service name
+
+--- REST API ENDPOINTS ---
+
+Create a controller/router at /admin/logs:
+
+GET /api/admin/logs/events
+  - Permission: admin.logs.read
+  - Query params: type, service, method, path, statusMin, statusMax, userEmail,
+    since, q (free text), limit (default 100, max 1000), offset (default 0)
+  - Parse statusMin/statusMax as integers
+  - Returns: { events: LogEvent[], total: number }
+
+GET /api/admin/logs/stats
+  - Permission: admin.logs.read
+  - Returns: LogStats object (see design-blueprint.md Section 12b)
+
+DELETE /api/admin/logs/events
+  - Permission: admin.logs.delete
+  - Clears the buffer
+  - Log "Activity log buffer cleared by admin"
+  - Returns: { success: true, message: 'Log buffer cleared' }
+
+--- RBAC PERMISSIONS ---
+
+Add to the RBAC seed data / permission migration:
+
+Resource: admin.logs
+Actions: read, delete
+
+Grant to:
+- Super Admin: admin.logs.read + admin.logs.delete (via wildcard)
+- Admin: admin.logs.read only
+- Manager: (none)
+- User: (none)
+
+--- ADMIN UI: ACTIVITY LOGS TAB ---
+
+Add an "Activity Logs" tab to the Admin panel (between API Keys and Settings,
+or as appropriate for the app's admin layout).
+
+Tab contents:
+
+1. Stats cards row (5 cards):
+   - BUFFER: count + "X% of Y" + percentage
+   - TOTAL RECEIVED: lifetime count
+   - REQUESTS: count of type='request'
+   - OUTBOUND: count of type='outbound'
+   - RECENT ERRORS (5M): count of errors in last 5 minutes
+
+2. Filter controls row:
+   - Type dropdown: All Types / request / outbound
+   - Service dropdown: All Services / [dynamic from stats]
+   - Method dropdown: All Methods / GET / POST / PUT / DELETE / PATCH
+   - Search input: "Search logs (path, URL, error, email)..."
+   - Search button
+   - Auto-refresh checkbox (when checked, polls every 5 seconds)
+   - Clear Buffer button (red/outline, with confirm dialog)
+     - Visible only if user has admin.logs.delete permission (Super Admin)
+
+3. Results header:
+   - "Showing X of Y events"
+   - Status breakdown badges (e.g., "2xx: 150", "4xx: 10", "5xx: 2")
+
+4. Event table:
+   - TIME: formatted timestamp (locale time)
+   - TYPE: badge -- "IN" (blue) for request, "OUT" (purple) for outbound
+   - METHOD: HTTP method
+   - PATH / URL: path for requests, full sanitized URL for outbound
+   - STATUS: color-coded (green for 2xx, yellow for 3xx/4xx, red for 5xx, gray for 0)
+   - DURATION: Xms
+   - USER / SERVICE: userEmail for requests, service name for outbound
+   - ERROR: error message if present
+
+5. Service breakdown (optional sidebar or inline):
+   - Show event counts per service from stats
+
+6. Auto-refresh behavior:
+   - When checkbox checked, call fetchLogs() every 5 seconds
+   - Clear interval when unchecked or tab changes
+
+--- ENVIRONMENT VARIABLES ---
+
+Add to .env.example:
+# Activity Log
+# In-memory circular buffer size (events lost on restart)
+LOG_BUFFER_SIZE=10000
+# Future: Cribl Stream forwarding
+# CRIBL_STREAM_URL=
+# CRIBL_STREAM_TOKEN=
+
+Add to docker-compose.yml app service environment:
+LOG_BUFFER_SIZE: ${LOG_BUFFER_SIZE:-10000}
+```
+
+**Required context:** stack, list of external integrations (for outbound interceptor wiring)
+**Always runs:** Yes -- every web app and API service gets activity logs
+
+---
+
 ## Prompt #10: Design AI Architecture
 
 **This prompt has two parts: provider setup (always runs if AI is used) and prompt

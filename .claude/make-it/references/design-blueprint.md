@@ -1026,6 +1026,194 @@ generate a lightweight mock service using the mock-apisrvr pattern:
 
 ---
 
+## 12b. Activity Logs (In-Memory Observability)
+
+**Applied by default for all web-app and api-service projects (Tier 0 -- no user questions needed).** Every app includes an in-memory activity log system that captures all inbound API requests and outbound HTTP calls to external services. This provides real-time observability without external dependencies.
+
+**Why this exists:**
+- Developers and admins need visibility into what the app is doing without setting up external logging infrastructure
+- Captures the full request/response lifecycle for debugging, auditing, and performance analysis
+- Future-ready for Cribl Stream forwarding (env vars pre-configured, implementation deferred)
+- Ephemeral by design -- all data lost on restart, no persistent storage overhead
+
+**Architecture: Circular Buffer + Middleware + Interceptors**
+
+```
+Inbound HTTP Request                    Outbound HTTP Call
+       |                                       |
+       v                                       v
+┌─────────────────────┐              ┌──────────────────────┐
+│ Request Logger       │              │ Outbound Logger       │
+│ Middleware           │              │ (Axios/httpx          │
+│ (captures method,    │              │  interceptor)         │
+│  path, status,       │              │ (captures service,    │
+│  duration, user)     │              │  url, status,         │
+│                      │              │  duration, errors)    │
+└──────────┬──────────┘              └──────────┬───────────┘
+           |                                    |
+           v                                    v
+     ┌─────────────────────────────────────────────┐
+     │           LogService (singleton)             │
+     │  ┌───────────────────────────────────────┐  │
+     │  │    LogStore (circular buffer)          │  │
+     │  │    - FIFO eviction at maxEvents        │  │
+     │  │    - Default: 10,000 events            │  │
+     │  │    - Configurable: LOG_BUFFER_SIZE     │  │
+     │  └───────────────────────────────────────┘  │
+     └──────────────────┬──────────────────────────┘
+                        |
+           ┌────────────┼────────────┐
+           v            v            v
+     GET /events   GET /stats   DELETE /events
+     (filtered,    (buffer %,   (clear buffer,
+      paginated,   by type,     Super Admin
+      newest first) by service)  only)
+```
+
+**LogEvent schema (unified for both inbound and outbound):**
+
+```typescript
+interface LogEvent {
+  id: string;
+  timestamp: string;            // ISO 8601 UTC
+  type: 'request' | 'outbound';
+
+  // Inbound request fields (type='request')
+  method?: string;              // GET, POST, PUT, DELETE
+  path?: string;                // /api/projects, /api/admin/users
+  statusCode?: number;          // 200, 401, 500
+  durationMs?: number;          // response time
+  userEmail?: string;           // from JWT
+  userRole?: string;            // from JWT
+  ip?: string;                  // client IP
+  userAgent?: string;           // truncated to 200 chars
+
+  // Outbound call fields (type='outbound')
+  service?: string;             // 'jira', 'tempo', 'github', etc.
+  url?: string;                 // full URL with secrets stripped
+  requestMethod?: string;       // GET, POST, PUT, DELETE
+  responseStatus?: number;      // 200, 404, 500
+  responseDurationMs?: number;  // round-trip time
+  error?: string;               // error message (truncated to 500 chars)
+
+  [key: string]: unknown;       // flexible extra fields
+}
+```
+
+**Core components (framework-agnostic requirements, NestJS reference impl):**
+
+| Component | Purpose | NestJS Pattern | FastAPI Pattern | Express Pattern |
+|-----------|---------|---------------|-----------------|-----------------|
+| LogStore | Circular buffer, FIFO eviction, query, stats | Plain class | Plain class | Plain class |
+| LogService | Injectable singleton wrapping LogStore | `@Injectable()` | Singleton dependency | Module export |
+| LogModule | Global module exporting LogService | `@Global() @Module()` | N/A (FastAPI DI) | N/A |
+| RequestLoggerMiddleware | Captures inbound requests | `NestMiddleware` | Starlette middleware | Express middleware |
+| attachOutboundLogger | Axios/httpx interceptor factory | Function | Function | Function |
+| LogController | REST API for events, stats, clear | `@Controller('admin/logs')` | `APIRouter(prefix='/admin/logs')` | `Router()` |
+
+**Inbound request middleware rules:**
+- Captures: method, path (originalUrl), statusCode, durationMs, userEmail, userRole, ip, userAgent
+- Skips noise: health checks (`/health`), static assets (`/_next`, `.js`, `.css`, `.ico`, `.png`, `.svg`)
+- Logs on response `finish` event (not on request entry) to capture the final status code
+- Extracts user info from JWT payload on the request object (may be populated by auth middleware)
+
+**Outbound HTTP interceptor rules:**
+- Attaches to every axios/httpx instance that calls an external service
+- Stamps request start time, calculates duration on response
+- Captures: service name, sanitized URL, method, status, duration, error message
+- URL sanitization: strips query params containing 'token', 'key', 'secret', 'password' (replaced with `***`)
+- Error messages: truncated to 500 chars, extracts meaningful message from response body
+- Must be attached at every point where an HTTP client is created (constructor, reconnect, OAuth refresh)
+
+**RBAC permissions:**
+- Resource: `admin.logs`
+- Actions: `read` (view events and stats), `delete` (clear buffer)
+- Super Admin: gets both via wildcard
+- Admin: gets `admin.logs.read`
+- Manager/User: no access
+
+**API endpoints (all require authentication + admin.logs permission):**
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| GET | /api/admin/logs/events | admin.logs.read | Query events with filters, pagination |
+| GET | /api/admin/logs/stats | admin.logs.read | Buffer stats, counts by type/service/status |
+| DELETE | /api/admin/logs/events | admin.logs.delete | Clear the buffer (Super Admin only) |
+
+**Query parameters for GET /events:**
+- `type` -- filter by 'request' or 'outbound'
+- `service` -- filter by service name (jira, tempo, etc.)
+- `method` -- filter by HTTP method
+- `path` -- substring match on path or URL
+- `statusMin`, `statusMax` -- filter by status code range
+- `userEmail` -- substring match on user email
+- `since` -- ISO timestamp, return events after this time
+- `q` -- free text search across path, URL, error, userEmail, service
+- `limit` (default 100, max 1000), `offset` (default 0) -- pagination
+
+**Stats response structure:**
+```json
+{
+  "totalReceived": 1234,
+  "bufferSize": 1000,
+  "bufferMax": 10000,
+  "bufferUsagePct": 10.0,
+  "eventsByType": { "request": 500, "outbound": 500 },
+  "eventsByService": { "jira": 300, "tempo": 200 },
+  "eventsByStatus": { "2xx": 900, "4xx": 80, "5xx": 20 },
+  "recentErrorCount": 5
+}
+```
+
+**Admin UI -- Activity Logs tab (under Admin section):**
+
+The Activity Logs tab is part of the Admin panel, alongside User Management, API Keys, and Settings.
+
+- **Stats cards row:** Buffer usage (count + percentage), Total Received, Requests count, Outbound count, Recent Errors (5min window)
+- **Filter controls:** Type dropdown (All/Request/Outbound), Service dropdown, Method dropdown, Search input, Search button
+- **Auto-refresh toggle:** Checkbox that polls every 5 seconds when enabled
+- **Clear Buffer button:** Visible only to Super Admin (guarded by `isSuperAdmin` or `admin.logs.delete` permission), with confirm dialog
+- **Event table:** Time, Type (IN/OUT badges), Method, Path/URL, Status (color-coded: green 2xx, yellow 4xx, red 5xx), Duration, User/Service, Error
+- **Status breakdown:** Badge showing count by status bucket (e.g., "2xx: 150, 4xx: 10")
+- **Empty state:** "No activity recorded yet. Events will appear as the app handles requests."
+
+**Environment variables:**
+```bash
+# Activity Log
+LOG_BUFFER_SIZE=10000           # Circular buffer max events (default: 10,000)
+
+# Future: Cribl Stream forwarding (not yet implemented)
+# CRIBL_STREAM_URL=             # HTTP endpoint for Cribl Stream source
+# CRIBL_STREAM_TOKEN=           # Bearer token for Cribl Stream auth
+```
+
+**docker-compose.yml addition:**
+```yaml
+# In the app service environment block:
+LOG_BUFFER_SIZE: ${LOG_BUFFER_SIZE:-10000}
+```
+
+**Implementation generates:**
+- LogStore class (circular buffer with query/stats/clear)
+- LogService (injectable singleton wrapping LogStore)
+- LogModule (global module for app-wide availability)
+- RequestLoggerMiddleware (inbound request capture)
+- attachOutboundLogger() function (outbound HTTP interceptor)
+- LogController (REST API endpoints)
+- RBAC permissions (admin.logs.read, admin.logs.delete)
+- Admin UI Activity Logs tab
+- Environment variables in .env.example and docker-compose.yml
+- Cribl Stream placeholder env vars (future-ready)
+
+**Key principles:**
+- Ephemeral -- all data lost on restart, no database tables, no persistent storage
+- Zero external dependencies -- no Redis, no log aggregator needed for basic functionality
+- Low overhead -- circular buffer with configurable size, noise-filtered middleware
+- Security -- URL sanitization strips sensitive query params, auth required for all endpoints
+- Framework-agnostic design -- same pattern works in NestJS, FastAPI, Express, or any HTTP framework
+
+---
+
 ## 13. Standard UI Components (Built-In Defaults)
 
 **Applied by default for all apps (no user questions needed).**
@@ -1148,6 +1336,15 @@ Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost 
 - [ ] QuickSearch (⌘K) populated with all navigation items and app actions
 - [ ] ThemeProvider wraps app, ModeToggle in header, oklch CSS variables for light/dark
 - [ ] CHANGELOG.md and TODO.md maintained
+- [ ] Activity Log module exists with circular buffer, inbound middleware, outbound interceptors
+- [ ] Activity Log middleware skips health checks and static assets
+- [ ] Outbound logger attached to ALL HTTP client creation points (including reconnect/OAuth refresh)
+- [ ] URL sanitization strips sensitive query params (token, key, secret, password)
+- [ ] admin.logs RBAC resource with read and delete actions seeded in migration
+- [ ] Admin UI Activity Logs tab with stats cards, filters, event table, auto-refresh
+- [ ] Clear Buffer action gated by admin.logs.delete (Super Admin only)
+- [ ] LOG_BUFFER_SIZE in .env.example and docker-compose.yml
+- [ ] Cribl Stream placeholder env vars in .env.example (CRIBL_STREAM_URL, CRIBL_STREAM_TOKEN)
 - [ ] AI provider abstraction layer created (lib/ai/) -- if using AI
 - [ ] AI_PROVIDER, AI_MODEL_HEAVY/STANDARD/LIGHT env vars configured -- if using AI
 - [ ] No provider SDK imports outside lib/ai/providers/ -- if using AI

@@ -113,6 +113,44 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Seed users' oidc_subjects must match mock-oidc subject IDs exactly
 - Admin UI: User Management + Role Management pages with permission matrix
 
+### Activity Logs (In-Memory Observability)
+- LogStore class exists with circular buffer, FIFO eviction, configurable max size (LOG_BUFFER_SIZE env var)
+- LogService (or equivalent singleton) wraps LogStore, exposes logRequest(), logOutbound(), query(), stats(), clear()
+- Inbound request middleware captures: method, path, statusCode, durationMs, userEmail, userRole, ip, userAgent
+- Inbound middleware skips noise: health checks (/health), static assets (/_next, .js, .css, .ico, .png, .svg)
+- Outbound HTTP interceptor (attachOutboundLogger or equivalent) attached to ALL HTTP client instances
+- Outbound interceptor captures: service name, sanitized URL, method, status, duration, error
+- URL sanitization strips query params containing 'token', 'key', 'secret', 'password' (replaced with ***)
+- Outbound logger attached at EVERY point where HTTP clients are created (constructor, reconnect, OAuth token refresh)
+- Log controller/router with GET /events (filtered, paginated), GET /stats, DELETE /events endpoints
+- admin.logs RBAC resource with 'read' and 'delete' actions in permissions seed data
+- Super Admin gets admin.logs.read + admin.logs.delete; Admin gets admin.logs.read
+- All log endpoints require authentication and admin.logs permission checks
+- LOG_BUFFER_SIZE in .env.example (default: 10000) and docker-compose.yml app service environment
+- Cribl Stream placeholder env vars in .env.example: CRIBL_STREAM_URL, CRIBL_STREAM_TOKEN (commented/empty)
+- Admin UI Activity Logs tab exists under Admin panel with:
+  - Stats cards: buffer usage, total received, request count, outbound count, recent errors (5min)
+  - Filter controls: type, service, method dropdowns + search input
+  - Auto-refresh toggle (5-second interval)
+  - Clear Buffer button visible only to Super Admin (admin.logs.delete permission)
+  - Event table with: time, type badge (IN/OUT), method, path/URL, status (color-coded), duration, user/service, error
+  - Status breakdown badges (2xx, 4xx, 5xx counts)
+
+### Activity Logs Build-Verify Checklist
+- [ ] LogStore/LogService exists with circular buffer and configurable max size
+- [ ] Inbound request middleware is registered and captures API requests (not health/static)
+- [ ] Outbound logger is attached to ALL HTTP client creation points (verify by reading service constructors)
+- [ ] URL sanitization strips sensitive query params before logging
+- [ ] GET /api/admin/logs/events returns events (may be empty initially, but endpoint responds 200 with auth)
+- [ ] GET /api/admin/logs/stats returns buffer stats with correct structure
+- [ ] DELETE /api/admin/logs/events requires admin.logs.delete permission (403 for Admin role, 200 for Super Admin)
+- [ ] admin.logs.read and admin.logs.delete permissions exist in RBAC seed data
+- [ ] Admin UI Activity Logs tab renders with stats cards, filters, and event table
+- [ ] Auto-refresh toggle works (checkbox enables 5-second polling)
+- [ ] Clear Buffer button only visible to users with admin.logs.delete permission
+- [ ] LOG_BUFFER_SIZE present in .env.example and docker-compose.yml
+- [ ] After app handles some requests, GET /api/admin/logs/events returns non-empty results
+
 ### UI & Frontend
 - System fonts only (no external font CDNs -- Zscaler-safe)
 - One shared authenticated layout (not duplicated per page)
@@ -650,6 +688,7 @@ The Design phase summary to the user should reflect the project type without usi
 | Docker Compose | | Y | | | | Y |
 | Mock services | | Y | | | | Y |
 | Seed data | | Y | | | | Y |
+| Activity Logs (in-memory) | | Y | | | | Y |
 | Standard UI components | | Y | | | | |
 | System fonts only | | Y | | | | |
 | Extension manifest | | | Y | | | |
