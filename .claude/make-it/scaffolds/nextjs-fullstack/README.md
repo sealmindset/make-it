@@ -148,13 +148,46 @@ Client-side: `useAuth()` hook with `hasPermission(resource, action)`.
 
 ## Status
 
-**SCAFFOLD STRUCTURE DEFINED -- template files pending.**
+**COMPLETE -- 60 template files ready.**
 
-The shared files (mock-oidc, .gitignore, seed script) are copied from the fastapi-nextjs
-scaffold. The Next.js-specific template files need to be created as generic templates
-with bracket placeholders, following the same pattern as the fastapi-nextjs scaffold.
+All template files populated with `[BRACKET_PLACEHOLDER]` values. Mock-oidc copied
+as-is from fastapi-nextjs scaffold. Ready for use by `/make-it` Build phase.
 
-### Key Patterns to Encode in Templates
+### Files (60)
+
+```
+prisma/schema.prisma, prisma/seed.ts
+src/lib/auth.ts, src/lib/auth-context.tsx, src/lib/api.ts, src/lib/db.ts,
+  src/lib/types.ts, src/lib/utils.ts
+src/middleware.ts
+src/app/layout.tsx, src/app/globals.css, src/app/page.tsx, src/app/login/page.tsx
+src/app/(authenticated)/layout.tsx, src/app/(authenticated)/dashboard/page.tsx
+src/app/(authenticated)/admin/users/page.tsx, src/app/(authenticated)/admin/roles/page.tsx
+src/app/(authenticated)/admin/settings/page.tsx
+src/app/api/auth/login/route.ts, src/app/api/auth/callback/route.ts
+src/app/api/auth/me/route.ts, src/app/api/auth/logout/route.ts
+src/app/api/users/route.ts, src/app/api/users/[id]/route.ts
+src/app/api/users/directory/route.ts
+src/app/api/roles/route.ts, src/app/api/roles/[id]/route.ts
+src/app/api/roles/[id]/permissions/route.ts, src/app/api/permissions/route.ts
+src/app/api/admin/settings/route.ts, src/app/api/admin/settings/[key]/route.ts
+src/app/api/admin/settings/[key]/reveal/route.ts
+src/app/api/admin/settings/audit-log/route.ts, src/app/api/dashboard/route.ts
+src/components/theme-provider.tsx, src/components/login-button.tsx
+src/components/layout/sidebar.tsx, src/components/breadcrumbs.tsx
+src/components/quick-search.tsx, src/components/mode-toggle.tsx
+src/components/data-table.tsx, src/components/data-table-column-header.tsx
+src/components/data-table-toolbar.tsx, src/components/data-table-pagination.tsx
+Dockerfile, docker-compose.yml, entrypoint.sh
+.env.example, .gitignore, package.json, next.config.ts
+tsconfig.json, tailwind.config.ts, postcss.config.mjs
+scripts/seed-mock-services.sh, public/.gitkeep
+mock-services/mock-oidc/app.py, mock-services/mock-oidc/Dockerfile
+mock-services/mock-oidc/requirements.txt
+README.md
+```
+
+### Key Patterns Encoded
 
 These patterns were validated through real-world retrofits and security scans:
 

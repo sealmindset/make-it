@@ -6,19 +6,6 @@ _All high priority items completed._
 
 ## Medium Priority
 
-### Populate Next.js full-stack scaffold template files
-The `scaffolds/nextjs-fullstack/` directory has the README and architecture documented,
-but the actual template files (Dockerfile, docker-compose.yml, prisma/schema.prisma,
-src/lib/auth.ts, etc.) need to be extracted from the TPRMAI reference implementation.
-
-**Steps:**
-1. Read TPRMAI source files and generalize them into templates with [PLACEHOLDER] values
-2. Copy shared files from fastapi-nextjs scaffold (mock-oidc, .gitignore, seed script)
-3. Create Next.js-specific templates: Dockerfile, next.config.js, middleware.ts,
-   auth.ts, auth-context.tsx, db.ts, prisma/schema.prisma (RBAC tables only)
-4. Create standard UI components: sidebar, data-table, breadcrumbs, quick-search, mode-toggle
-5. Test by running /make-it with a simple app and selecting the nextjs-fullstack scaffold
-
 ### /resume-it: Sync changes from repo to installed location
 Currently, skill files live in both `~/.claude/` (installed) and the make-it repo
 (source of truth). Changes to the repo must be manually copied. Consider:
@@ -30,6 +17,18 @@ Currently, skill files live in both `~/.claude/` (installed) and the make-it rep
 _All low priority items completed._
 
 ## Completed
+
+### Populate Next.js full-stack scaffold template files ✓
+Created 60 template files for `scaffolds/nextjs-fullstack/` with `[BRACKET_PLACEHOLDER]`
+values. Includes: Prisma schema + seed (RBAC 4-table model), auth (jose JWT, OIDC with
+state parameter, Next.js 16 Set-Cookie workaround, ENFORCE_SECRETS pattern), middleware,
+15 API routes (auth, users, roles, permissions, settings with audit log, dashboard),
+10 standard UI components (sidebar, data-table with 4 sub-components, breadcrumbs,
+quick-search, mode-toggle, theme-provider, login-button), 5 page templates (dashboard,
+users, roles, settings, login), Docker (multi-stage Dockerfile, 3-service compose),
+config files (package.json, next.config.ts, tsconfig, tailwind, postcss), entrypoint.sh
+(prisma migrate + seed), seed-mock-services.sh, and mock-oidc (copied as-is from
+fastapi-nextjs). Updated README status to COMPLETE.
 
 ### /nemo-it: Standalone security attestation skill ✓
 Created /nemo-it as a completely separate skill from /make-it and /ship-it. Scans any
