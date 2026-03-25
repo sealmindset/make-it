@@ -25,80 +25,7 @@ This skill has 5 phases:
 3. **Build** -- Generate and execute the application code
 4. **Ship** -- Hand off to /ship-it for deployment
 
-**Special command: `/make-it update`** -- Updates all skills to the latest version.
-
 </objective>
-
-<!-- ============================================================ -->
-<!-- UPDATE INTERCEPTOR -- Check if user said "update"             -->
-<!-- ============================================================ -->
-
-<update-interceptor>
-
-**BEFORE doing anything else**, check if the user's input contains the word "update" (case-insensitive).
-
-If the user said "update", "Update", "/make-it update", or any variation:
-
-1. **Check installed version:**
-   ```bash
-   cat ~/.claude/make-it/VERSION 2>/dev/null || echo "none"
-   ```
-
-2. **Check latest version from GitHub:**
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>/dev/null || echo "unknown"
-   ```
-
-3. **Compare versions and report:**
-
-   If versions match:
-   "You're already on the latest version (v[VERSION]). Everything is up to date!"
-   -> Stop here. Do NOT proceed to Preflight or Ideation.
-
-   If update is available:
-   "There's an update available! v[CURRENT] -> v[LATEST]
-
-   Updating now..."
-
-4. **Run the update:**
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
-   ```
-
-5. **Report results:**
-   Read the output from install.sh and relay it to the user in plain language:
-
-   "All done! Here's what was updated:
-   - [List any new skills that were added]
-   - All existing skills updated to v[NEW_VERSION]
-
-   **Important:** Please restart Claude Code for the changes to take effect.
-   After restarting, just type /make-it to start building!"
-
-   -> Stop here. Do NOT proceed to Preflight or Ideation.
-
-   If the update fails (network error, curl not found, etc.):
-   "I couldn't update automatically. Here are two easy ways to update manually:
-
-   **Option 1** -- Run this in your terminal:
-   ```
-   curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
-   ```
-
-   **Option 2** -- If you have the repo cloned:
-   ```
-   cd ~/Documents/GitHub/make-it
-   git pull
-   bash install.sh
-   ```
-
-   After either option, restart Claude Code and you'll be on the latest version."
-
-   -> Stop here. Do NOT proceed to Preflight or Ideation.
-
-**If the user did NOT say "update"**, skip this section entirely and proceed to Phase 0 (Preflight).
-
-</update-interceptor>
 
 <execution_context>
 
@@ -107,6 +34,7 @@ If the user said "update", "Update", "/make-it update", or any variation:
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
@@ -493,36 +421,7 @@ to understand the patterns, then generate new code that follows the same convent
    - Use CSS variables (`var(--primary)`, etc.) or Tailwind semantic classes (`bg-primary`)
      for all colors -- both work because tailwind.config.ts maps CSS variables
 
-4. **Application Settings (Database-Backed)**
-   - Tell user: "Setting up application settings management..."
-   - The scaffold already includes: `backend/app/models/app_setting.py` (AppSetting + AppSettingAuditLog),
-     `backend/app/schemas/app_setting.py`, `backend/app/services/settings_service.py`,
-     `backend/app/routers/settings.py`, and `frontend/app/(auth)/admin/settings/page.tsx`
-   - Wire the settings router:
-     a. Register settings router in `backend/app/main.py`
-     b. Uncomment `require_permission` and `CurrentUser` dependencies in the router
-     c. Replace `[REPLACE_WITH_USER_EMAIL]` with actual user email from auth
-   - Create `backend/alembic/versions/002_app_settings.py` migration:
-     a. Creates app_settings and app_setting_audit_logs tables
-     b. Seeds ALL .env variables from the project into app_settings with metadata:
-        - group_name: Database / Authentication / Security / URLs / Application / AI Provider
-        - display_name: human-readable version of the key
-        - description: what the setting does
-        - value_type: string / int / bool (inferred from the value)
-        - is_sensitive: true for JWT_SECRET, API keys, passwords, client secrets
-        - requires_restart: true for DATABASE_URL, JWT_SECRET, OIDC_*, false for AI models, rate limits
-   - Add `app_settings.view` and `app_settings.edit` permissions to the RBAC seed migration
-   - Grant both permissions to Super Admin and Admin roles only
-   - Generate the full Admin Settings page:
-     a. Tab/section grouping by group_name
-     b. Sensitive values masked with eye icon to reveal (requires app_settings.edit)
-     c. Inline editing with save per group (bulk update)
-     d. "Requires restart" badge on settings with requires_restart=true
-     e. Audit log tab with DataTable (timestamp, key, old value, new value, changed by)
-     f. Permission gating: page hidden from sidebar without app_settings.view,
-        edit controls disabled without app_settings.edit
-
-5. **Wire Navigation**
+4. **Wire Navigation**
    - Update `frontend/components/sidebar.tsx` -- replace `[NAV_ITEMS]` with actual nav items
      including domain pages. Each item needs: `label`, `href`, `icon`, `permission`
    - Update `frontend/components/breadcrumbs.tsx` -- replace `[SEGMENT_LABELS]` with
@@ -565,6 +464,33 @@ to understand the patterns, then generate new code that follows the same convent
      - "moderate" → database + admin UI
      - "heavy" → full management platform
    - Reference prompt-templates.md Prompt #10 for implementation details per tier
+
+9b. **Activity Logs (In-Memory Observability)**
+   - Tell user: "Adding activity monitoring..."
+   - This step ALWAYS runs for web-app and api-service projects (Tier 0 -- no user questions)
+   - Reference prompt-templates.md Prompt #9c and design-blueprint.md Section 12b
+   - Implement:
+     a. **LogStore** -- Circular buffer with configurable max size (LOG_BUFFER_SIZE env var,
+        default 10000). FIFO eviction. Methods: add(), query(), stats(), clear()
+     b. **LogService** -- Injectable singleton wrapping LogStore
+     c. **Inbound request middleware** -- Captures method, path, status, duration, user info.
+        Excludes health checks and static assets. Registered globally.
+     d. **Outbound HTTP interceptor** -- Axios/httpx interceptor factory attached to ALL
+        service client creation points. Captures service name, method, URL, status, duration.
+        URL sanitization strips sensitive query params (token, key, secret, password, auth).
+     e. **REST API** -- Three endpoints under /api/admin/logs:
+        - GET /events (query params: type, service, method, since, limit) -- requires admin.logs.read
+        - GET /stats -- requires admin.logs.read
+        - DELETE /events -- requires admin.logs.delete
+     f. **RBAC permissions** -- Add admin.logs resource with read and delete actions to seed data
+     g. **Admin UI tab** -- Activity Logs tab in Admin panel with:
+        - Stats cards (buffer usage, total events, recent errors, uptime)
+        - Filters (type, service, method)
+        - Event table with timestamp, type, method, path/URL, status, duration
+        - Auto-refresh toggle (5-second interval)
+        - Clear Buffer button (visible only to users with admin.logs.delete permission)
+     h. **Environment variables** -- Add LOG_BUFFER_SIZE to .env.example and docker-compose.yml.
+        Add CRIBL_STREAM_URL and CRIBL_STREAM_TOKEN as empty placeholders (future forwarding).
 
 10. **Security Hardening**
     - Tell user: "Locking down security..."
@@ -621,100 +547,27 @@ already running in production.
 
 **PART A: Static code verification (before starting the app)**
 
-1. **Verify the project structure** -- ensure all expected files exist
-2. **Verify no stub endpoints** -- search for placeholder messages like "not yet implemented"
-   or "implement with" in route handlers. If found, complete the implementation.
-3. **Verify no hardcoded mock data in pages** -- pages should use a service/API layer, not
-   inline arrays of fake data
-4. **Verify database migrations exist** -- if using SQLAlchemy, check for alembic/ directory
-   with at least one migration. If using Prisma, check for prisma/migrations/.
-5. **Verify .env and .env.example both exist** -- .env should be gitignored, .env.example
-   should be committed. Verify JWT_SECRET is populated in .env (not empty) and is NOT
-   committed in .env.example (should be empty with a generation comment).
-6. **Verify CHANGELOG.md and TODO.md exist** -- both should have content from the build
-7. **Verify mock services are wired** -- mock-oidc in docker-compose.yml (if auth needed),
-   service clients read base URLs from env vars, .env points to mock URLs
-8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports or production
-   URLs in application code (they should all come from environment variables)
-9. **Verify no external font imports** -- grep for `next/font/google`, `fonts.googleapis.com`,
-   or any external font CDN references. If found, replace with system font stacks.
-10. **Verify standard UI components exist** -- All four must be present and wired:
-    - `components/breadcrumbs.tsx` exists with SEGMENT_LABELS populated for all app pages
-    - `components/data-table.tsx` and related files exist; all list pages use DataTable
-    - `components/quick-search.tsx` exists with NAVIGATION_ITEMS for all app pages
-    - `components/theme-provider.tsx` and `components/mode-toggle.tsx` exist
-    - Authenticated layout header bar has: SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
-    - ThemeProvider wraps the app in root layout with `suppressHydrationWarning`
-    - `@tanstack/react-table` and `next-themes` are in package.json dependencies
-    If any are missing, generate them now.
-11. **Verify seed data exists** -- The database must be populated with sample data on first startup.
-    Check for a seed migration (Alembic), seed script, or Prisma seed file. Verify it creates:
-    - At least one user per role (matching mock-oidc test users by oidc_subject)
-    - Enough domain records to populate every page (10-20 items for list pages)
-    - Dashboard metrics that show non-zero values
-    - Recent timestamps so the app looks active
-    If seed data is missing or incomplete, generate it now.
-12. **Verify mock service seed script exists** -- Check for scripts/seed-mock-services.sh.
-    It must: register app users in mock-oidc, remove non-app users, update client redirect URIs.
-    If missing, generate it now.
-13. **Verify auth callback reads roles from database** -- Read the auth callback code and confirm
-    it queries the users table (by oidc_subject or email) and reads the role from the database
-    record. If the callback uses OIDC claims for roles, fix it to use the database.
-14. **Verify logout is a POST endpoint** -- Read the logout route and confirm it's a POST that
-    clears the JWT cookie. Read the frontend logout button and confirm it calls the API via POST
-    (not a GET link or <a href>). Fix if wrong.
-15. **Verify service client endpoints match mock services** -- For each service client, read the
-    methods and verify they call endpoints that actually exist on the corresponding mock service.
-    Cross-reference with the mock service route files. Fix any mismatches.
-16. **Verify database-driven RBAC** -- Check that:
-    - roles, permissions, role_permissions tables exist in the migration
-    - users table has role_id FK (not a VARCHAR role column)
-    - Seed migration creates 4 system roles, page-level CRUD permissions, and default mappings
-    - Permission service exists with has_permission(user, resource, action) and cache invalidation
-    - require_permission(resource, action) middleware is used on all route handlers
-    - Admin API has endpoints for user CRUD, role CRUD, and permission listing
-    - Admin UI has User Management and Role Management pages
-    - Frontend sidebar shows/hides items based on user permissions from JWT/auth endpoint
-    If any of these are missing, generate them now.
-17. **Verify docker-compose env var names match backend config** -- Read the backend config
-    class (e.g., pydantic Settings) and cross-reference every field name against the
-    docker-compose.yml environment block. Common mismatches:
-    - OIDC_ISSUER vs OIDC_ISSUER_URL
-    - JIRA_API_TOKEN vs JIRA_AUTH_TOKEN
-    Fix any mismatches so the backend receives the correct values.
-18. **Verify backend Dockerfile uses entrypoint.sh** -- If the backend requires database
-    migrations (Alembic/Prisma), the Dockerfile CMD must invoke entrypoint.sh (not the
-    application server directly). The entrypoint.sh must: wait for DB, run migrations,
-    then exec the server. If Dockerfile CMD runs uvicorn/node directly, migrations will
-    never execute and the database will be empty. Fix if wrong.
-19. **Verify Alembic seed migration syntax** -- If using Alembic, read the seed data migration
-    and check for these common bugs:
-    - op.execute() called with 2+ args (only takes 1 -- use sa.text().bindparams())
-    - sa.text() with PostgreSQL :: cast syntax (conflicts with :param bind syntax)
-    - sa.table() columns using sa.String for PostgreSQL enum columns (must use sa.Enum
-      with create_type=False)
-    Fix any issues found.
-20. **Verify port availability** -- Check that all ports in docker-compose.yml are available
-    on the host: `lsof -i :PORT`. If any port is already in use, remap to an unused port
-    in docker-compose.yml, .env, .env.example, and scripts/seed-mock-services.sh.
-21. **Verify same-origin proxy pattern** -- next.config.ts has rewrites() routing
-    /api/* to backend. Frontend BASE_URL="/api" (relative). OIDC redirect_uri
-    uses FRONTEND_URL/api/auth/callback. Login endpoint returns 302. Login button
-    uses window.location.href (not fetch). BACKEND_INTERNAL_URL set in Dockerfile.
-    If any are wrong, fix them.
-22. **Verify AuthMe type matches JWT** -- Frontend AuthMe type must be flat:
-    { sub, email, name, role_id, role_name, permissions[] }. No .user wrapper.
-    All components use authMe.name not authMe.user.display_name. If wrong, fix.
-23. **Verify no global 401 redirect** -- API client handleResponse must NOT redirect
-    to "/" on 401. Login page checks /auth/me (expects 401). Auth guard in layout
-    handles redirects. If global redirect exists, remove it.
-24. **Verify frontend types match backend schemas** -- For each backend Pydantic
-    schema in schemas/*.py, compare field names against the corresponding frontend
-    TypeScript interface. Check: field name spelling, nesting structure, list vs
-    paginated response. Fix any mismatches. Common issues:
-    - title vs label, task_count vs tasks_count, jira_key vs jira_issue_key
-    - Backend returns list[] but frontend expects { items: T[], total: number }
-    - Backend returns role_name string but frontend expects nested Role object
+Run ALL checks from `build-standards.md` that match the project's active tiers.
+Reference: `~/.claude/make-it/references/build-standards.md`
+
+For Tier 1 (web-app), this includes checks across all categories:
+- **S01-S08**: Structure & configuration (project files, .env, stubs, secrets)
+- **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
+- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
+- **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
+- **D01-D05**: Database & seed data (migrations, seed users, Alembic syntax)
+- **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
+- **M01-M04**: Mock services (mock-oidc, seed script, contracts, env vars)
+- **L01-L08**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI)
+- **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
+- **X01-X06**: Security (secrets, validation, deps, headers, no Java, no module throws)
+- **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
+- **AI01-AI10**: AI features (if ai_features.needed = true)
+
+For each failing check:
+- `[FIX]` items: auto-fix immediately
+- `[BLOCK]` items: must pass before proceeding to Part B
+- `[WARN]` items: note in TODO.md, continue
 
 Tell user: "Your app is built! Now I'm making sure everything works perfectly..."
 
@@ -778,6 +631,12 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     For each role, verify:
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
+
+29. **Test Activity Logs (web-app and api-service only):**
+    a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
+    b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests)
+    c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
+    d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 
 **PART C: Fix cycle (silent, automatic)**
 
@@ -990,6 +849,11 @@ That's it -- you just built your first app!"
    - Mock services in docker-compose.yml with seed script
    - Service client endpoints match mock API contracts
    - All external service URLs from environment variables
+   - Activity Logs: LogStore/LogService with circular buffer exists
+   - Activity Logs: Inbound middleware + outbound interceptors wired
+   - Activity Logs: Admin UI tab with stats, filters, event table, auto-refresh
+   - Activity Logs: admin.logs.read and admin.logs.delete permissions seeded
+   - Activity Logs: LOG_BUFFER_SIZE in .env.example and docker-compose.yml
 
    **Tier 2 checks (extension) -- IN ADDITION to Tier 0:**
    - Extension manifest complete (all commands, views, config declared)

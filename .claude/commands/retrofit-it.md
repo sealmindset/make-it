@@ -37,6 +37,7 @@ This skill has 7 phases:
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -770,65 +771,35 @@ After each step:
 
 **PART A: Static code verification (before starting the app)**
 
-Run ALL applicable checks. For web-app retrofits (Tier 1), this includes:
+Run ALL checks from `build-standards.md` that match the project's active tiers.
+Reference: `~/.claude/make-it/references/build-standards.md`
 
-1. **Verify project structure** -- all expected files exist
-2. **Verify no stub endpoints** -- search for "not yet implemented" in route handlers
-3. **Verify no hardcoded mock data in pages** -- pages use API layer, not inline arrays
-4. **Verify database migrations exist** -- Alembic versions/ or Prisma migrations/
-5. **Verify .env and .env.example both exist** -- .env gitignored, JWT_SECRET populated
-6. **Verify CHANGELOG.md and TODO.md exist** with content
-7. **Verify mock services are wired** -- mock-oidc in docker-compose, service clients use env vars
-8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports in app code
-9. **Verify no external font imports** -- grep for next/font/google, fonts.googleapis.com
-10. **Verify all four standard UI components** -- breadcrumbs, data-table, quick-search, mode-toggle
-    - Header bar: SidebarTrigger | Breadcrumbs | spacer | QuickSearch | ModeToggle
-    - ThemeProvider wraps app with suppressHydrationWarning
-    - @tanstack/react-table and next-themes in package.json
-11. **Verify seed data exists** -- users per role, 10-20 domain items, dashboard metrics
-12. **Verify seed script exists** -- scripts/seed-mock-services.sh registers users, updates redirects
-13. **Verify auth callback reads roles from database** -- queries users by oidc_subject, not claims
-14. **Verify logout is POST** -- backend POST endpoint, frontend calls via POST (not GET)
-15. **Verify service client ↔ mock contracts** -- cross-reference client methods with mock routes
-16. **Verify database-driven RBAC** -- roles/permissions/role_permissions tables, require_permission
-    middleware, permission service with cache, admin UI for users/roles
-17. **Verify docker-compose env var names match backend config** -- cross-reference field names
-18. **Verify backend Dockerfile uses entrypoint.sh** -- wait-for-DB + migrations + exec server
-19. **Verify Alembic seed migration syntax** -- sa.text().bindparams(), no ::uuid, correct enum types
-20. **Verify port availability** -- lsof for all ports in docker-compose.yml
-21. **Verify same-origin proxy** -- next.config.ts rewrites, relative BASE_URL, BACKEND_INTERNAL_URL
-22. **Verify AuthMe type is flat** -- {sub, email, name, role_id, role_name, permissions[]}, no wrapper
-23. **Verify no global 401 redirect** -- API client must not redirect to "/" on 401
-24. **Verify frontend types match backend schemas** -- field names, nesting, list vs paginated
-25. **Verify Activity Logs** -- LogStore, inbound middleware, outbound interceptors, REST API,
-    admin UI tab, admin.logs permissions, LOG_BUFFER_SIZE in .env.example
-26. **Verify ENFORCE_SECRETS** -- enforce_secrets() called at startup, ENFORCE_SECRETS=false in
-    docker-compose, weak secret detection for JWT_SECRET and OIDC_CLIENT_SECRET
-27. **Verify OIDC state parameter** -- login generates state token, callback validates with
-    secrets.compare_digest(), oidc_state cookie cleared after use
-28. **Verify test infrastructure** -- pytest.ini, conftest.py with auth bypass fixtures,
-    test_health.py, Playwright config + health spec
+For Tier 1 (web-app), this includes checks across all categories:
+- **S01-S08**: Structure & configuration
+- **A01-A10**: Authentication & OIDC
+- **R01-R07**: RBAC & permissions
+- **U01-U07**: UI & frontend
+- **D01-D05**: Database & seed data
+- **I01-I07**: Docker & infrastructure
+- **M01-M04**: Mock services
+- **L01-L08**: Activity logs
+- **G01-G07**: Application settings
+- **X01-X06**: Security
+- **T01-T05**: Test infrastructure
+- **AI01-AI10**: AI features (if ai_features.needed = true)
+
+For each failing check:
+- `[FIX]` items: auto-fix immediately
+- `[BLOCK]` items: must pass before proceeding to Part B
+- `[WARN]` items: note in TODO.md, continue
 
 Tell user: "Your app is retrofitted! Now making sure everything works perfectly..."
 
 **PART B: Live verification (start the app and test it)**
 
-1. **SSL-inspecting proxy check** -- detect Zscaler/Netskope/GlobalProtect before Docker builds.
-   If detected, ask user to pause. Wait for confirmation. Remind to re-enable after builds.
-2. **Build and start containers:** `docker compose --profile dev build && up -d`
-   If build fails, diagnose silently, fix, retry (up to 3 attempts).
-3. **Wait for all services healthy** -- poll health endpoints (timeout 120s per service)
-4. **Run seed script:** `bash scripts/seed-mock-services.sh`
-5. **Test auth flow for EACH role:**
-   - Navigate to app, follow login through mock-oidc (login_hint per role)
-   - Verify callback completes, JWT cookie set
-   - Verify /auth/me returns correct role from DATABASE
-   - Verify dashboard loads with content
-   - Test logout (POST, cookie cleared, 401 after)
-6. **Test every API endpoint** with valid JWT -- verify 2xx, valid JSON, non-empty arrays
-7. **Test every page** -- loads (200), has meaningful content (not empty)
-8. **Test permission boundaries** -- correct access per role, 403 for unauthorized
-9. **Test Activity Logs** -- stats returns data, events captured, admin UI tab loads
+Run ALL live verification checks from `build-standards.md`:
+- **V01-V09**: SSL proxy detection, container health, seed script, auth flow per role,
+  API endpoints, page content, permission boundaries, Activity Logs, Docker cache
 
 **PART C: Fix cycle (silent, automatic, up to 3 cycles)**
 
@@ -840,22 +811,7 @@ If ANY test fails:
 5. Re-run FULL test suite for regressions
 6. Repeat (up to 3 full cycles)
 
-**Common retrofit-specific issues and fixes:**
-- Auth callback returns wrong role -> fix to query database by oidc_subject
-- Logout 404 -> change to POST endpoint, fix frontend button
-- Service client 404 from mock -> fix endpoint URL to match mock routes
-- Empty pages -> verify seed migration ran, check API endpoint
-- Docker TLS error -> prompt user to disable SSL proxy
-- Health check IPv6 fail -> use 127.0.0.1 not localhost
-- Port conflict -> remap in docker-compose.yml + .env
-- Backend can't reach mock-oidc -> use http://mock-oidc:10090 (internal Docker address)
-- Alembic migration fails -> sa.text().bindparams(), f-string UUIDs, Enum(create_type=False)
-- Backend starts but DB empty -> Dockerfile CMD must use entrypoint.sh
-- Cross-origin cookie blocked -> implement same-origin proxy in next.config.ts
-- AuthMe has .user wrapper -> flatten to match JWT payload
-- Login page infinite loop -> remove global 401 redirect from API client
-- OIDC callback cookie not set -> redirect_uri must go through frontend proxy
-- Frontend types don't match backend -> read Pydantic schemas, fix TypeScript interfaces
+Reference the **Common Fix Cycle Issues** table in build-standards.md for root cause → fix mappings.
 
 **PART D: Retrofit-specific verification**
 

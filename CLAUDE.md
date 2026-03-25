@@ -102,6 +102,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       prompt-templates.md          # The 14 prompts (auto-filled from user answers)
       ship-it-guide.md            # /ship-it integration reference
       guardrails.md               # Tiered guardrail system (Tier 0-5)
+      build-standards.md          # Shared verification checklist (single source of truth)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     scaffolds/
@@ -219,6 +220,23 @@ The user's world is simple: describe, verify, say "ready." Everything else is au
 
 See `ship-it-guide.md` for the full lifecycle, CI/CD automation contract, and security scanner integration.
 
+## Shared Build Standards
+
+`build-standards.md` is the **single source of truth** for what a compliant application looks like. All three skills reference it:
+
+| Skill | How it uses build-standards.md |
+|-------|-------------------------------|
+| `/make-it` | Build-verify Part A runs all checks for active tiers |
+| `/retrofit-it` | Verify phase runs all checks + retrofit-specific preservation checks |
+| `/resume-it` | Catch-up scan compares project against latest checks, surfaces gaps |
+
+Each check has an ID (S01, A01, R01, etc.), a tier, and a severity:
+- `[BLOCK]` -- must pass before handoff
+- `[FIX]` -- auto-fix if failing
+- `[WARN]` -- note in TODO.md
+
+When build-standards.md is updated with new checks, `/resume-it` automatically detects the gap on the next run and suggests the missing patterns. This eliminates drift between skills.
+
 ## Build Quality
 
 The build process has four layers:
@@ -226,3 +244,4 @@ The build process has four layers:
 2. **Prevention** -- Prompts and build instructions encode lessons learned (API contract verification, seed data alignment, Alembic syntax rules)
 3. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
 4. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
+5. **Catch-up** -- /resume-it scans existing projects against the latest build-standards.md and applies any new patterns

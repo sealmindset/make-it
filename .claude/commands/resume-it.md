@@ -26,6 +26,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/build-standards.md
 
 </execution_context>
 
@@ -140,7 +141,66 @@ If `SECURITY_SCANNER_API_KEY` is NOT set but issues exist, work from the GitHub 
 
 Security scanner findings become priority work items -- auto-fixed before any user-requested changes. See "Security Scanner Remediation" workflow below.
 
-**7. Build an internal context summary:**
+**7. Check for AI prompt management gaps:**
+
+If the app uses AI (LLM provider imports, agent classes, AI SDK dependencies):
+- Scan for hardcoded system prompts in agent/service files (look for getSystemPrompt(),
+  SYSTEM_PROMPT constants, prompt template strings passed to LLM calls)
+- Check if a managed_prompts or equivalent table exists in the database schema
+- Check if there's an admin UI for prompt editing
+- Count the number of distinct AI prompts (system prompts + user prompt templates)
+
+If hardcoded prompts are found and no prompt management system exists, this is a gap:
+- 1-3 prompts: note in TODO.md but low priority
+- 4-10 prompts: suggest adding Tier 2 prompt management (DB + admin UI)
+- 10+ prompts: suggest adding Tier 3 prompt management platform
+
+Reference Prompt #10 in prompt-templates.md for the implementation specification.
+
+**8. Standards catch-up scan (build-standards.md):**
+
+Compare the current project against the latest `build-standards.md` to detect patterns
+that were added AFTER the app was originally built. This is how projects stay current
+without re-running /make-it or /retrofit-it.
+
+Reference: `~/.claude/make-it/references/build-standards.md`
+
+a. **Determine active tiers** from app-context.json (`project_type` and `active_tiers`).
+   If no app-context.json exists, infer from the detected stack (web-app is default).
+
+b. **Run a quick static scan** for each check ID in the active tiers. This is NOT a full
+   build-verify -- it's a lightweight file-existence and pattern check:
+
+   For each check category, do a targeted scan:
+   - **Structure (S01-S08):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore
+   - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
+   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
+   - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
+   - **Database (D01-D05):** Check for migrations directory, seed data file
+   - **Docker (I01-I07):** Check for docker-compose.yml, entrypoint.sh, 127.0.0.1 in health checks
+   - **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh
+   - **Activity Logs (L01-L08):** Grep for LogStore/log_store, log middleware, /logs/events endpoint
+   - **Settings (G01-G07):** Check for app_settings table in migrations, settings service, admin page
+   - **Security (X01-X06):** Grep for hardcoded secrets, external font imports
+   - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
+   - **AI (AI01-AI10):** Only if AI features detected -- check for provider abstraction, sanitization
+
+c. **Categorize results:**
+   - **PASS:** Check is satisfied
+   - **GAP:** Check fails -- this is a pattern the project is missing
+   - **N/A:** Check doesn't apply (wrong tier, or feature not present)
+
+d. **Build a gaps list** with check IDs and plain-language descriptions.
+   Only include GAP items -- don't report passing checks.
+
+e. **Classify gap severity for suggestion priority:**
+   - **Critical gaps** (BLOCK checks): missing auth patterns, security issues
+   - **Important gaps** (FIX checks): missing UI components, settings, activity logs
+   - **Nice-to-have gaps** (WARN checks): test infrastructure, minor improvements
+
+The gaps list feeds into the greet-and-suggest phase as a suggested action.
+
+**9. Build an internal context summary:**
 
 From all of the above, build a mental model of:
 - Project name and purpose
@@ -148,6 +208,8 @@ From all of the above, build a mental model of:
 - What's changed recently (git log)
 - Outstanding work (TODO.md items, known issues)
 - Security scanner findings (open scan issues, severity)
+- AI prompt management status (hardcoded vs database-managed, count of prompts)
+- **Standards gaps** (checks from build-standards.md that the project doesn't pass yet)
 - Test coverage status (tests exist? passing?)
 - Deployment status (shipped? local only?)
 
@@ -186,6 +248,35 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | No deployment yet | "Ready to deploy? I can hand you off to /ship-it" |
 | Recent git activity on features | "Looks like you were working on [feature] -- want to continue?" |
 | Infrastructure/env needs detected | "Want me to check what you still need to get this app running? I can make you a checklist." |
+| AI prompts hardcoded (no prompt mgmt) | "Your AI agents have [N] prompts hardcoded in the code. Want me to add a prompt management system so they can be edited without redeploying?" |
+| Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- want me to apply them now?" |
+| Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
+| Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
+
+**When standards gaps are found, present them in plain language:**
+
+If the catch-up scan found gaps, include a brief summary in the status:
+
+"I also compared your app against the latest build standards and found [N] things
+that can be improved:
+- [Critical count] security/auth updates
+- [Important count] feature enhancements (e.g., admin settings, activity logs)
+- [Nice-to-have count] optional improvements
+
+Want me to apply these updates?"
+
+**If the user accepts the catch-up work:**
+
+Route to a dedicated catch-up workflow:
+1. Apply all critical gaps first (BLOCK items from build-standards.md)
+2. Apply important gaps next (FIX items)
+3. Note nice-to-have gaps in TODO.md (WARN items)
+4. After each batch, run existing tests to verify nothing broke
+5. Update CHANGELOG.md with what was added
+6. Report results: "Your app is now up to date with the latest standards."
+
+This is effectively a mini-retrofit that runs within /resume-it, using the
+same check IDs and fix patterns from build-standards.md.
 
 **4. Always end with the open question:**
 
