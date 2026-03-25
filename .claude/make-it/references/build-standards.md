@@ -76,6 +76,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`.
 
+**R04a** [Tier 1, 5*] [BLOCK] **Permission names consistent across stack** -- Backend `require_permission()` args, frontend `hasPermission()` args, sidebar nav permissions, quick-search permissions, and seed migration data MUST all use identical resource/action strings. Standard format: `admin.users`/`admin.roles` with actions `read`/`create`/`update`/`delete` (NEVER `view`/`edit`). Domain resources use the resource name directly (e.g., `projects.read`). Cross-reference all five locations after any permission change.
+
 **R05** [Tier 1, 5*] [FIX] **Permission service** -- `has_permission(user, resource, action)` with in-memory cache and invalidation on role/permission changes.
 
 **R06** [Tier 1] [FIX] **Admin UI** -- User Management + Role Management pages with permission matrix.

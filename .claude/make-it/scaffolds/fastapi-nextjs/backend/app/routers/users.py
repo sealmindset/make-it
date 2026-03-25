@@ -33,7 +33,7 @@ def _user_to_out(user: User) -> UserOut:
 @router.get("/directory")
 async def search_directory(
     q: str = Query(..., min_length=2),
-    current_user: UserInfo = Depends(require_permission("users", "create")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "create")),
 ):
     """
     Search the OIDC directory for users to provision.
@@ -61,7 +61,7 @@ async def search_directory(
 
 @router.get("/", response_model=list[UserOut])
 async def list_users(
-    current_user: UserInfo = Depends(require_permission("users", "view")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """List all users."""
@@ -73,7 +73,7 @@ async def list_users(
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
     data: UserCreate,
-    current_user: UserInfo = Depends(require_permission("users", "create")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "create")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new user (provision from OIDC directory)."""
@@ -99,7 +99,7 @@ async def create_user(
 @router.get("/{user_id}", response_model=UserOut)
 async def get_user(
     user_id: uuid.UUID,
-    current_user: UserInfo = Depends(require_permission("users", "view")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single user by ID."""
@@ -116,7 +116,7 @@ async def get_user(
 async def update_user(
     user_id: uuid.UUID,
     data: UserUpdate,
-    current_user: UserInfo = Depends(require_permission("users", "edit")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a user's details."""
@@ -139,7 +139,7 @@ async def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
-    current_user: UserInfo = Depends(require_permission("users", "delete")),
+    current_user: UserInfo = Depends(require_permission("admin.users", "delete")),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a user."""

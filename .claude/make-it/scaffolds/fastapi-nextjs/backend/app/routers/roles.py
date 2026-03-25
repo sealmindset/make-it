@@ -57,7 +57,7 @@ def _role_to_out(role: Role, include_permissions: bool = False):
 @router.get("/")
 async def list_roles(
     include_permissions: bool = Query(False),
-    current_user: UserInfo = Depends(require_permission("roles", "view")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """List all roles, optionally including their permissions."""
@@ -74,7 +74,7 @@ async def list_roles(
 @router.post("/", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
 async def create_role(
     data: RoleCreate,
-    current_user: UserInfo = Depends(require_permission("roles", "create")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "create")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a custom role."""
@@ -96,7 +96,7 @@ async def create_role(
 async def update_role(
     role_id: uuid.UUID,
     data: RoleUpdate,
-    current_user: UserInfo = Depends(require_permission("roles", "edit")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a role's name or description."""
@@ -119,7 +119,7 @@ async def update_role(
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_role(
     role_id: uuid.UUID,
-    current_user: UserInfo = Depends(require_permission("roles", "delete")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "delete")),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a custom role. System roles cannot be deleted."""
@@ -143,7 +143,7 @@ async def delete_role(
 async def update_role_permissions(
     role_id: uuid.UUID,
     data: PermissionAssignment,
-    current_user: UserInfo = Depends(require_permission("roles", "edit")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """Replace all permissions for a role (permission matrix save)."""

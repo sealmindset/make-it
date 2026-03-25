@@ -31,9 +31,9 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const canCreate = hasPermission("users", "create");
-  const canEdit = hasPermission("users", "edit");
-  const canDelete = hasPermission("users", "delete");
+  const canCreate = hasPermission("admin.users", "create");
+  const canEdit = hasPermission("admin.users", "update");
+  const canDelete = hasPermission("admin.users", "delete");
 
   const fetchUsers = useCallback(async () => {
     try {

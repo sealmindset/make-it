@@ -17,18 +17,18 @@ interface SearchItem {
 const navigationItems: SearchItem[] = [
   { label: "Dashboard", href: "/dashboard", keywords: ["home", "overview"] },
   // [NAVIGATION_ITEMS] -- app-specific pages, e.g.:
-  // { label: "Projects", href: "/projects", keywords: ["project", "list"], permission: { resource: "projects", action: "view" } },
+  // { label: "Projects", href: "/projects", keywords: ["project", "list"], permission: { resource: "projects", action: "read" } },
   {
     label: "User Management",
     href: "/admin/users",
     keywords: ["users", "admin", "people"],
-    permission: { resource: "users", action: "read" },
+    permission: { resource: "admin.users", action: "read" },
   },
   {
     label: "Role Management",
     href: "/admin/roles",
     keywords: ["roles", "permissions", "admin"],
-    permission: { resource: "roles", action: "read" },
+    permission: { resource: "admin.roles", action: "read" },
   },
   {
     label: "Settings",

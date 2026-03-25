@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/permissions", tags=["permissions"])
 
 @router.get("/", response_model=list[PermissionOut])
 async def list_permissions(
-    current_user: UserInfo = Depends(require_permission("roles", "view")),
+    current_user: UserInfo = Depends(require_permission("admin.roles", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """List all available permissions (used by role permission matrix UI)."""

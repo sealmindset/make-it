@@ -32,18 +32,18 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   // [NAV_ITEMS] -- app-specific pages inserted here, e.g.:
-  // { label: "Projects", href: "/projects", icon: FolderKanban, permission: { resource: "projects", action: "view" } },
+  // { label: "Projects", href: "/projects", icon: FolderKanban, permission: { resource: "projects", action: "read" } },
   {
     label: "Users",
     href: "/admin/users",
     icon: Users,
-    permission: { resource: "users", action: "read" },
+    permission: { resource: "admin.users", action: "read" },
   },
   {
     label: "Roles",
     href: "/admin/roles",
     icon: Shield,
-    permission: { resource: "roles", action: "read" },
+    permission: { resource: "admin.roles", action: "read" },
   },
   {
     label: "Settings",

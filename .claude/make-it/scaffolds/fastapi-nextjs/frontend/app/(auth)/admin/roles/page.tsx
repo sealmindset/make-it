@@ -18,9 +18,9 @@ export default function RolesPage() {
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const canCreate = hasPermission("roles", "create");
-  const canEdit = hasPermission("roles", "edit");
-  const canDelete = hasPermission("roles", "delete");
+  const canCreate = hasPermission("admin.roles", "create");
+  const canEdit = hasPermission("admin.roles", "update");
+  const canDelete = hasPermission("admin.roles", "delete");
 
   const fetchRoles = useCallback(async () => {
     try {
