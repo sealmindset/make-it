@@ -775,7 +775,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S08**: Structure & configuration
+- **S01-S09**: Structure & configuration
 - **A01-A10**: Authentication & OIDC
 - **R01-R07**: RBAC & permissions
 - **U01-U07**: UI & frontend

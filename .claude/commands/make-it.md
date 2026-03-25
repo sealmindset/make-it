@@ -520,6 +520,177 @@ to understand the patterns, then generate new code that follows the same convent
     - Replace `[APP_SLUG]` in script header
     - Add `[ADDITIONAL_MOCK_SEED]` if external mock services need seeding
 
+13. **Project README**
+    - Tell user: "Writing up your project documentation..."
+    - Generate `README.md` in the project root describing THE APP (not /make-it).
+    - The README must be written as if a developer is seeing this project for the first time.
+    - Structure:
+
+    ```markdown
+    # [APP_NAME]
+
+    [1-2 sentence description of what this app does and who it's for]
+
+    ## Features
+
+    - [Feature 1 -- plain language, from ideation]
+    - [Feature 2]
+    - [Feature 3]
+    - ...
+
+    ## Tech Stack
+
+    | Component | Technology |
+    |-----------|-----------|
+    | Frontend | [e.g., Next.js 15, React 19, Tailwind CSS, shadcn/ui] |
+    | Backend | [e.g., FastAPI, Python 3.12, SQLAlchemy, Alembic] |
+    | Database | [e.g., PostgreSQL 16] |
+    | Auth | [e.g., OIDC (Azure AD / mock-oidc for local dev)] |
+    | Infrastructure | [e.g., Docker Compose (dev), Terraform (prod)] |
+
+    ## Prerequisites
+
+    - Docker Desktop (or Rancher Desktop)
+    - Git
+    - (Optional) VS Code with recommended extensions
+
+    ## Getting Started
+
+    1. Clone the repository:
+       ```bash
+       git clone [REPO_URL]
+       cd [APP_SLUG]
+       ```
+
+    2. Create your environment file:
+       ```bash
+       cp .env.example .env
+       # Generate a JWT secret:
+       openssl rand -hex 32
+       # Paste the value into .env as JWT_SECRET=...
+       ```
+
+    3. Start the application:
+       ```bash
+       docker compose --profile dev up --build
+       ```
+
+    4. Seed the mock services (first run only):
+       ```bash
+       bash scripts/seed-mock-services.sh
+       ```
+
+    5. Open your browser:
+       - **App:** http://localhost:[FRONTEND_PORT]
+       - **API docs:** http://localhost:[BACKEND_PORT]/docs
+
+    ## Test Users (Local Development)
+
+    | Role | Email | What they can do |
+    |------|-------|-----------------|
+    | Super Admin | admin@[APP_SLUG].local | Full access to everything |
+    | Manager | manager@[APP_SLUG].local | [Description based on RBAC] |
+    | User | user@[APP_SLUG].local | [Description based on RBAC] |
+    | Viewer | viewer@[APP_SLUG].local | Read-only access |
+
+    Click "Sign In" and pick a user from the login screen.
+
+    ## User Roles & Permissions
+
+    [Brief description of the RBAC model -- what each role can do, how custom roles work]
+
+    ## Architecture
+
+    ```
+    Browser → Next.js (frontend) → FastAPI (backend) → PostgreSQL
+                                  ↘ mock-oidc (auth)
+                                  ↘ [mock services for integrations]
+    ```
+
+    [1-2 sentences explaining the architecture choices]
+
+    ## External Integrations
+
+    | Service | Purpose | Local Dev | Production |
+    |---------|---------|-----------|-----------|
+    | [Service] | [What it does] | mock-[service] container | Real [service] API |
+
+    (Omit this section if there are no external integrations)
+
+    ## Development
+
+    ### Running Tests
+
+    ```bash
+    # Backend unit + integration tests
+    cd backend && pip install -r requirements.txt && pytest
+
+    # End-to-end tests (requires app running)
+    cd e2e && npm install && npx playwright test
+    ```
+
+    ### Project Structure
+
+    ```
+    [APP_SLUG]/
+    ├── backend/          # FastAPI application
+    │   ├── app/          # Application code (routers, models, schemas, services)
+    │   ├── alembic/      # Database migrations
+    │   └── tests/        # Backend tests
+    ├── frontend/         # Next.js application
+    │   ├── app/          # Pages and layouts
+    │   ├── components/   # Reusable UI components
+    │   └── lib/          # Utilities and API client
+    ├── mock-services/    # Mock services for local development
+    ├── scripts/          # Seed and utility scripts
+    ├── e2e/              # End-to-end Playwright tests
+    ├── infrastructure/   # Terraform (if generated)
+    └── docker-compose.yml
+    ```
+
+    ## Deployment
+
+    ### Local Development
+    Uses Docker Compose with the `dev` profile, which includes mock services
+    for authentication and external integrations.
+
+    ### Production
+    [Based on app-context.json deployment config:]
+    - If containerized: "Deploy as Docker containers to [target platform]"
+    - If Terraform exists: "Infrastructure is defined in `infrastructure/`.
+      Hand the Terraform files to your DevOps team."
+    - If Kubernetes: "Kubernetes manifests are in `k8s/`"
+    - Always: "Set `ENFORCE_SECRETS=true` and replace mock service URLs
+      with production endpoints. See `.env.example` for all required
+      environment variables."
+
+    ### Environment Variables
+
+    See `.env.example` for the complete list. Key variables for production:
+
+    | Variable | Description | Required |
+    |----------|-------------|----------|
+    | `OIDC_ISSUER_URL` | Your identity provider URL | Yes |
+    | `OIDC_CLIENT_ID` | OAuth client ID | Yes |
+    | `OIDC_CLIENT_SECRET` | OAuth client secret | Yes |
+    | `JWT_SECRET` | 32+ char secret for token signing | Yes |
+    | `DATABASE_URL` | PostgreSQL connection string | Yes |
+    | `ENFORCE_SECRETS` | Set to `true` in production | Yes |
+
+    ## License
+
+    [From app-context.json or default to: "Internal use only"]
+    ```
+
+    - Fill ALL placeholders from app-context.json and the ideation answers
+    - The Features section should use the EXACT features from ideation (plain language)
+    - The Test Users table should match the actual seed data
+    - The Deployment section should match the actual infrastructure generated
+    - If Kubernetes manifests were generated, mention Kubernetes
+    - If only Docker Compose, say Docker Compose
+    - If Terraform was generated, reference the infrastructure/ directory
+    - NEVER mention /make-it, /ship-it, /resume-it, or Claude Code in the README
+
 **After each step:**
 - Verify the code follows scaffold conventions (imports, patterns, naming)
 - Fix any issues before moving to the next step
@@ -551,7 +722,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S08**: Structure & configuration (project files, .env, stubs, secrets)
+- **S01-S09**: Structure & configuration (project files, .env, stubs, secrets, README)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
