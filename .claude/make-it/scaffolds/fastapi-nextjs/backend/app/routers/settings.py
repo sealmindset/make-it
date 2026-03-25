@@ -2,17 +2,16 @@
 Admin Settings API -- RBAC-protected endpoints for managing app_settings.
 
 Permissions required:
-  - app_settings.view: list settings, view audit logs
-  - app_settings.edit: update settings, reveal sensitive values
+  - admin.settings.read: list settings, view audit logs
+  - admin.settings.update: update settings, reveal sensitive values
 """
 
-from typing import Annotated
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.middleware.permissions import require_permission
 from app.models.app_setting import AppSetting, AppSettingAuditLog
 from app.schemas.app_setting import (
     AppSettingAuditLogRead,
@@ -21,23 +20,22 @@ from app.schemas.app_setting import (
     AppSettingReveal,
     AppSettingUpdate,
 )
+from app.schemas.auth import UserInfo
 from app.services.settings_service import invalidate_cache, mask_sensitive
-
-# [SETTINGS_ROUTER_DEPS] -- replaced during build with require_permission imports
 
 router = APIRouter(prefix="/api/admin/settings", tags=["settings"])
 
 
 @router.get("", response_model=list[AppSettingRead])
 async def list_settings(
-    # user: Annotated[CurrentUser, Depends(require_permission("app_settings", "view"))],
+    current_user: UserInfo = Depends(require_permission("admin.settings", "read")),
     db: AsyncSession = Depends(get_db),
 ):
     """List all settings, grouped by group_name. Sensitive values are masked."""
     result = await db.execute(
         select(AppSetting).order_by(AppSetting.group_name, AppSetting.key)
     )
-    settings = result.scalars().all()
+    rows = result.scalars().all()
     return [
         AppSettingRead(
             **{
@@ -45,7 +43,7 @@ async def list_settings(
                 "value": mask_sensitive(s.value, s.is_sensitive),
             }
         )
-        for s in settings
+        for s in rows
     ]
 
 
@@ -53,26 +51,25 @@ async def list_settings(
 async def update_setting(
     key: str,
     body: AppSettingUpdate,
-    # user: Annotated[CurrentUser, Depends(require_permission("app_settings", "edit"))],
+    current_user: UserInfo = Depends(require_permission("admin.settings", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a single setting value."""
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))
     setting = result.scalar_one_or_none()
     if not setting:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
     old_value = setting.value
     setting.value = body.value
-    # setting.updated_by = user.email  # [UNCOMMENT_AFTER_AUTH_WIRING]
+    setting.updated_by = current_user.email
 
     # Audit log
     audit = AppSettingAuditLog(
         setting_id=setting.id,
         old_value="********" if setting.is_sensitive else old_value,
         new_value="********" if setting.is_sensitive else body.value,
-        changed_by="system",  # [REPLACE_WITH_USER_EMAIL]
+        changed_by=current_user.email,
     )
     db.add(audit)
     await db.commit()
@@ -91,7 +88,7 @@ async def update_setting(
 @router.put("", response_model=list[AppSettingRead])
 async def bulk_update_settings(
     body: AppSettingBulkUpdate,
-    # user: Annotated[CurrentUser, Depends(require_permission("app_settings", "edit"))],
+    current_user: UserInfo = Depends(require_permission("admin.settings", "update")),
     db: AsyncSession = Depends(get_db),
 ):
     """Bulk update multiple settings at once."""
@@ -106,13 +103,13 @@ async def bulk_update_settings(
 
         old_value = setting.value
         setting.value = item.value
-        # setting.updated_by = user.email  # [UNCOMMENT_AFTER_AUTH_WIRING]
+        setting.updated_by = current_user.email
 
         audit = AppSettingAuditLog(
             setting_id=setting.id,
             old_value="********" if setting.is_sensitive else old_value,
             new_value="********" if setting.is_sensitive else item.value,
-            changed_by="system",  # [REPLACE_WITH_USER_EMAIL]
+            changed_by=current_user.email,
         )
         db.add(audit)
         updated.append(setting)
@@ -134,21 +131,20 @@ async def bulk_update_settings(
 @router.get("/{key}/reveal", response_model=AppSettingReveal)
 async def reveal_setting(
     key: str,
-    # user: Annotated[CurrentUser, Depends(require_permission("app_settings", "edit"))],
+    current_user: UserInfo = Depends(require_permission("admin.settings", "update")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Reveal the actual value of a sensitive setting. Requires edit permission."""
+    """Reveal the actual value of a sensitive setting. Requires update permission."""
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))
     setting = result.scalar_one_or_none()
     if not setting:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
     return AppSettingReveal(key=setting.key, value=setting.value)
 
 
 @router.get("/audit-log", response_model=list[AppSettingAuditLogRead])
 async def list_audit_logs(
-    # user: Annotated[CurrentUser, Depends(require_permission("app_settings", "view"))],
+    current_user: UserInfo = Depends(require_permission("admin.settings", "read")),
     db: AsyncSession = Depends(get_db),
     limit: int = 100,
 ):

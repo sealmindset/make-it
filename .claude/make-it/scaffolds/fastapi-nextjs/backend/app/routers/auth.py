@@ -1,10 +1,11 @@
+import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,6 +18,11 @@ from app.models.user import User
 from app.schemas.auth import LogoutResponse, UserInfo
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _is_secure() -> bool:
+    """Derive cookie Secure flag from FRONTEND_URL protocol."""
+    return settings.FRONTEND_URL.startswith("https")
 
 
 def _is_trusted_url(url: str) -> bool:
@@ -41,7 +47,7 @@ async def _get_oidc_discovery() -> dict:
 
 @router.get("/login")
 async def login():
-    """Redirect to OIDC provider authorization endpoint."""
+    """Redirect to OIDC provider authorization endpoint with CSRF state."""
     discovery = await _get_oidc_discovery()
     authorization_endpoint = discovery["authorization_endpoint"]
 
@@ -51,22 +57,47 @@ async def login():
             detail="OIDC discovery returned untrusted authorization endpoint.",
         )
 
+    # Generate CSRF state token (RFC 6749 Section 10.12)
+    state = secrets.token_urlsafe(32)
+
     params = {
         "client_id": settings.OIDC_CLIENT_ID,
         "response_type": "code",
         "scope": "openid email profile",
         "redirect_uri": f"{settings.FRONTEND_URL}/api/auth/callback",
+        "state": state,
     }
     auth_url = f"{authorization_endpoint}?{urllib.parse.urlencode(params)}"
-    return RedirectResponse(url=auth_url, status_code=302)
+
+    response = RedirectResponse(url=auth_url, status_code=302)
+    response.set_cookie(
+        key="oidc_state",
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=_is_secure(),
+        path="/",
+        max_age=600,  # 10 minutes
+    )
+    return response
 
 
 @router.get("/callback")
 async def callback(
     code: str = Query(...),
+    state: str = Query(...),
+    oidc_state: str | None = Cookie(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange authorization code for tokens, look up user, issue JWT."""
+
+    # Validate CSRF state (RFC 6749 Section 10.12)
+    if not oidc_state or not secrets.compare_digest(state, oidc_state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid state parameter. Please try logging in again.",
+        )
+
     discovery = await _get_oidc_discovery()
     token_endpoint = discovery["token_endpoint"]
     userinfo_endpoint = discovery["userinfo_endpoint"]
@@ -148,18 +179,28 @@ async def callback(
     }
     token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
-    # Set httpOnly cookie and redirect to dashboard
-    response = RedirectResponse(
-        url=f"{settings.FRONTEND_URL}/dashboard", status_code=302
-    )
+    # Next.js 16+ strips Set-Cookie from redirect (307) responses.
+    # Return an HTML page that sets the cookie via response header, then
+    # redirects via meta-refresh + JavaScript.
+    redirect_url = f"{settings.FRONTEND_URL}/dashboard"
+    html = f"""<!DOCTYPE html>
+<html><head>
+<meta http-equiv="refresh" content="0;url={redirect_url}">
+</head><body>
+<script>window.location.href="{redirect_url}";</script>
+</body></html>"""
+
+    response = HTMLResponse(content=html, status_code=200)
     response.set_cookie(
         key="token",
         value=token,
         httponly=True,
         samesite="lax",
-        secure=False,  # Set to True in production with HTTPS
+        secure=_is_secure(),
         path="/",
     )
+    # Clear the OIDC state cookie
+    response.delete_cookie(key="oidc_state", path="/")
     return response
 
 
@@ -173,8 +214,6 @@ async def me(current_user: UserInfo = Depends(get_current_user)):
 async def logout(current_user: UserInfo = Depends(get_current_user)):
     """Log out by deleting the token cookie. Must be POST, not GET."""
     response = LogoutResponse(message="Logged out successfully")
-    from fastapi.responses import JSONResponse
-
     json_response = JSONResponse(content=response.model_dump())
     json_response.delete_cookie(key="token", path="/")
     return json_response
