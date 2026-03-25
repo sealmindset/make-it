@@ -11,9 +11,10 @@ const segmentLabels: Record<string, string> = {
   admin: "Admin",
   users: "Users",
   roles: "Roles",
+  settings: "Settings",
+  logs: "Activity Logs",
   // [SEGMENT_LABELS] -- app-specific labels, e.g.:
   // projects: "Projects",
-  // settings: "Settings",
 };
 
 function formatSegment(segment: string): string {

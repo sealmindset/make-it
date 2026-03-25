@@ -23,6 +23,14 @@ The scaffold provides the foundational infrastructure that every app needs -- au
 | `scripts/seed-mock-services.sh` | Customized | User list and extra mock seeding filled in per app |
 | `.env.example` | Customized | Additional service URLs added per app |
 | `.gitignore` | Yes | Standard Python + Node.js + Docker gitignore |
+| `backend/app/services/log_service.py` | Customized | `[APP_SLUG]` in service name |
+| `backend/app/middleware/logging.py` | Customized | `[APP_SLUG]` in service name |
+| `backend/app/routers/logs.py` | Yes | Activity log REST API (events, stats, clear) |
+| `frontend/app/(auth)/admin/logs/page.tsx` | Yes | Activity Logs admin UI page |
+| `backend/tests/conftest.py` | Customized | `[APP_SLUG]` in emails, `[PERMISSIONS]` placeholders |
+| `backend/tests/integration/test_health.py` | Yes | Health endpoint tests |
+| `e2e/playwright.config.ts` | Customized | `[FRONTEND_PORT]` placeholder |
+| `e2e/tests/health.spec.ts` | Yes | Frontend + backend health smoke tests |
 
 ## Placeholders
 
@@ -111,6 +119,32 @@ All health checks use `127.0.0.1` (not `localhost`) to avoid IPv6 resolution iss
 - **Backend**: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"` (slim image, no wget/curl)
 - **mock-oidc**: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"` (slim image)
 - **PostgreSQL**: `pg_isready -U [APP_SLUG]`
+
+### Activity Logs
+
+Every scaffolded app includes an in-memory activity log for observability:
+- **LogStore** -- circular buffer (configurable via `LOG_BUFFER_SIZE`, default 10000) with FIFO eviction
+- **RequestLoggingMiddleware** -- captures inbound API requests (excludes health/static)
+- **URL sanitization** -- strips sensitive query params (token, key, secret, password) before logging
+- **REST API** -- `GET /api/admin/logs/events`, `GET /api/admin/logs/stats`, `DELETE /api/admin/logs/events`
+- **Admin UI** -- Activity Logs tab with stats cards, filters, event table, auto-refresh toggle, clear button
+- **RBAC** -- requires `admin.logs.read` and `admin.logs.delete` permissions (seeded in the app's 003 migration)
+
+Outbound HTTP logging is added per-app during the Build phase by wrapping service client creation with the log interceptor.
+
+### Trailing-Slash ASGI Wrapper
+
+FastAPI registers list endpoints with a trailing slash (e.g., `/api/rfcs/`). When requests arrive through the Next.js reverse proxy without the slash, FastAPI's built-in redirect leaks the internal Docker hostname (e.g., `http://backend:8000/api/rfcs/`). The `TrailingSlashASGI` wrapper in `main.py` silently rewrites matching paths instead of issuing a redirect.
+
+### Test Infrastructure
+
+The scaffold includes a ready-to-use test setup:
+- **pytest.ini** -- asyncio_mode=auto, test discovery config
+- **conftest.py** -- in-memory SQLite with UUID compat, auth bypass via dependency overrides, `admin_client`/`user_client`/`viewer_client` fixtures, `seed_user()` helper
+- **test_health.py** -- health endpoint smoke tests (always valid for any app)
+- **e2e/** -- Playwright config + health smoke test, targeting `http://localhost:[FRONTEND_PORT]`
+
+Test users in conftest.py have `[PERMISSIONS]` placeholders that the Build phase fills in to match the app's RBAC seed data.
 
 ### Port Selection
 

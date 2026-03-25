@@ -63,6 +63,8 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - FRONTEND_URL=http://localhost:[FRONTEND_PORT]
       - BACKEND_URL=http://localhost:[BACKEND_PORT]
+      - ENFORCE_SECRETS=false
+      - LOG_BUFFER_SIZE=10000
       # [ADDITIONAL_SERVICE_URLS]
       # - JIRA_BASE_URL=http://mock-jira:8443
       # - JIRA_AUTH_TOKEN=mock-jira-token

@@ -10,6 +10,8 @@ import {
   LayoutDashboard,
   Users,
   Shield,
+  Settings,
+  Activity,
   // [NAV_ICONS] -- import additional icons for app-specific pages
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -35,13 +37,25 @@ const navItems: NavItem[] = [
     label: "Users",
     href: "/admin/users",
     icon: Users,
-    permission: { resource: "users", action: "view" },
+    permission: { resource: "users", action: "read" },
   },
   {
     label: "Roles",
     href: "/admin/roles",
     icon: Shield,
-    permission: { resource: "roles", action: "view" },
+    permission: { resource: "roles", action: "read" },
+  },
+  {
+    label: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    permission: { resource: "admin.settings", action: "read" },
+  },
+  {
+    label: "Activity Logs",
+    href: "/admin/logs",
+    icon: Activity,
+    permission: { resource: "admin.logs", action: "read" },
   },
 ];
 

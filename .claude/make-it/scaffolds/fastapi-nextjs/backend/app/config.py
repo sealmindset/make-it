@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # URLs
     FRONTEND_URL: str = "http://localhost:[FRONTEND_PORT]"
     BACKEND_URL: str = "http://localhost:[BACKEND_PORT]"
+    # Security
+    ENFORCE_SECRETS: bool = False
+    # Activity Log
+    LOG_BUFFER_SIZE: int = 10000
     # [ADDITIONAL_SERVICE_URLS] -- e.g., JIRA_BASE_URL, TEMPO_BASE_URL
 
     model_config = {"env_file": ".env", "extra": "ignore"}

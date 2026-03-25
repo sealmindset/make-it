@@ -120,13 +120,16 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 Scaffolds are pre-built, battle-tested code foundations with `[BRACKET_PLACEHOLDERS]` for app-specific values. They encode every lesson learned from real builds so the same bugs never recur.
 
-### fastapi-nextjs (61 files)
+### fastapi-nextjs (83 files)
 The primary scaffold for web applications. The Build phase copies it into the project, replaces placeholders, then generates domain-specific code on top. Provides:
 - **Auth**: Complete OIDC flow (login → mock-oidc → callback → JWT cookie → /me → logout)
 - **RBAC**: 4 tables (roles, permissions, role_permissions, users), require_permission middleware, admin UI
 - **Frontend**: Same-origin proxy, flat AuthMe, DataTable with Excel-like filtering, sidebar, breadcrumbs, quick search, mode toggle, oklch theming
 - **Docker**: Compose with health checks (127.0.0.1), entrypoint.sh for migrations, mock-oidc on dev profile
 - **Mock-oidc**: Copied as-is. RSA signing, internal/external URL split, user picker, admin API
+- **Activity Logs**: LogStore circular buffer, request logging middleware, REST API, admin UI page with stats/filters/auto-refresh
+- **Trailing-slash wrapper**: ASGI middleware that prevents Docker hostname leaks in FastAPI redirects
+- **Test infrastructure**: pytest conftest with SQLite UUID compat, auth bypass fixtures, health tests, Playwright e2e scaffolding
 
 What the scaffold does NOT provide (generated fresh per app):
 - Domain models, migrations, and seed data

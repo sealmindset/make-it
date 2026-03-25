@@ -22,13 +22,25 @@ const navigationItems: SearchItem[] = [
     label: "User Management",
     href: "/admin/users",
     keywords: ["users", "admin", "people"],
-    permission: { resource: "users", action: "view" },
+    permission: { resource: "users", action: "read" },
   },
   {
     label: "Role Management",
     href: "/admin/roles",
     keywords: ["roles", "permissions", "admin"],
-    permission: { resource: "roles", action: "view" },
+    permission: { resource: "roles", action: "read" },
+  },
+  {
+    label: "Settings",
+    href: "/admin/settings",
+    keywords: ["settings", "config", "admin"],
+    permission: { resource: "admin.settings", action: "read" },
+  },
+  {
+    label: "Activity Logs",
+    href: "/admin/logs",
+    keywords: ["logs", "activity", "events", "monitoring", "admin"],
+    permission: { resource: "admin.logs", action: "read" },
   },
 ];
 
