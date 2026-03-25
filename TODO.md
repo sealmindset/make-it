@@ -37,17 +37,32 @@ manifests are an additional production artifact.
    store with service account scoped to Secret Server folder) but not yet
    onboarded for all teams.
 
+**DevOps integration (from Argo team):**
+- `/ship-it` (or GitHub Actions + Claude) creates the Argo CD Application resource
+  directly — no manual Argo UI step needed
+- Requires a **service account token** scoped to the team's Argo CD project for RBAC
+- `/make-it k8s` or `/ship-it` prompts user for:
+  1. Argo CD service account token (stored in `.env`, never committed)
+  2. Namespace (or default to team naming convention: `teamname-project`)
+- Once the Argo Application is created and pointed at the Git repo, Argo handles
+  deployment automatically on every push
+- Flow: `/make-it k8s` builds app + generates manifests → `/ship-it` pushes to Git
+  → GitHub Actions builds + pushes images to ghcr.io → `/ship-it` creates Argo
+  Application via API using service account token → Argo syncs and deploys
+
 **Design decisions already made:**
 - Flag approach, not separate skill (`/make-it k8s`)
 - Sets `deployment.target: "argocd"` in app-context.json
 - Build phase identical — same scaffold, same Docker Compose for local dev
 - Extra step at end generates: `k8s/` directory (Deployments, Services, ConfigMap,
   Secrets template, Ingress), `argocd/application.yml`, DB migration as K8s Job
-- `/ship-it` detects target and pushes to Git for Argo sync instead of direct deploy
+- `/ship-it` detects target and creates Argo Application via API (not just Git push)
 - Docker Compose always present for local dev, `/try-it`, and build-verify
 - Ask user "Helm or Kustomize?" as part of the k8s flag flow
 - Generate GHCR push workflow (GitHub Actions) for container images
 - Include ONBOARDING.md with step-by-step for AD group access + SNOW request
+- Service account token + namespace stored in `.env` (gitignored), documented
+  in `.env.example` as `ARGOCD_TOKEN` and `ARGOCD_NAMESPACE`
 
 ## Low Priority
 
