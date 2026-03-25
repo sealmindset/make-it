@@ -1,6 +1,6 @@
 ---
 name: retrofit-it
-description: Retrofit an existing application with production-ready foundations (OIDC, RBAC, settings management, Docker, security) by reverse-engineering first, then upgrading surgically.
+description: Retrofit an existing application with production-ready foundations (OIDC, RBAC, Docker, security) by reverse-engineering first, then upgrading surgically.
 allowed-tools:
   - Read
   - Write
@@ -255,8 +255,8 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase A | .env config, .gitignore, Docker, CHANGELOG, TODO | "Setting up your development environment" |
 | Phase B | Database migrations, RBAC tables, seed data | "Preparing your database for users and permissions" |
 | Phase C | OIDC authentication, permission middleware | "Adding secure login and user permissions" |
-| Phase C2 | app_settings + audit_log tables, settings service, settings router, Admin Settings page | "Adding application settings management" |
 | Phase D | Standard components, layout, theme | "Polishing the interface" |
+| Phase D2 | Activity Logs: LogStore, middleware, interceptors, REST API, Admin UI tab | "Adding activity monitoring to your app" |
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
 | Phase F2 | AI operational safety: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if AI) | "Securing your AI features" (skip if no AI) |
@@ -353,12 +353,11 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 **I'll do this in [N] steps, checking with you between each one:**
 1. **Setting up your development environment** -- no risk to your existing features
 2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
-3. **Adding secure login and user permissions** -- the biggest change, I'll test thoroughly
-4. **Adding application settings management** -- so admins can change configuration without editing files
-5. **Polishing the interface** -- your app will look the same, just with a few upgrades
-6. **Setting up test services** -- so you can develop without needing real external systems
-7. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
-8. **Final security checks and deployment prep** -- locking everything down
+3. **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
+4. **Polishing the interface** -- your app will look the same, just with a few upgrades
+5. **Setting up test services** -- so you can develop without needing real external systems
+6. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+7. **Final security checks and deployment prep** -- locking everything down
 
 I'll check with you after each step before moving on.
 
@@ -407,10 +406,49 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Do NOT recreate project structure -- work within existing structure
 
 2. **Docker (Prompt #6 adapted):**
-   - Generate Dockerfile(s) for existing services
+   - **Port conflict detection:** Before assigning ports, check availability:
+     ```bash
+     for PORT in 3000 8000 5432 10090; do lsof -i :$PORT >/dev/null 2>&1 && echo "$PORT in use"; done
+     ```
+     Start from defaults (3000, 8000, 5432, 10090) and increment by 100 if in use.
+   - Generate Dockerfile(s) for existing services:
+     - **Non-root user:** Every Dockerfile MUST create and switch to a non-root user:
+       ```dockerfile
+       RUN groupadd --gid 1001 appgroup && \
+           useradd --uid 1001 --gid appgroup --shell /bin/bash --create-home appuser
+       COPY --chown=appuser:appgroup . .
+       USER appuser
+       ```
+     - **Backend entrypoint.sh:** If the backend requires database migrations (Alembic/Prisma),
+       the Dockerfile CMD MUST invoke entrypoint.sh (not the application server directly).
+       The entrypoint.sh must: wait for DB (one-liner socket check), run migrations, then exec
+       the server. If CMD runs uvicorn/node directly, migrations never execute.
+       ```bash
+       #!/bin/bash
+       set -e
+       # Wait for DB
+       until python3 -c "import socket; s=socket.create_connection(('db',5432)); s.close()" 2>/dev/null; do sleep 1; done
+       # Run migrations
+       alembic upgrade head
+       # Start server
+       exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+       ```
    - Generate docker-compose.yml with profiles (default + dev for mocks)
+   - **Health checks:** ALL health checks MUST use `127.0.0.1` (not `localhost`) to avoid
+     IPv6 resolution issues in Alpine containers:
+     - Frontend: `wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/`
+     - Backend: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"`
+     - mock-oidc: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"`
+     - PostgreSQL: `pg_isready -U [APP_SLUG]`
+   - **Trailing-slash wrapper (FastAPI only):** Add TrailingSlashASGI middleware to main.py.
+     FastAPI registers list endpoints with trailing slash (e.g., `/api/items/`). Behind a
+     reverse proxy, requests arrive without it. FastAPI's built-in redirect leaks the internal
+     Docker hostname (e.g., `http://backend:8000/api/items/`). The wrapper silently rewrites
+     matching paths instead of issuing a redirect.
    - Wire existing env vars into docker-compose
-   - Check port availability before assigning
+   - **Cross-reference env var names:** Read the backend config class (e.g., pydantic Settings)
+     and verify every field name matches the docker-compose.yml environment block. Common
+     mismatches: OIDC_ISSUER vs OIDC_ISSUER_URL, JIRA_API_TOKEN vs JIRA_AUTH_TOKEN. Fix any.
 
 3. **Database (Prompt #4 + #7 adapted):**
    - If existing DB: add RBAC tables (roles, permissions, role_permissions) via migration
@@ -435,60 +473,153 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
      - Migrate user data model
    - Always: add mock-oidc to docker-compose, wire .env
 
+   **Critical auth patterns (MUST be implemented exactly):**
+
+   a. **Same-origin proxy (Next.js frontend):** Configure next.config.ts with rewrites()
+      routing `/api/*` to the backend. Frontend API client uses `BASE_URL="/api"` (relative).
+      Set `BACKEND_INTERNAL_URL=http://backend:8000` in the frontend Dockerfile/compose.
+      OIDC redirect_uri uses `FRONTEND_URL/api/auth/callback` (goes through proxy).
+      Login button uses `window.location.href` (not fetch). This ensures auth cookies are
+      set on the same origin and avoids cross-origin cookie issues.
+
+   b. **OIDC state parameter (RFC 6749 Section 10.12):** The `/login` endpoint MUST
+      generate a CSRF state token (`secrets.token_urlsafe(32)`), store it in an `oidc_state`
+      httpOnly cookie (max_age=600), and include it in the OIDC authorization URL. The
+      `/callback` endpoint MUST validate the state param against the cookie using
+      `secrets.compare_digest()` and clear the cookie after use.
+
+   c. **Set-Cookie workaround (Next.js 16+):** Next.js strips Set-Cookie from redirect
+      (307) responses. The OIDC callback MUST return an HTMLResponse (200) with the JWT
+      cookie in the response header, plus meta-refresh + JavaScript redirect to dashboard.
+      Do NOT use RedirectResponse for the callback.
+
+   d. **Cookie Secure flag:** Derive from URL protocol: `settings.FRONTEND_URL.startswith("https")`.
+      NEVER hardcode `Secure=False` or derive from NODE_ENV.
+
+   e. **Flat JWT payload:** The JWT must contain `{sub, email, name, role_id, role_name,
+      permissions[]}` at the top level. No `.user` wrapper object. The frontend AuthMe type
+      must match this flat structure exactly.
+
+   f. **Auth callback role lookup:** The callback MUST query the users table by `oidc_subject`
+      and read the role from the database record. NEVER use OIDC claims for roles.
+
+   g. **Logout:** POST endpoint that clears the JWT cookie. Frontend logout button calls
+      the API via POST (not a GET link or `<a href>`).
+
 5. **Permissions (Prompt #9 adapted):**
-   - Add require_permission middleware to all route handlers
+   - Add require_permission middleware to all route handlers (NEVER check role strings directly)
+   - Add permission service with `has_permission(user, resource, action)` and in-memory cache
+     with invalidation on role/permission changes
    - Map existing role checks to permission-based checks
    - Generate admin UI: User Management + Role Management pages
-   - Wire sidebar to show/hide based on permissions
+   - Wire sidebar to show/hide items based on user permissions from JWT/auth endpoint
+   - Frontend action buttons gated with `hasPermission(resource, action)` from `useAuth()`
 
-6. **Application Settings (Prompt #9b adapted):**
-   - Scan for existing settings management: grep for settings tables, admin settings pages,
-     config management endpoints, or similar patterns
-   - **If no settings management exists:** Add complete settings feature:
-     a. Add `app_settings` and `app_setting_audit_logs` tables via migration
-     b. Create settings service with in-memory cache (60s TTL) and cascading
-        precedence (DB > .env > code default)
-     c. Create settings router with RBAC-gated endpoints (list, update, bulk update,
-        reveal sensitive, audit log)
-     d. Generate Admin Settings page with tab grouping, sensitive value masking,
-        inline editing, and audit log viewer
-     e. Add `app_settings.view` and `app_settings.edit` permissions to RBAC seed
-     f. Create seed migration populating `app_settings` from all `.env` variables
-        with category, sensitivity flag, and description
-   - **If partial settings management exists:** Enhance it:
-     a. Add missing tables (audit log if absent)
-     b. Add cascading precedence if settings are DB-only (no .env fallback)
-     c. Add sensitive value masking if missing
-     d. Add RBAC permissions if settings page is unprotected
-     e. Seed any .env variables not yet in the settings table
-   - CRITICAL: Settings depend on auth + RBAC (for permission gating) and database
-     (for storage). Must run AFTER steps 3-5.
-   - Risk weight: "Add" (1) if no settings exist, "Enhance" (2) if partial
+5b. **Activity Logs (Prompt #9c adapted -- always for web-app and api-service):**
+    - Add LogStore (circular buffer) and LogService (injectable singleton)
+    - Add inbound request middleware (exclude health/static routes)
+    - Add outbound HTTP interceptor to ALL existing service client creation points
+    - Add URL sanitization to strip sensitive query params before logging
+    - Add REST API: GET /api/admin/logs/events, GET /api/admin/logs/stats,
+      DELETE /api/admin/logs/events (with RBAC permissions)
+    - Add admin.logs resource with read and delete actions to RBAC seed data
+    - Add Activity Logs tab to Admin UI with stats cards, filters, event table,
+      auto-refresh toggle, and Clear Buffer button
+    - Add LOG_BUFFER_SIZE, CRIBL_STREAM_URL, CRIBL_STREAM_TOKEN to .env.example
+    - Reference design-blueprint.md Section 12b for architecture and prompt-templates.md
+      Prompt #9c for implementation patterns
 
-7. **UI Components (Prompt #14 adapted):**
-   - Add missing standard components (Breadcrumbs, DataTable, QuickSearch, ModeToggle)
-   - Add shared authenticated layout with header bar (if missing)
-   - Replace plain HTML tables with DataTable on list pages
-   - Add ThemeProvider with oklch CSS variables
-   - Ensure system fonts only (remove external font imports)
+6. **UI Components (Prompt #14 adapted):**
+   - Add ALL four standard components (generate if missing, verify if present):
+     - `components/breadcrumbs.tsx` with SEGMENT_LABELS for all app pages
+     - `components/data-table.tsx` with sorting, filtering, pagination
+     - `components/quick-search.tsx` with NAVIGATION_ITEMS for all pages (Cmd+K palette)
+     - `components/mode-toggle.tsx` for light/dark theme switching
+   - Add shared authenticated layout with EXACT header bar structure:
+     `SidebarTrigger | Breadcrumbs | <spacer> | QuickSearch | ModeToggle`
+   - Replace plain HTML tables with DataTable on ALL list pages
+   - Add ThemeProvider wrapping the app in root layout with `suppressHydrationWarning`
+   - Add oklch CSS variables for theming (Tailwind config maps to CSS vars)
+   - Ensure system fonts only (grep for `next/font/google`, `fonts.googleapis.com`, or
+     any external font CDN references -- remove and replace with system font stacks)
+   - Add `@tanstack/react-table` and `next-themes` to package.json dependencies
    - PRESERVE existing page designs and layouts -- only add framework components
 
 7. **Mock Services (Prompt #12 adapted):**
-   - Add mock-oidc (always)
+   - **mock-oidc:** Copy from `~/.claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/`
+     as-is (never regenerate -- it's the most stable, battle-tested component). Add to
+     docker-compose.yml with `profile: dev`. Configure internal/external URL split:
+     - `MOCK_OIDC_EXTERNAL_BASE_URL=http://localhost:[PORT]` (browser navigates here)
+     - `MOCK_OIDC_INTERNAL_BASE_URL=http://mock-oidc:10090` (backend calls this inside Docker)
+     - Backend's `OIDC_ISSUER_URL` uses the INTERNAL address
    - Add mock services for each discovered external integration
-   - Generate scripts/seed-mock-services.sh
-   - Wire service client base URLs to env vars
+   - **Generate scripts/seed-mock-services.sh** with:
+     - User registration: one user per app role, with `sub` matching `oidc_subject` in DB seed
+       (e.g., `mock-admin`, `mock-manager`, `mock-user`, `mock-viewer`)
+     - Remove non-app users from mock-oidc (clean slate)
+     - Update client redirect URIs to match `FRONTEND_URL/api/auth/callback`
+     - Additional mock service seeding if external integrations exist
+   - Wire ALL service client base URLs to environment variables (never hardcoded)
+   - **Verify service client ↔ mock endpoint contracts:** For each service client, read the
+     methods and cross-reference with the mock service route files. Fix any endpoint mismatches
+     (e.g., client calls `/api/v2/issues` but mock only has `/rest/api/2/issue`).
 
 8. **Seed Data (Prompt #13 adapted):**
-   - Generate seed data for RBAC tables (roles, permissions, users per role)
-   - Generate seed data for domain tables (use existing data patterns if any)
-   - Ensure seed users match mock-oidc test users
+   - Generate seed data for RBAC tables:
+     - 4 system roles (Super Admin, Admin, Manager, User) with `is_system=true`
+     - Page-level CRUD permissions for ALL pages (resource.action format)
+     - Scaffold permissions: admin.users (read/create/update/delete), admin.roles
+       (read/create/update/delete), admin.settings (read/update), admin.logs (read/delete)
+     - Role-permission mappings (Super Admin gets all, others tiered)
+   - Generate seed data for domain tables:
+     - 10-20 items per list page with varied statuses and dates
+     - **Dashboard data:** Enough records for charts/metrics to show non-zero values
+     - Recent timestamps so the app looks active, not stale
+   - Ensure seed users match mock-oidc test users by `oidc_subject`:
+     - `mock-admin` → admin@[app].local (Super Admin role)
+     - `mock-manager` → manager@[app].local (Manager role)
+     - `mock-user` → user@[app].local (User role)
+     - `mock-viewer` → viewer@[app].local (Viewer role)
+   - **Seed migration MUST be idempotent** -- safe to run multiple times
+   - **Alembic syntax rules (if using SQLAlchemy):**
+     - Use `sa.text("...").bindparams(...)` for parameterized inserts (NOT `op.execute()` with 2+ args)
+     - Use f-string literals for deterministic UUIDs (NOT PostgreSQL `::uuid` cast syntax)
+     - Use `sa.Enum(create_type=False)` for existing PostgreSQL enum columns (NOT `sa.String`)
 
-10. **Security (Prompt #11 adapted):**
+9. **Security (Prompt #11 adapted):**
    - Fix any hardcoded secrets found during discovery
    - Add input validation where missing
    - Add security headers
    - Update dependencies to latest stable versions
+   - **ENFORCE_SECRETS pattern:** Add `enforce_secrets()` function called at app startup.
+     When `ENFORCE_SECRETS=true` (production), validate:
+     - JWT_SECRET is at least 32 characters and not a known default
+     - OIDC_CLIENT_SECRET is not the mock default
+     - App refuses to start if any secret is weak (RuntimeError)
+     Set `ENFORCE_SECRETS=false` in docker-compose.yml (local dev) and `true` in production.
+   - **No global 401 redirect:** Verify the frontend API client does NOT redirect to "/" on 401.
+     The login page checks /auth/me and expects 401. Auth guard in layout handles redirects.
+
+10. **Test Infrastructure (scaffold test patterns):**
+    - **Python (FastAPI) backend:**
+      - Add `pytest.ini` with `asyncio_mode = auto` and `testpaths = tests`
+      - Add `tests/conftest.py` with:
+        - In-memory SQLite with UUID compatibility patch (`@compiles(PG_UUID, "sqlite")`)
+        - Auth bypass via FastAPI dependency overrides (inject test user into `get_current_user`
+          and `require_permission`)
+        - Test user fixtures: `admin_client`, `user_client`, `viewer_client` with appropriate
+          permissions
+        - `seed_user()` helper for creating test users in the database
+        - `db_engine` / `db_session` fixtures with table creation and cleanup
+      - Add `tests/integration/test_health.py` -- health endpoint smoke tests
+      - Add `pytest`, `pytest-asyncio`, `aiosqlite` to requirements.txt
+      - Keep existing tests -- ensure they still pass after retrofit
+    - **Frontend (Next.js) e2e:**
+      - Add `e2e/package.json` with `@playwright/test`
+      - Add `e2e/playwright.config.ts` targeting `http://localhost:[FRONTEND_PORT]` with
+        chromium-only, single worker
+      - Add `e2e/tests/health.spec.ts` -- frontend loads + backend health endpoint tests
+    - If the app already has tests, preserve them and ensure they pass alongside the new ones
 
 11. **AI Prompt Management (Prompt #10 adapted):**
     - Detect AI usage: scan for LLM/AI provider calls, agent classes, hardcoded system prompts
@@ -567,25 +698,19 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Verify: app still works in Docker
 - Tell user: "Your development environment is set up. Your app is running just like before, but now in a proper sandbox."
 
-**Step 2: "Adding secure login and user permissions" (highest risk)**
-- Internal: Steps 3-5 (database, auth, permissions)
-- Verify: login works, roles work, all pages accessible
-- Tell user: "Secure login is working! You can now control who can access what in your app."
-
-**Step 2.5: "Adding application settings management"**
-- Internal: Step 6 (application settings)
-- Verify: settings table seeded, Admin Settings page loads, settings API responds,
-  sensitive values masked, audit log records changes, RBAC permissions enforced
-- Tell user: "Your app now has a settings management system. Authorized admins can
-  view and change configuration through the admin panel instead of editing config files."
+**Step 2: "Adding secure login, user permissions, and activity monitoring" (highest risk)**
+- Internal: Steps 3-5b (database, auth, permissions, activity logs)
+- Verify: login works, roles work, all pages accessible, activity logs capturing events
+- Tell user: "Secure login is working! You can now control who can access what in your app,
+  and there's a built-in activity monitor so you can see what's happening behind the scenes."
 
 **Step 3: "Polishing the interface and setting up test services" (moderate risk)**
-- Internal: Steps 7-9 (UI components, mock services, seed data)
+- Internal: Steps 6-8 (UI components, mock services, seed data)
 - Verify: all pages render correctly, mock services respond
 - Tell user: "Your interface got a few upgrades, and I set up test services so you can develop without needing real external systems."
 
 **Step 4: "Making your AI prompts editable" (if app uses AI)**
-- Internal: Step 11 (AI prompt management)
+- Internal: Step 10 (AI prompt management)
 - Verify: prompts load from DB, admin UI works
 - Tell user: "Your AI prompts can now be edited through the admin panel without changing any code."
 - Skip this step entirely if the app doesn't use AI/LLM features.
@@ -604,8 +729,13 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Run NeMo Guardrails basic test suite (18 tests) after this step to confirm the safety
   controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
 
-**Step 5: "Final security checks and deployment prep" (low risk)**
-- Internal: Steps 10, 13 (security hardening, Terraform)
+**Step 5: "Adding automated tests" (low risk)**
+- Internal: Step 10 (test infrastructure)
+- Verify: pytest runs, Playwright config exists, existing tests still pass
+- Tell user: "Automated tests are set up. They'll catch problems early as you keep building."
+
+**Step 6: "Final security checks and deployment prep" (low risk)**
+- Internal: Steps 9, 13 (security hardening, Terraform)
 - Verify: final build-verify pass
 - Tell user: "Security is locked down and your deployment files are ready for your DevOps team."
 
@@ -635,15 +765,101 @@ After each step:
 
 <step name="verify">
 
-**Run the same build-verify as /make-it.** Reference the make-it.md build-verify step.
+**Build-verify is a SILENT QUALITY GATE** identical to /make-it's. The user sees
+"Making sure everything works..." but NOT the technical details.
 
-The verification is identical:
-- Part A: Static code verification (all checks from guardrails.md active tiers)
-- Part B: Live verification (start containers, test auth, test pages, test permissions)
-- Part C: Fix cycle (silent, automatic, up to 3 cycles)
-- Part D: Declare success
+**PART A: Static code verification (before starting the app)**
 
-**Additional retrofit-specific checks:**
+Run ALL applicable checks. For web-app retrofits (Tier 1), this includes:
+
+1. **Verify project structure** -- all expected files exist
+2. **Verify no stub endpoints** -- search for "not yet implemented" in route handlers
+3. **Verify no hardcoded mock data in pages** -- pages use API layer, not inline arrays
+4. **Verify database migrations exist** -- Alembic versions/ or Prisma migrations/
+5. **Verify .env and .env.example both exist** -- .env gitignored, JWT_SECRET populated
+6. **Verify CHANGELOG.md and TODO.md exist** with content
+7. **Verify mock services are wired** -- mock-oidc in docker-compose, service clients use env vars
+8. **Verify no hardcoded service URLs** -- grep for hardcoded localhost ports in app code
+9. **Verify no external font imports** -- grep for next/font/google, fonts.googleapis.com
+10. **Verify all four standard UI components** -- breadcrumbs, data-table, quick-search, mode-toggle
+    - Header bar: SidebarTrigger | Breadcrumbs | spacer | QuickSearch | ModeToggle
+    - ThemeProvider wraps app with suppressHydrationWarning
+    - @tanstack/react-table and next-themes in package.json
+11. **Verify seed data exists** -- users per role, 10-20 domain items, dashboard metrics
+12. **Verify seed script exists** -- scripts/seed-mock-services.sh registers users, updates redirects
+13. **Verify auth callback reads roles from database** -- queries users by oidc_subject, not claims
+14. **Verify logout is POST** -- backend POST endpoint, frontend calls via POST (not GET)
+15. **Verify service client ↔ mock contracts** -- cross-reference client methods with mock routes
+16. **Verify database-driven RBAC** -- roles/permissions/role_permissions tables, require_permission
+    middleware, permission service with cache, admin UI for users/roles
+17. **Verify docker-compose env var names match backend config** -- cross-reference field names
+18. **Verify backend Dockerfile uses entrypoint.sh** -- wait-for-DB + migrations + exec server
+19. **Verify Alembic seed migration syntax** -- sa.text().bindparams(), no ::uuid, correct enum types
+20. **Verify port availability** -- lsof for all ports in docker-compose.yml
+21. **Verify same-origin proxy** -- next.config.ts rewrites, relative BASE_URL, BACKEND_INTERNAL_URL
+22. **Verify AuthMe type is flat** -- {sub, email, name, role_id, role_name, permissions[]}, no wrapper
+23. **Verify no global 401 redirect** -- API client must not redirect to "/" on 401
+24. **Verify frontend types match backend schemas** -- field names, nesting, list vs paginated
+25. **Verify Activity Logs** -- LogStore, inbound middleware, outbound interceptors, REST API,
+    admin UI tab, admin.logs permissions, LOG_BUFFER_SIZE in .env.example
+26. **Verify ENFORCE_SECRETS** -- enforce_secrets() called at startup, ENFORCE_SECRETS=false in
+    docker-compose, weak secret detection for JWT_SECRET and OIDC_CLIENT_SECRET
+27. **Verify OIDC state parameter** -- login generates state token, callback validates with
+    secrets.compare_digest(), oidc_state cookie cleared after use
+28. **Verify test infrastructure** -- pytest.ini, conftest.py with auth bypass fixtures,
+    test_health.py, Playwright config + health spec
+
+Tell user: "Your app is retrofitted! Now making sure everything works perfectly..."
+
+**PART B: Live verification (start the app and test it)**
+
+1. **SSL-inspecting proxy check** -- detect Zscaler/Netskope/GlobalProtect before Docker builds.
+   If detected, ask user to pause. Wait for confirmation. Remind to re-enable after builds.
+2. **Build and start containers:** `docker compose --profile dev build && up -d`
+   If build fails, diagnose silently, fix, retry (up to 3 attempts).
+3. **Wait for all services healthy** -- poll health endpoints (timeout 120s per service)
+4. **Run seed script:** `bash scripts/seed-mock-services.sh`
+5. **Test auth flow for EACH role:**
+   - Navigate to app, follow login through mock-oidc (login_hint per role)
+   - Verify callback completes, JWT cookie set
+   - Verify /auth/me returns correct role from DATABASE
+   - Verify dashboard loads with content
+   - Test logout (POST, cookie cleared, 401 after)
+6. **Test every API endpoint** with valid JWT -- verify 2xx, valid JSON, non-empty arrays
+7. **Test every page** -- loads (200), has meaningful content (not empty)
+8. **Test permission boundaries** -- correct access per role, 403 for unauthorized
+9. **Test Activity Logs** -- stats returns data, events captured, admin UI tab loads
+
+**PART C: Fix cycle (silent, automatic, up to 3 cycles)**
+
+If ANY test fails:
+1. Diagnose root cause from error context
+2. Fix in application code
+3. Rebuild affected service with `--no-cache` (Docker layer caching can serve stale output)
+4. Re-run failing test to confirm fix
+5. Re-run FULL test suite for regressions
+6. Repeat (up to 3 full cycles)
+
+**Common retrofit-specific issues and fixes:**
+- Auth callback returns wrong role -> fix to query database by oidc_subject
+- Logout 404 -> change to POST endpoint, fix frontend button
+- Service client 404 from mock -> fix endpoint URL to match mock routes
+- Empty pages -> verify seed migration ran, check API endpoint
+- Docker TLS error -> prompt user to disable SSL proxy
+- Health check IPv6 fail -> use 127.0.0.1 not localhost
+- Port conflict -> remap in docker-compose.yml + .env
+- Backend can't reach mock-oidc -> use http://mock-oidc:10090 (internal Docker address)
+- Alembic migration fails -> sa.text().bindparams(), f-string UUIDs, Enum(create_type=False)
+- Backend starts but DB empty -> Dockerfile CMD must use entrypoint.sh
+- Cross-origin cookie blocked -> implement same-origin proxy in next.config.ts
+- AuthMe has .user wrapper -> flatten to match JWT payload
+- Login page infinite loop -> remove global 401 redirect from API client
+- OIDC callback cookie not set -> redirect_uri must go through frontend proxy
+- Frontend types don't match backend -> read Pydantic schemas, fix TypeScript interfaces
+
+**PART D: Retrofit-specific verification**
+
+After the standard build-verify passes, run these additional checks:
 
 1. **Preservation check** -- Verify that existing features still work:
    - Every page that existed BEFORE retrofit still loads
@@ -662,11 +878,13 @@ The verification is identical:
 
 Tell user (during verification): "Almost done -- just making sure everything still works the way it did before, plus the new features..."
 
+**PART E: Declare success and hand off**
+
 **Save project state** -- Write `.make-it-state.md` with:
 - Retrofit completed (not initial build)
 - What was retrofitted (gap inventory summary)
 - Risk score and strategy used
-- Verification results
+- Verification results (all Part A-D results)
 - Any remaining TODOs
 
 **Generate app-context.json** -- So /resume-it and /ship-it work going forward.
@@ -687,7 +905,6 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 - Secure login with [OIDC provider]
 - Role-based permissions ([N] roles, [N] permissions)
-- Application settings management (database-backed, admin UI)
 - A proper development environment with Docker
 - Mock services for testing without real dependencies
 - Security hardening throughout
