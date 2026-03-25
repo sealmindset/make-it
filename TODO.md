@@ -12,6 +12,43 @@ Currently, skill files live in both `~/.claude/` (installed) and the make-it rep
 - A sync script that copies from repo to ~/.claude/
 - Or using symlinks so the installed version always reads from the repo
 
+### Kubernetes / Argo CD deployment support (`/make-it k8s`)
+Add a `k8s` (or `argo`) flag to `/make-it` that generates K8s deployment manifests
+alongside the existing Docker Compose setup. Local dev stays Docker Compose; K8s
+manifests are an additional production artifact.
+
+**Onboarding prerequisites (before first deploy):**
+- Submit a story to get team onboarded to Argo CD + Rancher
+- AD group access granted after onboarding:
+  - `rancher<dev/prd>_teamname_SSO`
+  - `argocd<dev/prd>_teamname_SSO`
+- SNOW request to get privileges in the AD group
+
+**Team answers (resolved):**
+1. **Helm vs Kustomize:** User's choice — Argo CD supports both. Ask during ideation.
+2. **Registry:** ghcr.io (SleepNumber GitHub Corp). Other registries possible but
+   team projects are scoped to SleepNumber GitHub org.
+3. **Namespace strategy:** Each team gets a project + namespace (e.g.,
+   `security-engineering-project`). Apps stay in the team namespace by default.
+   New namespaces can be requested if something warrants isolation (e.g., a
+   shared connector). Request to create additional namespaces.
+4. **Secrets management:** Currently manual creation in Rancher before use.
+   External Secrets Operator is the future target (per-project external secret
+   store with service account scoped to Secret Server folder) but not yet
+   onboarded for all teams.
+
+**Design decisions already made:**
+- Flag approach, not separate skill (`/make-it k8s`)
+- Sets `deployment.target: "argocd"` in app-context.json
+- Build phase identical — same scaffold, same Docker Compose for local dev
+- Extra step at end generates: `k8s/` directory (Deployments, Services, ConfigMap,
+  Secrets template, Ingress), `argocd/application.yml`, DB migration as K8s Job
+- `/ship-it` detects target and pushes to Git for Argo sync instead of direct deploy
+- Docker Compose always present for local dev, `/try-it`, and build-verify
+- Ask user "Helm or Kustomize?" as part of the k8s flag flow
+- Generate GHCR push workflow (GitHub Actions) for container images
+- Include ONBOARDING.md with step-by-step for AD group access + SNOW request
+
 ## Low Priority
 
 _All low priority items completed._
