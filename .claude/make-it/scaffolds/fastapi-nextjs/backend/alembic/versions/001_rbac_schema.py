@@ -6,6 +6,19 @@ Create Date: 2025-01-01 00:00:00.000000
 
 This migration is the SCAFFOLD -- it's the same for every app.
 App-specific tables go in subsequent migrations (002+).
+
+SCAFFOLD-REQUIRED PERMISSIONS (must be seeded in the app seed migration):
+  These permissions are used by scaffold-provided admin pages and routes.
+  The /make-it build phase generates the seed migration that includes these.
+
+  Resource            Actions         Used By
+  ──────────────────  ──────────────  ─────────────────────────────
+  admin.users         read, create,   User Management admin page
+                      update, delete
+  admin.roles         read, create,   Role Management admin page
+                      update, delete
+  admin.settings      read, update    Settings admin page + API
+  admin.logs          read, delete    Activity Logs admin page + API
 """
 from typing import Sequence, Union
 

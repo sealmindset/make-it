@@ -15,16 +15,28 @@ async def get_log_events(
     service: str | None = Query(None),
     method: str | None = Query(None),
     since: str | None = Query(None),
+    path: str | None = Query(None, description="Substring match on path or URL"),
+    status_min: int | None = Query(None, ge=100, le=599),
+    status_max: int | None = Query(None, ge=100, le=599),
+    user_email: str | None = Query(None, description="Substring match on user email"),
+    q: str | None = Query(None, description="Free-text search across path, URL, error, email, service"),
     limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     current_user: UserInfo = Depends(require_permission("admin.logs", "read")),
 ):
-    """Query activity log events."""
+    """Query activity log events with filtering and pagination."""
     return log_store.query(
         event_type=type,
         service=service,
         method=method,
         since=since,
+        path=path,
+        status_min=status_min,
+        status_max=status_max,
+        user_email=user_email,
+        q=q,
         limit=limit,
+        offset=offset,
     )
 
 
@@ -32,7 +44,7 @@ async def get_log_events(
 async def get_log_stats(
     current_user: UserInfo = Depends(require_permission("admin.logs", "read")),
 ):
-    """Get activity log buffer statistics."""
+    """Get activity log buffer statistics with breakdowns."""
     return log_store.stats()
 
 

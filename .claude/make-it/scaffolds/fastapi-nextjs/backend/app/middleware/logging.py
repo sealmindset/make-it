@@ -39,6 +39,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             service="[APP_SLUG]-api",
             user_sub=user_sub,
             user_email=user_email,
+            ip=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
         )
         log_store.add(event)
 

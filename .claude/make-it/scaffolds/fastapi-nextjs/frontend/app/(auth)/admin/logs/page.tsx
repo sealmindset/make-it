@@ -5,7 +5,7 @@ import { apiGet, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/utils";
 import {
-  Activity, RefreshCw, Trash2, Filter,
+  Activity, RefreshCw, Trash2, Filter, Search,
   ArrowDownCircle, ArrowUpCircle, Clock, AlertCircle,
 } from "lucide-react";
 
@@ -14,11 +14,15 @@ interface LogEvent {
   type: string;
   method: string;
   path: string;
+  url: string | null;
   status: number | null;
   duration_ms: number | null;
   service: string | null;
   user_sub: string | null;
   user_email: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  error: string | null;
 }
 
 interface LogStats {
@@ -28,6 +32,9 @@ interface LogStats {
   total_evicted: number;
   recent_errors: number;
   uptime_seconds: number;
+  events_by_type: Record<string, number>;
+  events_by_service: Record<string, number>;
+  events_by_status: Record<string, number>;
 }
 
 export default function ActivityLogsPage() {
@@ -38,6 +45,7 @@ export default function ActivityLogsPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [methodFilter, setMethodFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const canDelete = hasPermission("admin.logs", "delete");
@@ -47,6 +55,7 @@ export default function ActivityLogsPage() {
       const params = new URLSearchParams();
       if (typeFilter) params.set("type", typeFilter);
       if (methodFilter) params.set("method", methodFilter);
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
       params.set("limit", "200");
 
       const [eventsData, statsData] = await Promise.all([
@@ -60,7 +69,7 @@ export default function ActivityLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, methodFilter]);
+  }, [typeFilter, methodFilter, searchQuery]);
 
   useEffect(() => {
     fetchData();
@@ -152,8 +161,42 @@ export default function ActivityLogsPage() {
         </div>
       )}
 
+      {/* Status breakdown mini-bar (when data exists) */}
+      {stats && Object.keys(stats.events_by_status).length > 0 && (
+        <div className="flex items-center gap-4 text-xs" style={{ color: "var(--muted-foreground)" }}>
+          <span className="font-medium">Status:</span>
+          {(["2xx", "3xx", "4xx", "5xx"] as const).map((bucket) => {
+            const count = stats.events_by_status[bucket] || 0;
+            if (count === 0) return null;
+            return (
+              <span key={bucket} className="inline-flex items-center gap-1">
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor:
+                      bucket === "2xx" ? "var(--success, var(--primary))" :
+                      bucket === "3xx" ? "var(--primary)" :
+                      bucket === "4xx" ? "var(--warning, var(--destructive))" :
+                      "var(--destructive)",
+                  }}
+                />
+                {bucket}: {count}
+              </span>
+            );
+          })}
+          {Object.keys(stats.events_by_type).length > 0 && (
+            <>
+              <span className="font-medium">|</span>
+              {Object.entries(stats.events_by_type).map(([t, c]) => (
+                <span key={t}>{t}: {c}</span>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Filter className="h-4 w-4" style={{ color: "var(--muted-foreground)" }} />
         <select
           value={typeFilter}
@@ -177,6 +220,17 @@ export default function ActivityLogsPage() {
           <option value="PUT">PUT</option>
           <option value="DELETE">DELETE</option>
         </select>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
+          <input
+            type="text"
+            placeholder="Search path, email, service..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="rounded-md border pl-8 pr-3 py-1.5 text-sm w-64"
+            style={{ borderColor: "var(--input)", backgroundColor: "var(--background)", color: "var(--foreground)" }}
+          />
+        </div>
         <button
           onClick={fetchData}
           className="rounded-md border px-3 py-1.5 text-sm"
@@ -194,16 +248,17 @@ export default function ActivityLogsPage() {
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Timestamp</th>
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Type</th>
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Method</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Path</th>
+              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Path / URL</th>
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Status</th>
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Duration</th>
               <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Service</th>
+              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>User</th>
             </tr>
           </thead>
           <tbody>
             {events.length === 0 ? (
               <tr>
-                <td colSpan={7} className="h-24 text-center" style={{ color: "var(--muted-foreground)" }}>
+                <td colSpan={8} className="h-24 text-center" style={{ color: "var(--muted-foreground)" }}>
                   {loading ? "Loading..." : "No events recorded yet."}
                 </td>
               </tr>
@@ -239,14 +294,17 @@ export default function ActivityLogsPage() {
                       {event.method}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs max-w-[300px] truncate">{event.path}</td>
+                  <td className="px-3 py-2 font-mono text-xs max-w-[300px] truncate" title={event.url || event.path}>
+                    {event.type === "outbound" && event.url ? event.url : event.path}
+                  </td>
                   <td className="px-3 py-2">
                     <span
                       className="font-mono text-xs font-medium"
                       style={{
-                        color: event.status && event.status >= 400 ? "var(--destructive)" :
-                               event.status && event.status >= 300 ? "var(--primary)" :
-                               "var(--primary)",
+                        color: event.status && event.status >= 500 ? "var(--destructive)" :
+                               event.status && event.status >= 400 ? "var(--warning, var(--destructive))" :
+                               event.status && event.status >= 300 ? "var(--muted-foreground)" :
+                               "var(--success, var(--primary))",
                       }}
                     >
                       {event.status || "-"}
@@ -257,6 +315,9 @@ export default function ActivityLogsPage() {
                   </td>
                   <td className="px-3 py-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
                     {event.service || "-"}
+                  </td>
+                  <td className="px-3 py-2 text-xs truncate max-w-[150px]" style={{ color: "var(--muted-foreground)" }} title={event.user_email || undefined}>
+                    {event.user_email || "-"}
                   </td>
                 </tr>
               ))

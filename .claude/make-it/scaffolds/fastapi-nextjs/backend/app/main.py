@@ -1,12 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
+from app.config import enforce_secrets, settings
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routers import auth, logs, permissions, roles, users
 from app.routers import settings as settings_router
 
 app = FastAPI(title="[APP_SLUG]", version="0.1.0")
+
+# Fail fast if ENFORCE_SECRETS=True and secrets are weak
+enforce_secrets()
 
 # Middleware
 app.add_middleware(RequestLoggingMiddleware)

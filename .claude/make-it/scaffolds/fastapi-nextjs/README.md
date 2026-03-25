@@ -124,13 +124,26 @@ All health checks use `127.0.0.1` (not `localhost`) to avoid IPv6 resolution iss
 
 Every scaffolded app includes an in-memory activity log for observability:
 - **LogStore** -- circular buffer (configurable via `LOG_BUFFER_SIZE`, default 10000) with FIFO eviction
-- **RequestLoggingMiddleware** -- captures inbound API requests (excludes health/static)
-- **URL sanitization** -- strips sensitive query params (token, key, secret, password) before logging
-- **REST API** -- `GET /api/admin/logs/events`, `GET /api/admin/logs/stats`, `DELETE /api/admin/logs/events`
-- **Admin UI** -- Activity Logs tab with stats cards, filters, event table, auto-refresh toggle, clear button
-- **RBAC** -- requires `admin.logs.read` and `admin.logs.delete` permissions (seeded in the app's 003 migration)
+- **LogEvent** -- captures timestamp, type, method, path, url, status, duration, service, user, ip, user_agent, error
+- **RequestLoggingMiddleware** -- captures inbound API requests (excludes health/static), including client IP and user-agent
+- **attach_outbound_logging()** -- httpx event hooks that log outbound calls with URL sanitization and timing
+- **URL sanitization** -- strips sensitive query params (token, key, secret, password, auth, api_key) before logging
+- **REST API** -- `GET /api/admin/logs/events` (with offset, path, status_min/max, user_email, q filters), `GET /api/admin/logs/stats` (with type/service/status breakdowns), `DELETE /api/admin/logs/events`
+- **Admin UI** -- Activity Logs tab with stats cards, status breakdown bar, filters (type, method, free-text search), event table with user column, auto-refresh toggle, clear button
+- **RBAC** -- requires `admin.logs.read` and `admin.logs.delete` permissions (seeded in the app's seed migration)
 
-Outbound HTTP logging is added per-app during the Build phase by wrapping service client creation with the log interceptor.
+#### Outbound Logging
+
+Service clients wire outbound logging during creation using `attach_outbound_logging()`:
+
+```python
+from app.services.log_service import attach_outbound_logging
+
+client = httpx.AsyncClient(base_url=settings.JIRA_BASE_URL)
+attach_outbound_logging(client, "jira")
+```
+
+This is added per-app during the Build phase for each external integration.
 
 ### Trailing-Slash ASGI Wrapper
 
@@ -145,6 +158,15 @@ The scaffold includes a ready-to-use test setup:
 - **e2e/** -- Playwright config + health smoke test, targeting `http://localhost:[FRONTEND_PORT]`
 
 Test users in conftest.py have `[PERMISSIONS]` placeholders that the Build phase fills in to match the app's RBAC seed data.
+
+### Secret Enforcement
+
+The scaffold includes a startup validation gate controlled by `ENFORCE_SECRETS`:
+
+- **`ENFORCE_SECRETS=false`** (default, local dev) -- app starts with weak/mock secrets
+- **`ENFORCE_SECRETS=true`** (production) -- app refuses to start if JWT_SECRET is weak (<32 chars or a known default) or OIDC_CLIENT_SECRET is still the mock value
+
+This is called at startup in `main.py` via `enforce_secrets()`. The /ship-it deployment pipeline sets `ENFORCE_SECRETS=true` in production environment variables.
 
 ### Port Selection
 
