@@ -103,6 +103,16 @@ services:
   # --------------------------------------------------------------------------
   # Mock OIDC Provider (local dev only)
   # --------------------------------------------------------------------------
+  # Port mapping: The container always listens on 10090 internally.
+  # [MOCK_OIDC_PORT] is the HOST port (may differ from 10090 to avoid conflicts).
+  #
+  # Two base URLs handle the Docker networking split:
+  #   EXTERNAL (http://localhost:[MOCK_OIDC_PORT]) -- browser navigates here
+  #   INTERNAL (http://mock-oidc:10090) -- backend calls this inside Docker network
+  #
+  # The backend's OIDC_ISSUER_URL uses the INTERNAL address (http://mock-oidc:10090)
+  # so token/userinfo calls stay within the Docker network.
+  # --------------------------------------------------------------------------
   mock-oidc:
     build:
       context: ./mock-services/mock-oidc

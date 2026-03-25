@@ -5,16 +5,19 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// [SEGMENT_LABELS] -- human-readable labels for URL segments
+// Human-readable labels for URL segments.
+// Scaffold defaults are listed first; app-specific labels are added during build.
 const segmentLabels: Record<string, string> = {
+  // Scaffold pages (always present)
   dashboard: "Dashboard",
   admin: "Admin",
   users: "Users",
   roles: "Roles",
   settings: "Settings",
   logs: "Activity Logs",
-  // [SEGMENT_LABELS] -- app-specific labels, e.g.:
+  // [SEGMENT_LABELS] -- app-specific labels added by /make-it, e.g.:
   // projects: "Projects",
+  // forecasts: "Forecasts",
 };
 
 function formatSegment(segment: string): string {
