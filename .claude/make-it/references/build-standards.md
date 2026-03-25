@@ -269,7 +269,7 @@ These checks apply to ANY project type that uses AI/LLM features.
 
 **AI07** [AI] [FIX] **No dangerouslySetInnerHTML for AI output** -- Escaped rendering only.
 
-**AI08** [AI] [FIX] **Prompt management (Tier 2 minimum)** -- managed_prompts + prompt_versions tables. Admin UI for editing. Safety preamble. Seed all prompts. Agents load from DB with code fallback.
+**AI08** [AI] [BLOCK] **Prompt management (Tier 2 minimum)** -- If ai_features.needed = true in app-context.json, verify ALL of the following exist: managed_prompts + prompt_versions tables in migration, API routes for CRUD at /api/admin/prompts/, Admin UI page for editing prompts, safety preamble prepended at runtime, all hardcoded prompts seeded into DB, agents load from DB with code fallback. If ANY are missing, Step 9 (AI Features) did not execute completely -- regenerate from prompt-templates.md Prompt #10.
 
 **AI09** [AI] [FIX] **NeMo Guardrails** -- guardrails/ directory, config.yml, Colang rails. Basic suite (18 tests) passes.
 
