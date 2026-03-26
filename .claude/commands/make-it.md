@@ -12,6 +12,15 @@ allowed-tools:
   - Agent
 ---
 
+<!-- ARGUMENT SUBSTITUTION: Claude Code replaces $ARGUMENTS before this prompt is sent -->
+<!-- User invoked: /make-it $ARGUMENTS -->
+
+**CRITICAL FIRST CHECK -- READ THIS BEFORE ANYTHING ELSE:**
+
+If the argument above is "update" (case-insensitive), you MUST run the update-interceptor
+step below and STOP. Do NOT proceed to Preflight, Ideation, or any other phase.
+If the argument is empty or anything else, skip to Preflight.
+
 <objective>
 
 Take a first-time developer (vibe coder) from a raw idea to a fully working, production-ready application through a guided conversational experience. The user needs ZERO programming knowledge, ZERO understanding of frameworks, and ZERO organizational experience.
