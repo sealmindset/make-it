@@ -40,13 +40,11 @@ You'll be asked a few questions in plain English:
 
 Answer in your own words. There are no wrong answers.
 
-<!-- Screenshot: ideation-conversation.png — showing the Q&A conversation -->
-![Ideation conversation](screenshots/ideation-conversation.png)
+<!-- Screenshot placeholder: capture a terminal showing the /make-it Q&A -->
 
 After a few questions, you'll see a summary of what's about to be built. Confirm it looks right, and the build starts automatically.
 
-<!-- Screenshot: build-progress.png — showing "Building your app..." progress messages -->
-![Build in progress](screenshots/build-progress.png)
+<!-- Screenshot placeholder: capture a terminal showing build progress messages -->
 
 **This takes a few minutes.** You'll see friendly progress updates. Behind the scenes, your entire app is being created — login system, database, pages, permissions, everything.
 
@@ -58,7 +56,6 @@ When it's done, it automatically moves to the next step.
 
 Your app opens in your browser. No setup required.
 
-<!-- Screenshot: app-dashboard.png — showing a working dashboard with real data -->
 ![Your app running](screenshots/app-dashboard.png)
 
 You'll get instructions on how to explore:
@@ -67,8 +64,11 @@ You'll get instructions on how to explore:
 - **Click through** every page
 - **See real sample data** — not empty screens
 
-<!-- Screenshot: try-it-login.png — showing the test user picker -->
 ![Test user login](screenshots/try-it-login.png)
+
+Every app comes with built-in admin tools — user management, roles, settings, and activity logs:
+
+![Admin panel](screenshots/admin-panel.png)
 
 **If something doesn't look right,** just describe what you see:
 
