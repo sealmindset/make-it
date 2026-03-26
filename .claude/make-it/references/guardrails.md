@@ -315,16 +315,30 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 
 ### AI Prompt Management (MANDATORY for any app with AI features)
 - **Tier 2 is the MINIMUM for any AI-powered app.** Tier 1 (code-only prompts) is eliminated.
+- **The scaffold provides pre-built prompt management** -- 6 database tables, ~25 API routes,
+  4 admin UI pages ("AI Instructions"), and 5 reusable components (prompt-card, prompt-editor
+  with guided mode and safety zones, safety-indicator, variable-pill, version-timeline).
+  Do NOT generate prompt management from scratch -- use the scaffold module.
+- Scaffold files: `backend/app/models/managed_prompt.py`, `backend/app/routers/prompts.py`,
+  `backend/app/schemas/prompt.py`, `backend/app/services/prompt_service.py`,
+  `backend/alembic/versions/003_prompt_management.py`,
+  `frontend/app/(auth)/admin/prompts/` (4 pages), `frontend/components/prompt-*.tsx` (4 components),
+  `frontend/components/safety-indicator.tsx`, `frontend/components/variable-pill.tsx`,
+  `frontend/components/version-timeline.tsx`
 - Determine ai_usage_level: none, moderate (1-10 prompts), heavy (10+)
-- Tier 2 (MINIMUM -- any AI app): managed_prompts + prompt_versions + prompt_audit_log tables,
-  admin UI for editing, version history, safety preamble, content validation, adversarial testing,
-  save/test/publish workflow, seed all prompts into DB, agents/services load from DB with code fallback
-- Tier 3 (heavy): full prompt management platform per Prompt #10c
+- Tier 2 (MINIMUM -- scaffold provides this): managed_prompts + prompt_versions + prompt_usages
+  + prompt_tags + prompt_test_cases + prompt_audit_log tables, card-based admin UI with guided
+  editing, version timeline, "Try It" testing, "Where Used" breadcrumbs, safety zone indicators,
+  content validation, save/test/publish workflow, seed all prompts into DB, agents load from DB
+  with code fallback
+- Tier 3 (heavy): extends scaffold with import/export, agent-binding, orchestration diagrams,
+  analytics dashboards per Prompt #10c
 - CRITICAL: hardcoded prompt strings in agent/service files are NEVER acceptable.
   Every AI prompt must be editable without a code deploy. This is a mandatory build requirement.
 - Prompt seed data mandatory -- managed_prompts table must not start empty
 - Build-verify: confirm agents load prompts from DB, admin UI lists all prompts,
-  editing a prompt and re-running the agent uses the updated text
+  editing a prompt and re-running the agent uses the updated text,
+  sidebar shows "AI Instructions" nav item with Sparkles icon
 
 ### AI Prompt Template Content Validation (Tier 2/3 -- database-backed prompts)
 

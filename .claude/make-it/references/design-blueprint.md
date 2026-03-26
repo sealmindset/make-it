@@ -626,24 +626,29 @@ AI features mentioned?
   Yes -> MINIMUM Tier 2 prompt management is MANDATORY.
          Prompt management is a REQUIRED part of AI-powered app builds, not optional.
          Every AI prompt must be editable without a code deploy.
+         The scaffold provides a PRE-BUILT Tier 2 module -- do NOT generate from scratch.
 
   Classify by signals to determine Tier 2 vs Tier 3:
 
   Moderate (Tier 2 -- MINIMUM for any AI app): 1-10 prompts, any audience
-    -> Database-stored prompts with basic admin UI
-    -> 3 tables: managed_prompts, managed_prompt_versions, prompt_audit_log
-    -> 6 API routes + admin editor page
+    -> USE THE SCAFFOLD MODULE (pre-built, copy as-is like auth/RBAC)
+    -> 6 database tables: managed_prompts, prompt_versions, prompt_usages,
+       prompt_tags, prompt_test_cases, prompt_audit_log
+    -> ~25 API routes at /api/admin/prompts/ with full CRUD, versioning,
+       tagging, testing, usage tracking, and audit logging
+    -> 4 admin UI pages: card-based registry, detail+edit with 5 tabs,
+       analytics, and audit log -- all labeled "AI Instructions" (not "Prompts")
+    -> 5 reusable components: prompt-card, prompt-editor (guided mode with
+       safety zone indicators), safety-indicator, variable-pill, version-timeline
     -> Runtime loader with code fallback
     -> Safety preamble, content validation, adversarial testing
     -> Save -> Test -> Publish workflow
     -> Prompt seeding (every agent/service starts with a published prompt)
 
   Heavy (Tier 3): 10+ prompts, AI-native app, multiple agents/models
-    -> Full prompt management platform (reference production prompt management platform)
-    -> 6 tables with usage tracking, tagging, test cases
-    -> 30+ API routes
-    -> 5 frontend pages (registry, detail, editor, analytics, audit)
-    -> 3-tier runtime: Redis cache -> DB -> seed fallback
+    -> Extends scaffold Tier 2 with: import/export, agent-binding,
+       orchestration visualization, 3-tier caching (Redis -> DB -> seed fallback)
+    -> Full prompt management platform per Prompt #10c
 ```
 
 **IMPORTANT: Tier 1 (code-only prompts) is ELIMINATED.** Any app with AI features gets
@@ -651,14 +656,35 @@ at minimum Tier 2 prompt management built during the /make-it process. Hardcoded
 in agent/service files are never acceptable -- they make prompt tuning require a code deploy,
 which blocks non-developers from iterating on AI behavior.
 
+**Scaffold module files (Tier 2 -- copied as-is, then customized):**
+- `backend/app/models/managed_prompt.py` -- 6 SQLAlchemy models
+- `backend/app/schemas/prompt.py` -- Pydantic Create/Update/Out schemas
+- `backend/app/services/prompt_service.py` -- Version diffing, audit, test execution placeholder
+- `backend/app/routers/prompts.py` -- ~25 routes with require_permission gates
+- `backend/alembic/versions/003_prompt_management.py` -- Migration for all 6 tables
+- `frontend/app/(auth)/admin/prompts/` -- 4 pages (registry, [slug] detail, analytics, audit)
+- `frontend/components/prompt-card.tsx` -- Card component for registry grid
+- `frontend/components/prompt-editor.tsx` -- Guided editor with safety zones, variable pills
+- `frontend/components/safety-indicator.tsx` -- Green/yellow zone indicator
+- `frontend/components/variable-pill.tsx` -- {variable} inline pill with tooltip
+- `frontend/components/version-timeline.tsx` -- Visual version history with restore/compare
+- Sidebar nav item (Sparkles icon, "AI Instructions") and breadcrumb labels are pre-wired
+
+**During build, customize by:**
+1. Seed managed_prompts table with the app's AI prompts (one row per agent/service prompt)
+2. Register prompt usages (where each prompt is used in the app)
+3. Wire the test execution placeholder (`[AI_PROVIDER_PLACEHOLDER]` in prompt_service.py) to the actual AI provider
+4. Add app-specific variable descriptions to prompt-editor.tsx `variableDescriptions` map
+5. Add app-specific categories to the registry page's category filter dropdown
+
 **Signals that push toward Tier 3 (above the Tier 2 minimum):**
 - "AI personas, agents, or evaluators" with 10+ distinct prompts -> Tier 3
 - "Need analytics on AI usage" -> Tier 3
 - "A/B testing prompts" -> Tier 3
 
-**Implementation generates:**
-- Tier 2: Schema (3 tables), API (6 routes), admin UI, runtime loader with fallback, safety preamble, content validation, adversarial testing, seed data
-- Tier 3: Schema (6 tables), API (30+ routes), 5 frontend pages, 3-tier caching, seed system, RBAC (4 permission scopes)
+**Implementation:**
+- Tier 2: Copy scaffold module (6 tables, ~25 routes, 4 pages, 5 components), customize seed data and provider wiring
+- Tier 3: Extend scaffold with import/export, agent-binding, orchestration diagrams, 3-tier caching, RBAC scopes per Prompt #10c
 
 ### 10a. Prompt Template Content Validation (Tier 2/3)
 

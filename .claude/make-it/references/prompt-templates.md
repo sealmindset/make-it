@@ -1027,45 +1027,19 @@ AI_MODEL_LIGHT=[AI_MODEL_LIGHT]
 
 ---
 
-### Prompt #10a: Tier 1 -- Minimal AI (1-3 prompts)
+### Prompt #10a: ELIMINATED -- Tier 1 is no longer supported
+
+Tier 1 (code-only prompts) has been eliminated. ALL AI-powered apps get minimum
+Tier 2 prompt management via the scaffold module. See Prompt #10b.
+
+**Runs when:** NEVER -- this tier is eliminated. Any app with AI features uses Tier 2 minimum.
+
+### Prompt #10b: Tier 2 -- Moderate AI (1-10 prompts) -- SCAFFOLD-BASED
 
 ```
-Set up AI prompt management for [PROJECT_NAME] -- Tier 1 (minimal).
-
-This app uses AI for:
-[AI_FEATURES_LIST]
-
-AI prompts (list all):
-[PROMPT_1_NAME]: [WHAT_IT_DOES]
-[PROMPT_2_NAME]: [WHAT_IT_DOES]
-[PROMPT_3_NAME]: [WHAT_IT_DOES]
-
-Requirements:
-- Store all prompts in a single dedicated file (lib/prompts.py or lib/prompts.ts)
-- Each prompt is a named constant with a descriptive variable name
-- Allow environment variable override for each prompt (for production tuning
-  without redeployment)
-- Include the AI model name and parameters (temperature, max_tokens) alongside
-  each prompt
-- Add a comment block at the top explaining each prompt's purpose
-
-Pattern to follow:
-- Python: PROMPT_NAME = os.getenv("PROMPT_NAME", """default content""")
-- TypeScript: export const PROMPTS = { name: process.env.PROMPT_NAME ?? `default` }
-
-Do NOT build a database or admin UI for prompts -- this app only has a few
-prompts and they rarely change.
-```
-
-**Required context:** AI features list, prompt names and purposes
-**Runs when:** ai_usage_level = "minimal" (1-3 prompts, developers only)
-
-### Prompt #10b: Tier 2 -- Moderate AI (4-10 prompts)
-
-```
-Design the AI prompt management system for [PROJECT_NAME] -- Tier 2
-(moderate). All AI prompts should be stored in the database and editable
-through the admin UI without code changes.
+Set up AI prompt management for [PROJECT_NAME] -- Tier 2 (moderate).
+The scaffold provides a PRE-BUILT prompt management module. Do NOT generate
+from scratch. Copy the scaffold files and customize.
 
 This app uses AI for:
 [AI_FEATURES_LIST]
@@ -1073,51 +1047,46 @@ This app uses AI for:
 AI prompts to manage:
 [PROMPT_LIST_WITH_CATEGORIES]
 
-Database schema needed (3 tables):
-1. managed_prompts -- registry with slug, name, content, version, is_active,
-   category, updated_by, timestamps
-2. managed_prompt_versions -- immutable version history (append-only),
-   content + change_summary + who changed it
-3. prompt_audit_log -- append-only audit trail of all changes
+STEP 1: VERIFY SCAFFOLD FILES ARE PRESENT
+The following files come from the scaffold and should already exist:
+- backend/app/models/managed_prompt.py (6 SQLAlchemy models)
+- backend/app/schemas/prompt.py (Pydantic schemas)
+- backend/app/services/prompt_service.py (version diffing, audit, test placeholder)
+- backend/app/routers/prompts.py (~25 API routes)
+- backend/alembic/versions/003_prompt_management.py (migration for 6 tables)
+- frontend/app/(auth)/admin/prompts/ (4 pages: registry, [slug] detail, analytics, audit)
+- frontend/components/prompt-card.tsx, prompt-editor.tsx, safety-indicator.tsx,
+  variable-pill.tsx, version-timeline.tsx
+- Sidebar nav item "AI Instructions" with Sparkles icon
+- Breadcrumb labels for prompts/analytics/audit
+If any are missing, copy them from the scaffold.
 
-API endpoints needed (6 routes, all behind admin permission):
-- GET /api/admin/prompts -- list all prompts
-- GET /api/admin/prompts/:key -- get prompt with version history
-- PUT /api/admin/prompts/:key -- update (creates new version, requires change_summary)
-- POST /api/admin/prompts/:key/test -- test with sample input
-- POST /api/admin/prompts/:key/restore -- rollback to previous version
-- GET /api/admin/prompts/:key/audit -- view change log
-
-Runtime loader: database first, code-defined fallback. Simple in-memory cache.
-Seed database on first run from code constants.
-
-Seed data: Generate an Alembic data migration (or seed script) that inserts
-all of the app's AI prompts into the managed_prompts table on first run.
-Each prompt must have: slug, name, content, category, model, default parameters.
+STEP 2: SEED PROMPT DATA
+Generate an Alembic data migration that inserts all of the app's AI prompts
+into the managed_prompts table. For each prompt provide:
+- slug, name, description (plain English for non-technical card display),
+  category, provider, model, content, system_message, parameters
+- Register prompt_usages with location breadcrumbs (e.g., "Dashboard > Analysis Panel")
+- Mark the primary usage as is_primary=True
 The database must NOT start empty.
 
-Admin UI: prompt list, edit with change summary, test panel, version diff,
-one-click rollback, audit trail.
+STEP 3: WIRE AI PROVIDER
+In backend/app/services/prompt_service.py, replace the [AI_PROVIDER_PLACEHOLDER]
+mock in run_test() with the actual AI provider client:
+    from app.services.ai_provider import get_provider
+    provider = get_provider()
+    result = await provider.complete(rendered_content, system_message, parameters)
 
-Permission required: [PROMPT_ADMIN_PERMISSION]
-Storage: [DATABASE_TYPE]
+STEP 4: CUSTOMIZE FRONTEND (optional)
+- Add app-specific variable descriptions to prompt-editor.tsx variableDescriptions map
+- Add app-specific categories to the registry page's category filter dropdown
 
-PROMPT TEMPLATE CONTENT VALIDATION (mandatory for Tier 2):
-
-Schema addition: managed_prompts gets `status` column (draft | active | archived).
-prompt_audit_log gets `risk_flag` boolean column (default false).
-
-Save flow:
-1. Admin edits prompt_content in the UI (safety preamble is NEVER shown)
-2. On save: run validatePromptTemplate() -- blocklist check for injection patterns,
-   code injection, encoded payloads, safety preamble tampering
-3. If blocklist triggers: BLOCK the save, show friendly warning with highlighted text.
-   No jargon -- e.g., "This wording could let users override the AI's instructions."
-4. If blocklist passes: save as status=draft (NOT active)
-5. Admin MUST click "Test" before "Publish" becomes enabled
-6. Test runs: blocklist + sanitizePromptInput() on rendered output + all saved test
-   cases + mini NeMo check (3 injection + 2 jailbreak inputs)
-7. All tests pass -> Publish button enabled -> sets status=active
+STEP 5: PROMPT TEMPLATE CONTENT VALIDATION (mandatory)
+Implement validatePromptTemplate() in lib/ai/validate.ts:
+- Blocklist patterns: injection overrides, role manipulation, code injection,
+  encoded payloads, safety preamble tampering
+- On blocklist match: BLOCK save, show friendly warning (no jargon)
+- Draft/test/publish workflow: new edits save as draft, require Test to activate
 
 Runtime: get_prompt() and render_prompt() ALWAYS prepend the immutable safety
 preamble (from Prompt #10e Part 7). No code path skips it.
@@ -1125,14 +1094,14 @@ preamble (from Prompt #10e Part 7). No code path skips it.
 Variable interpolation: render_prompt() passes ALL variable values through
 sanitizePromptInput() before substitution. HTML entities escaped by default.
 
-Risk warnings: if pattern is borderline (not blocked but suspicious), show yellow
-warning banner. Log to prompt_audit_log with risk_flag=true.
+Permission resource: admin.prompts with read/create/update/delete actions.
+Seed these 4 permissions in the RBAC migration.
 
 Implementation details: see Prompt #10e Part 9.
 ```
 
-**Required context:** AI features, prompt names/categories, admin permission name
-**Runs when:** ai_usage_level = "moderate" (4-10 prompts, product team edits)
+**Required context:** AI features, prompt names/categories
+**Runs when:** ai_usage_level = "moderate" (1-10 prompts, any audience)
 
 ### Prompt #10c: Tier 3 -- Heavy AI (10+ prompts, AI-native app)
 

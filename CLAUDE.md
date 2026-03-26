@@ -121,7 +121,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 Scaffolds are pre-built, battle-tested code foundations with `[BRACKET_PLACEHOLDERS]` for app-specific values. They encode every lesson learned from real builds so the same bugs never recur.
 
-### fastapi-nextjs (83 files)
+### fastapi-nextjs (98 files)
 The primary scaffold for web applications. The Build phase copies it into the project, replaces placeholders, then generates domain-specific code on top. Provides:
 - **Auth**: Complete OIDC flow (login → mock-oidc → callback → JWT cookie → /me → logout)
 - **RBAC**: 4 tables (roles, permissions, role_permissions, users), require_permission middleware, admin UI
@@ -129,6 +129,7 @@ The primary scaffold for web applications. The Build phase copies it into the pr
 - **Docker**: Compose with health checks (127.0.0.1), entrypoint.sh for migrations, mock-oidc on dev profile
 - **Mock-oidc**: Copied as-is. RSA signing, internal/external URL split, user picker, admin API
 - **Activity Logs**: LogStore circular buffer, request logging middleware, REST API, admin UI page with stats/filters/auto-refresh
+- **AI Prompt Management**: 6 database tables, ~25 API routes, 4 admin UI pages ("AI Instructions"), 5 reusable components (prompt-card, prompt-editor with guided mode/safety zones, safety-indicator, variable-pill, version-timeline). Card-based registry, guided editing for non-technical users, version timeline with one-click restore, "Try It" testing, "Where Used" breadcrumbs
 - **Trailing-slash wrapper**: ASGI middleware that prevents Docker hostname leaks in FastAPI redirects
 - **Test infrastructure**: pytest conftest with SQLite UUID compat, auth bypass fixtures, health tests, Playwright e2e scaffolding
 

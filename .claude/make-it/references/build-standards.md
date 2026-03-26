@@ -269,11 +269,11 @@ These checks apply to ANY project type that uses AI/LLM features.
 
 **AI07** [AI] [FIX] **No dangerouslySetInnerHTML for AI output** -- Escaped rendering only.
 
-**AI08** [AI] [BLOCK] **Prompt management (Tier 2 minimum)** -- If ai_features.needed = true in app-context.json, verify ALL of the following exist: managed_prompts + prompt_versions tables in migration, API routes for CRUD at /api/admin/prompts/, Admin UI page for editing prompts, safety preamble prepended at runtime, all hardcoded prompts seeded into DB, agents load from DB with code fallback. If ANY are missing, Step 9 (AI Features) did not execute completely -- regenerate from prompt-templates.md Prompt #10.
+**AI08** [AI] [BLOCK] **Prompt management (Tier 2 minimum)** -- If ai_features.needed = true in app-context.json, the prompt management scaffold module MUST be included. The scaffold provides pre-built: 6 database tables (managed_prompts, prompt_versions, prompt_usages, prompt_tags, prompt_test_cases, prompt_audit_log) in `backend/alembic/versions/003_prompt_management.py`, ~25 API routes in `backend/app/routers/prompts.py`, Pydantic schemas in `backend/app/schemas/prompt.py`, service layer in `backend/app/services/prompt_service.py`, 4 admin UI pages at `frontend/app/(auth)/admin/prompts/`, and 5 reusable components (prompt-card, prompt-editor, safety-indicator, variable-pill, version-timeline). Verify: migration runs, router is wired in main.py, sidebar shows "AI Instructions" nav item, all hardcoded prompts are seeded into managed_prompts table, agents load from DB with code fallback. Do NOT generate prompt management from scratch -- use the scaffold.
 
 **AI09** [AI] [FIX] **NeMo Guardrails** -- guardrails/ directory, config.yml, Colang rails. Basic suite (18 tests) passes.
 
-**AI10** [AI] [FIX] **Prompt template validation (Tier 2/3)** -- validatePromptTemplate() on save endpoints. Immutable safety preamble. Draft/test/publish workflow. Variable interpolation sanitized.
+**AI10** [AI] [FIX] **Prompt template validation (Tier 2/3)** -- validatePromptTemplate() on save endpoints. Immutable safety preamble. Draft/test/publish workflow. Variable interpolation sanitized. The scaffold prompt-editor component provides guided editing with safety zone indicators (green=safe, yellow=caution) and variable pills for non-technical users.
 
 ---
 

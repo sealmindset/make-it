@@ -15,6 +15,9 @@ const segmentLabels: Record<string, string> = {
   roles: "Roles",
   settings: "Settings",
   logs: "Activity Logs",
+  prompts: "AI Instructions",
+  analytics: "Analytics",
+  audit: "Audit Log",
   // [SEGMENT_LABELS] -- app-specific labels added by /make-it, e.g.:
   // projects: "Projects",
   // forecasts: "Forecasts",

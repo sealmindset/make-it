@@ -57,6 +57,7 @@ ADMIN_USER = UserInfo(
         "roles.create", "roles.read", "roles.update", "roles.delete",
         "admin.logs.read", "admin.logs.delete",
         "admin.settings.read", "admin.settings.update",
+        "admin.prompts.create", "admin.prompts.read", "admin.prompts.update", "admin.prompts.delete",
         # [ADMIN_PERMISSIONS] -- add app-specific permissions here
     ],
 )

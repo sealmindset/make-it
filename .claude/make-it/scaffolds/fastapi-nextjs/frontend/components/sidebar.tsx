@@ -12,6 +12,7 @@ import {
   Shield,
   Settings,
   Activity,
+  Sparkles,
   // [NAV_ICONS] -- import additional icons for app-specific pages
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -44,6 +45,12 @@ const navItems: NavItem[] = [
     href: "/admin/roles",
     icon: Shield,
     permission: { resource: "admin.roles", action: "read" },
+  },
+  {
+    label: "AI Instructions",
+    href: "/admin/prompts",
+    icon: Sparkles,
+    permission: { resource: "admin.prompts", action: "read" },
   },
   {
     label: "Settings",
