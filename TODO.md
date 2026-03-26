@@ -50,6 +50,24 @@ manifests are an additional production artifact.
   → GitHub Actions builds + pushes images to ghcr.io → `/ship-it` creates Argo
   Application via API using service account token → Argo syncs and deploys
 
+**DevOps requirements (from Argo/infra team):**
+- Need solid templates for Services, IngressRoutes, etc. — these vary per app
+- IngressRoutes are especially variable (different routing rules per app)
+- Traefik is the ingress controller — requires host matching URL (e.g., `app1.comfort.com`)
+- `/make-it k8s` must prompt for or derive the hostname for IngressRoute
+- Once External Secret Store is set up: secrets go in Secret Server (SS), their
+  IDs are placed in ExternalSecret manifests. Until then, secrets are manual in Rancher.
+- TLS/cert management needs to be sorted for HTTPS apps (cert-manager? Traefik TLS
+  passthrough? Wildcard cert from org CA?)
+
+**Open questions for DevOps:**
+1. Is there a standard wildcard cert (e.g., `*.comfort.com`) or do apps request
+   individual certs? Is cert-manager in use?
+2. Are there existing IngressRoute examples we can use as reference templates?
+3. For the ExternalSecret manifest — what's the Secret Server ID format? Is there
+   a standard manifest structure the team already uses?
+4. Any Traefik middleware in use (rate limiting, auth forwarding, IP allowlisting)?
+
 **Design decisions already made:**
 - Flag approach, not separate skill (`/make-it k8s`)
 - Sets `deployment.target: "argocd"` in app-context.json
