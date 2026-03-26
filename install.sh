@@ -162,6 +162,7 @@ report() {
         try-it)      desc="Spin up and test your app" ;;
         resume-it)   desc="Continue working on your app" ;;
         retrofit-it) desc="Upgrade an existing app with production foundations" ;;
+        wrap-it)     desc="Wrap up your session and shut down cleanly" ;;
         nemo-it)     desc="Security attestation (scan any app)" ;;
         fix-it)      desc="Auto-fix security findings from /nemo-it" ;;
         *)           desc="Custom skill" ;;

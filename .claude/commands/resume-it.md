@@ -141,21 +141,65 @@ If `SECURITY_SCANNER_API_KEY` is NOT set but issues exist, work from the GitHub 
 
 Security scanner findings become priority work items -- auto-fixed before any user-requested changes. See "Security Scanner Remediation" workflow below.
 
-**7. Check for AI prompt management gaps:**
+**7. Check for AI prompt management gaps (tier-aware detection):**
 
-If the app uses AI (LLM provider imports, agent classes, AI SDK dependencies):
-- Scan for hardcoded system prompts in agent/service files (look for getSystemPrompt(),
-  SYSTEM_PROMPT constants, prompt template strings passed to LLM calls)
-- Check if a managed_prompts or equivalent table exists in the database schema
-- Check if there's an admin UI for prompt editing
-- Count the number of distinct AI prompts (system prompts + user prompt templates)
+If the app uses AI (LLM provider imports, agent classes, AI SDK dependencies), classify the
+current prompt management implementation into one of four tiers:
 
-If hardcoded prompts are found and no prompt management system exists, this is a gap:
-- 1-3 prompts: note in TODO.md but low priority
-- 4-10 prompts: suggest adding Tier 2 prompt management (DB + admin UI)
-- 10+ prompts: suggest adding Tier 3 prompt management platform
+**a. Detect current tier -- run these checks:**
 
-Reference Prompt #10 in prompt-templates.md for the implementation specification.
+```bash
+# Count prompt-related tables in migrations
+grep -r "CREATE TABLE.*prompt" backend/alembic/versions/ 2>/dev/null | wc -l
+
+# Count prompt-related API routes
+grep -r "@router\.\(get\|post\|put\|patch\|delete\).*prompt" backend/app/routers/ 2>/dev/null | wc -l
+
+# Count prompt admin pages
+ls frontend/app/\(auth\)/admin/prompts/ 2>/dev/null | wc -l
+
+# Check for scaffold components
+ls frontend/components/prompt-card.tsx frontend/components/prompt-editor.tsx \
+   frontend/components/safety-indicator.tsx frontend/components/variable-pill.tsx \
+   frontend/components/version-timeline.tsx 2>/dev/null | wc -l
+
+# Check for Tier 3 indicators (any ONE = Tier 3)
+grep -r "import.*export\|orchestrat\|agent.*bind" backend/ frontend/ 2>/dev/null | head -5
+```
+
+**b. Classify based on detection results:**
+
+| Tier | Tables | Routes | Pages | Components | Advanced Features |
+|------|--------|--------|-------|------------|-------------------|
+| **Tier 0 (None)** | 0 | 0 | 0 | 0 | -- |
+| **Tier 2 Standard** | 6 | ~25 | 4 | 5 | -- |
+| **Tier 2 Outdated** | 1-5 | <20 | <4 | <5 | -- |
+| **Tier 3 Custom** | 6+ | 25+ | 4+ | any | import/export, orchestration, agent-binding |
+
+Tier 3 indicators (any ONE triggers Tier 3 classification):
+- Import/export endpoints or UI for prompts
+- Orchestration diagrams or agent-binding logic
+- More than 6 prompt-related tables
+- More than 30 prompt-related routes
+
+**c. If Tier 2 Outdated:**
+- Add to catch-up work: "AI Prompt Management can be upgraded to latest scaffold standard"
+- List what's missing vs scaffold (tables, routes, pages, components)
+- Note: upgrade requires user confirmation (see prompt-management-upgrade step)
+
+**d. If Tier 3 Custom:**
+- Note in status: "Custom Tier 3 prompt management detected -- protected from scaffold upgrades"
+- Do NOT suggest upgrade -- the custom implementation is intentionally advanced
+
+**e. If Tier 0 (None):**
+- Scan for hardcoded prompts in agent/service files (getSystemPrompt(), SYSTEM_PROMPT constants)
+- Count distinct AI prompts
+- Add to catch-up work: "AI Prompt Management scaffold can be installed"
+
+**f. If Tier 2 Standard:**
+- Already current -- skip (no catch-up needed)
+
+Reference build-standards.md AI08 and AI08-upgrade for the full specification.
 
 **8. Standards catch-up scan (build-standards.md):**
 
@@ -208,7 +252,7 @@ From all of the above, build a mental model of:
 - What's changed recently (git log)
 - Outstanding work (TODO.md items, known issues)
 - Security scanner findings (open scan issues, severity)
-- AI prompt management status (hardcoded vs database-managed, count of prompts)
+- AI prompt management tier (Tier 0 none / Tier 2 Standard / Tier 2 Outdated / Tier 3 Custom)
 - **Standards gaps** (checks from build-standards.md that the project doesn't pass yet)
 - Test coverage status (tests exist? passing?)
 - Deployment status (shipped? local only?)
@@ -248,7 +292,9 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | No deployment yet | "Ready to deploy? I can hand you off to /ship-it" |
 | Recent git activity on features | "Looks like you were working on [feature] -- want to continue?" |
 | Infrastructure/env needs detected | "Want me to check what you still need to get this app running? I can make you a checklist." |
-| AI prompts hardcoded (no prompt mgmt) | "Your AI agents have [N] prompts hardcoded in the code. Want me to add a prompt management system so they can be edited without redeploying?" |
+| AI prompts: Tier 0 (no prompt mgmt) | "Your AI agents have [N] prompts hardcoded in the code. Want me to add a prompt management system so they can be edited without redeploying?" |
+| AI prompts: Tier 2 Outdated | "Your AI prompt management can be upgraded to the latest standard -- better editing experience, version history, and safety indicators. Want me to upgrade it?" |
+| AI prompts: Tier 3 Custom (protected) | (Do NOT suggest upgrade -- note as "Custom prompt management: up to date" in status) |
 | Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- want me to apply them now?" |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
@@ -293,6 +339,10 @@ same check IDs and fix patterns from build-standards.md.
 <step name="execute-work">
 
 Based on the user's response, route to the appropriate workflow:
+
+**PROMPT MANAGEMENT TRIGGER:** If the user says anything like "update the prompt management",
+"upgrade AI instructions", "update prompts to latest", or "upgrade the prompt system", route
+directly to the `prompt-management-upgrade` step below. Skip normal work routing.
 
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)
@@ -563,6 +613,206 @@ This runs BEFORE any user-requested work. The user does not initiate this -- it 
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
+
+</step>
+
+<!-- ============================================================ -->
+<!-- PROMPT MANAGEMENT UPGRADE -- Tier-aware scaffold upgrade      -->
+<!-- ============================================================ -->
+
+<step name="prompt-management-upgrade">
+
+**Triggered when:**
+- Catch-up scan detected Tier 2 Outdated prompt management and user chose to upgrade
+- User explicitly requested prompt management upgrade (conversational trigger)
+- User accepted standards gap suggestion that includes prompt management
+
+**This step has 5 phases. Do NOT skip any phase.**
+
+---
+
+**Phase 1: Stack Eligibility**
+
+Check app-context.json (or infer from codebase) for the tech stack.
+
+- **FastAPI + Next.js:** Eligible for scaffold-based upgrade. Proceed to Phase 2.
+- **Any other stack** (Flask, Django, Express, etc.): NOT eligible for scaffold upgrade.
+  - Document the gap in TODO.md with a description of the scaffold standard
+  - Explain to user: "The automatic upgrade works with FastAPI + Next.js apps. Your app uses [stack]. I can document what the standard looks like so you can upgrade manually, or you could use /retrofit-it to move to FastAPI + Next.js first."
+  - Stop here -- do not proceed to Phase 2.
+
+---
+
+**Phase 2: Current State Snapshot**
+
+Catalog what currently exists:
+
+```bash
+# Find existing prompt-related tables
+grep -r "CREATE TABLE\|op.create_table" backend/alembic/versions/ 2>/dev/null | grep -i prompt
+
+# Find existing prompt-related routes
+grep -r "@router\.\(get\|post\|put\|patch\|delete\)" backend/app/routers/ 2>/dev/null | grep -i prompt
+
+# Find existing prompt admin pages
+ls -la frontend/app/\(auth\)/admin/prompts/ 2>/dev/null
+
+# Find existing prompt components
+ls frontend/components/*prompt* frontend/components/safety-indicator* \
+   frontend/components/variable-pill* frontend/components/version-timeline* 2>/dev/null
+
+# Count seeded prompts (look in seed migrations)
+grep -r "INSERT INTO.*prompt\|op.bulk_insert.*prompt" backend/alembic/versions/ 2>/dev/null
+
+# Check for custom columns not in scaffold schema
+grep -r "Column\|sa\.Column" backend/alembic/versions/ 2>/dev/null | grep -i prompt
+```
+
+Build a snapshot:
+- Table names and their columns (identify columns NOT in the scaffold schema)
+- Route count and endpoints
+- Page count and paths
+- Component list
+- Seeded prompt count and names
+- Custom columns/features unique to this app
+
+---
+
+**Phase 3: Conversational Confirmation**
+
+Present the snapshot and upgrade plan to the user. Wait for explicit "yes" before proceeding.
+
+**For Tier 2 Outdated (normal upgrade):**
+
+"Here's what I found in your current prompt management:
+- **Tables:** [list] ([N] of 6 scaffold tables)
+- **Routes:** [N] (scaffold has ~25)
+- **Pages:** [N] (scaffold has 4)
+- **Components:** [N] of 5 scaffold components
+- **Seeded prompts:** [N] ([list names])
+
+I can upgrade to the latest scaffold standard, which adds:
+- [list what's missing: version history, test cases, tags, usage tracking, audit log, etc.]
+- Card-based registry with search and filters
+- Guided editing with safety indicators and variable pills
+- Version timeline with one-click restore
+- 'Try It' testing tab
+
+**Your existing [N] prompts will be migrated to the new schema.** Old tables will be renamed
+with a `_legacy` suffix (never deleted) so you can always reference the original data.
+[If custom columns found:] Your custom columns ([list]) will be preserved in the legacy tables.
+
+Proceed with the upgrade?"
+
+**For Tier 3 Custom (protection):**
+
+"Your app has a custom Tier 3 prompt management implementation with advanced features:
+- [list detected features: import/export, orchestration, agent-binding, etc.]
+- [N] tables, [N] routes, [N] pages
+
+The scaffold upgrade would **replace** this with the simpler Tier 2 standard, which does NOT
+include [list Tier 3 features that would be lost]. I strongly recommend keeping your current
+implementation.
+
+Want me to skip the prompt management upgrade?"
+
+If user still insists on upgrading Tier 3:
+"To confirm: this will replace your custom Tier 3 implementation (including [features]) with the
+Tier 2 scaffold. This cannot be undone without `git revert`. Please type 'Yes, replace my Tier 3
+implementation' to proceed."
+
+---
+
+**Phase 4: Execute Upgrade**
+
+Only runs after explicit user confirmation.
+
+**4a. Generate a new Alembic migration** (NEVER modify existing migrations):
+
+The migration must:
+1. **Rename** existing prompt tables with `_legacy` suffix:
+   - e.g., `ai_prompts` -> `ai_prompts_legacy`
+   - e.g., `prompt_versions` -> `prompt_versions_legacy` (if exists)
+   - Use `op.rename_table()` -- preserves data
+
+2. **Create** all 6 scaffold tables:
+   - managed_prompts (UUID PK, slug, name, description, category, content, system_message, model_settings JSONB, is_active, is_locked, current_version, created/updated timestamps)
+   - prompt_versions (UUID PK, prompt_id FK, version, content, system_message, model_settings JSONB, change_summary, created_by, created_at)
+   - prompt_usages (UUID PK, prompt_id FK, location, component_path, last_called_at, call_count, error_count, avg_latency_ms)
+   - prompt_tags (UUID PK, prompt_id FK, tag)
+   - prompt_test_cases (UUID PK, prompt_id FK, name, input_variables JSONB, expected_output, created_at)
+   - prompt_audit_log (UUID PK, prompt_id UUID NOT FK, action, actor, changes JSONB, created_at)
+
+3. **Migrate data** from legacy tables to new schema:
+   - Map columns: name -> name, description -> description, content -> content, is_active -> is_active
+   - Generate slugs from names (lowercase, hyphens, no special chars)
+   - Map model-related columns (e.g., model_tier) to model_settings JSONB
+   - Set current_version = 1
+   - Create one PromptVersion (v1) per migrated prompt with the current content
+   - Preserve created_at and updated_at timestamps
+   - Log migration in prompt_audit_log (action="migrated", actor="resume-it")
+
+4. **downgrade()** must reverse: drop new tables, rename legacy tables back
+
+**4b. Copy scaffold backend files:**
+
+Reference the scaffold at `~/.claude/make-it/scaffolds/fastapi-nextjs/`:
+
+- `backend/app/models/managed_prompt.py` -- Copy as-is (6 models)
+- `backend/app/schemas/prompt.py` -- Copy as-is
+- `backend/app/services/prompt_service.py` -- Copy, replace `[AI_PROVIDER_PLACEHOLDER]` if AI provider is known
+- `backend/app/routers/prompts.py` -- Copy as-is
+
+Update wiring:
+- `backend/app/models/__init__.py` -- Add 6 model imports (if not already present)
+- `backend/app/main.py` -- Replace old prompt router import with scaffold prompt router. Remove old prompt router include, add new one.
+- `backend/tests/conftest.py` -- Add admin.prompts.read/create/update/delete to ADMIN_USER permissions
+
+**4c. Copy scaffold frontend files:**
+
+Components (copy all 5):
+- `frontend/components/prompt-card.tsx`
+- `frontend/components/prompt-editor.tsx`
+- `frontend/components/safety-indicator.tsx`
+- `frontend/components/variable-pill.tsx`
+- `frontend/components/version-timeline.tsx`
+
+Pages (copy all 4, replacing any existing prompt admin pages):
+- `frontend/app/(auth)/admin/prompts/page.tsx`
+- `frontend/app/(auth)/admin/prompts/[slug]/page.tsx`
+- `frontend/app/(auth)/admin/prompts/analytics/page.tsx`
+- `frontend/app/(auth)/admin/prompts/audit/page.tsx`
+
+Update wiring:
+- `frontend/components/sidebar.tsx` -- Replace old prompt nav item with: `{ label: "AI Instructions", href: "/admin/prompts", icon: Sparkles, permission: { resource: "admin.prompts", action: "read" } }`
+- `frontend/components/breadcrumbs.tsx` -- Add segment labels: `prompts: "AI Instructions"`, `analytics: "Analytics"`, `audit: "Audit Log"`
+- `frontend/lib/types.ts` -- Add prompt TypeScript interfaces (ManagedPrompt, PromptVersion, PromptUsage, etc.)
+
+**4d. Update project documentation:**
+- CHANGELOG.md: "Upgraded AI prompt management to scaffold standard (card-based registry, guided editing, version history, safety indicators)"
+- TODO.md: Remove any prompt management gaps, add "Seed app-specific variable descriptions in prompt-editor.tsx" if applicable
+
+---
+
+**Phase 5: Verify**
+
+1. Run the new Alembic migration: `alembic upgrade head`
+2. Start the app (or restart if already running)
+3. Verify /admin/prompts loads and shows migrated prompts as cards
+4. Verify each prompt detail page loads (/admin/prompts/[slug])
+5. Verify all prompt API endpoints respond (GET /api/admin/prompts, GET /api/admin/prompts/stats)
+6. Verify migrated prompts have v1 versions in the version timeline
+7. Verify legacy tables still exist (SELECT * FROM [table]_legacy)
+8. Run existing tests to confirm nothing broke
+
+Report to user:
+"Your prompt management has been upgraded! Here's what changed:
+- [N] prompts migrated from the old system
+- New features: card-based registry, guided editing, version history, safety indicators, 'Try It' testing
+- Your old data is preserved in [table]_legacy tables
+- The sidebar now shows 'AI Instructions' with the new interface
+
+Want to explore the new prompt management, or continue with something else?"
 
 </step>
 

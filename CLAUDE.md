@@ -82,9 +82,26 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 5. **Test** -- Scaffolds test infrastructure (pytest, Playwright) if needed, generates and runs tests
 6. **Ship** -- Handoff to `/ship-it` when ready
 
+## /wrap-it
+
+`/wrap-it` cleanly wraps up a work session. The user runs it when they're done for the day.
+
+0. **Discover** -- Check what's running (containers), what's changed (git status), read state files
+1. **Save** -- Offer to commit uncommitted changes, update TODO.md, CHANGELOG.md, and .make-it-state.md
+2. **Shutdown** -- `docker compose down` (preserves data volumes for fast restart), check for orphaned ports
+3. **Report** -- Summary of what was saved, what was shut down, and top 3 items for next session
+
+### Key Principles
+
+- Never destroys data volumes (`docker compose down` without `-v`)
+- Never pushes to remote -- local commits only
+- Never kills processes -- only reports orphaned ports
+- Never starts new work -- the user said they're done
+- Always updates .make-it-state.md so /resume-it picks up seamlessly
+
 ### State Breadcrumb
 
-`/make-it` writes `.make-it-state.md` at the end of the build phase. `/resume-it` reads and updates this file each session. It tracks what was built, what's pending, test status, and suggested next steps.
+`/make-it` writes `.make-it-state.md` at the end of the build phase. `/resume-it` and `/wrap-it` read and update this file each session. It tracks what was built, what's pending, test status, and suggested next steps.
 
 ## File Structure
 
@@ -94,6 +111,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
     make-it.md                    # Main skill -- idea to working app
     try-it.md                     # Try skill -- spin up, test, explore in browser
     resume-it.md                  # Resume skill -- continue, test, fix, ship
+    wrap-it.md                    # Wrap-up skill -- save progress, shut down, prep for next session
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
   make-it/
     references/
@@ -212,6 +230,7 @@ The user's world is simple: describe, verify, say "ready." Everything else is au
 /make-it -> Build new app in Docker sandbox, push to GitHub
 /retrofit-it -> Upgrade existing app with production foundations (OIDC, RBAC, Docker, etc.)
 /resume-it -> Iterate (security scanner auto-fixes, user verifies idea works)
+/wrap-it -> Save progress, shut down app, prep state for next session
 /ship-it -> Hand off to CI/CD
   CI/CD Automation -> Scan, auto-remediate, send back for verification
   /try-it -> User verifies app still works

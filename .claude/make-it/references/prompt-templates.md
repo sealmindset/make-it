@@ -1103,6 +1103,61 @@ Implementation details: see Prompt #10e Part 9.
 **Required context:** AI features, prompt names/categories
 **Runs when:** ai_usage_level = "moderate" (1-10 prompts, any audience)
 
+### Prompt #10-upgrade: AI Prompt Management Upgrade (used by /resume-it only)
+
+```
+Upgrade an existing app's prompt management to the scaffold standard.
+
+This prompt is used by /resume-it when it detects Tier 2 Outdated prompt management
+in a FastAPI+Next.js app. It is NOT used during initial /make-it builds.
+
+Steps:
+
+1. Detect current tier:
+   - Count prompt-related tables in Alembic migrations
+   - Count prompt-related API routes
+   - Count prompt admin pages and scaffold components
+   - Check for Tier 3 indicators (import/export, orchestration, agent-binding)
+   - Classify: Tier 0 (none), Tier 2 Standard (current), Tier 2 Outdated (partial), Tier 3 Custom
+
+2. If Tier 2 Outdated + FastAPI+Next.js, generate a NEW Alembic migration that:
+   - Renames existing prompt tables with `_legacy` suffix (op.rename_table)
+   - Creates all 6 scaffold tables (managed_prompts, prompt_versions, prompt_usages,
+     prompt_tags, prompt_test_cases, prompt_audit_log)
+   - Migrates data from legacy tables:
+     - Map old columns to new schema (name, description, content, is_active)
+     - Create initial PromptVersion (v1) for each migrated prompt
+     - Generate slugs from prompt names
+     - Preserve created_at/updated_at timestamps
+     - Map model-related columns to model_settings JSONB
+   - downgrade() reverses: drop new tables, rename legacy tables back
+   - NEVER modify existing Alembic migrations
+
+3. Copy scaffold backend files:
+   - backend/app/models/managed_prompt.py (6 models)
+   - backend/app/schemas/prompt.py
+   - backend/app/services/prompt_service.py
+   - backend/app/routers/prompts.py (~25 routes)
+   - Wire in main.py, models/__init__.py, conftest.py
+
+4. Copy scaffold frontend files:
+   - 5 components: prompt-card, prompt-editor, safety-indicator, variable-pill, version-timeline
+   - 4 pages: registry, detail/[slug], analytics, audit
+   - Update sidebar ("AI Instructions" + Sparkles icon), breadcrumbs, types.ts
+
+5. Verify: migration runs, /admin/prompts loads with migrated data, API responds,
+   legacy tables preserved, existing tests pass
+
+If Tier 3 Custom: SKIP upgrade, note in status as protected. Requires explicit
+double-confirmation from user to override.
+
+If not FastAPI+Next.js: document gap in TODO.md, suggest manual upgrade or /retrofit-it first.
+```
+
+**Required context:** Existing prompt table schema, seeded prompt data, app stack
+**Runs when:** /resume-it detects Tier 2 Outdated and user confirms upgrade
+**Never runs during:** Initial /make-it builds (use Prompt #10b instead)
+
 ### Prompt #10c: Tier 3 -- Heavy AI (10+ prompts, AI-native app)
 
 ```
