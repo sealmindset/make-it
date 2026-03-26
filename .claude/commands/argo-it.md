@@ -129,8 +129,8 @@ cat env/dev/kustomization.yaml k8s/kustomization.yaml 2>/dev/null
 # Read any Deployment to learn image registry, naming, secret patterns
 cat env/dev/*.yaml k8s/*.yaml 2>/dev/null | head -200
 
-# Read Ingress to learn controller type and hostname pattern
-grep -l "Ingress" env/dev/*.yaml k8s/*.yaml 2>/dev/null | head -1 | xargs cat 2>/dev/null
+# Read Ingress or IngressRoute to learn controller type and hostname pattern
+grep -l "Ingress\|IngressRoute" env/dev/*.yaml k8s/*.yaml 2>/dev/null | head -1 | xargs cat 2>/dev/null
 
 # Read PVC to learn storage class
 grep "storageClassName" env/dev/*.yaml k8s/*.yaml 2>/dev/null
@@ -142,9 +142,9 @@ grep "storageClassName" env/dev/*.yaml k8s/*.yaml 2>/dev/null
 |-----------|---------------|----------------------|
 | **Container registry** | Image field in Deployment (e.g., `ghcr.io/org/repo/service:tag`) | Ask user |
 | **Image tag strategy** | Tag in image field (e.g., `dev-latest`, `v1.2.3`, git SHA) | `{env}-latest` |
-| **Ingress controller** | Annotations on Ingress (`nginx.ingress.kubernetes.io`, `traefik.ingress.kubernetes.io`, `alb.ingress.kubernetes.io`) | Ask user |
-| **Hostname pattern** | `host:` field in Ingress rules | Ask user |
-| **TLS config** | `tls:` section in Ingress | Match existing pattern |
+| **Ingress controller** | Annotations on Ingress (`nginx.ingress.kubernetes.io`, `traefik.ingress.kubernetes.io`, `alb.ingress.kubernetes.io`) or Traefik IngressRoute CRD (`kind: IngressRoute`) | Ask user |
+| **Hostname pattern** | `host:` field in Ingress rules or IngressRoute `match:` | Ask user |
+| **TLS config** | `tls:` section in Ingress or IngressRoute | Match existing pattern |
 | **Storage class** | `storageClassName` in PVC | Ask user |
 | **Secret naming** | `secretKeyRef.name` in Deployment env vars | `{app}-secrets-{env}` |
 | **Namespace** | `namespace:` in kustomization.yaml or Ingress metadata | Ask user |
@@ -220,7 +220,9 @@ Docker Compose file -- I'll generate K8s manifests for [list app services] and s
 
 **Ingress controller** (if not detected):
 "What ingress controller does your cluster use?"
-- Options: nginx, Traefik, AWS ALB, Istio, none (ClusterIP only)
+- Options: Traefik IngressRoute (CRD), Traefik standard Ingress, nginx, AWS ALB, Istio, none (ClusterIP only)
+- If Traefik: "Does your cluster use Traefik IngressRoute CRDs or standard Kubernetes Ingress with Traefik annotations?"
+- IngressRoute CRDs are preferred when available (more control over entrypoints like `websecure`)
 
 **Storage class** (only if the app uses volumes AND not detected):
 "What storage class does your cluster use for persistent volumes?"
@@ -291,12 +293,31 @@ spec:
         volumeMounts:
         - name: {app}-pvc
           mountPath: "{mount_path}"
+      # If the service runs database migrations (e.g., Alembic, Django, Prisma):
+      initContainers:
+      - name: {service}-migrate
+        image: {registry}/{image_path}:{tag}
+        command: ["python", "-m", "alembic", "upgrade", "head"]  # adapt for framework
+        env:
+          # Same env vars as main container (secrets + config)
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {detected_secret_name_pattern}
+                key: DATABASE_URL
       # If volumes:
       volumes:
       - name: {app}-pvc
         persistentVolumeClaim:
           claimName: {app}-pvc
 ```
+
+**Init container rules:**
+- Use init containers for DB migrations (preferred over K8s Jobs -- no cluster-level RBAC needed)
+- Same image as the main container, different command
+- Same secret/config env vars as main container (needs DB access)
+- Adapt command for framework: Alembic (`alembic upgrade head`), Django (`manage.py migrate`), Prisma (`prisma migrate deploy`), Knex (`knex migrate:latest`)
+- Only add if the app has a database migration tool (check for `alembic/`, `migrations/`, `prisma/`, etc.)
 
 **Registry and image path rules:**
 - Use detected registry pattern from existing manifests if available
@@ -333,6 +354,54 @@ spec:
 
 Generate based on detected ingress controller:
 
+**Traefik IngressRoute (CRD -- preferred when Traefik is available):**
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {app}-ingress
+  namespace: {namespace}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`{hostname}`)
+      kind: Rule
+      services:
+        - name: {main_service}-service
+          port: {container_port}
+      # Optional middlewares (user's choice -- add if needed):
+      # middlewares:
+      #   - name: {app}-ratelimit
+  tls:
+    secretName: {tls_secret_name}
+```
+
+If the user needs middlewares, generate them as separate Traefik Middleware CRDs:
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {app}-ratelimit
+  namespace: {namespace}
+spec:
+  rateLimit:
+    average: 100
+    burst: 50
+```
+
+**Traefik standard Ingress (annotations-based):**
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {app}-ingress
+  namespace: {namespace}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+```
+
 **nginx:**
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -346,18 +415,6 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
     nginx.ingress.kubernetes.io/ssl-prefer-server-ciphers: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-```
-
-**Traefik:**
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {app}-ingress
-  namespace: {namespace}
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
 ```
 
 **AWS ALB:**
@@ -375,9 +432,9 @@ metadata:
     alb.ingress.kubernetes.io/certificate-arn: {cert_arn}
 ```
 
-**If existing Ingress manifests were found, copy their annotations exactly.**
+**If existing Ingress/IngressRoute manifests were found, copy their structure exactly.**
 
-The spec section is the same for all controllers:
+The spec section for standard Ingress controllers (nginx, ALB, Traefik annotations):
 ```yaml
 spec:
   rules:
@@ -422,9 +479,38 @@ namespace: {namespace}
 resources:
 - {service}.yaml
 - {service}-service.yaml
-- {app}-ingress.yaml
-- {app}-pvc.yaml    # only if PVC was generated
+- {app}-ingress.yaml      # Ingress or IngressRoute
+- {app}-pvc.yaml           # only if PVC was generated
+# If External Secrets Operator:
+# - {app}-external-secret.yaml
 ```
+
+**If the user is using External Secrets Operator**, also generate:
+
+### {app}-external-secret.yaml (optional -- only if ESO is available)
+
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {app}-secrets-{env}
+  namespace: {namespace}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: {team-name}-secret-store
+    kind: SecretStore
+  target:
+    name: {app}-secrets-{env}
+  data:
+    - secretKey: {VAR_NAME}
+      remoteRef:
+        key: {secret_server_path}
+        property: {VAR_NAME}
+```
+
+Only generate ExternalSecret if the user confirms ESO is available for their namespace.
+Otherwise, document manual secret creation in ONBOARDING-K8S.md.
 
 **Environment differences (dev vs prod):**
 - Image tag: `dev-latest` vs `prod-latest` (or detected pattern)
@@ -541,11 +627,58 @@ jobs:
 - `.github/workflows/build-and-push.yml` -- CI workflow for container images
 - This file
 
+## TLS Certificate
+
+Your app needs a TLS certificate for `{hostname}`.
+
+1. **Generate a CSR** (Certificate Signing Request) for `{hostname}`
+2. **Submit a request** through your org's cert provisioning process (e.g., ServiceNow ticket)
+3. **Create a K8s TLS secret** once the cert is issued:
+   ```bash
+   kubectl create secret tls {tls_secret_name} \
+     --cert=path/to/cert.pem \
+     --key=path/to/key.pem \
+     -n {namespace}
+   ```
+
+Note: Certs are per-app and typically valid for 1 year. Set a reminder to renew.
+
 ## Secrets to create
 
 These K8s Secrets must be created in the target namespace (`{namespace}`).
-Check with your DevOps team for how secrets are managed in your org
-(Rancher UI, kubectl, External Secrets Operator, Sealed Secrets, etc.).
+
+**Option A: Manual creation (quick start)**
+Create secrets via your cluster management UI (e.g., Rancher) or kubectl:
+```bash
+kubectl create secret generic {app}-secrets-{env} \
+  --from-literal=DATABASE_URL='...' \
+  --from-literal=SECRET_KEY='...' \
+  -n {namespace}
+```
+
+**Option B: External Secrets Operator (recommended for production)**
+If your namespace has been onboarded to External Secrets Operator, create an ExternalSecret
+that pulls from your team's SecretStore:
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {app}-secrets-{env}
+  namespace: {namespace}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: {team-name}-secret-store
+    kind: SecretStore
+  target:
+    name: {app}-secrets-{env}
+  data:
+    - secretKey: DATABASE_URL
+      remoteRef:
+        key: {secret_server_path}
+        property: DATABASE_URL
+```
+Ask your DevOps team if your namespace is onboarded to ESO.
 
 ### {app}-secrets-{env}
 | Key | Description | Where to get it |
@@ -557,6 +690,12 @@ Check with your DevOps team for how secrets are managed in your org
 |-----|-------------|-----------------|
 | {VAR_NAME} | {description} | {source hint} |
 
+## Namespace
+
+Your app deploys to namespace `{namespace}`. Namespaces are typically created by
+your infrastructure/compute team -- if this namespace doesn't exist yet, request it
+before deploying.
+
 ## Argo CD setup
 
 1. **Argo Application** should point to:
@@ -565,7 +704,8 @@ Check with your DevOps team for how secrets are managed in your org
    - **Path:** `{manifest_dir}/dev` (for dev) or `{manifest_dir}/prod` (for prod)
    - **Namespace:** `{namespace}`
 
-2. If the Argo Application doesn't exist yet, ask your DevOps team to create it.
+2. If the Argo Application doesn't exist yet, ask your DevOps team to create it
+   within your team's Argo project.
 
 ## Database
 
