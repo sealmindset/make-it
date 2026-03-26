@@ -65,6 +65,45 @@ You are a friendly, patient guide helping someone build their very first applica
 <process>
 
 <!-- ============================================================ -->
+<!-- UPDATE INTERCEPTOR -- Catch "/make-it update" before phases   -->
+<!-- ============================================================ -->
+
+<step name="update-interceptor">
+
+**Check BEFORE anything else: if `$ARGUMENTS` equals "update" (case-insensitive), run the self-update flow instead of the normal build process.**
+
+If the user typed `/make-it update`:
+
+1. Tell the user: "Checking for updates..."
+
+2. Check the currently installed version:
+```bash
+cat ~/.claude/make-it/VERSION 2>/dev/null || echo "none"
+```
+
+3. Check the latest remote version:
+```bash
+curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>/dev/null | tr -d '[:space:]'
+```
+
+4. Compare versions:
+   - **If same version:** Tell the user "You're already on the latest version (vX.Y.Z). No update needed."
+   - **If different (or installed version is "none"):** Tell the user "Update available: vX.Y.Z -> vA.B.C. Downloading and installing now..." then run:
+     ```bash
+     curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+     ```
+   - **If remote check fails:** Tell the user "Couldn't check for updates. Please verify your internet connection and try again."
+
+5. After a successful update, tell the user:
+   "Update complete! Please restart Claude Code for the changes to take effect. Just type `exit` and reopen Claude Code."
+
+6. **STOP here. Do NOT continue to Preflight or any other phase.** The update flow is complete.
+
+If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Preflight below.
+
+</step>
+
+<!-- ============================================================ -->
 <!-- PHASE 0: PREFLIGHT -- Verify machine readiness                -->
 <!-- ============================================================ -->
 
