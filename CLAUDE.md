@@ -82,6 +82,26 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 5. **Test** -- Scaffolds test infrastructure (pytest, Playwright) if needed, generates and runs tests
 6. **Ship** -- Handoff to `/ship-it` when ready
 
+## /argo-it
+
+`/argo-it` deploys a Docker Compose app to Kubernetes via Argo CD. The user runs it from any project that has a docker-compose.yml.
+
+0. **Discover** -- Read docker-compose.yml, .env, classify services (app vs database vs mock)
+1. **Setup** -- Ask namespace, hostname, deploy branch (3-4 questions max)
+2. **Generate** -- Create `env/dev/` and `env/prod/` Kustomize manifests following the org's established pattern
+3. **Workflow** -- Generate `.github/workflows/build-and-push.yml` for ghcr.io image publishing
+4. **Onboarding** -- Generate `ONBOARDING-K8S.md` with manual steps (secrets, Argo config)
+5. **Deploy** -- Commit, push, merge to deploy branch (Argo auto-syncs)
+
+### Key Principles
+
+- Follows the established Kustomize + Argo CD GitOps pattern (no Helm, no Kompose)
+- Generates manifests for multi-service apps (one Deployment per app service)
+- Skips databases and mock services (handled separately in K8s)
+- Never hardcodes secrets -- always K8s Secret references
+- Never applies K8s resources directly -- Argo CD handles that via GitOps
+- Reference implementation: `corp-functions-finance-dashboard` repo `env/dev/`
+
 ## /wrap-it
 
 `/wrap-it` cleanly wraps up a work session. The user runs it when they're done for the day.
@@ -112,6 +132,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
     try-it.md                     # Try skill -- spin up, test, explore in browser
     resume-it.md                  # Resume skill -- continue, test, fix, ship
     wrap-it.md                    # Wrap-up skill -- save progress, shut down, prep for next session
+    argo-it.md                    # Argo CD skill -- generate K8s manifests, deploy via GitOps
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
   make-it/
     references/
@@ -231,6 +252,7 @@ The user's world is simple: describe, verify, say "ready." Everything else is au
 /retrofit-it -> Upgrade existing app with production foundations (OIDC, RBAC, Docker, etc.)
 /resume-it -> Iterate (security scanner auto-fixes, user verifies idea works)
 /wrap-it -> Save progress, shut down app, prep state for next session
+/argo-it -> Generate K8s manifests from Docker Compose, merge to deploy branch for Argo CD
 /ship-it -> Hand off to CI/CD
   CI/CD Automation -> Scan, auto-remediate, send back for verification
   /try-it -> User verifies app still works
