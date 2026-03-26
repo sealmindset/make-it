@@ -108,7 +108,10 @@ install_skills() {
   for cmd_file in "$REPO_DIR/.claude/commands/"*.md; do
     if [ -f "$cmd_file" ]; then
       cmd_name="$(basename "$cmd_file")"
-      cp "$cmd_file" "$COMMANDS_DIR/"
+      target="$COMMANDS_DIR/$cmd_name"
+      # Remove existing symlinks (from dev-link.sh) before copying
+      [ -L "$target" ] && rm "$target"
+      cp "$cmd_file" "$target"
       ok "$cmd_name"
       SKILL_COUNT=$((SKILL_COUNT + 1))
     fi
@@ -120,7 +123,9 @@ install_skills() {
 
   # Copy references, templates, and scaffolds
   echo "  Copying references, templates, and scaffolds..."
-  rm -rf "$MAKEIT_DIR"
+  # Remove symlink (from dev-link.sh) or directory before copying
+  [ -L "$MAKEIT_DIR" ] && rm "$MAKEIT_DIR"
+  [ -d "$MAKEIT_DIR" ] && rm -rf "$MAKEIT_DIR"
   cp -r "$REPO_DIR/.claude/make-it" "$MAKEIT_DIR"
 
   # Verify
