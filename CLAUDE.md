@@ -84,23 +84,25 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 ## /argo-it
 
-`/argo-it` deploys a Docker Compose app to Kubernetes via Argo CD. The user runs it from any project that has a docker-compose.yml.
+`/argo-it` deploys a Docker Compose app to Kubernetes via Argo CD. Universal skill -- works with any K8s cluster, any container registry, any ingress controller. The user runs it from any project that has a docker-compose.yml.
 
-0. **Discover** -- Read docker-compose.yml, .env, classify services (app vs database vs mock)
-1. **Setup** -- Ask namespace, hostname, deploy branch (3-4 questions max)
-2. **Generate** -- Create `env/dev/` and `env/prod/` Kustomize manifests following the org's established pattern
-3. **Workflow** -- Generate `.github/workflows/build-and-push.yml` for ghcr.io image publishing
-4. **Onboarding** -- Generate `ONBOARDING-K8S.md` with manual steps (secrets, Argo config)
-5. **Deploy** -- Commit, push, merge to deploy branch (Argo auto-syncs)
+0. **Detect** -- Read docker-compose.yml + any existing K8s manifests to auto-detect conventions (registry, ingress controller, storage class, secret naming, namespace)
+1. **Setup** -- Only ask what couldn't be detected (typically 3-4 questions: namespace, hostname, deploy branch)
+2. **Generate** -- Create `env/dev/` and `env/prod/` Kustomize manifests using detected patterns
+3. **CI Workflow** -- Generate build-and-push workflow (GitHub Actions, GitLab CI, Jenkins, or Azure DevOps)
+4. **Onboarding** -- Generate `ONBOARDING-K8S.md` with manual steps (secrets, Argo config) + local K8s testing instructions
+5. **Deploy** -- Offer 4 options: push+merge, test locally first (Rancher Desktop/minikube/kind), just push, or review only
 
 ### Key Principles
 
-- Follows the established Kustomize + Argo CD GitOps pattern (no Helm, no Kompose)
+- **Detect-first**: Reads existing manifests to extract conventions before asking questions
+- Follows Kustomize + Argo CD GitOps pattern (no Helm, no Kompose)
 - Generates manifests for multi-service apps (one Deployment per app service)
 - Skips databases and mock services (handled separately in K8s)
 - Never hardcodes secrets -- always K8s Secret references
 - Never applies K8s resources directly -- Argo CD handles that via GitOps
-- Reference implementation: `corp-functions-finance-dashboard` repo `env/dev/`
+- Supports multiple registries (ghcr.io, ECR, ACR, Docker Hub), ingress controllers (nginx, Traefik, ALB, Istio), and storage classes
+- Local K8s testing via `kubectl apply -k env/dev/` on Rancher Desktop, minikube, or kind
 
 ## /wrap-it
 

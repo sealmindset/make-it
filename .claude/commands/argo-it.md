@@ -16,11 +16,11 @@ allowed-tools:
 
 Take an existing Docker Compose application (built by /make-it or otherwise) and deploy it to
 Kubernetes via Argo CD. The user just types /argo-it -- the skill reads docker-compose.yml,
-generates Kustomize manifests, creates a GitHub Actions image-push workflow, and merges
+generates Kustomize manifests, creates a CI workflow for image publishing, and merges
 everything to the deploy branch where Argo CD auto-syncs.
 
-No Kubernetes knowledge required. No Helm. No Kompose. Just plain Kustomize manifests
-following the organization's established pattern.
+No Kubernetes knowledge required. The skill detects org conventions from existing manifests
+and adapts to any K8s environment.
 
 </objective>
 
@@ -53,7 +53,7 @@ is invisible to the user.
 <process>
 
 <!-- ============================================================ -->
-<!-- PHASE 0: DISCOVER -- Read the app and gather context           -->
+<!-- PHASE 0: DISCOVER -- Read the app and detect conventions       -->
 <!-- ============================================================ -->
 
 <step name="discover">
@@ -63,7 +63,6 @@ is invisible to the user.
 **1. Read docker-compose.yml:**
 
 ```bash
-# Find the compose file
 ls docker-compose.yml docker-compose.yaml 2>/dev/null
 ```
 
@@ -75,7 +74,7 @@ app to generate Kubernetes manifests from. Try /make-it first to build your app.
 
 For each service, extract:
 - Service name
-- Image (or build context)
+- Image (or build context and Dockerfile path)
 - Ports (host:container mapping)
 - Environment variables (inline values and .env references)
 - Volumes (named volumes and bind mounts)
@@ -91,8 +90,8 @@ cat .env.example 2>/dev/null
 ```
 
 Categorize each env var:
-- **Secret** (contains KEY, SECRET, PASSWORD, TOKEN, or is a connection string): will become K8s Secret references
-- **Config** (everything else): will become literal `value:` in the manifest
+- **Secret** (name contains KEY, SECRET, PASSWORD, TOKEN, CREDENTIAL, or value is a connection string/URL with credentials): will become K8s Secret references
+- **Config** (everything else with a literal value): will become literal `value:` in the manifest
 
 **4. Read project context:**
 
@@ -100,91 +99,156 @@ Categorize each env var:
 # App context for project name, stack, etc.
 cat .make-it/app-context.json 2>/dev/null
 
-# GitHub remote for image registry path
+# Git remote for registry path
 git remote get-url origin 2>/dev/null
 
 # Project name fallback
 basename "$(pwd)"
 ```
 
-**5. Check for existing K8s manifests:**
+**5. DETECT EXISTING CONVENTIONS -- This is the key step.**
+
+Check if K8s manifests already exist in this project or in sibling repos:
 
 ```bash
-ls env/dev/ env/prod/ k8s/ 2>/dev/null
+# Check this repo for existing manifests
+ls env/dev/ env/prod/ k8s/ deploy/ manifests/ 2>/dev/null
+find . -name "kustomization.yaml" -not -path "./.git/*" 2>/dev/null
+find . -name "Chart.yaml" -not -path "./.git/*" 2>/dev/null
+
+# Check for existing CI workflows
+ls .github/workflows/ 2>/dev/null
 ```
 
-If manifests already exist, note this -- we may be updating, not creating from scratch.
+**If existing manifests are found, READ THEM and extract the org's conventions:**
+
+```bash
+# Read kustomization.yaml to learn the pattern
+cat env/dev/kustomization.yaml k8s/kustomization.yaml 2>/dev/null
+
+# Read any Deployment to learn image registry, naming, secret patterns
+cat env/dev/*.yaml k8s/*.yaml 2>/dev/null | head -200
+
+# Read Ingress to learn controller type and hostname pattern
+grep -l "Ingress" env/dev/*.yaml k8s/*.yaml 2>/dev/null | head -1 | xargs cat 2>/dev/null
+
+# Read PVC to learn storage class
+grep "storageClassName" env/dev/*.yaml k8s/*.yaml 2>/dev/null
+```
+
+**Extract these conventions from existing manifests (if found):**
+
+| Convention | How to detect | Fallback if not found |
+|-----------|---------------|----------------------|
+| **Container registry** | Image field in Deployment (e.g., `ghcr.io/org/repo/service:tag`) | Ask user |
+| **Image tag strategy** | Tag in image field (e.g., `dev-latest`, `v1.2.3`, git SHA) | `{env}-latest` |
+| **Ingress controller** | Annotations on Ingress (`nginx.ingress.kubernetes.io`, `traefik.ingress.kubernetes.io`, `alb.ingress.kubernetes.io`) | Ask user |
+| **Hostname pattern** | `host:` field in Ingress rules | Ask user |
+| **TLS config** | `tls:` section in Ingress | Match existing pattern |
+| **Storage class** | `storageClassName` in PVC | Ask user |
+| **Secret naming** | `secretKeyRef.name` in Deployment env vars | `{app}-secrets-{env}` |
+| **Namespace** | `namespace:` in kustomization.yaml or Ingress metadata | Ask user |
+| **Manifest structure** | Directory layout (env/dev, k8s/, etc.) | `env/{env}/` |
+| **Deploy branch** | Check for deploy-* branches: `git branch -r \| grep deploy` | Ask user |
+
+**Also check sibling repos for org conventions** (if the user's git remote reveals an org):
+
+```bash
+# Check for deploy branches in this repo
+git branch -r 2>/dev/null | grep -i deploy
+```
 
 **6. Classify services:**
 
-| Service Type | Example | Action |
-|-------------|---------|--------|
-| **App service** | backend, frontend, web | Generate Deployment + Service + Ingress |
-| **Database** | postgres, mysql, redis | SKIP -- assume managed externally in K8s. Document in onboarding. |
-| **Mock service** | mock-oidc, mock-* | SKIP -- local dev only, not deployed to K8s |
-| **Worker** | celery, worker, scheduler | Generate Deployment (no Service/Ingress) |
+| Service Type | How to identify | Action |
+|-------------|----------------|--------|
+| **App service** | Has `build:` or app image, exposes ports | Generate Deployment + Service |
+| **Web-facing service** | App service that serves HTTP on well-known ports (80, 443, 3000, 5000, 8000, 8080) | Also gets Ingress |
+| **Database** | Image is postgres, mysql, mariadb, mongo, redis, etc. | SKIP -- document in onboarding |
+| **Mock service** | Name starts with mock-*, or is in docker-compose `profiles: [dev]` | SKIP -- local dev only |
+| **Worker** | Has no ports, or is named worker/celery/scheduler | Generate Deployment only (no Service/Ingress) |
 
 **7. Build internal context:**
-- Project name (from app-context.json or git remote)
-- GitHub org and repo (from git remote, e.g., `SleepNumberInc/corp-functions-finance-dashboard`)
-- Services to deploy (app services and workers only)
+- Project name
+- Git org and repo (from remote URL)
+- Services to deploy (app + worker only)
 - Ports per service
 - Env var classification (secret vs config)
-- Whether this is a first-time generation or an update
+- **Detected conventions** (registry, ingress controller, storage class, etc.)
+- **What needs to be asked** (anything not detected)
+- Whether this is first-time generation or an update
 
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 1: SETUP -- Ask the few questions we need                -->
+<!-- PHASE 1: SETUP -- Ask only what couldn't be detected           -->
 <!-- ============================================================ -->
 
 <step name="setup">
 
-**Ask the user only what can't be derived from the codebase. Maximum 3-4 questions.**
+**Only ask questions for conventions that could NOT be detected from existing manifests.**
+If everything was detected, skip directly to generation with a confirmation.
 
 **1. Greet and explain:**
 
 "I'll set up Kubernetes deployment for **[PROJECT_NAME]**. I found [N] services in your
 Docker Compose file -- I'll generate K8s manifests for [list app services] and skip
-[list skipped services like databases and mocks] (those are handled separately in K8s).
+[list skipped services] (those are handled separately in K8s).
 
-I just need a few details:"
+[If conventions detected:] I found existing K8s manifests and will follow the same patterns:
+- Registry: [detected registry]
+- Ingress: [detected controller]
+- Namespace: [detected namespace]
 
-**2. Ask questions (one at a time):**
+[If some questions needed:] I just need a few details:"
 
-**Q1: Namespace**
+**2. Ask ONLY what's missing (skip if detected):**
+
+**Container registry** (if not detected from existing manifests):
+"Where should container images be published?"
+- Options: GitHub Container Registry (ghcr.io), Docker Hub, AWS ECR, Azure ACR, custom
+- For ghcr.io: derive path from git remote (e.g., `ghcr.io/{org}/{repo}/{service}`)
+
+**Namespace** (if not detected):
 "What Kubernetes namespace should this deploy to?"
-- If app-context.json has a namespace, suggest it as default
-- If another app in the org uses a known namespace (e.g., `corporate-functions-projects`), suggest that
 - Save to app-context.json as `deployment.k8s_namespace`
 
-**Q2: Hostname**
-"What hostname should your app be accessible at in dev?"
-- Suggest pattern: `{appname}-dev.comfort.com` based on the finance-dashboard pattern
-- Also ask for prod hostname (or "same pattern without -dev")
+**Hostname** (if not detected from existing Ingress):
+"What hostname should your app be accessible at?"
+- For dev and prod separately
 - Save to app-context.json
 
-**Q3: Deploy branch**
+**Ingress controller** (if not detected):
+"What ingress controller does your cluster use?"
+- Options: nginx, Traefik, AWS ALB, Istio, none (ClusterIP only)
+
+**Storage class** (only if the app uses volumes AND not detected):
+"What storage class does your cluster use for persistent volumes?"
+- Common options: longhorn, gp3, standard, local-path
+
+**Deploy branch** (if not detected):
 "Which branch does Argo CD watch for deployments?"
-- Suggest `deploy-nonprod` as default (matches the established pattern)
+- Suggest `deploy-nonprod` if no existing pattern found
 - Save to app-context.json as `deployment.deploy_branch`
 
-**Q4: (Only if multiple app services) Which service is the main web-facing one?**
-"I see [backend] and [frontend] -- which one should be the main entry point (gets the Ingress)?"
-- If only one service, skip this question
-- For multi-service apps (e.g., FastAPI + Next.js): the frontend gets the Ingress, backend gets a ClusterIP Service only
+**Main service** (only if multiple web-facing services):
+"I see [backend] and [frontend] -- which one should be the main entry point?"
+- The selected service gets the Ingress; others get ClusterIP Service only
 
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 2: GENERATE -- Create all K8s manifests                  -->
+<!-- PHASE 2: GENERATE -- Create K8s manifests                      -->
 <!-- ============================================================ -->
 
 <step name="generate-manifests">
 
-**Generate `env/dev/` and `env/prod/` directories with Kustomize manifests.**
+**Generate manifests using detected conventions (or user answers for anything not detected).**
 
-**Reference pattern:** The manifests follow the established pattern from `corp-functions-finance-dashboard`.
+Determine the manifest directory structure:
+- If existing manifests use `env/dev/` and `env/prod/`: follow that
+- If existing manifests use `k8s/`: follow that
+- Default: `env/dev/` and `env/prod/`
 
 **For each app service, generate:**
 
@@ -209,21 +273,21 @@ spec:
     spec:
       containers:
       - name: {service}
-        image: ghcr.io/{github_org}/{repo}/{service}:{env}-latest
+        image: {registry}/{image_path}:{tag}
         imagePullPolicy: Always
         ports:
           - containerPort: {container_port}
         env:
-          # For each SECRET env var:
+          # SECRET env vars -> secretKeyRef
           - name: {VAR_NAME}
             valueFrom:
               secretKeyRef:
-                name: {app}-secrets-{env}
+                name: {detected_secret_name_pattern}
                 key: {VAR_NAME}
-          # For each CONFIG env var:
+          # CONFIG env vars -> literal value
           - name: {VAR_NAME}
             value: "{value}"
-        # If service has volume mounts:
+        # If volumes exist:
         volumeMounts:
         - name: {app}-pvc
           mountPath: "{mount_path}"
@@ -234,12 +298,18 @@ spec:
           claimName: {app}-pvc
 ```
 
-**Env var classification rules:**
-- Env var name contains `KEY`, `SECRET`, `PASSWORD`, `TOKEN`, `CREDENTIAL`: -> secretKeyRef to `{app}-secrets-{env}`
-- Env var name contains `CLIENT_ID`, `CLIENT_SECRET`, `TENANT_ID`, `ENDPOINT` for Azure/OIDC: -> secretKeyRef to `{app}-azure-{env}`
-- Env var value is a URL with credentials or connection string: -> secretKeyRef
-- Everything else with a literal value: -> `value:` directly in manifest
-- `ENFORCE_SECRETS`, `LOG_BUFFER_SIZE`, and other app config: -> `value:` directly
+**Registry and image path rules:**
+- Use detected registry pattern from existing manifests if available
+- For ghcr.io: `ghcr.io/{github_org}/{repo}/{service}:{env}-latest`
+- For ECR: `{account}.dkr.ecr.{region}.amazonaws.com/{repo}/{service}:{tag}`
+- For ACR: `{registry}.azurecr.io/{repo}/{service}:{tag}`
+- For Docker Hub: `{org}/{service}:{tag}`
+
+**Secret grouping rules:**
+- Follow detected secret naming pattern from existing manifests
+- If no pattern detected, group by purpose:
+  - `{app}-secrets-{env}` for general app secrets (DB, JWT, API keys)
+  - `{app}-{provider}-{env}` for provider-specific secrets (azure, aws, oidc)
 
 ### {service}-service.yaml (Service)
 
@@ -259,8 +329,11 @@ spec:
       targetPort: {container_port}
 ```
 
-### {app}-ingress.yaml (Ingress -- only for the main web-facing service)
+### {app}-ingress.yaml (Ingress -- only for web-facing service)
 
+Generate based on detected ingress controller:
+
+**nginx:**
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -273,6 +346,39 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
     nginx.ingress.kubernetes.io/ssl-prefer-server-ciphers: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+```
+
+**Traefik:**
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {app}-ingress
+  namespace: {namespace}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+```
+
+**AWS ALB:**
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {app}-ingress
+  namespace: {namespace}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: {cert_arn}
+```
+
+**If existing Ingress manifests were found, copy their annotations exactly.**
+
+The spec section is the same for all controllers:
+```yaml
 spec:
   rules:
   - host: "{hostname}"
@@ -288,10 +394,10 @@ spec:
   tls:
     - hosts:
         - {hostname}
-      secretName: {app}-{env}
+      secretName: {tls_secret_name}
 ```
 
-### {app}-pvc.yaml (PersistentVolumeClaim -- only if service has volumes)
+### {app}-pvc.yaml (PersistentVolumeClaim -- only if volumes exist)
 
 ```yaml
 apiVersion: v1
@@ -299,7 +405,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {app}-pvc
 spec:
-  storageClassName: longhorn
+  storageClassName: {detected_or_asked_storage_class}
   accessModes:
     - ReadWriteOnce
   resources:
@@ -314,32 +420,40 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: {namespace}
 resources:
-# List all generated manifest files
 - {service}.yaml
 - {service}-service.yaml
 - {app}-ingress.yaml
 - {app}-pvc.yaml    # only if PVC was generated
 ```
 
-**Dev vs Prod differences:**
-- Image tag: `dev-latest` vs `prod-latest`
-- Secret names: `{app}-secrets-dev` vs `{app}-secrets-prod`, `{app}-azure-dev` vs `{app}-azure-prod`
-- Hostname: `{app}-dev.comfort.com` vs `{app}.comfort.com` (or user-specified)
-- TLS secret name: `{app}-dev` vs `{app}-prod`
+**Environment differences (dev vs prod):**
+- Image tag: `dev-latest` vs `prod-latest` (or detected pattern)
+- Secret names: `{app}-secrets-dev` vs `{app}-secrets-prod` (or detected pattern)
+- Hostname: dev hostname vs prod hostname (from user input or detected pattern)
+- TLS secret name: follows detected pattern or `{app}-tls-{env}`
 
-**Generate both `env/dev/` and `env/prod/` with the appropriate values.**
+**Generate manifests for all configured environments.**
 
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 3: GITHUB ACTIONS -- Image build and push workflow       -->
+<!-- PHASE 3: CI WORKFLOW -- Image build and push                   -->
 <!-- ============================================================ -->
 
 <step name="generate-workflow">
 
-**Generate `.github/workflows/build-and-push.yml` for building and pushing container images to ghcr.io.**
+**Generate a CI workflow for building and pushing container images.**
 
-For each app service that has a `build:` directive in docker-compose.yml (not just an `image:`):
+Detect the CI system from the repo:
+- `.github/workflows/` exists -> GitHub Actions
+- `.gitlab-ci.yml` exists -> GitLab CI
+- `Jenkinsfile` exists -> Jenkins
+- `azure-pipelines.yml` exists -> Azure DevOps
+- None found -> default to GitHub Actions
+
+**For GitHub Actions** (most common):
+
+Generate `.github/workflows/build-and-push.yml`:
 
 ```yaml
 name: Build and Push Container Images
@@ -348,18 +462,17 @@ on:
   push:
     branches:
       - main
-      - deploy-nonprod
+      - {deploy_branch}
     paths:
       # Only rebuild when source code changes, not K8s manifests
-      - 'backend/**'
-      - 'frontend/**'
+      - '{build_context}/**'
       - 'Dockerfile*'
       - 'docker-compose.yml'
       - '.github/workflows/build-and-push.yml'
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_BASE: ghcr.io/${{ github.repository }}
+  REGISTRY: {registry_host}
+  IMAGE_BASE: {registry_host}/{image_base_path}
 
 jobs:
   build-and-push:
@@ -372,7 +485,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to container registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -388,7 +501,7 @@ jobs:
             echo "tag=dev-latest" >> "$GITHUB_OUTPUT"
           fi
 
-      # One build-and-push step per service
+      # One build step per service with a build context
       - name: Build and push {service}
         uses: docker/build-push-action@v5
         with:
@@ -398,18 +511,24 @@ jobs:
           tags: ${{ env.IMAGE_BASE }}/{service}:${{ steps.tag.outputs.tag }}
 ```
 
-If the app has multiple services with build contexts (e.g., `backend/` and `frontend/`),
-generate a build step for each.
+**Adapt the login step for non-ghcr.io registries:**
+- ECR: use `aws-actions/amazon-ecr-login@v2`
+- ACR: use `azure/docker-login@v1`
+- Docker Hub: use `docker/login-action@v3` with Docker Hub credentials
+
+**If existing CI workflows are found**, read them and either:
+- Add the image build steps to an existing workflow, or
+- Create a new workflow that doesn't conflict
 
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 4: ONBOARDING DOC -- What the user needs to do manually -->
+<!-- PHASE 4: ONBOARDING DOC                                        -->
 <!-- ============================================================ -->
 
 <step name="generate-onboarding">
 
-**Generate `ONBOARDING-K8S.md` documenting the manual steps for DevOps/user.**
+**Generate `ONBOARDING-K8S.md` documenting manual steps.**
 
 ```markdown
 # Kubernetes Deployment -- [PROJECT_NAME]
@@ -417,59 +536,85 @@ generate a build step for each.
 ## What was generated
 
 /argo-it created the following files:
-- `env/dev/` -- Kustomize manifests for dev environment
-- `env/prod/` -- Kustomize manifests for prod environment
-- `.github/workflows/build-and-push.yml` -- GitHub Actions for container images
+- `{manifest_dir}/dev/` -- Kustomize manifests for dev environment
+- `{manifest_dir}/prod/` -- Kustomize manifests for prod environment
+- `.github/workflows/build-and-push.yml` -- CI workflow for container images
+- This file
 
-## Secrets to create in Rancher
+## Secrets to create
 
-These K8s Secrets must be created manually in the target namespace (`{namespace}`):
+These K8s Secrets must be created in the target namespace (`{namespace}`).
+Check with your DevOps team for how secrets are managed in your org
+(Rancher UI, kubectl, External Secrets Operator, Sealed Secrets, etc.).
 
 ### {app}-secrets-{env}
 | Key | Description | Where to get it |
 |-----|-------------|-----------------|
-| {VAR_NAME} | {description from .env.example or inferred} | {source hint} |
-| ... | ... | ... |
+| {VAR_NAME} | {description} | {source hint} |
 
-### {app}-azure-{env} (if Azure/OIDC vars exist)
+### {app}-{provider}-{env} (if provider-specific secrets exist)
 | Key | Description | Where to get it |
 |-----|-------------|-----------------|
-| ... | ... | ... |
+| {VAR_NAME} | {description} | {source hint} |
 
 ## Argo CD setup
 
 1. **Argo Application** should point to:
-   - **Repo:** `https://github.com/{github_org}/{repo}`
+   - **Repo:** `{repo_url}`
    - **Target Revision:** `{deploy_branch}` (branch)
-   - **Path:** `env/dev` (for dev) or `env/prod` (for prod)
+   - **Path:** `{manifest_dir}/dev` (for dev) or `{manifest_dir}/prod` (for prod)
    - **Namespace:** `{namespace}`
 
-2. If the Argo Application doesn't exist yet, ask your DevOps team to create it
-   in the `{namespace}` project.
+2. If the Argo Application doesn't exist yet, ask your DevOps team to create it.
 
 ## Database
 
-This app uses [database type from docker-compose]. In Kubernetes, the database should be:
-- A managed service (cloud-hosted), OR
+[If database service was skipped from docker-compose:]
+This app uses {database_type} locally via Docker Compose. In Kubernetes, you need:
+- A managed database service (cloud-hosted), OR
 - An existing database in the cluster
 
-The `DATABASE_URL` secret should point to the K8s-accessible database.
+Set the `DATABASE_URL` secret to point to the K8s-accessible database.
+
+## Local K8s testing (optional)
+
+If you have a local K8s cluster (Rancher Desktop, minikube, kind, Docker Desktop K8s):
+
+```bash
+# Build images locally
+docker compose build
+
+# For Rancher Desktop (nerdctl):
+nerdctl --namespace k8s.io load < $(docker save {image})
+
+# Apply manifests to local cluster
+kubectl apply -k {manifest_dir}/dev/
+
+# Verify pods are running
+kubectl get pods -n {namespace}
+
+# Clean up
+kubectl delete -k {manifest_dir}/dev/
+```
+
+This tests the exact same Kustomize manifests that Argo CD uses.
 
 ## How to deploy
 
-1. Push code to `main` -- GitHub Actions builds and pushes images to ghcr.io
+1. Push code to `main` -- CI builds and pushes images to {registry}
 2. Merge `main` into `{deploy_branch}` -- Argo CD auto-syncs the K8s manifests
 3. Check Argo CD dashboard to verify sync status
 
 ## How to update manifests
 
-Edit files in `env/dev/` or `env/prod/` directly. Merge to `{deploy_branch}` and Argo syncs.
+Edit files in `{manifest_dir}/dev/` or `{manifest_dir}/prod/` directly.
+Merge to `{deploy_branch}` and Argo syncs automatically.
 ```
 
 </step>
 
 <!-- ============================================================ -->
-<!-- PHASE 5: DEPLOY -- Merge to the deploy branch                  -->
+<!-- PHASE 5: DEPLOY -- Commit and merge to deploy branch           -->
 <!-- ============================================================ -->
 
 <step name="deploy">
@@ -477,65 +622,79 @@ Edit files in `env/dev/` or `env/prod/` directly. Merge to `{deploy_branch}` and
 **1. Commit the generated files:**
 
 ```bash
-git add env/ .github/workflows/build-and-push.yml ONBOARDING-K8S.md
-git commit -m "Add K8s manifests and GitHub Actions for Argo CD deployment"
+git add env/ .github/workflows/ ONBOARDING-K8S.md
+git commit -m "Add K8s manifests and CI workflow for Argo CD deployment"
 ```
 
-**2. Ask the user before merging:**
+**2. Ask the user what they want to do:**
 
-"I've generated all the Kubernetes manifests and the image build workflow. Here's what's ready:
+"I've generated all the Kubernetes manifests. Here's what's ready:
 
 **Generated files:**
-- `env/dev/` -- [N] manifest files for dev deployment
-- `env/prod/` -- [N] manifest files for prod deployment
-- `.github/workflows/build-and-push.yml` -- Builds and pushes images to ghcr.io
-- `ONBOARDING-K8S.md` -- Manual setup steps (secrets, Argo config)
+- `{manifest_dir}/dev/` -- [N] manifest files for dev
+- `{manifest_dir}/prod/` -- [N] manifest files for prod
+- `.github/workflows/build-and-push.yml` -- Image build pipeline
+- `ONBOARDING-K8S.md` -- Setup steps for secrets and Argo
 
-**Before deploying, you'll need to:**
-1. Create the K8s Secrets listed in ONBOARDING-K8S.md (or ask DevOps to)
-2. Make sure an Argo CD Application exists pointing to your repo
+**What would you like to do?**
 
-Want me to push this to GitHub and merge to the `{deploy_branch}` branch? Or would you
-rather review the files first?"
+1. **Push and merge to `{deploy_branch}`** -- Argo CD will auto-sync (requires secrets to be created first)
+2. **Test locally first** -- Apply to your local K8s cluster with `kubectl apply -k {manifest_dir}/dev/`
+3. **Just push** -- Push to GitHub but don't merge to deploy branch yet (review first)
+4. **Review files** -- Show me the generated manifests before doing anything"
 
-**3. If user says yes:**
+**3. Execute based on user choice:**
 
+**Option 1 (push + merge):**
 ```bash
-# Push to current branch
 git push
 
-# Create or update the deploy branch
 git fetch origin {deploy_branch} 2>/dev/null || true
-
-# If deploy branch exists, merge into it
 if git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
   git checkout {deploy_branch}
   git merge main --no-edit
   git push
   git checkout main
 else
-  # Create deploy branch from main
   git checkout -b {deploy_branch}
   git push -u origin {deploy_branch}
   git checkout main
 fi
 ```
 
-**4. Report success:**
+**Option 2 (local test):**
+```bash
+# Build images locally
+docker compose build
 
-"Your app is deploying! Here's what's happening:
+# Apply to local cluster
+kubectl apply -k {manifest_dir}/dev/
+
+# Check status
+kubectl get pods -n {namespace}
+kubectl get svc -n {namespace}
+kubectl get ingress -n {namespace}
+```
+
+Then ask: "How does it look? Want me to push and merge to `{deploy_branch}` now?"
+
+**Option 3 (just push):**
+```bash
+git push
+```
+"Pushed! When you're ready, merge to `{deploy_branch}` and Argo will pick it up."
+
+**4. Report success (after deploy):**
+
+"Your app is deploying!
 
 1. [x] K8s manifests generated and pushed
 2. [x] Merged to `{deploy_branch}` -- Argo CD will auto-sync
-3. [ ] GitHub Actions will build and push your container images on the next push to main
-
-**What to check:**
-- Argo CD dashboard -- look for your app to show 'Synced' and 'Healthy'
-- If images haven't been pushed yet, merge to main first to trigger the build
+3. [ ] CI will build and push images on the next push to main
 
 **Still needed (see ONBOARDING-K8S.md):**
-- Create K8s Secrets in Rancher for your environment
-- Verify Argo CD Application configuration
+- Create K8s Secrets in your cluster
+- Verify Argo CD Application exists and is configured
 
 Your app will be live at **{hostname}** once secrets are configured and images are pushed!"
 
@@ -549,21 +708,27 @@ Your app will be live at **{hostname}** once secrets are configured and images a
 "This project doesn't have a Docker Compose file. /argo-it generates K8s manifests from
 Docker Compose. Try /make-it first to build your app, or add a docker-compose.yml manually."
 
-**If git remote is not GitHub:**
-- Try to parse the remote URL anyway for the image registry path
-- If unparseable, ask the user for the ghcr.io image path
+**If git remote is not recognizable:**
+- Ask the user for the container registry and image path
+- Don't assume any specific registry
 
-**If deploy branch already exists with manifests:**
-"I see existing K8s manifests in `env/dev/`. Want me to regenerate them from your current
-Docker Compose (this will overwrite the existing ones), or update specific files?"
+**If existing manifests are found:**
+"I see existing K8s manifests in `{dir}`. Want me to:
+1. Regenerate them from your current Docker Compose (overwrites existing)
+2. Update specific files only
+3. Use them as a reference pattern for a new app"
 
-**If the user doesn't know the namespace or hostname:**
-- Suggest they ask their DevOps team
-- Offer to generate manifests with placeholders that can be filled in later
+**If the user doesn't know a setting (namespace, hostname, etc.):**
+- Offer to generate manifests with `TODO` placeholders that can be filled in later
+- "No worries -- I'll mark it as TODO in the manifest. You can fill it in later or ask your DevOps team."
 
-**If GitHub Actions workflow already exists:**
-- Read the existing workflow, merge new build steps if needed
-- Don't overwrite unrelated workflows
+**If kubectl is not available (for local testing):**
+- Skip local test option
+- "Local K8s testing requires kubectl and a local cluster (Rancher Desktop, minikube, etc.). You can still push to the deploy branch for Argo CD."
+
+**If no CI system is detected:**
+- Still generate the GitHub Actions workflow as default
+- "I generated a GitHub Actions workflow. If your org uses a different CI system, you may need to adapt it."
 
 </error-handling>
 
@@ -572,19 +737,19 @@ Docker Compose (this will overwrite the existing ones), or update specific files
 **Safety rules:**
 - NEVER modify docker-compose.yml or application source code
 - NEVER hardcode secrets in manifest files -- always use secretKeyRef
-- NEVER create or apply K8s resources directly (kubectl apply) -- Argo CD handles that
 - NEVER merge to deploy branch without user confirmation
 - NEVER delete existing manifests without asking
-- ALWAYS follow the established Kustomize pattern (no Helm, no raw kubectl)
+- NEVER assume a specific registry, ingress controller, or storage class -- detect or ask
+- ALWAYS detect conventions from existing manifests before asking questions
 - ALWAYS generate both dev and prod environments
-- ALWAYS skip database and mock services (they're not deployed via the app manifests)
+- ALWAYS skip database and mock services (they're not deployed via app manifests)
 - ALWAYS generate ONBOARDING-K8S.md with manual steps
+- ALWAYS offer local K8s testing as an option before deploying
 
-**Manifest conventions (from finance-dashboard reference):**
-- Image: `ghcr.io/{org}/{repo}/{service}:{env}-latest`
-- Secret names: `{app}-secrets-{env}`, `{app}-azure-{env}`
-- Ingress: nginx controller, TLS enabled, hostname from user input
-- Storage: Longhorn StorageClass for PVCs
-- Namespace: user-specified, set in kustomization.yaml
+**Convention detection priority:**
+1. Existing manifests in THIS repo (highest priority -- follow exactly)
+2. Patterns from app-context.json deployment settings
+3. User answers to setup questions
+4. Sensible defaults (lowest priority)
 
 </guardrails>
