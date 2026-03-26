@@ -141,40 +141,78 @@ If `SECURITY_SCANNER_API_KEY` is NOT set but issues exist, work from the GitHub 
 
 Security scanner findings become priority work items -- auto-fixed before any user-requested changes. See "Security Scanner Remediation" workflow below.
 
-**7. Check for AI prompt management gaps (tier-aware detection):**
+**7. ALWAYS check for AI prompt management gaps (tier-aware detection):**
 
-If the app uses AI (LLM provider imports, agent classes, AI SDK dependencies), classify the
-current prompt management implementation into one of four tiers:
+**This step is MANDATORY -- always run it, do not skip.** First determine if the app uses AI,
+then classify the prompt management tier.
 
-**a. Detect current tier -- run these checks:**
+**a. Determine if the app uses AI -- run ALL of these checks:**
 
 ```bash
-# Count prompt-related tables in migrations
-grep -r "CREATE TABLE.*prompt" backend/alembic/versions/ 2>/dev/null | wc -l
+# Check 1: app-context.json ai_features flag (most reliable signal)
+cat .make-it/app-context.json 2>/dev/null | grep -i "ai_features\|ai_usage\|ai_provider"
 
-# Count prompt-related API routes
-grep -r "@router\.\(get\|post\|put\|patch\|delete\).*prompt" backend/app/routers/ 2>/dev/null | wc -l
+# Check 2: AI SDK dependencies
+grep -i "anthropic\|openai\|langchain\|azure.*openai\|ai21\|cohere" \
+  requirements.txt pyproject.toml package.json 2>/dev/null
 
-# Count prompt admin pages
-ls frontend/app/\(auth\)/admin/prompts/ 2>/dev/null | wc -l
-
-# Check for scaffold components
-ls frontend/components/prompt-card.tsx frontend/components/prompt-editor.tsx \
-   frontend/components/safety-indicator.tsx frontend/components/variable-pill.tsx \
-   frontend/components/version-timeline.tsx 2>/dev/null | wc -l
-
-# Check for Tier 3 indicators (any ONE = Tier 3)
-grep -r "import.*export\|orchestrat\|agent.*bind" backend/ frontend/ 2>/dev/null | head -5
+# Check 3: AI service imports in backend code
+grep -rl "import anthropic\|import openai\|from langchain\|from openai\|AIProvider\|LLMProvider" \
+  backend/ 2>/dev/null | head -5
 ```
 
-**b. Classify based on detection results:**
+**If ANY of the above finds AI usage, proceed to detection. If NONE find AI, skip to step 8.**
+
+**b. Detect current prompt management tier -- run ALL of these checks:**
+
+```bash
+# Count prompt-related tables in migrations (handles both raw SQL and Alembic Python syntax)
+grep -rl "prompt" backend/alembic/versions/ 2>/dev/null | head -10
+grep -r "create_table.*prompt\|CREATE TABLE.*prompt\|op\.create_table.*prompt" \
+  backend/alembic/versions/ 2>/dev/null
+
+# Count prompt-related API routes (handles both decorator styles)
+grep -r "@router\.\|APIRouter\|include_router.*prompt" backend/app/routers/ 2>/dev/null | grep -i prompt
+ls backend/app/routers/*prompt* 2>/dev/null
+
+# Count prompt admin pages
+ls frontend/app/\(auth\)/admin/prompts/ 2>/dev/null
+find frontend/app -path "*/admin/prompts*" -name "page.tsx" 2>/dev/null
+
+# Check for the 5 scaffold components (presence = Tier 2 Standard)
+ls frontend/components/prompt-card.tsx frontend/components/prompt-editor.tsx \
+   frontend/components/safety-indicator.tsx frontend/components/variable-pill.tsx \
+   frontend/components/version-timeline.tsx 2>/dev/null
+
+# Check sidebar label -- "AI Instructions" = scaffold standard, anything else = outdated
+grep -i "prompt\|ai.instruct" frontend/components/sidebar.tsx 2>/dev/null
+
+# Check for Tier 3 indicators (any ONE = Tier 3)
+grep -r "import.*export\|orchestrat\|agent.*bind" backend/ frontend/ 2>/dev/null | \
+  grep -i prompt | head -5
+```
+
+**Read the results carefully.** Count tables, routes, pages, and components to classify.
+
+**c. Classify based on detection results:**
 
 | Tier | Tables | Routes | Pages | Components | Advanced Features |
 |------|--------|--------|-------|------------|-------------------|
 | **Tier 0 (None)** | 0 | 0 | 0 | 0 | -- |
-| **Tier 2 Standard** | 6 | ~25 | 4 | 5 | -- |
-| **Tier 2 Outdated** | 1-5 | <20 | <4 | <5 | -- |
+| **Tier 2 Standard** | 6 (managed_prompts + 5 more) | ~25 | 4 | 5 (prompt-card, prompt-editor, safety-indicator, variable-pill, version-timeline) | -- |
+| **Tier 2 Outdated** | 1-5 (e.g., ai_prompts only) | <20 | <4 | <5 (missing scaffold components) | -- |
 | **Tier 3 Custom** | 6+ | 25+ | 4+ | any | import/export, orchestration, agent-binding |
+
+**IMPORTANT: If the app has ANY prompt table(s) but is missing the scaffold's 6-table schema
+(managed_prompts, prompt_versions, prompt_usages, prompt_tags, prompt_test_cases, prompt_audit_log)
+or is missing the 5 scaffold components, it is Tier 2 Outdated -- even if it works fine.
+The key signal is: does it have the SCAFFOLD components, or a custom/older implementation?**
+
+Common Tier 2 Outdated patterns:
+- Single `ai_prompts` table (missing versioning, tagging, testing, audit)
+- Sidebar says "AI Prompts" instead of "AI Instructions"
+- No prompt-card.tsx, prompt-editor.tsx, safety-indicator.tsx, variable-pill.tsx, or version-timeline.tsx
+- Inline admin page instead of card-based registry
 
 Tier 3 indicators (any ONE triggers Tier 3 classification):
 - Import/export endpoints or UI for prompts
@@ -182,21 +220,21 @@ Tier 3 indicators (any ONE triggers Tier 3 classification):
 - More than 6 prompt-related tables
 - More than 30 prompt-related routes
 
-**c. If Tier 2 Outdated:**
+**d. If Tier 2 Outdated:**
 - Add to catch-up work: "AI Prompt Management can be upgraded to latest scaffold standard"
 - List what's missing vs scaffold (tables, routes, pages, components)
 - Note: upgrade requires user confirmation (see prompt-management-upgrade step)
 
-**d. If Tier 3 Custom:**
+**e. If Tier 3 Custom:**
 - Note in status: "Custom Tier 3 prompt management detected -- protected from scaffold upgrades"
 - Do NOT suggest upgrade -- the custom implementation is intentionally advanced
 
-**e. If Tier 0 (None):**
+**f. If Tier 0 (None):**
 - Scan for hardcoded prompts in agent/service files (getSystemPrompt(), SYSTEM_PROMPT constants)
 - Count distinct AI prompts
 - Add to catch-up work: "AI Prompt Management scaffold can be installed"
 
-**f. If Tier 2 Standard:**
+**g. If Tier 2 Standard:**
 - Already current -- skip (no catch-up needed)
 
 Reference build-standards.md AI08 and AI08-upgrade for the full specification.
