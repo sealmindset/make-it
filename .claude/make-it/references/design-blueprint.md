@@ -71,11 +71,15 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
   |                            |                                |
   |                            |-- Lookup user in DATABASE ----->|
   |                            |   (by oidc_subject)            |
-  |                            |-- Read role from DATABASE ---->|
+  |                            |-- Read ALL roles from          |
+  |                            |   user_roles table             |
   |                            |   (NOT from OIDC claims)       |
+  |                            |-- Union permissions from ALL   |
+  |                            |   effective roles              |
   |                            |                                |
   |                            |-- Sign JWT { sub, email, name, |
   |                            |     role_id, role_name,        |
+  |                            |     roles: [{id,name}],        |
   |                            |     permissions[] }            |
   |                            |-- Set httpOnly cookie "token"  |
   |<-- 302 Redirect to /dashboard --|                           |
@@ -84,6 +88,7 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
   |                            |-- Validate JWT from cookie     |
   |<-- { sub, email, name,    -|                                |
   |      role_id, role_name,   |                                |
+  |      roles: [{id,name}],   |                                |
   |      permissions[] }       |                                |
   |                            |                                |
   |-- POST /auth/logout ------>|                                |
@@ -98,8 +103,11 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
   `secure = FRONTEND_URL.startsWith("https")`
 - Logout is POST (not GET -- browsers prefetch GET, causing unintended logouts)
 - JWT is STATELESS -- no server-side session store (no Redis, no DB sessions)
-- /auth/me returns FLAT object: { sub, email, name, role_id, role_name, permissions[] }
+- /auth/me returns FLAT object: { sub, email, name, role_id, role_name, roles: [{id, name}], permissions[] }
   -- no .user wrapper, no nested Role object
+  -- role_id/role_name = primary role (highest precedence, for display)
+  -- roles = ALL effective roles from user_roles table
+  -- permissions = UNION of permissions across ALL effective roles
 - OIDC state parameter MANDATORY (RFC 6749 Section 10.12): /auth/login generates a random
   state value (`crypto.randomBytes(16).toString('hex')`), stores it in an httpOnly cookie
   (`oidc_state`), and passes it to the authorization URL. /auth/callback validates the
@@ -132,23 +140,31 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
 
 **Decision rules:**
 - ALWAYS implement database-driven RBAC with admin UI (this is standard for every app)
-- Single-role apps (just authenticated vs. not) -> still use RBAC, just with fewer roles
+- **ALWAYS use multi-role model** -- users can have multiple effective roles (e.g., Admin + Treasury)
+- Single-role apps (just authenticated vs. not) -> still use RBAC with multi-role tables, just with fewer roles assigned
 - Default system roles: Super Admin, Admin, Manager, User (4 predefined, cannot be deleted)
 - Super Admin can create custom roles with any permission combination
 - Permission granularity defaults to page-level CRUD (view, create, edit, delete per resource)
 - Permissions, roles, and role-permission mappings live in the DATABASE (not code config)
 - Admins can modify role permissions via the UI without code deploys
+- Authorization checks UNION permissions across all effective roles (if ANY role grants it, user has it)
 
-**Database schema (4 tables):**
+**Database schema (5 tables):**
 1. `roles` -- id, name, description, is_system (true for predefined roles), is_active, created_by, timestamps
 2. `permissions` -- id, resource (page/feature name), action (view, create, edit, delete), description
 3. `role_permissions` -- role_id, permission_id (many-to-many junction table)
-4. `users` table gets a `role_id` foreign key to `roles` (one role per user)
+4. `user_roles` -- user_id, role_id (many-to-many junction table for ALL effective roles per user). This is the source of truth for authorization.
+5. `users` table gets a `primary_role_id` foreign key to `roles` (highest-precedence role, for display only). Authorization MUST use `user_roles`, not `primary_role_id`.
+
+**Why multi-role is mandatory:**
+Enterprise identity providers (Azure AD, Okta) assign users to multiple groups. A user might be in both "Admin" and "Treasury" groups, needing entitlements from both. A single role_id FK forces picking one, silently dropping the other's permissions. This causes 403 errors and missing page access that are extremely hard to debug. The multi-role model prevents this by design.
 
 **User provisioning:**
 - Admin adds users to the app by email or OIDC lookup (person must exist in the identity provider)
-- Admin assigns a role to the new user
-- User logs in via SSO and their role + permissions are loaded from the database
+- Admin assigns one or more roles to the new user (stored in `user_roles` table)
+- The highest-precedence role is stored as `primary_role_id` on the users table (for display)
+- User logs in via SSO and ALL their effective roles + unioned permissions are loaded from the database
+- When OIDC group mapping is configured, the auth callback resolves ALL matching groups to roles and syncs `user_roles` automatically
 - Users who don't exist in the identity provider need an IT ticket first -- the app does NOT support
   separate login methods or email-based invites
 
@@ -165,10 +181,11 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
 - GET /admin/permissions -- list all available permissions
 
 **Runtime permission checking:**
-- `has_permission(user, resource, action)` queries the database (with in-memory cache)
-- Cache invalidated when roles or role-permissions are modified via admin API
+- `has_permission(user, resource, action)` queries ALL effective roles from `user_roles` (with in-memory cache). Returns true if ANY role grants the permission (union semantics).
+- Cache invalidated when roles, role-permissions, or user_roles are modified via admin API
 - Middleware/dependency: `require_permission(resource, action)` for route protection
 - Anti-pattern to avoid: `if (user.role === 'admin')` -- always use `has_permission()`
+- Anti-pattern to avoid: checking only `primary_role_id` for authorization -- always use `user_roles`
 
 **Seed data:**
 - 4 system roles with default permission mappings
@@ -178,8 +195,8 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
 - Manager gets view + limited create/edit
 - User gets view-only
 
-**Implementation generates:** Database tables, migration, seed data, admin API, admin UI,
-runtime permission loader with caching, middleware for route protection
+**Implementation generates:** Database tables (including user_roles junction), migration, seed data, admin API (with multi-role assignment), admin UI,
+runtime permission loader with multi-role union caching, middleware for route protection
 
 ---
 

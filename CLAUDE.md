@@ -165,7 +165,7 @@ Scaffolds are pre-built, battle-tested code foundations with `[BRACKET_PLACEHOLD
 ### fastapi-nextjs (98 files)
 The primary scaffold for web applications. The Build phase copies it into the project, replaces placeholders, then generates domain-specific code on top. Provides:
 - **Auth**: Complete OIDC flow (login → mock-oidc → callback → JWT cookie → /me → logout)
-- **RBAC**: 4 tables (roles, permissions, role_permissions, users), require_permission middleware, admin UI
+- **RBAC**: 5 tables (roles, permissions, role_permissions, user_roles, users), multi-role support via user_roles junction table, require_permission middleware with union semantics, admin UI with multi-role assignment
 - **Frontend**: Same-origin proxy, flat AuthMe, DataTable with Excel-like filtering, sidebar, breadcrumbs, quick search, mode toggle, oklch theming
 - **Docker**: Compose with health checks (127.0.0.1), entrypoint.sh for migrations, mock-oidc on dev profile
 - **Mock-oidc**: Copied as-is. RSA signing, internal/external URL split, user picker, admin API
@@ -227,7 +227,8 @@ Web applications additionally follow:
 - OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
-- Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
+- Database-driven RBAC with 5 tables (roles, permissions, role_permissions, user_roles, users.primary_role_id FK)
+- Multi-role model: users can have multiple effective roles via user_roles junction table; permissions are the union across all roles
 - Page-level CRUD permissions (resource.action format, auto-generated per page)
 - 4 system roles (Super Admin, Admin, Manager, User) seeded in migration
 - Custom roles with dynamic permission sets via admin UI permission matrix

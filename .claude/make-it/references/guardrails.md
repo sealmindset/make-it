@@ -90,7 +90,10 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
-- Database-driven RBAC with 4 tables (roles, permissions, role_permissions, users.role_id FK)
+- Database-driven RBAC with 5 tables (roles, permissions, role_permissions, user_roles, users.primary_role_id FK)
+- **Multi-role model**: Users can have multiple effective roles via `user_roles` junction table (user_id, role_id). The `primary_role_id` on users is the highest-precedence role for display. Authorization uses the FULL set of roles from `user_roles`.
+- **Permission union**: `has_permission()` and `require_permission()` MUST check permissions across ALL effective roles. If ANY role grants the permission, the user has it. Never check only the primary role.
+- **OIDC group mapping**: When the OIDC provider returns multiple groups (e.g., Azure AD), resolve ALL matching roles -- do NOT pick just one. Skip unmapped groups (never use raw group GUIDs as role names).
 - Page-level CRUD permissions (resource.action format, auto-generated per page)
 - 4 system roles (Super Admin, Admin, Manager, User) seeded in migration, is_system=true
 - Custom roles with dynamic permission sets via admin UI permission matrix
@@ -98,7 +101,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - `require_permission(resource, action)` middleware on ALL route handlers (no exceptions)
 - Permission service with in-memory cache + invalidation on role/permission changes
 - Anti-pattern: `if (user.role === 'admin')` -- ALWAYS use `has_permission()` instead
-- JWT payload: { sub, email, name, role_id, role_name, permissions[] } -- FLAT, no nesting
+- Anti-pattern: Single `role_id` FK as the only role storage -- ALWAYS use `user_roles` junction table for authorization
+- JWT payload: { sub, email, name, role_id, role_name, roles: [{id, name}], permissions[] } -- FLAT, no nesting. `role_id`/`role_name` = primary (display). `roles` = all effective. `permissions` = union across all roles.
 - Auth callback redirects use EXTERNAL frontend URL env var, NOT request.url
 - Cookie Secure flag derived from URL protocol, NOT NODE_ENV
 - OIDC state parameter (RFC 6749 Section 10.12): login generates random state, stores in

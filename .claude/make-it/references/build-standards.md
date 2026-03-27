@@ -56,9 +56,9 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **A06** [Tier 1, 5*] [BLOCK] **Cookie Secure flag from URL** -- Derived from `FRONTEND_URL.startswith("https")`. NEVER hardcoded. NEVER from NODE_ENV.
 
-**A07** [Tier 1, 5*] [BLOCK] **Flat JWT payload** -- `{sub, email, name, role_id, role_name, permissions[]}` at top level. No `.user` wrapper object.
+**A07** [Tier 1, 5*] [BLOCK] **Flat JWT payload with multi-role support** -- `{sub, email, name, role_id, role_name, roles: [{id, name}], permissions[]}` at top level. No `.user` wrapper object. `role_id` and `role_name` are the PRIMARY role (highest precedence, for display). `roles` is the full list of effective roles. `permissions` is the UNION of permissions across ALL effective roles.
 
-**A08** [Tier 1] [BLOCK] **AuthMe type matches JWT** -- Frontend AuthMe type is flat. All components use `authMe.name` not `authMe.user.display_name`.
+**A08** [Tier 1] [BLOCK] **AuthMe type matches JWT** -- Frontend AuthMe type is flat and includes multi-role fields. All components use `authMe.name` not `authMe.user.display_name`. Permission checks use `authMe.permissions` (union of all roles). Display uses `authMe.role_name` (primary). `authMe.roles` available for role-specific UI (e.g., classification visibility).
 
 **A09** [Tier 1] [BLOCK] **No global 401 redirect** -- API client handleResponse does NOT redirect to "/" on 401. Login page checks /auth/me (expects 401). Auth guard in layout handles redirects.
 
@@ -68,13 +68,15 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ## RBAC & Permissions
 
-**R01** [Tier 1, 5*] [BLOCK] **Database-driven RBAC tables** -- roles, permissions, role_permissions tables exist in migration. users table has role_id FK (not VARCHAR role column).
+**R01** [Tier 1, 5*] [BLOCK] **Database-driven RBAC tables** -- roles, permissions, role_permissions, AND user_roles tables exist in migration. users table has a `primary_role_id` FK for display purposes. The `user_roles` many-to-many junction table (user_id, role_id) stores ALL effective roles per user. Authorization MUST check `user_roles` (not just `primary_role_id`).
+
+**R01a** [Tier 1, 5*] [BLOCK] **Multi-role permission union** -- Permission checks MUST union permissions across ALL of a user's effective roles (from `user_roles`). If ANY role grants a permission, the user has it. Never check only the primary role. The auth callback must query `user_roles` to build the full permissions list for the JWT.
 
 **R02** [Tier 1, 5*] [FIX] **4 system roles seeded** -- Super Admin, Admin, Manager, User with is_system=true.
 
 **R03** [Tier 1, 5*] [FIX] **Scaffold permissions seeded** -- admin.users (read/create/update/delete), admin.roles (read/create/update/delete), admin.settings (read/update), admin.logs (read/delete).
 
-**R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`.
+**R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`. Permission check must use the union of all effective roles, not just the primary role.
 
 **R04a** [Tier 1, 5*] [BLOCK] **Permission names consistent across stack** -- Backend `require_permission()` args, frontend `hasPermission()` args, sidebar nav permissions, quick-search permissions, and seed migration data MUST all use identical resource/action strings. Standard format: `admin.users`/`admin.roles` with actions `read`/`create`/`update`/`delete` (NEVER `view`/`edit`). Domain resources use the resource name directly (e.g., `projects.read`). Cross-reference all five locations after any permission change.
 
@@ -237,7 +239,7 @@ These checks run after the app is started (Docker containers up, health checks p
 
 **V03** [Tier 1, 5] [BLOCK] **Seed script runs** -- `bash scripts/seed-mock-services.sh` completes without error.
 
-**V04** [Tier 1, 5*] [BLOCK] **Auth flow works for EACH role** -- Login through mock-oidc, JWT cookie set, /auth/me returns correct role from DB, dashboard loads with content, logout clears cookie.
+**V04** [Tier 1, 5*] [BLOCK] **Auth flow works for EACH role** -- Login through mock-oidc, JWT cookie set, /auth/me returns correct roles from DB (primary role + all effective roles), permissions are the union across all effective roles, dashboard loads with content, logout clears cookie. For users with multiple roles, verify that permissions from ALL roles are present in the JWT.
 
 **V05** [Tier 1, 5] [BLOCK] **Every API endpoint responds** -- 2xx, valid JSON, non-empty arrays from list endpoints.
 
@@ -286,6 +288,9 @@ When live verification fails, these are the most common root causes and fixes:
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | Auth callback returns wrong role | Callback uses OIDC claims, not DB | Query users table by oidc_subject |
+| 403 on login for multi-group users | Single role_id can't represent multiple OIDC groups | Use user_roles junction table; resolve ALL matching roles; union permissions |
+| User missing entitlements from second role | Only primary role permissions in JWT | Auth callback must query user_roles, union permissions from ALL effective roles |
+| OIDC group GUID used as role name | Unmapped group falls through to raw GUID | Only add roles that have a valid mapping match; skip unmapped groups |
 | Logout returns 404 | Route is GET not POST | Change to POST endpoint + frontend button |
 | Service client 404 from mock | Endpoint URL mismatch | Cross-reference client with mock routes |
 | Empty pages | Seed migration didn't run | Verify entrypoint.sh runs migrations |

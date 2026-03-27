@@ -307,12 +307,20 @@ Implementation requirements:
     1. Exchange authorization code for tokens
     2. Call the OIDC userinfo endpoint to get sub, email, name
     3. Query the users table by oidc_subject (or fall back to email)
-    4. If found: read the role from the DATABASE record (NOT from OIDC claims)
-    5. If not found: create a new user with default role ("user")
-    6. Sign a stateless JWT containing {sub, email, name, role_id, role_name}
-       using JWT_SECRET env var. Set expiry to [TOKEN_EXPIRY].
-    7. Set the JWT as an httpOnly, secure, sameSite=lax cookie named "token"
-    8. Redirect to the dashboard
+    4. If found: read ALL effective roles from the user_roles junction table (NOT from OIDC claims).
+       Union permissions across all effective roles. The primary_role_id on the users table
+       is the highest-precedence role (for display only).
+    5. If not found: create a new user with default role ("User"), add to user_roles table
+    6. If OIDC group mapping is configured: resolve ALL matching OIDC groups to roles,
+       sync the user_roles table (add new matches, keep existing). Skip unmapped groups
+       (never use raw group GUIDs as role names). Set primary_role_id to the highest-
+       precedence matched role.
+    7. Sign a stateless JWT containing {sub, email, name, role_id, role_name,
+       roles: [{id, name}], permissions[]} using JWT_SECRET env var.
+       role_id/role_name = primary role (display). roles = all effective roles.
+       permissions = UNION across all roles. Set expiry to [TOKEN_EXPIRY].
+    8. Set the JWT as an httpOnly, secure, sameSite=lax cookie named "token"
+    9. Redirect to the dashboard
   CRITICAL: User roles MUST come from the application database, NOT from OIDC
   provider claims. The OIDC provider (mock-oidc in dev, or your configured provider
   in production) only provides identity (sub, email, name). It does NOT provide
@@ -348,12 +356,15 @@ Frontend AuthMe type (MUST match JWT payload exactly):
     sub: string;
     email: string;
     name: string;
-    role_id: string;
-    role_name: string;
-    permissions: string[];
+    role_id: string;           // Primary role (highest precedence, for display)
+    role_name: string;         // Primary role name (for display)
+    roles: {id: string; name: string}[];  // ALL effective roles
+    permissions: string[];     // UNION of permissions across ALL roles
   }
 - All frontend components use authMe.name (NOT authMe.user.display_name)
-- All frontend components use authMe.role_name (NOT authMe.role.name)
+- All frontend components use authMe.role_name for display (NOT authMe.role.name)
+- authMe.permissions is the union across all roles -- use for access control
+- authMe.roles is available for role-specific logic (e.g., classification visibility)
 - The User type (for /api/users responses) is SEPARATE from AuthMe
 
 Frontend API client 401 handling (CRITICAL -- do NOT add global redirect):
@@ -422,7 +433,7 @@ Pages/resources in this app: [PAGES_LIST]
 
 --- DATABASE SCHEMA ---
 
-Create these 4 tables (in addition to the existing users table):
+Create these 5 tables (in addition to the existing users table):
 
 1. roles
    - id: UUID primary key
@@ -445,14 +456,33 @@ Create these 4 tables (in addition to the existing users table):
    - permission_id: UUID FK -> permissions, not null
    - PRIMARY KEY (role_id, permission_id)
 
-4. Modify the existing users table:
-   - Add role_id: UUID FK -> roles (replaces the old VARCHAR role column)
+4. user_roles (junction table for multi-role support)
+   - user_id: UUID FK -> users, not null, ondelete CASCADE
+   - role_id: UUID FK -> roles, not null, ondelete CASCADE
+   - PRIMARY KEY (user_id, role_id)
+   This table stores ALL effective roles per user. Authorization MUST check this
+   table (not just users.primary_role_id). A user's permissions are the UNION of
+   permissions across all their effective roles.
+
+5. Modify the existing users table:
+   - Add primary_role_id: UUID FK -> roles (highest-precedence role, for DISPLAY only)
    - Keep email, name, oidc_subject, last_login, etc.
+   - IMPORTANT: primary_role_id is for display purposes (showing "Admin" in the UI).
+     Authorization MUST use the user_roles junction table, not primary_role_id.
+
+WHY MULTI-ROLE IS MANDATORY:
+Enterprise identity providers (Azure AD, Okta) assign users to multiple groups.
+A user in both "Admin" and "Treasury" groups needs entitlements from BOTH roles.
+A single role_id FK forces picking one role, silently dropping the other's
+permissions. This causes 403 errors and missing page access that are extremely
+hard to debug. The user_roles junction table prevents this by design.
 
 Generate an Alembic migration (or Prisma migration) that:
-a. Creates the roles, permissions, and role_permissions tables
-b. Migrates the existing users.role VARCHAR column to users.role_id FK
+a. Creates the roles, permissions, role_permissions, and user_roles tables
+b. Migrates the existing users.role VARCHAR column to users.primary_role_id FK
 c. Seeds the system roles, permissions, and default mappings (see below)
+d. For each seeded user, inserts a corresponding row in user_roles linking the
+   user to their default role
 
 --- SEED DATA ---
 
@@ -495,11 +525,18 @@ Create a permission service/module that:
 
 2. Provides these functions:
    - has_permission(user, resource, action) -> bool
-     Checks the cached permissions for the user's role
+     Queries ALL effective roles from user_roles table. Returns true if ANY role
+     grants the permission (union semantics). Uses cached role->permissions mapping.
    - get_user_permissions(user) -> list[str]
-     Returns all permission strings for the user's role
+     Returns the UNION of all permission strings across all of the user's effective roles
+   - get_user_effective_roles(user) -> list[Role]
+     Returns all roles from the user_roles table for the given user
+   - sync_user_roles(user, role_names) -> None
+     Updates user_roles table to match the given list of role names. Adds new roles,
+     removes roles no longer in the list. Sets primary_role_id to the highest-
+     precedence role. Used by OIDC group mapping during auth callback.
    - invalidate_cache()
-     Called when roles or role_permissions are modified via admin API
+     Called when roles, role_permissions, or user_roles are modified via admin API
 
 3. Provides a route-protection middleware/dependency:
    - require_permission(resource, action) -- returns 403 if the user lacks the permission
@@ -555,13 +592,14 @@ After any role or role_permissions change, call invalidate_cache().
 --- ADMIN UI PAGES ---
 
 1. User Management page (/admin/users):
-   - DataTable listing all users: name, email, role, last login, status (active/inactive)
+   - DataTable listing all users: name, email, primary role, all roles, last login, status (active/inactive)
    - "Add User" button -> modal/dialog:
      - Email input (required)
      - Name input (required)
-     - Role dropdown (all active roles)
+     - Role multi-select (all active roles -- users can have multiple roles)
+     - The highest-precedence selected role becomes the primary role (for display)
      - Note: "This person must have an account in your OIDC provider to sign in"
-   - Row actions: Edit Role (dropdown), Deactivate/Reactivate
+   - Row actions: Edit Roles (multi-select), Deactivate/Reactivate
    - Cannot deactivate yourself (prevent lockout)
    - Cannot change Super Admin role unless you are Super Admin
 
@@ -585,14 +623,19 @@ After any role or role_permissions change, call invalidate_cache().
 --- INTEGRATION WITH AUTH ---
 
 Update the auth callback (/auth/callback) to:
-1. After looking up the user in the database, load their role_id
-2. Fetch the role's permissions from the cache
-3. Sign a new JWT containing { sub, email, name, role_id, role_name, permissions[] }
-   and set it as the httpOnly cookie (replaces the previous token)
+1. After looking up the user in the database, load ALL effective roles from user_roles table
+2. If OIDC group mapping is configured: resolve ALL matching groups to roles,
+   call sync_user_roles() to update user_roles table. Skip unmapped groups
+   (never use raw group GUIDs as role names).
+3. Union permissions across ALL effective roles
+4. Determine primary role (highest precedence) for display
+5. Sign a new JWT containing { sub, email, name, role_id, role_name,
+   roles: [{id, name}], permissions[] } and set it as the httpOnly cookie.
+   role_id/role_name = primary role. roles = all effective. permissions = union.
 
 Update get_current_user middleware to:
-1. Validate the JWT from the cookie and read role_id and permissions from the token
-2. Return a CurrentUser object with: subject, email, name, role_name, permissions[]
+1. Validate the JWT from the cookie and read roles and permissions from the token
+2. Return a CurrentUser object with: subject, email, name, role_name, roles[], permissions[]
 
 Update the frontend sidebar/navigation to:
 1. Fetch user permissions from /auth/me on login
