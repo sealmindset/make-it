@@ -332,7 +332,101 @@ Ready to deploy?"
 container, manifest, kubectl, namespace, pod, or any other technical term.
 **Instead say:** save, send, update, deploy, your app, a few minutes.
 
-**3. Execute the deployment:**
+**3. Pre-push self-review (silent -- user never sees this):**
+
+Before committing and pushing, run a quick automated review. This catches common
+deploy-breaking issues BEFORE they enter the pipeline. The user never sees the review
+running -- they only see the result if something needs attention.
+
+**3a. Lint and type-check changed files:**
+```bash
+# Detect what changed
+CHANGED=$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard)
+
+# Python files: run ruff or flake8 if available
+echo "$CHANGED" | grep '\.py$' | head -20 | while read f; do
+  [ -f "$f" ] && python -m ruff check "$f" 2>/dev/null || python -m flake8 "$f" 2>/dev/null || true
+done
+
+# TypeScript/JavaScript files: run tsc or eslint if available
+if echo "$CHANGED" | grep -qE '\.(ts|tsx|js|jsx)$'; then
+  npx --no-install tsc --noEmit 2>/dev/null || true
+  echo "$CHANGED" | grep -E '\.(ts|tsx|js|jsx)$' | head -20 | xargs npx --no-install eslint 2>/dev/null || true
+fi
+```
+
+If lint/type errors are found: auto-fix what's fixable (`ruff check --fix`, `eslint --fix`),
+then include the fixes in the commit. If unfixable errors remain, tell the user in plain
+language: "I found a small issue in your code that I can't fix automatically. Here's what's
+wrong: [plain description]. Want me to help fix it?"
+
+**3b. Cross-check env vars against K8s manifests:**
+```bash
+# Extract env vars from docker-compose.yml
+COMPOSE_VARS=$(grep -E '^\s+- [A-Z_]+=' docker-compose.yml 2>/dev/null | sed 's/.*- //' | cut -d= -f1 | sort -u)
+
+# Extract env vars from K8s manifests
+MANIFEST_VARS=$(grep -E '^\s+- name: [A-Z_]+' env/dev/*.yaml 2>/dev/null | sed 's/.*name: //' | sort -u)
+
+# Find vars in compose but missing from manifests (new env var not added to K8s)
+MISSING=$(comm -23 <(echo "$COMPOSE_VARS") <(echo "$MANIFEST_VARS"))
+```
+
+If new env vars are found in docker-compose.yml that don't exist in the K8s manifests,
+auto-add them to the manifests (as `secretKeyRef` if the name suggests a secret, or
+literal `value:` otherwise). Tell the user: "I noticed you added a new setting to your
+app. I've included it in the deployment config."
+
+**3c. Verify migration files are tracked:**
+```bash
+# Check for untracked migration files (Alembic, Django, Prisma)
+UNTRACKED_MIGRATIONS=$(git ls-files --others --exclude-standard \
+  'backend/alembic/versions/*.py' \
+  'migrations/versions/*.py' \
+  'prisma/migrations/**' \
+  '*/migrations/*.py' 2>/dev/null)
+```
+
+If untracked migrations exist: auto-add them (`git add`). Tell the user: "I found a
+database update file that wasn't saved yet -- I've included it."
+
+**3d. Import and dependency check:**
+```bash
+# Quick Python import check on changed files
+echo "$CHANGED" | grep '\.py$' | while read f; do
+  [ -f "$f" ] && python -c "import ast; ast.parse(open('$f').read())" 2>/dev/null || echo "SYNTAX_ERROR:$f"
+done
+
+# Check that requirements.txt or package.json hasn't diverged from lockfile
+if echo "$CHANGED" | grep -q 'requirements.txt'; then
+  [ -f requirements.txt ] && python -m pip check 2>/dev/null || true
+fi
+if echo "$CHANGED" | grep -q 'package.json'; then
+  [ -f package-lock.json ] && npm ls --all 2>/dev/null | grep -i 'MISSING\|INVALID' || true
+fi
+```
+
+If syntax errors are found: tell the user in plain language and offer to help fix.
+Never show raw Python tracebacks.
+
+**3e. Secret leak scan on the diff:**
+```bash
+# Scan staged changes for potential secrets
+DIFF=$(git diff --cached 2>/dev/null || git diff HEAD 2>/dev/null)
+echo "$DIFF" | grep -iE '(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' | \
+  grep -v '\.example\|TODO\|placeholder\|changeme\|your-.*-here' || true
+```
+
+If potential secrets are found: STOP. Tell the user: "I found what looks like a password
+or secret key in your changes. Secrets should never be saved in code. Want me to move it
+to a safe location?" Then move the value to `.env` and replace with `os.getenv()` /
+`process.env.` reference.
+
+**If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
+**If any check fails and can't be auto-fixed:** pause and explain in plain language. Never
+show raw error output, linter names, or tool output to the user.
+
+**4. Execute the deployment:**
 
 The CI workflow handles everything after the push. The developer does NOT manually merge
 to deploy-nonprod -- the GitHub Actions workflow mirrors the source branch and patches
@@ -353,7 +447,7 @@ That's it. The CI workflow will:
 3. Patch the image tags in the K8s manifests using `yq`
 4. Push to `{deploy_branch}` -- Argo auto-syncs
 
-**4. Report success in PLAIN LANGUAGE:**
+**5. Report success in PLAIN LANGUAGE:**
 
 "Done! Your changes are being deployed now.
 
@@ -363,10 +457,144 @@ That's it. The CI workflow will:
 
 That's it -- you're all set!"
 
-**If the push fails**, diagnose the issue and fix it automatically if possible.
+**If the push fails** (step 4), diagnose the issue and fix it automatically if possible.
 Only ask the user if you truly cannot resolve it. Never show git error output -- translate
 it to plain language (e.g., "There's a conflict with someone else's changes. Let me sort
 that out..." not "CONFLICT (content): Merge conflict in env/dev/backend.yaml").
+
+</step>
+
+<!-- ============================================================ -->
+<!-- PHASE 5c: POST-DEPLOY TROUBLESHOOTING                          -->
+<!-- ============================================================ -->
+
+<step name="post-deploy-troubleshoot">
+
+**This step runs when /argo-it is invoked AFTER a deployment and the user reports
+something isn't working -- typically "my changes aren't showing up" or "it's still
+the old version."**
+
+Detection: the user runs /argo-it in a project where manifests, CI, and deploy branch
+all exist AND the user describes a problem (not asking to deploy new changes).
+
+**Common scenario: "My changes aren't showing up"**
+
+This almost always means the pod is running a stale image. The fix is straightforward
+but involves multiple checkpoints. Walk through them in order, stopping at the first
+failure found.
+
+**1. Verify CI actually ran and succeeded:**
+
+```bash
+# Check the most recent workflow run
+gh run list --workflow=build-and-deploy.yml --limit=3 2>/dev/null || \
+  gh run list --limit=5 2>/dev/null
+
+# Get details of the latest run
+LATEST_RUN=$(gh run list --workflow=build-and-deploy.yml --limit=1 --json databaseId,status,conclusion,headBranch -q '.[0]' 2>/dev/null)
+```
+
+**Diagnose based on CI status:**
+
+| CI Status | What it means | What to tell the user |
+|-----------|--------------|----------------------|
+| `completed` + `success` | CI built and pushed the image. Problem is downstream. | "Your build succeeded. Let me check if the running app picked up the new version..." |
+| `completed` + `failure` | CI failed -- image was never pushed. | "Your build didn't finish successfully. Let me check what went wrong..." Then read the logs, diagnose, and auto-fix if possible. |
+| `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes. Want me to check back in a bit?" |
+| No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet. Want me to push them now?" |
+| Run exists but wrong branch | CI ran on a different branch. | "Your build ran on a different branch. Let me push from the right one..." |
+
+**2. If CI succeeded, check if the deploy branch was updated:**
+
+```bash
+# Compare latest commit on deploy branch vs source branch
+DEPLOY_BRANCH_SHA=$(git rev-parse origin/{deploy_branch} 2>/dev/null)
+SOURCE_SHA=$(git rev-parse origin/{current_branch} 2>/dev/null)
+
+# Check the deploy branch commit message for the expected image tag
+git log origin/{deploy_branch} -1 --oneline 2>/dev/null
+```
+
+If the deploy branch hasn't been updated: the mirror step in CI may have failed.
+Read the CI workflow logs for the "Mirror source to deploy branch" step.
+
+**3. If deploy branch is current, check if Argo synced:**
+
+The user can check this in the Argo CD dashboard. Guide them:
+
+"Your changes were built and sent to the deployment system. Let's check if the
+running app picked them up:
+
+1. Open your app in the Argo CD dashboard
+2. Look at the pod (the small box) -- is it green?
+3. If it's green but still showing old behavior, click the pod and choose **Delete**
+   - This forces it to restart with the latest version
+   - A new pod will appear in about 30 seconds
+4. Once the new pod is green, try your app again"
+
+**4. If the user can't access Argo CD (or doesn't know how):**
+
+Check if they have kubectl access:
+
+```bash
+# Try to check pod status directly
+kubectl get pods -n {namespace} 2>/dev/null
+```
+
+If kubectl is available:
+```bash
+# Check current image on the running pod
+kubectl get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}' 2>/dev/null
+
+# Compare with what CI pushed (from the deploy branch manifest)
+grep 'image:' env/dev/{service}.yaml 2>/dev/null
+
+# If images don't match, restart the deployment to pull the new image
+kubectl rollout restart deployment/{service} -n {namespace} 2>/dev/null
+```
+
+If kubectl is NOT available: tell the user to ask their DevOps team to restart the pod,
+or guide them through the Argo CD UI (step 3 above).
+
+**5. If the pod restarted but the app still doesn't work:**
+
+This means the new image deployed but has a runtime issue. Check pod logs:
+
+```bash
+kubectl logs -n {namespace} deploy/{service} --tail=100 2>/dev/null
+```
+
+Common issues and plain-language translations:
+
+| Log pattern | What to tell the user |
+|------------|----------------------|
+| `ModuleNotFoundError` / `ImportError` | "Your app is missing a piece it needs to run. Let me check what's missing..." |
+| `alembic.util.exc.CommandError` / migration error | "There's a database update that didn't apply correctly. Let me fix that..." |
+| `ConnectionRefusedError` to database | "Your app can't reach the database. This usually means the database isn't running yet or the connection info is wrong." |
+| `PermissionError` / `403` | "Your app is running but can't access something it needs. Let me check the settings..." |
+| No logs / `CrashLoopBackOff` | "Your app is crashing on startup. Let me look at what's going wrong..." |
+| `Break-glass admin seeded` + `[AUTH DEBUG]` present | "The new version IS running! The issue might be something else. Can you describe what's not working?" |
+
+**6. Auto-fix what's possible, escalate what's not:**
+
+| Issue | Auto-fix? | Action |
+|-------|-----------|--------|
+| CI didn't run | Yes | Push again: `git push origin {branch}` |
+| CI failed (lint/build) | Yes | Fix locally, push (same as pre-push self-review) |
+| Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
+| Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
+| Pod running old image | Guide (if no kubectl) | Walk user through Argo CD UI pod delete |
+| Pod crash-looping | Maybe | Read logs, fix code if clear, push again |
+| Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
+| Missing K8s secrets | No | Tell user: "Your app needs some settings that your DevOps team hasn't added yet. Share ONBOARDING-K8S.md with them." |
+
+**Communication rules (same as always):**
+- NEVER say: pod, container, image, SHA, digest, rollout, kubectl, CrashLoopBackOff
+- INSTEAD say: "your app", "the running version", "restart", "the latest version"
+- NEVER show raw logs to the user -- read them yourself and translate
+- If you need the user to do something in Argo CD, give click-by-click instructions
+- If the fix requires DevOps, tell the user plainly: "This one needs your DevOps team.
+  I'll tell you exactly what to ask them."
 
 </step>
 
@@ -1882,6 +2110,22 @@ Only offer manifest regeneration if the user explicitly asks.
 - Still generate the GitHub Actions workflow as default
 - "I generated a GitHub Actions workflow. If your org uses a different CI system, you may need to adapt it."
 
+**If the user says "my changes aren't showing up" or "it's still the old version":**
+- Skip straight to PHASE 5c (post-deploy troubleshooting)
+- Walk through the diagnostic checklist: CI status → deploy branch → Argo sync → pod image → logs
+- The most common fix is: the pod needs to be restarted to pull the latest image
+- Guide the user through Argo CD UI (click pod → Delete) or use kubectl if available
+- NEVER tell the user to "check the logs" -- read the logs yourself and translate
+
+**If the user says "it's not working" after a deploy (generic):**
+- Ask ONE clarifying question: "Can you describe what you see when you open the app?"
+- Then proceed to PHASE 5c based on their answer
+- Common answers and what they map to:
+  - "Login doesn't work" → check auth config, OIDC secrets, callback URLs
+  - "I get an error page" → check pod logs for crash/startup failure
+  - "It looks the same as before" → stale image, needs pod restart
+  - "Some pages are missing" → check if migrations ran (init container logs)
+
 </error-handling>
 
 <guardrails>
@@ -1949,5 +2193,26 @@ Only offer manifest regeneration if the user explicitly asks.
 - Migration chain validation runs BEFORE image build -- catches untracked migration files
 - Startup smoke test runs AFTER image build -- catches runtime failures (bad imports, broken entrypoint)
 - Both checks are cheap (<10s each) and prevent the most common crash-loop deploy failures
+
+**Post-deploy troubleshooting rules (PHASE 5c):**
+- When the user reports "changes not showing up" or "still old version," go straight to PHASE 5c
+- Walk the diagnostic chain IN ORDER: CI status → deploy branch → Argo sync → pod image → logs
+- Stop at the first failure -- don't check everything if you find the problem early
+- The #1 most common issue is: pod running a stale image (fix: restart the deployment)
+- If kubectl is available, use `kubectl rollout restart` -- don't ask the user to click around Argo
+- If kubectl is NOT available, give click-by-click Argo CD UI instructions
+- NEVER tell the user to "check the logs" -- read them yourself and translate to plain language
+- NEVER say: pod, container, image, SHA, digest, rollout, CrashLoopBackOff, kubectl
+- INSTEAD say: "your app", "the running version", "restart", "the latest version", "update"
+- If the fix requires DevOps (missing secrets, DNS, certs), tell the user exactly what to ask for
+
+**Pre-push self-review rules (PHASE 5b redeploy):**
+- Self-review runs silently BEFORE every commit+push in the fast-path redeploy
+- The user NEVER sees linter names, tool output, or raw error messages
+- Auto-fix what's fixable (lint --fix, auto-add untracked migrations, move secrets to .env)
+- STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
+- If env vars in docker-compose.yml don't match K8s manifests, auto-add them to manifests
+- Maximum effort: if a check fails and can't be auto-fixed, explain in plain language and offer to help
+- Never show: ruff, flake8, eslint, tsc, ast.parse, pip check -- translate everything to plain English
 
 </guardrails>

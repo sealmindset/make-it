@@ -50,6 +50,90 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
 | `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
 | `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No review. |
 
+### Pre-Push Self-Review (runs before every push)
+
+Before committing and pushing, /ship-it runs a silent automated review to catch issues
+BEFORE they enter the CI pipeline. The user never sees the review unless something needs
+their attention. All output is in plain language -- never linter names, raw errors, or
+tool output.
+
+**Review checks (in order):**
+
+| # | Check | What it does | On failure |
+|---|-------|-------------|------------|
+| 1 | **Lint & type-check** | Run ruff/flake8 on changed .py files, tsc/eslint on changed .ts/.tsx/.js files | Auto-fix what's fixable (--fix), include fixes in commit. If unfixable: pause, explain in plain language, offer to help |
+| 2 | **Env var cross-check** | Compare .env/.env.example against docker-compose.yml, K8s manifests, and .ship-it.yml | Warn if new env vars aren't documented in .env.example. Auto-add missing entries to .env.example with TODO values |
+| 3 | **Schema & migration alignment** | Check for untracked migration files (Alembic, Django, Prisma). Verify migration chain integrity (every down_revision exists as a revision) | Auto-add untracked migrations. If chain is broken: pause, explain "a database update file is missing" |
+| 4 | **Import & dependency check** | Parse changed Python files with `ast.parse()`. Check requirements.txt/package.json against lockfiles | If syntax error: pause, explain in plain language. If dependency mismatch: warn |
+| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a password in your changes." Move to .env, replace with env var reference |
+| 6 | **Build verification** | Run `docker compose build` to verify images build successfully | If build fails: diagnose, attempt auto-fix (missing dependency, syntax error), retry. If unfixable: pause, explain |
+
+**If ALL checks pass:** proceed silently (user never knows the review happened).
+**If any check requires user input:** pause and explain in plain language only.
+
+### Post-Push CI Monitoring (runs after push, /ship-it full mode only)
+
+After pushing and creating the PR, /ship-it watches the CI pipeline and auto-fixes
+failures. This is the "full loop" -- the user doesn't need to monitor CI themselves.
+
+**Monitoring flow:**
+
+```
+Push + Create PR
+  |
+  v
+Watch CI status (poll every 30s, up to 10 minutes)
+  |
+  +-- All checks pass?
+  |     -> Report success: "Your app passed all checks and is ready for review!"
+  |
+  +-- Check fails?
+  |     -> Read failure details (workflow logs, PR check annotations)
+  |     -> Classify failure:
+  |        |
+  |        +-- Auto-fixable (lint, formatting, dependency version, type error)?
+  |        |     -> Fix locally, commit, push (triggers new CI run)
+  |        |     -> Resume monitoring (max 3 auto-fix cycles)
+  |        |
+  |        +-- Test failure?
+  |        |     -> Read test output, diagnose root cause
+  |        |     -> If code fix is clear: apply, commit, push, resume monitoring
+  |        |     -> If test itself is wrong: fix the test, commit, push
+  |        |     -> If unclear: pause, explain to user in plain language
+  |        |
+  |        +-- Build failure?
+  |        |     -> Read build logs, diagnose (missing dep, Dockerfile issue, etc.)
+  |        |     -> Fix, commit, push, resume monitoring
+  |        |
+  |        +-- Infrastructure/permission failure?
+  |              -> Cannot auto-fix. Tell user: "The deployment system needs a
+  |                 configuration update. I've added a note to the review for
+  |                 the DevOps team."
+  |
+  +-- Timeout (10 minutes)?
+        -> Tell user: "CI is still running. You can check back later --
+           I'll note the status in the PR."
+```
+
+**Auto-fix rules:**
+- Maximum 3 auto-fix cycles per /ship-it invocation (prevents infinite loops)
+- Each fix cycle: fix locally → commit → push → watch CI again
+- Commit messages for auto-fixes: "fix: [plain description of what was fixed]"
+- Never force-push -- always new commits on the PR branch
+- If the same check fails twice after a fix attempt: stop, explain to user
+
+**What /ship-it tells the user during monitoring:**
+- "Your changes are being checked now. This usually takes a few minutes."
+- (On auto-fix) "One of the checks found a small issue. I've fixed it and resubmitted."
+- (On success) "All checks passed! Your app is ready for review."
+- (On failure requiring user) "There's an issue I need your help with: [plain description]"
+
+**What /ship-it does NOT do during monitoring:**
+- Show CI logs, workflow names, or check names to the user
+- Retry the same fix more than once
+- Push to the deploy branch or trigger production deployments
+- Modify the PR description with technical CI details (keep it user-friendly)
+
 ---
 
 ## Deployment Lifecycle
