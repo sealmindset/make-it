@@ -398,9 +398,9 @@ The user sees progress updates, NOT the technical details.
 
    c. **Copy scaffold files** into the project directory:
       ```bash
-      cp -r ~/.claude/make-it/scaffolds/fastapi-nextjs/* [PROJECT_DIR]/
-      cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore [PROJECT_DIR]/
-      cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.env.example [PROJECT_DIR]/
+      # Copy scaffold files EXCEPT README.md (scaffold README describes /make-it internals,
+      # not the user's app -- the app-specific README is generated in Phase B step 13)
+      rsync -a --exclude='README.md' ~/.claude/make-it/scaffolds/fastapi-nextjs/ [PROJECT_DIR]/
       ```
 
    d. **Copy mock-oidc as-is** (never regenerated -- most stable component):
