@@ -554,12 +554,28 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
      - `MOCK_OIDC_INTERNAL_BASE_URL=http://mock-oidc:10090` (backend calls this inside Docker)
      - Backend's `OIDC_ISSUER_URL` uses the INTERNAL address
    - Add mock services for each discovered external integration
-   - **Generate scripts/seed-mock-services.sh** with:
-     - User registration: one user per app role, with `sub` matching `oidc_subject` in DB seed
-       (e.g., `mock-admin`, `mock-manager`, `mock-user`, `mock-viewer`)
-     - Remove non-app users from mock-oidc (clean slate)
-     - Update client redirect URIs to match `FRONTEND_URL/api/auth/callback`
-     - Additional mock service seeding if external integrations exist
+   - **Copy seed script from scaffold and replace placeholders** (do NOT generate from scratch):
+     ```bash
+     cp ~/.claude/make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh [PROJECT_DIR]/scripts/
+     ```
+     Then replace placeholders in the copied file:
+     - `[MOCK_OIDC_PORT]` → host port from docker-compose (e.g., `10190`)
+     - `[FRONTEND_PORT]` → frontend host port from docker-compose (e.g., `3100`)
+     - `[APP_SLUG]` → app slug from discovery
+     - `[APP_NAME]` → app name from discovery
+     - `[ROLE_1_OIDC_SUB]` → `mock-admin` (must match `oidc_subject` in DB seed)
+     - `[ROLE_1_EMAIL]` → `admin@[APP_SLUG].local`
+     - `[ROLE_1_DISPLAY_NAME]` → `Admin User`
+     - `[ROLE_2_OIDC_SUB]` → `mock-manager`
+     - `[ROLE_2_EMAIL]` → `manager@[APP_SLUG].local`
+     - `[ROLE_2_DISPLAY_NAME]` → `Manager User`
+     - `[ROLE_3_OIDC_SUB]` → `mock-user`
+     - `[ROLE_3_EMAIL]` → `user@[APP_SLUG].local`
+     - `[ROLE_3_DISPLAY_NAME]` → `Regular User`
+     - `[ROLE_4_OIDC_SUB]` → `mock-viewer`
+     - `[ROLE_4_EMAIL]` → `viewer@[APP_SLUG].local`
+     - `[ROLE_4_DISPLAY_NAME]` → `Viewer User`
+     - `[ADDITIONAL_MOCK_SEED]` → extra seeding for discovered external integrations (or remove placeholder if none)
    - Wire ALL service client base URLs to environment variables (never hardcoded)
    - **Verify service client ↔ mock endpoint contracts:** For each service client, read the
      methods and cross-reference with the mock service route files. Fix any endpoint mismatches
