@@ -402,7 +402,8 @@ the exact state before any retrofit changes were made.
 Execute all changes in sequence, following the /make-it prompt order but ADAPTED for existing code:
 
 1. **Foundation (Prompt #1 adapted):**
-   - Add missing: .gitignore entries, .env.example, CHANGELOG.md, TODO.md
+   - Add missing: .gitignore entries, .env.example, CHANGELOG.md, TODO.md, README.md
+   - README.md: project name/description, features, tech stack, quick start, project structure, test users/roles, deployment notes. Do NOT mention /make-it, /retrofit-it, /resume-it, or Claude Code.
    - Generate app-context.json from discovered profile
    - Do NOT recreate project structure -- work within existing structure
 

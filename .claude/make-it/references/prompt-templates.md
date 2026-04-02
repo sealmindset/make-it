@@ -23,6 +23,7 @@ Set up the project structure with:
 - Documentation
 
 Also create:
+- README.md with: project name/description, features, tech stack, prerequisites, quick start (clone, configure, run), project structure overview, test users/roles, API overview (link to docs if exists), development commands, and deployment notes. This is the front door for anyone visiting the repo -- it must describe what the project IS and how to use it. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
 - CHANGELOG.md with an initial "## [0.1.0] - [DATE]" entry listing the project setup
 - TODO.md with high/medium/low priority sections (populate during build)
 - .env.example with all required environment variables (commented with descriptions)

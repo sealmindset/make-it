@@ -425,7 +425,7 @@ The user sees progress updates, NOT the technical details.
       ```
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
-   g. **Create CHANGELOG.md** with initial entry and **TODO.md** with section headers.
+   g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
 
    Tell user: "Foundation is ready! Now building your specific features..."
 
@@ -1043,7 +1043,7 @@ That's it -- you just built your first app!"
 
    **Tier 0 checks (ALL projects):**
    - Project builds/compiles with zero errors
-   - CHANGELOG.md and TODO.md exist with content
+   - README.md, CHANGELOG.md, and TODO.md exist with content
    - .gitignore properly configured (no secrets, no build artifacts)
    - No hardcoded config values -- all from environment/settings
    - Input validation at system boundaries

@@ -74,6 +74,10 @@ These apply to every project /make-it builds, no exceptions.
 15. **Extensibility by design** -- Identify the primary extension point (plugins, middleware, hooks, event handlers) and build it in from the start. Avoid monolithic designs where adding a feature requires modifying core code.
 16. **API-first for external communication** -- Any communication with external systems uses a client abstraction that reads its target from configuration.
 
+### Documentation
+
+15. **README.md from day one** -- Every project MUST have a README.md in the root directory. This is the front door for anyone visiting the repo. It must include at minimum: project name and description, tech stack, quick start instructions (how to install, configure, and run), project structure overview, and any role/login information needed to use the app. Created during project setup, updated when features are added. CHANGELOG.md documents what changed; README.md documents what the project IS and how to use it.
+
 ### Quality
 
 17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.
