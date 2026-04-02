@@ -258,6 +258,7 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase C | OIDC authentication, permission middleware | "Adding secure login and user permissions" |
 | Phase D | Standard components, layout, theme | "Polishing the interface" |
 | Phase D2 | Activity Logs: LogStore, middleware, interceptors, REST API, Admin UI tab | "Adding activity monitoring to your app" |
+| Phase D3 | Notification system: model, API, bell component, seed data | "Adding a notification system" |
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
 | Phase F2 | AI operational safety: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if AI) | "Securing your AI features" (skip if no AI) |
@@ -530,6 +531,22 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - Add LOG_BUFFER_SIZE, CRIBL_STREAM_URL, CRIBL_STREAM_TOKEN to .env.example
     - Reference design-blueprint.md Section 12b for architecture and prompt-templates.md
       Prompt #9c for implementation patterns
+
+5c. **Notification System (Prompt #9d adapted):**
+    - Add notifications database model (table with recipientType, recipientId, notificationType,
+      title, message, relatedEntityType, relatedEntityId, sentBy, sentAt, readAt, status, createdAt)
+    - Create notification query helper with buildNotificationWhere(userId, roleName) for user-scoped queries
+    - Add REST API: GET /api/notifications (list, paginated, status filter),
+      PATCH /api/notifications (mark read), GET /api/notifications/count (polling)
+    - Add NotificationBell component to header (Tier 1): dropdown panel with color-coded items,
+      detail dialog with "Go to" navigation, 30s polling, mark-as-read
+    - Derive 3+ notification types from the app's existing domain events (scan for escalation,
+      assignment, status change, deadline patterns in existing service/agent code)
+    - Map relatedEntityType values to existing page routes for "Go to" navigation
+    - Add seed notifications (5+) referencing real seeded users and domain entities
+    - Add notification creation calls to existing service/agent logic where events occur
+    - Reference design-blueprint.md Section 12c for architecture and prompt-templates.md
+      Prompt #9d for implementation patterns
 
 6. **UI Components (Prompt #14 adapted):**
    - Add ALL four standard components (generate if missing, verify if present):
@@ -817,6 +834,8 @@ Tell user: "Your app is retrofitted! Now making sure everything works perfectly.
 Run ALL live verification checks from `build-standards.md`:
 - **V01-V09**: SSL proxy detection, container health, seed script, auth flow per role,
   API endpoints, page content, permission boundaries, Activity Logs, Docker cache
+- **N01-N08**: Notification model, query helper, REST API, bell component, type coding,
+  entity routing, seed data, server-side creation points
 
 **PART C: Fix cycle (silent, automatic, up to 3 cycles)**
 

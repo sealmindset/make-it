@@ -181,6 +181,29 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ---
 
+## Notifications
+
+**N01** [Tier 1, 5] [FIX] **Notification model exists** -- Database table: notifications with fields: id, recipientType (INTERNAL/VENDOR/ROLE), recipientId (nullable -- null means broadcast to all users of that recipientType), notificationType (app-specific string, e.g. ESCALATION, ASSIGNMENT, STATUS_CHANGE), title, message (nullable), relatedEntityType (nullable -- domain entity name), relatedEntityId (nullable -- entity ID for navigation), sentBy (nullable -- agent/service/system name), sentAt, readAt (nullable -- null means unread), status (PENDING/SENT/READ/FAILED, default PENDING), createdAt.
+
+**N02** [Tier 1, 5] [FIX] **Notification query helper** -- Shared module (lib/notifications or services/notification_service) with `buildNotificationWhere(userId, roleName)` that scopes queries to the current user. Internal users see: broadcast notifications (recipientType=INTERNAL, recipientId=null) PLUS targeted notifications (recipientType=INTERNAL, recipientId=userId). External/vendor users see only targeted (recipientId=userId). Query uses OR logic. Separate `withUnreadFilter()` helper adds readAt=null constraint.
+
+**N03** [Tier 1, 5] [FIX] **Notification REST API** -- Three endpoints, all user-scoped via the query helper:
+- `GET /api/notifications` -- List notifications for current user. Supports query params: status=UNREAD (filters to unread only), limit (default 20, max 50), offset (default 0). Response: `{ notifications: [...], unreadCount: number, total: number }`. Always returns unreadCount regardless of pagination.
+- `PATCH /api/notifications` -- Mark notifications as read. Body: `{ ids: string[] }` (specific) or `{ markAllRead: true }` (all). Updates matching user-scoped notifications: readAt=now(), status=READ. Response: `{ updated: number }`.
+- `GET /api/notifications/count` -- Lightweight unread count for polling. Response: `{ unreadCount: number }`. This endpoint must be fast (single COUNT query, no joins).
+
+**N04** [Tier 1] [FIX] **Notification bell component** -- Header bell icon with dynamic unread badge (hidden when 0, shows "9+" when >9). Click opens dropdown panel: positioned absolute right-0, z-50, w-96, with header ("Notifications" + "Mark all read" link), scrollable list (max-h-96 overflow-y-auto), and empty state (muted bell icon + "No notifications"). Each notification item has color-coded left border by type, title (truncated), sentBy badge, relative time ("2m ago", "3h ago", "1d ago"), and unread dot indicator. Click item opens detail Dialog with full message, metadata, and "Go to [entity]" button. Polling: 30s interval on /api/notifications/count endpoint. Full list fetched only on dropdown open.
+
+**N05** [Tier 1, 5] [FIX] **Entity-to-route mapping** -- Function `getEntityRoute(entityType, entityId)` maps notification relatedEntityType + relatedEntityId to app page routes. Each domain entity type has a corresponding route. Fallback to dashboard/home when entityType is null or unrecognized. Used by the detail dialog "Go to" button.
+
+**N06** [Tier 1, 5] [FIX] **Notification type color coding** -- Configuration map: `notificationType` → `{ borderColor, bgColor, textColor, icon, label }`. At minimum 3 types defined matching the app's domain events. Color convention: red/destructive for urgent/escalation, orange/warning for action-required, blue/info for informational requests. Each type has a distinct Lucide icon. Default/fallback config for unknown types (gray).
+
+**N07** [Tier 1, 5] [FIX] **Seed notifications** -- At least 5 sample notifications in seed data. Requirements: tied to real seeded user IDs (capture user IDs during seed), reference real seeded domain entity IDs, mix of broadcast (recipientId=null) and targeted (recipientId=specific user), at least one already-read notification (readAt set, status=READ), spread across multiple notification types, timestamps spread across recent days (1d, 2d, 3d, 5d, 10d ago). Different users should see different unread counts.
+
+**N08** [Tier 1, 5] [FIX] **Notification creation is server-side only** -- Notifications are created by backend services, agents, background jobs, or system events. No public POST /api/notifications endpoint. Notification creation calls are added to service/agent logic wherever the app creates, escalates, assigns, changes status, or alerts. All authenticated users can read their own scoped notifications without additional RBAC permissions (uses the same auth gate as dashboard access).
+
+---
+
 ## Application Settings
 
 **G01** [Tier 1] [FIX] **Settings tables exist** -- app_settings and app_setting_audit_logs tables in migration.
@@ -250,6 +273,8 @@ These checks run after the app is started (Docker containers up, health checks p
 **V08** [Tier 1, 5] [FIX] **Activity Logs capturing** -- /api/admin/logs/stats returns data. /api/admin/logs/events has entries after requests.
 
 **V09** [Tier 1, 5] [BLOCK] **Docker build cache** -- After source fixes, rebuild with `--no-cache` to prevent stale output.
+
+**V10** [Tier 1, 5] [FIX] **Notifications working** -- GET /api/notifications/count returns { unreadCount } > 0 (seed data). GET /api/notifications returns notifications scoped to the logged-in user. PATCH /api/notifications marks notification as read. Different users see different unread counts (validates scoping). Bell badge reflects count (Tier 1).
 
 ---
 

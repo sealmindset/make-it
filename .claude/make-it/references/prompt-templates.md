@@ -1009,6 +1009,165 @@ LOG_BUFFER_SIZE: ${LOG_BUFFER_SIZE:-10000}
 
 ---
 
+## Prompt #9d: Notification System
+
+```
+Add an in-app notification system to ${APP_NAME}. This provides a centralized
+inbox for events that require user attention — escalations, assignments, status
+changes, deadlines, and system alerts.
+
+Reference: design-blueprint.md Section 12c and build-standards.md N01-N08.
+
+--- DATABASE MODEL ---
+
+Create a notifications table (no foreign keys to domain tables -- uses string IDs):
+
+  id                String    PK, auto-generated (cuid/uuid)
+  recipientType     String?   "INTERNAL" | "VENDOR" | custom
+  recipientId       String?   User ID for targeted, null for broadcast
+  notificationType  String    App-specific type (see TYPE CONFIGURATION below)
+  title             String    Display title
+  message           String?   Full message body
+  relatedEntityType String?   Domain entity name for navigation
+  relatedEntityId   String?   Entity ID for "Go to" link
+  sentBy            String?   Agent/service name or "System"
+  sentAt            DateTime?
+  readAt            DateTime? null = unread
+  status            String    default "PENDING" (PENDING/SENT/READ/FAILED)
+  createdAt         DateTime  auto
+
+--- NOTIFICATION QUERY HELPER ---
+
+Create a shared module (lib/notifications or services/notification_service):
+
+  buildNotificationWhere(userId, roleName):
+    Internal roles → OR(
+      recipientType='INTERNAL' AND recipientId IS NULL,    // broadcast
+      recipientType='INTERNAL' AND recipientId=userId      // targeted
+    )
+    External roles → recipientType='VENDOR' AND recipientId=userId
+
+  withUnreadFilter(where):
+    Adds readAt IS NULL constraint
+
+Both API routes import this helper for consistent scoping.
+
+--- REST API ---
+
+All endpoints require authentication (use same permission gate as dashboard).
+
+GET /api/notifications
+  Query: status=UNREAD (optional), limit=20 (max 50), offset=0
+  Response: { notifications: [...], unreadCount: number, total: number }
+  Uses buildNotificationWhere + optional withUnreadFilter
+  Orders by createdAt DESC
+
+PATCH /api/notifications
+  Body: { ids: string[] } OR { markAllRead: true }
+  Scoped to current user (same WHERE clause + id filter)
+  Updates: readAt=now(), status='READ'
+  Response: { updated: number }
+
+GET /api/notifications/count
+  Lightweight polling endpoint (single COUNT query)
+  Response: { unreadCount: number }
+
+--- NOTIFICATION BELL COMPONENT (Tier 1 / web-app only) ---
+
+Create NotificationBell component for the header:
+
+1. Bell button with dynamic unread badge
+   - Badge hidden when count=0, shows "9+" when >9
+   - 30s polling on /api/notifications/count
+
+2. Dropdown panel (absolute right-0, z-50, w-96)
+   - Header: "Notifications" + "Mark all read" link
+   - Scrollable list: max-h-96 overflow-y-auto
+   - Each item: color-coded left border, title (truncated), sentBy badge, time ago, unread dot
+   - Empty state: muted bell icon + "No notifications"
+   - Click-outside-to-close (useRef + mousedown listener)
+
+3. Detail Dialog (existing Dialog/Modal component)
+   - Type badge + sentBy agent name
+   - Full message body
+   - Timestamp
+   - "Go to [entity]" button → router navigation
+   - Opening the dialog marks the notification as read
+
+Create NotificationItem presentational component:
+   - Receives notification data + onClick handler
+   - Renders color-coded border, icon, title, metadata
+
+Replace the static bell button in the header with <NotificationBell />.
+
+--- TYPE CONFIGURATION ---
+
+Derive notification types from ${APP_NAME}'s domain events.
+
+Minimum 3 types. Map each to: { borderColor, bgColor, textColor, icon, label }.
+
+Color convention:
+  - Red (destructive/urgent): escalations, critical alerts, SLA breaches
+  - Orange (warning/action): assignments, remediation required, approvals needed
+  - Blue (informational): status changes, document requests, system updates
+  - Yellow (caution): approaching deadlines, expiring items
+  - Purple (request): external requests, review requests
+  - Gray: default/fallback for unknown types
+
+Each type uses a distinct Lucide icon (AlertTriangle, Shield, FileText, Clock, etc.).
+
+--- ENTITY-TO-ROUTE MAPPING ---
+
+Create getEntityRoute(entityType, entityId) function mapping relatedEntityType
+to the app's page routes:
+
+  ${ENTITY_TYPE_1} → /${ROUTE_1}/{entityId}
+  ${ENTITY_TYPE_2} → /${ROUTE_2}
+  ...
+  default → /dashboard (or home page)
+
+Also create entityLabel(entityType) for the "Go to" button text.
+
+Build from the app's actual page structure.
+
+--- SEED DATA ---
+
+Add 5+ sample notifications to the seed script:
+
+1. Capture user IDs when creating seed users (store in userMap)
+2. Capture domain entity IDs when creating seed data (store in entityMap)
+3. Create notifications AFTER users and entities exist
+4. Requirements:
+   - At least 2 broadcast (recipientId=null) -- visible to all internal users
+   - At least 2 targeted (recipientId=specific user) -- visible only to that user
+   - At least 1 already-read (status=READ, readAt set)
+   - Spread across multiple notification types
+   - Timestamps: 1d, 2d, 3d, 5d, 10d ago
+   - Reference real seeded entity IDs in relatedEntityId
+5. Expected counts per role should differ (validates scoping works)
+
+--- NOTIFICATION CREATION POINTS ---
+
+Add notification creation calls to existing service/agent logic.
+
+Scan ${APP_NAME}'s services and agents for events that should trigger notifications:
+- Entity created/assigned → notify assignee
+- Status changed to urgent → broadcast escalation
+- Deadline approaching → notify owner
+- External request sent → notify requestor
+- Error/failure detected → notify admin
+
+Pattern: prisma.notification.create({ data: { ... } }) or ORM equivalent
+inside the existing service method, AFTER the primary action succeeds.
+
+Server-side only -- no public POST /api/notifications endpoint.
+```
+
+**Required context:** stack, domain entities, page routes, service/agent list, seed user data
+**Always runs:** Yes -- every web app and API service gets notifications (like Activity Logs)
+
+---
+
 ## Prompt #10: Design AI Architecture
 
 **This prompt has two parts: provider setup (always runs if AI is used) and prompt

@@ -540,6 +540,24 @@ to understand the patterns, then generate new code that follows the same convent
      h. **Environment variables** -- Add LOG_BUFFER_SIZE to .env.example and docker-compose.yml.
         Add CRIBL_STREAM_URL and CRIBL_STREAM_TOKEN as empty placeholders (future forwarding).
 
+9c. **Notification System**
+    - Tell user: "Adding notification system..."
+    - This step ALWAYS runs for web-app and api-service projects (like Activity Logs)
+    - Reference prompt-templates.md Prompt #9d and design-blueprint.md Section 12c
+    - Build-standards.md checks: N01-N08
+    - Steps:
+      a. Add notifications database model (N01)
+      b. Create notification query helper with user-scoped WHERE builder (N02)
+      c. Create REST API: GET /api/notifications, PATCH /api/notifications, GET /api/notifications/count (N03)
+      d. **Notification bell component** (Tier 1/web-app only): Replace static bell in header with
+         NotificationBell component -- dropdown panel with color-coded items, detail dialog with
+         "Go to" navigation, 30s polling, mark-as-read (N04)
+      e. Define entity-to-route mapping from the app's page structure (N05)
+      f. Define notification type color coding -- derive 3+ types from domain events discovered
+         during ideation. Map to colors: red=urgent, orange=action, blue=info (N06)
+      g. Add seed notifications (5+) referencing real seeded users and entities (N07)
+      h. Add notification creation calls to service/agent logic where events occur (N08)
+
 10. **Security Hardening**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
@@ -857,6 +875,13 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
     d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 
+30. **Test Notifications (web-app and api-service only):**
+    a. Verify GET /api/notifications/count returns valid { unreadCount } for authenticated user
+    b. Verify GET /api/notifications returns notifications scoped to the logged-in user
+    c. Verify PATCH /api/notifications with { ids: [...] } marks a notification as read
+    d. Verify the bell badge shows correct unread count per role (different users see different counts)
+    e. Verify notifications reference real seeded entity IDs (relatedEntityId is not null for at least some)
+
 **PART C: Fix cycle (silent, automatic)**
 
 If ANY test fails in Part B:
@@ -1073,6 +1098,12 @@ That's it -- you just built your first app!"
    - Activity Logs: Admin UI tab with stats, filters, event table, auto-refresh
    - Activity Logs: admin.logs.read and admin.logs.delete permissions seeded
    - Activity Logs: LOG_BUFFER_SIZE in .env.example and docker-compose.yml
+   - Notifications: model, query helper, REST API (GET list, PATCH mark-read, GET count)
+   - Notifications: bell component in header with dropdown, detail dialog, "Go to" navigation
+   - Notifications: type color coding with 3+ domain-specific types
+   - Notifications: seed data (5+) with mix of broadcast + targeted, referencing real entity IDs
+   - Notifications: entity-to-route mapping for "Go to" navigation
+   - Notifications: server-side creation calls in service/agent logic
 
    **Tier 2 checks (extension) -- IN ADDITION to Tier 0:**
    - Extension manifest complete (all commands, views, config declared)
