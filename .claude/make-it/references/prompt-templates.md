@@ -1168,6 +1168,163 @@ Server-side only -- no public POST /api/notifications endpoint.
 
 ---
 
+## Prompt #9e: File Upload & Document Processing
+
+```
+Add file upload and document processing to ${APP_NAME}. This provides a reusable
+drag-drop-browse upload component, in-memory file processing, multi-format text
+extraction, and persistent Docker volume storage.
+
+Reference: design-blueprint.md Section 12d and build-standards.md F01-F08.
+
+--- UPLOAD COMPONENT (Tier 1 / web-app only) ---
+
+Create a reusable FileUploadZone component (components/file-upload-zone.tsx):
+
+1. Drop zone with visual states:
+   - idle: dashed border, upload icon, "Drag & drop, click to browse" text
+   - dragover: blue highlight border, "Drop file here" text
+   - selected: file name + size + type icon + remove button
+   - uploading: progress bar or spinner
+   - error: red border + error message
+
+2. Drag events:
+   - onDragOver: preventDefault + set dragover state
+   - onDragEnter: preventDefault (for nested elements)
+   - onDragLeave: remove dragover state
+   - onDrop: preventDefault + extract files[0] + validate + call onFile callback
+
+3. Click-to-browse:
+   - Hidden <input type="file" accept={accept} /> triggered by zone click
+   - accept prop controls allowed file types (e.g., ".pdf,.docx,.xlsx,.png,.jpg")
+
+4. Props interface:
+   - accept: string (MIME types / extensions)
+   - maxSize: number (bytes, default from MAX_FILE_SIZE env)
+   - onFile: (file: File) => void
+   - disabled: boolean
+   - className: string (composable styling)
+
+5. Client-side validation (before upload):
+   - File size against maxSize
+   - File type against accept list
+   - Show user-friendly error ("This file is too large" not "413")
+
+No external upload libraries -- use native HTML5 drag events and FormData.
+
+--- UPLOAD API ROUTE ---
+
+Create POST /api/${UPLOAD_RESOURCE}/upload (or /api/onboarding/extract, etc.):
+
+1. Accept multipart/form-data with a single "file" field
+2. Validate file size BEFORE reading full buffer:
+   - Check file.size against MAX_FILE_SIZE env var (default 50MB)
+   - Return 400 if no file, 413 if oversized
+3. Read file into Buffer (Node.js) or bytes (Python) IN MEMORY
+   - const arrayBuffer = await file.arrayBuffer()
+   - const buffer = Buffer.from(arrayBuffer)
+4. Call extractContent(buffer, file.name, file.type)
+5. Process extracted content (AI extraction, parsing, etc.)
+6. Return structured response with extracted data
+7. RBAC: requirePermission('${RESOURCE}', 'edit')
+
+CRITICAL: Never write to temp files. Process entirely in memory.
+
+--- TEXT EXTRACTION UTILITY ---
+
+Create lib/documents/extract-text.ts (or equivalent):
+
+Exports: extractContent(buffer, filename, mimeType) → { text, isImage, imageBase64?, imageMime? }
+Exports: getFileType(filename, mimeType) → 'pdf' | 'docx' | 'xlsx' | 'image' | 'text'
+
+Format handlers:
+
+1. PDF -- ⚠️ MANDATORY: use pdf-parse/lib/pdf-parse DIRECTLY
+   ```typescript
+   // CRITICAL: Import the lib directly, NOT the package root
+   // pdf-parse/index.js has debug code that does Fs.readFileSync('./test/data/...')
+   // which fails in Next.js standalone/Docker production builds
+   const pdfParseLib = require('pdf-parse/lib/pdf-parse')
+
+   async function extractPdfText(buffer: Buffer): Promise<string> {
+     const data = await pdfParseLib(buffer)
+     return data.text
+   }
+   ```
+   NEVER use: import pdfParse from 'pdf-parse'
+   NEVER use: const pdf = await import('pdf-parse')
+   These trigger the debug wrapper that crashes in production Docker.
+
+2. DOCX -- JSZip (already a common dep)
+   - Load buffer with JSZip.loadAsync(buffer)
+   - Read 'word/document.xml'
+   - Strip XML tags, normalize whitespace
+
+3. XLSX -- ExcelJS (Node.js) or openpyxl (Python)
+   - Iterate sheets and rows
+   - Join cell values as CSV-like text per sheet
+
+4. Images -- Return as base64 for AI vision processing
+   - Detect MIME type from extension
+   - Return { text: '', isImage: true, imageBase64, imageMime }
+
+5. Plain text -- UTF-8 decode
+   - Buffer.toString('utf-8')
+
+Each handler wrapped in try/catch with descriptive error messages.
+File type detection uses BOTH extension and MIME type for reliability.
+
+--- DOCKER VOLUME ---
+
+1. Add named volume to docker-compose.yml:
+   ```yaml
+   services:
+     app:
+       volumes:
+         - ${APP_NAME_LOWER}-documents:/app/data
+       environment:
+         - DOCUMENTS_PATH=/app/data/documents
+         - UPLOAD_CACHE_PATH=/app/data/uploads
+
+   volumes:
+     ${APP_NAME_LOWER}-documents:
+   ```
+
+2. Add to Dockerfile (BEFORE USER directive):
+   ```dockerfile
+   RUN mkdir -p /app/data/documents /app/data/uploads && \
+       chown -R nextjs:nodejs /app/data
+   ```
+
+3. Add to .env.example:
+   ```
+   DOCUMENTS_PATH=/app/data/documents
+   UPLOAD_CACHE_PATH=/app/data/uploads
+   MAX_FILE_SIZE=52428800
+   ```
+
+--- UPLOAD WIZARD (if app has Documents page) ---
+
+Create an upload wizard component that chains:
+1. FileUploadZone → file selection
+2. Processing state → "Extracting content..."
+3. Review state → show extracted data with edit capability
+4. Confirm → save to database + optionally store file to DOCUMENTS_PATH
+
+Wire into the Documents page (or relevant entity page) with a trigger button.
+
+--- RBAC ---
+
+Upload endpoints use requirePermission for the relevant resource.
+File size validation is server-side (never trust client Content-Length).
+File type validation is server-side (check extension, not just Content-Type).
+```
+
+**Required context:** stack, document-related pages, entity types that accept files
+**Runs when:** App has a Documents page, file attachments, or any upload feature. Also runs when AI agents process uploaded files (AURA pattern). Skip if the app has no file handling at all.
+
+---
+
 ## Prompt #10: Design AI Architecture
 
 **This prompt has two parts: provider setup (always runs if AI is used) and prompt

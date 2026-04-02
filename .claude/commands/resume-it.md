@@ -263,6 +263,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh
    - **Activity Logs (L01-L08):** Grep for LogStore/log_store, log middleware, /logs/events endpoint
    - **Notifications (N01-N08):** Check for notifications table in migrations/schema, /api/notifications route, notification-bell component, notification seed data
+   - **File Upload (F01-F08):** Check for upload component, extract-text utility, Docker volume in docker-compose.yml. If pdf-parse is in package.json, verify import uses `pdf-parse/lib/pdf-parse` NOT default import (F03 -- crashes in production Docker)
    - **Settings (G01-G07):** Check for app_settings table in migrations, settings service, admin page
    - **Security (X01-X06):** Grep for hardcoded secrets, external font imports
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
@@ -335,6 +336,8 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | AI prompts: Tier 2 Outdated | "Your AI prompt management can be upgraded to the latest standard -- better editing experience, version history, and safety indicators. Want me to upgrade it?" |
 | AI prompts: Tier 3 Custom (protected) | (Do NOT suggest upgrade -- note as "Custom prompt management: up to date" in status) |
 | Notifications missing (N01-N08 gaps) | "Your app doesn't have an in-app notification system yet -- users won't know when things need their attention. Want me to add one?" |
+| File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
+| pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |
 | Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- want me to apply them now?" |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |

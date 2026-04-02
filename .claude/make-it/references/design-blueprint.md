@@ -1482,6 +1482,143 @@ Default implementation uses 30-second polling on the lightweight `/api/notificat
 
 ---
 
+## 12d. File Upload & Document Processing
+
+**Applied by default for all web-app and api-service projects that have a Documents page, file attachments, or any entity that accepts uploaded files.** Provides a reusable drag-drop-browse upload component, in-memory file processing pipeline, multi-format text extraction, and persistent Docker volume storage.
+
+**Why this exists:**
+- Every non-trivial app eventually needs file upload -- building it correctly from day one avoids retrofitting
+- PDF extraction has a known cross-platform trap (`pdf-parse` index.js debug wrapper) that breaks in production Docker containers but works perfectly in local development -- encoding the fix in the standard prevents this recurring issue
+- In-memory buffer processing eliminates temp file management, permission issues, and cleanup headaches
+- Docker volume ensures uploaded documents survive container rebuilds
+
+**Architecture: Upload Zone → Buffer → Extract → Process → Store**
+
+```
+Browser                                   Server
+   |                                        |
+   |  FileUploadZone Component              |
+   |  ┌──────────────────────────┐          |
+   |  │  ┌────────────────────┐  │          |
+   |  │  │  Drag & Drop Zone  │  │          |
+   |  │  │  Click to Browse   │  │          |
+   |  │  │  Paste support     │  │          |
+   |  │  └────────────────────┘  │          |
+   |  │  [file.pdf] 2.4 MB ✓    │          |
+   |  │  [Upload] [Cancel]       │          |
+   |  └──────────┬───────────────┘          |
+   |             │ FormData POST            |
+   |             v                          |
+   |     POST /api/{resource}/upload ──────>│
+   |                                        │── Validate size (MAX_FILE_SIZE)
+   |                                        │── Read into Buffer (in-memory)
+   |                                        │── Detect file type (ext + MIME)
+   |                                        │
+   |                                        │── extractContent(buffer, name, mime)
+   |                                        │   ├── PDF:  pdf-parse/lib/pdf-parse ⚠️
+   |                                        │   ├── DOCX: JSZip → word/document.xml
+   |                                        │   ├── XLSX: ExcelJS → sheets/rows
+   |                                        │   ├── Image: base64 + MIME (for AI vision)
+   |                                        │   └── Text: UTF-8 decode
+   |                                        │
+   |                                        │── Process (AI extract, parse, etc.)
+   |                                        │── Store to /app/data/documents (volume)
+   |  <── { extractedText, metadata } ──────│
+   |                                        |
+```
+
+**⚠️ CRITICAL: pdf-parse production trap (F03)**
+
+The `pdf-parse` npm package contains a debug code path in its `index.js`:
+
+```javascript
+// pdf-parse/index.js -- the PROBLEM
+let isDebugMode = !module.parent;   // ← undefined in webpack/turbopack bundles = true
+if (isDebugMode) {
+    let PDF_FILE = './test/data/05-versions-space.pdf';
+    let dataBuffer = Fs.readFileSync(PDF_FILE);  // ← ENOENT in production Docker
+    ...
+}
+```
+
+When Next.js (Turbopack) or webpack bundles this module, `module.parent` is `undefined`, so `!module.parent` evaluates to `true`, triggering `Fs.readFileSync('./test/data/05-versions-space.pdf')`. This file exists in `node_modules/` during development but is NOT included in:
+- Next.js standalone output (`.next/standalone`)
+- Production Docker images (pruned dependencies)
+- Any webpack/turbopack bundle
+
+**The fix is mandatory and simple:** Import the actual parser directly, bypassing the wrapper:
+
+```typescript
+// WRONG -- triggers debug file read in production bundles
+import pdfParse from 'pdf-parse'
+
+// WRONG -- dynamic import still loads index.js
+const pdf = await import('pdf-parse')
+
+// RIGHT -- bypasses index.js debug wrapper entirely
+const pdfParseLib = require('pdf-parse/lib/pdf-parse')
+```
+
+The `pdf-parse/lib/pdf-parse.js` file is the actual PDF parser (wrapping pdfjs-dist). It has no debug code, no test file reads, and works identically in dev and production.
+
+**Python is NOT affected** -- `pdfplumber`, `PyPDF2`, and `pdfminer` do not have this issue.
+
+**FileUploadZone component (Tier 1 only):**
+
+```
+FileUploadZone (reusable, composable)
+├── Props: accept (MIME string), maxSize (bytes), onFile (callback), disabled
+├── States: idle → dragover → selected → uploading → success/error
+├── Drag events: onDragOver (preventDefault + highlight), onDragLeave (remove highlight),
+│                onDrop (preventDefault + extract files[0] + validate + call onFile)
+├── Click: hidden <input type="file" accept={accept}> triggered by zone click
+├── Display: file name, size (human-readable), type icon, remove button
+├── Validation: client-side size check + type check before upload (server re-validates)
+└── Styling: dashed border idle, blue highlight on dragover, green on success, red on error
+```
+
+The component is self-contained with no external upload libraries. Every app's upload page imports `<FileUploadZone />` and wires it to the relevant API endpoint.
+
+**Docker volume for persistent storage:**
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    volumes:
+      - {app}-documents:/app/data    # persistent across rebuilds
+    environment:
+      - DOCUMENTS_PATH=/app/data/documents
+      - UPLOAD_CACHE_PATH=/app/data/uploads
+
+volumes:
+  {app}-documents:
+```
+
+The Dockerfile creates the directories with correct ownership:
+```dockerfile
+RUN mkdir -p /app/data/documents /app/data/uploads && \
+    chown -R appuser:appgroup /app/data
+```
+
+**In-memory processing (no temp files):**
+
+File upload routes read the entire file into a buffer and pass it directly to the extraction pipeline. No `writeFileSync` to a temp directory, no cleanup needed, no permission issues in containers. The buffer is garbage-collected after the request completes.
+
+For files that need persistent storage (user downloads, audit trail), write to the Docker volume path (`DOCUMENTS_PATH`) after processing.
+
+**Implementation checklist (from build-standards.md F01-F08):**
+- FileUploadZone component (drag/drop/browse/paste)
+- Upload API route with in-memory buffer processing
+- pdf-parse/lib/pdf-parse direct import (NOT default import)
+- Multi-format extraction (PDF, DOCX, XLSX, images, text)
+- Docker volume for document persistence
+- Environment variables (DOCUMENTS_PATH, UPLOAD_CACHE_PATH, MAX_FILE_SIZE)
+- Upload wizard for document-centric pages
+- RBAC on all upload endpoints
+
+---
+
 ## 13. Standard UI Components (Built-In Defaults)
 
 **Applied by default for all apps (no user questions needed).**

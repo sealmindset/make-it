@@ -558,6 +558,24 @@ to understand the patterns, then generate new code that follows the same convent
       g. Add seed notifications (5+) referencing real seeded users and entities (N07)
       h. Add notification creation calls to service/agent logic where events occur (N08)
 
+9d. **File Upload & Document Processing**
+    - Tell user: "Adding file upload support..."
+    - This step runs when the app has a Documents page, file attachments, or any entity
+      that accepts uploaded files. Also runs when AI agents process uploaded files.
+    - Reference prompt-templates.md Prompt #9e and design-blueprint.md Section 12d
+    - Build-standards.md checks: F01-F08
+    - Steps:
+      a. Create FileUploadZone component with drag/drop/browse/paste (F01)
+      b. Create upload API route with in-memory buffer processing (F02)
+      c. Create text extraction utility (lib/documents/extract-text) with multi-format
+         support: PDF, DOCX, XLSX, images, plain text (F04)
+      d. **CRITICAL pdf-parse fix**: if using Node.js, import `pdf-parse/lib/pdf-parse`
+         directly -- NEVER import from `pdf-parse` root (F03). The default import triggers
+         a debug file read that crashes in production Docker containers.
+      e. Add Docker volume for document persistence + env vars (F05, F06)
+      f. Add upload wizard for document-centric pages (F07)
+      g. Add RBAC to upload endpoints (F08)
+
 10. **Security Hardening**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
@@ -881,6 +899,16 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     c. Verify PATCH /api/notifications with { ids: [...] } marks a notification as read
     d. Verify the bell badge shows correct unread count per role (different users see different counts)
     e. Verify notifications reference real seeded entity IDs (relatedEntityId is not null for at least some)
+
+31. **Test File Upload (if app has Documents page or upload feature):**
+    a. Upload a valid PDF via the upload API endpoint -- verify 200 with extracted text
+    b. Upload an image -- verify 200 with base64 content
+    c. Upload an oversized file (> MAX_FILE_SIZE) -- verify 413 rejection
+    d. Verify Docker volume mount exists: `docker exec {container} ls /app/data/documents`
+    e. **CRITICAL**: Grep source for `from 'pdf-parse'` or `import('pdf-parse')` -- if found,
+       this is F03 violation. Must use `require('pdf-parse/lib/pdf-parse')` instead.
+       The default import crashes in production Docker with ENOENT on test data file.
+    f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
 
 **PART C: Fix cycle (silent, automatic)**
 

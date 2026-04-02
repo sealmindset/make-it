@@ -259,6 +259,7 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase D | Standard components, layout, theme | "Polishing the interface" |
 | Phase D2 | Activity Logs: LogStore, middleware, interceptors, REST API, Admin UI tab | "Adding activity monitoring to your app" |
 | Phase D3 | Notification system: model, API, bell component, seed data | "Adding a notification system" |
+| Phase D4 | File upload: FileUploadZone, extraction utility, Docker volume, upload API | "Adding file upload support" |
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
 | Phase F2 | AI operational safety: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if AI) | "Securing your AI features" (skip if no AI) |
@@ -548,6 +549,20 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - Reference design-blueprint.md Section 12c for architecture and prompt-templates.md
       Prompt #9d for implementation patterns
 
+5d. **File Upload & Document Processing (Prompt #9e adapted):**
+    - Runs when the app has a Documents page, file attachments, or AI agents that process files
+    - Create FileUploadZone component (drag/drop/browse) if no upload component exists
+    - Create text extraction utility (lib/documents/extract-text) with PDF, DOCX, XLSX,
+      image, and text support
+    - **CRITICAL**: If pdf-parse is in dependencies, verify import uses
+      `require('pdf-parse/lib/pdf-parse')` NOT default import. Fix if wrong (F03).
+    - Add Docker volume for persistent document storage (F05)
+    - Add DOCUMENTS_PATH, UPLOAD_CACHE_PATH, MAX_FILE_SIZE env vars (F06)
+    - Add upload API route with in-memory buffer processing (F02)
+    - Wire FileUploadZone into relevant pages with upload wizard (F07)
+    - Add RBAC to upload endpoints (F08)
+    - Reference design-blueprint.md Section 12d and prompt-templates.md Prompt #9e
+
 6. **UI Components (Prompt #14 adapted):**
    - Add ALL four standard components (generate if missing, verify if present):
      - `components/breadcrumbs.tsx` with SEGMENT_LABELS for all app pages
@@ -817,6 +832,8 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **I01-I07**: Docker & infrastructure
 - **M01-M04**: Mock services
 - **L01-L08**: Activity logs
+- **N01-N08**: Notifications
+- **F01-F08**: File upload & document processing (if app has Documents page or uploads)
 - **G01-G07**: Application settings
 - **X01-X06**: Security
 - **T01-T05**: Test infrastructure

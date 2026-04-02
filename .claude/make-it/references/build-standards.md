@@ -204,6 +204,28 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ---
 
+## File Upload & Document Processing
+
+**F01** [Tier 1, 5] [FIX] **Upload UI component exists** -- Reusable `FileUploadZone` component supporting drag-and-drop, click-to-browse, and paste. Uses HTML5 drag events (`onDragOver`, `onDragEnter`, `onDragLeave`, `onDrop`) with visual feedback (dashed border highlight on drag-over). Accepts a configurable `accept` prop for MIME types and an `maxSize` prop for file size limit. Shows file name, size, type after selection. Includes upload progress indicator and error display. Component is self-contained -- no external upload libraries.
+
+**F02** [Tier 1, 5] [BLOCK] **Upload API route processes in-memory** -- File upload POST endpoint accepts `multipart/form-data`, extracts the file into a `Buffer` (Node.js) or `bytes` (Python) in memory, and passes the buffer directly to the extraction/processing pipeline. NEVER writes uploaded files to a temp path before processing. Validates file size BEFORE reading the full buffer (check `Content-Length` header or `file.size` against `MAX_FILE_SIZE` env var, default 50MB). Returns 400 for missing file, 413 for oversized file.
+
+**F03** [Tier 1, 5] [BLOCK] **PDF extraction uses pdf-parse/lib/pdf-parse (NOT pdf-parse index.js)** -- The `pdf-parse` npm package has a known bug: its `index.js` wrapper contains debug code that runs `Fs.readFileSync('./test/data/05-versions-space.pdf')` when `module.parent` is undefined. In Next.js standalone builds (Turbopack/webpack bundling), `module.parent` evaluates to `undefined`, triggering the debug path and causing `ENOENT: no such file or directory` at runtime. The FIX: always import `pdf-parse/lib/pdf-parse` directly, which is the actual parser without the debug wrapper. Python apps using `pdfplumber`, `PyPDF2`, or `pdfminer` are not affected. **This is a BLOCK check -- builds that use `pdf-parse` default import WILL fail in production Docker containers.**
+
+**F04** [Tier 1, 5] [FIX] **Multi-format text extraction** -- A shared extraction utility (`lib/documents/extract-text` or equivalent) handles at minimum: PDF (via pdf-parse/lib/pdf-parse), DOCX (via JSZip reading `word/document.xml` with XML tag stripping), XLSX (via ExcelJS or openpyxl iterating sheets and rows), images (returned as base64 with MIME type for vision AI), and plain text (UTF-8 decode). Each format has a try/catch that throws a descriptive error (`Failed to extract PDF content`) without leaking library internals. File type detection uses both extension and MIME type (`getFileType(filename, mimeType)`).
+
+**F05** [Tier 1, 5] [FIX] **Docker volume for document storage** -- `docker-compose.yml` defines a named volume (e.g., `{app}-documents`) mounted at `/app/data`. Two subdirectories: `/app/data/documents` for persistent document storage and `/app/data/uploads` for temporary upload cache. The Dockerfile creates these directories with proper ownership (`chown appuser:appgroup`) BEFORE the `USER` directive. Environment variables `DOCUMENTS_PATH` and `UPLOAD_CACHE_PATH` are set in docker-compose.yml and `.env.example`. The volume survives container rebuilds -- uploaded documents persist across restarts.
+
+**F06** [Tier 1, 5] [FIX] **Upload environment variables** -- `.env.example` and docker-compose.yml include: `DOCUMENTS_PATH` (default: `/app/data/documents`), `UPLOAD_CACHE_PATH` (default: `/app/data/uploads`), `MAX_FILE_SIZE` (default: `52428800` = 50MB). All file paths in application code read from env vars -- no hardcoded paths.
+
+**F07** [Tier 1] [FIX] **Upload onboarding wizard** -- When the app has a Documents page or any entity that accepts file attachments, include a multi-step upload wizard: (1) Upload zone (drag/drop/browse with file type hints), (2) Processing indicator ("Extracting content..."), (3) Extracted data review (parsed fields, confidence indicators if AI-extracted), (4) Confirm and save. The wizard uses the shared `FileUploadZone` component and calls the upload API endpoint. Errors display user-friendly messages ("This file type isn't supported" not "Failed to parse DOCX").
+
+**F08** [Tier 1, 5] [FIX] **Upload RBAC** -- File upload endpoints use `requirePermission` (e.g., `documents.edit` or the relevant resource). Upload size limits enforced server-side regardless of client claims. File type validation enforced server-side (check magic bytes or extension, not just Content-Type header which can be spoofed). No public/unauthenticated upload endpoints.
+
+**F09** [Tier 1, 5] [BLOCK] **Upload errors never return 500 to the user** -- The upload API route wraps the entire extraction pipeline in a top-level try/catch. Every failure mode returns a specific, user-friendly HTTP status and message -- NEVER an unhandled 500. Required error responses: `400 "No file provided"` (missing file), `400 "Unsupported file type"` (unrecognized format), `413 "File too large"` (exceeds MAX_FILE_SIZE), `422 "Could not extract content from this file"` (extraction failed -- corrupt PDF, password-protected DOCX, etc.), `429` (rate limited, if AI processing). The catch-all returns `500` only as a last resort with a generic safe message ("An error occurred while processing your file. Please try a different file or format.") -- NEVER leaking library names, stack traces, file paths, or internal error details. Build-verify: upload a corrupt/empty file and verify the response is 422 with a friendly message, not 500 with a stack trace.
+
+---
+
 ## Application Settings
 
 **G01** [Tier 1] [FIX] **Settings tables exist** -- app_settings and app_setting_audit_logs tables in migration.
@@ -276,6 +298,8 @@ These checks run after the app is started (Docker containers up, health checks p
 
 **V10** [Tier 1, 5] [FIX] **Notifications working** -- GET /api/notifications/count returns { unreadCount } > 0 (seed data). GET /api/notifications returns notifications scoped to the logged-in user. PATCH /api/notifications marks notification as read. Different users see different unread counts (validates scoping). Bell badge reflects count (Tier 1).
 
+**V11** [Tier 1, 5] [BLOCK] **File upload works end-to-end** -- If the app has a Documents page or file upload feature: upload a valid PDF via the upload API endpoint, verify 200 response with extracted text content (not empty). Upload an image, verify base64 return. Upload oversized file, verify 413 rejection. Verify Docker volume mount exists (`docker exec {container} ls /app/data/documents`). If pdf-parse is in package.json, verify the import uses `pdf-parse/lib/pdf-parse` (NOT default import) by grepping the source.
+
 ---
 
 ## AI Features (when ai_features.needed = true)
@@ -332,3 +356,6 @@ When live verification fails, these are the most common root causes and fixes:
 | Frontend type errors | Schema mismatch | Read Pydantic schemas, fix TS interfaces |
 | OIDC callback cookie not set | redirect_uri wrong | Must go through frontend proxy |
 | Stale code after fix | Docker layer cache | Rebuild with --no-cache |
+| PDF upload ENOENT 05-versions-space.pdf | pdf-parse index.js debug wrapper | Import `pdf-parse/lib/pdf-parse` directly (F03) |
+| Upload works locally but 500 in Docker | Temp file path doesn't exist in container | Process files in-memory buffers, not temp files (F02) |
+| Uploaded documents lost on rebuild | No persistent volume | Add named Docker volume for /app/data (F05) |
