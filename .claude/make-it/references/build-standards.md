@@ -147,6 +147,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **I07** [Tier 1] [FIX] **Trailing-slash wrapper (FastAPI)** -- TrailingSlashASGI middleware prevents Docker hostname leaks in FastAPI redirects.
 
+**I08** [Tier 0] [FIX] **Registry proxy support** -- All Dockerfiles use `ARG DOCKER_HUB_PREFIX=` before each `FROM` instruction, with `FROM ${DOCKER_HUB_PREFIX}image:tag`. In multi-stage builds, repeat `ARG DOCKER_HUB_PREFIX=` before EACH `FROM` (Docker ARGs do not persist across stages). All docker-compose.yml services with `build:` include `args: [DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}]`. Services with `image:` use `${DOCKER_HUB_PREFIX:-}image:tag`. `.env.example` documents `DOCKER_HUB_PREFIX`, `MCR_PREFIX`, `GHCR_PREFIX` with auto-discovery instructions. This enables developers behind corporate SSL-inspecting proxies (Zscaler, Netskope, GlobalProtect) to pull Docker images through an ACR proxy cache without disabling the proxy.
+
 ---
 
 ## Mock Services
@@ -278,7 +280,7 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 These checks run after the app is started (Docker containers up, health checks passing).
 
-**V01** [Tier 1, 5] [BLOCK] **SSL proxy detection** -- Check for Zscaler/Netskope/GlobalProtect before Docker builds. Ask user to pause if detected.
+**V01** [Tier 0] [FIX] **SSL proxy detection with registry auto-discovery** -- Check for Zscaler/Netskope/GlobalProtect before Docker builds. If detected: (1) Check if `DOCKER_HUB_PREFIX` is already set in `.env` -- skip if configured. (2) Check Azure CLI availability and login: `az account show`. (3) Discover ACR registries: `az acr list --query "[].{name:name, loginServer:loginServer}" -o json`. (4) For each ACR, check for proxy cache rules: `az acr cache list --registry <name> -o json`. (5) If an ACR with cache rules is found, auto-configure `.env`: `DOCKER_HUB_PREFIX=<loginServer>/docker.io/library/`, `MCR_PREFIX=<loginServer>/mcr.microsoft.com/`, `GHCR_PREFIX=<loginServer>/ghcr.io/`. (6) Run `az acr login --name <acrName>` to authenticate Docker. (7) Tell user: "I detected a corporate SSL proxy and found a container registry cache at <loginServer>. I've configured your project to pull Docker images through it -- no need to disable your proxy." (8) If no ACR with cache rules is found, fall back to asking user to pause the proxy.
 
 **V02** [Tier 1, 5] [BLOCK] **All containers healthy** -- Poll health endpoints (timeout 120s per service).
 
@@ -343,7 +345,7 @@ When live verification fails, these are the most common root causes and fixes:
 | Logout returns 404 | Route is GET not POST | Change to POST endpoint + frontend button |
 | Service client 404 from mock | Endpoint URL mismatch | Cross-reference client with mock routes |
 | Empty pages | Seed migration didn't run | Verify entrypoint.sh runs migrations |
-| Docker build TLS error | SSL-inspecting proxy | Ask user to pause Zscaler/Netskope |
+| Docker build TLS error | SSL-inspecting proxy | Auto-discover ACR proxy via `az acr cache list` and set DOCKER_HUB_PREFIX/MCR_PREFIX/GHCR_PREFIX in .env (I08, V01). Fallback: ask user to pause Zscaler/Netskope |
 | Health check fails | IPv6 resolution | Use 127.0.0.1 not localhost |
 | Port already allocated | Host port conflict | Remap in docker-compose + .env |
 | Backend can't reach mock-oidc | Wrong issuer URL | Use http://mock-oidc:10090 (internal) |

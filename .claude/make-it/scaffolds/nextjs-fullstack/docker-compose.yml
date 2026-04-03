@@ -24,6 +24,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
     ports:
       - "[APP_PORT]:3000"
     depends_on:
@@ -53,7 +55,7 @@ services:
   # Database (PostgreSQL)
   # --------------------------------------------------------------------------
   db:
-    image: postgres:16-alpine
+    image: ${DOCKER_HUB_PREFIX:-}postgres:16-alpine
     ports:
       - "[DB_PORT]:5432"
     environment:
@@ -77,6 +79,8 @@ services:
     build:
       context: ./mock-services/mock-oidc
       dockerfile: Dockerfile
+      args:
+        - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
     ports:
       - "[MOCK_OIDC_PORT]:10090"
     profiles:

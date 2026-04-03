@@ -1,5 +1,6 @@
 # ---- Stage 1: Dependencies ----
-FROM node:20-alpine AS deps
+ARG DOCKER_HUB_PREFIX=
+FROM ${DOCKER_HUB_PREFIX}node:20-alpine AS deps
 
 WORKDIR /app
 
@@ -7,7 +8,8 @@ COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # ---- Stage 2: Builder ----
-FROM node:20-alpine AS builder
+ARG DOCKER_HUB_PREFIX=
+FROM ${DOCKER_HUB_PREFIX}node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -25,7 +27,8 @@ RUN mkdir -p public
 RUN npm run build
 
 # ---- Stage 3: Runner ----
-FROM node:20-alpine AS runner
+ARG DOCKER_HUB_PREFIX=
+FROM ${DOCKER_HUB_PREFIX}node:20-alpine AS runner
 
 WORKDIR /app
 

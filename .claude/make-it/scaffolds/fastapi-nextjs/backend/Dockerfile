@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+ARG DOCKER_HUB_PREFIX=
+FROM ${DOCKER_HUB_PREFIX}python:3.12-slim
 
 RUN groupadd --gid 1001 appgroup && \
     useradd --uid 1001 --gid appgroup --shell /bin/bash --create-home appuser

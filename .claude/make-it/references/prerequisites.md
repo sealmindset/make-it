@@ -128,7 +128,19 @@ These apply only if you work in a corporate environment with specific access con
 - `SSL: CERTIFICATE_VERIFY_FAILED` when downloading packages
 - `x509: certificate signed by unknown authority` errors
 
-**If needed:**
+**Preferred fix (ACR proxy cache auto-discovery):**
+If your organization has an Azure Container Registry configured as a proxy cache (e.g., Dockyard Gateway), /make-it will automatically detect it and configure your project:
+1. /make-it detects the SSL proxy during preflight
+2. It runs `az acr list` + `az acr cache list` to find an ACR with proxy cache rules
+3. If found, it sets `DOCKER_HUB_PREFIX`, `MCR_PREFIX`, `GHCR_PREFIX` in your `.env`
+4. Docker pulls route through Azure (server-side), bypassing the SSL proxy entirely
+5. No need to disable the proxy -- it just works
+
+**Requirements for auto-discovery:**
+- Azure CLI installed and logged in (`az login`)
+- At least one Azure subscription with an ACR that has proxy cache rules configured
+
+**Fallback (if no ACR proxy cache is available):**
 - Ask your IT team about "developer bypass" or "developer exclusion" options
 - Some organizations provide special groups/permissions that allow temporary proxy disablement
 - Alternative: Add corporate root certificates to Docker and development tools (IT can provide guidance)

@@ -255,6 +255,19 @@ Dockerfile and entrypoint rules:
     CMD ["./entrypoint.sh"]
 - If using pg_isready in entrypoint.sh, install postgresql-client in the Dockerfile
 
+Registry proxy support (I08):
+- Every Dockerfile MUST have `ARG DOCKER_HUB_PREFIX=` before each FROM instruction
+- FROM lines use: `FROM ${DOCKER_HUB_PREFIX}image:tag`
+- In multi-stage builds, repeat `ARG DOCKER_HUB_PREFIX=` before EACH FROM
+  (Docker ARGs do not persist across build stages)
+- docker-compose.yml services with `build:` include build args:
+    args:
+      - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
+- docker-compose.yml services with `image:` use: `${DOCKER_HUB_PREFIX:-}image:tag`
+- .env.example documents DOCKER_HUB_PREFIX, MCR_PREFIX, GHCR_PREFIX
+- This allows developers behind corporate SSL proxies (Zscaler, Netskope) to route
+  Docker image pulls through an ACR proxy cache without code changes
+
 Make containers secure and optimized for production.
 ```
 
