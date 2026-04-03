@@ -26,13 +26,18 @@ def _is_secure() -> bool:
 
 
 def _is_trusted_url(url: str) -> bool:
-    """Validate that a URL shares the same scheme+host as the configured OIDC issuer."""
+    """Validate that a URL shares the same scheme+host as a configured OIDC URL.
+
+    In Docker, the backend talks to mock-oidc via OIDC_ISSUER_URL (internal DNS),
+    but the authorization endpoint uses OIDC_EXTERNAL_URL (browser-facing localhost).
+    Both hostnames are trusted.
+    """
     parsed = urllib.parse.urlparse(url)
-    issuer_parsed = urllib.parse.urlparse(settings.OIDC_ISSUER_URL)
-    return (
-        parsed.scheme in ("http", "https")
-        and parsed.hostname == issuer_parsed.hostname
-    )
+    if parsed.scheme not in ("http", "https"):
+        return False
+    issuer_host = urllib.parse.urlparse(settings.OIDC_ISSUER_URL).hostname
+    external_host = urllib.parse.urlparse(settings.OIDC_EXTERNAL_URL).hostname
+    return parsed.hostname in (issuer_host, external_host)
 
 
 async def _get_oidc_discovery() -> dict:

@@ -7,6 +7,7 @@ _WEAK_SECRETS = {"change-me-in-production", "secret", "changeme", ""}
 class Settings(BaseSettings):
     # OIDC
     OIDC_ISSUER_URL: str = "http://mock-oidc:10090"
+    OIDC_EXTERNAL_URL: str = "http://localhost:[MOCK_OIDC_PORT]"
     OIDC_CLIENT_ID: str = "mock-oidc-client"
     OIDC_CLIENT_SECRET: str = "mock-oidc-secret"
     # JWT

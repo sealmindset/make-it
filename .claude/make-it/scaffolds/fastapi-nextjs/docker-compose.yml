@@ -57,11 +57,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      mock-oidc:
-        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql+asyncpg://[APP_SLUG]:[APP_SLUG]@db:5432/[APP_SLUG]
       - OIDC_ISSUER_URL=http://mock-oidc:10090
+      - OIDC_EXTERNAL_URL=http://localhost:[MOCK_OIDC_PORT]
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-mock-oidc-client}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-mock-oidc-secret}
       - JWT_SECRET=${JWT_SECRET}
