@@ -461,13 +461,36 @@ to understand the patterns, then generate new code that follows the same convent
    - Read the scaffold's admin pages (`users/page.tsx`, `roles/page.tsx`) and the
      DataTable component to understand the pattern (apiGet, useAuth, DataTable, column defs)
    - Create new page files in `frontend/app/(auth)/[page-name]/page.tsx`
-   - All list pages MUST use the DataTable component (not plain HTML tables)
+
+   **DataTable is MANDATORY for every page that displays tabular data (U06, U08):**
+   - Import `DataTable` from `@/components/data-table` and `DataTableColumnHeader` from
+     `@/components/data-table-column-header`
+   - NEVER use plain HTML tables (`<table>`, `<tr>`, `<td>`) -- every list MUST use `<DataTable>`
+   - Every column definition MUST use `DataTableColumnHeader` for the `header` property --
+     this is what provides Excel-like filtering and sorting on each column
+   - Set `storageKey` prop to a unique string per page (e.g., `"projects-table"`) for
+     localStorage state persistence (filters, sorting, pagination, column visibility)
+   - Set `searchKey` prop to the most-searched column (e.g., `"name"`) for toolbar search
+   - Set `filterableColumns` prop for columns that benefit from toolbar-level faceted filters
+     (status, category, type columns -- provide `{ id, title, options }` array)
+   - Set `onRowClick` prop for detail navigation if applicable
+   - The scaffold's DataTable provides ALL of these features automatically when used correctly:
+     Excel-like column filters, multi-select checkboxes, sorting with visual indicators,
+     pagination (10/20/50/100), column visibility toggle, and state persistence to localStorage.
+     Do NOT reimplement any of these features -- just use the component.
+
+   **Theme compliance is MANDATORY (U09):**
    - All pages MUST fetch data through `apiGet`/`apiPost`/`apiPut`/`apiDelete` from `@/lib/api`
    - All pages MUST gate actions with `hasPermission(resource, action)` from `useAuth()`
    - Do NOT hardcode mock data in page components
    - NEVER use external font CDNs -- system font stacks only (Zscaler-safe)
-   - Use CSS variables (`var(--primary)`, etc.) or Tailwind semantic classes (`bg-primary`)
-     for all colors -- both work because tailwind.config.ts maps CSS variables
+   - NEVER use hardcoded colors (hex, rgb, hsl, oklch) in page components. ALL colors MUST
+     use CSS variables (`var(--primary)`, `var(--background)`, etc.) or Tailwind semantic
+     classes (`bg-primary`, `text-muted-foreground`, `border-border`). This ensures every
+     page responds to the light/dark/system theme toggle.
+   - Use `color-mix(in oklch, var(--primary) 15%, transparent)` for transparent tinted
+     backgrounds (e.g., status badges) -- this respects theme changes automatically
+   - Inline styles MUST reference CSS variables, never literal color values
 
 4. **Wire Navigation**
    - Update `frontend/components/sidebar.tsx` -- replace `[NAV_ITEMS]` with actual nav items
@@ -900,7 +923,32 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     d. Verify the bell badge shows correct unread count per role (different users see different counts)
     e. Verify notifications reference real seeded entity IDs (relatedEntityId is not null for at least some)
 
-31. **Test File Upload (if app has Documents page or upload feature):**
+31. **Test DataTable features on every list page (V12):**
+    For each page that displays tabular data:
+    a. Fetch the page HTML and verify it contains DataTable markup:
+       - Pagination text (e.g., "Page 1 of") and page size selector
+       - Column header buttons (not plain `<th>` text)
+       - Toolbar area with search input and/or filter buttons
+    b. Verify data rows exist (seed data must populate -- no empty "No results" state)
+    c. Verify the page source imports from `@/components/data-table` (read the page .tsx file)
+    d. Verify column definitions use `DataTableColumnHeader` (provides Excel filtering + sorting)
+    e. Verify `storageKey` prop is set (enables state persistence)
+    f. Grep all page files for raw `<table` usage -- any match outside the DataTable
+       component files themselves is a U06 violation. Fix by replacing with DataTable.
+
+32. **Test theme toggle (V13):**
+    a. Verify `<ModeToggle />` appears in the authenticated layout header (read the layout file)
+    b. Verify `<ThemeProvider>` wraps the app in root layout
+    c. Verify `globals.css` has both `:root` and `.dark` CSS variable blocks
+    d. Verify `tailwind.config.ts` has `darkMode: "class"`
+    e. Grep all `.tsx` page files (under `app/(auth)/`) for hardcoded colors:
+       - Pattern: `#[0-9a-fA-F]{3,8}` or `rgb(` or `hsl(` or `oklch(`
+       - Any match in a page file is a U09 violation (colors must use CSS variables or
+         Tailwind semantic classes so they respond to the theme toggle)
+       - Fix by replacing with `var(--*)` CSS variables or Tailwind classes
+    f. Verify the ModeToggle component uses the `mounted` state pattern (prevents hydration errors)
+
+33. **Test File Upload (if app has Documents page or upload feature):**
     a. Upload a valid PDF via the upload API endpoint -- verify 200 with extracted text
     b. Upload an image -- verify 200 with base64 content
     c. Upload an oversized file (> MAX_FILE_SIZE) -- verify 413 rejection
@@ -914,12 +962,12 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 If ANY test fails in Part B:
 
-29. Diagnose the root cause from the error context
-30. Fix the issue in the application code
-31. If the fix requires a container restart, rebuild and restart the affected service
-32. Re-run the failing test to confirm the fix
-33. After all fixes, re-run the FULL test suite to check for regressions
-34. Repeat the fix cycle (up to 3 full cycles)
+34. Diagnose the root cause from the error context
+35. Fix the issue in the application code
+36. If the fix requires a container restart, rebuild and restart the affected service
+37. Re-run the failing test to confirm the fix
+38. After all fixes, re-run the FULL test suite to check for regressions
+39. Repeat the fix cycle (up to 3 full cycles)
 
 Common issues and fixes:
 - Auth callback returns wrong role -> fix to query database by oidc_subject
@@ -941,6 +989,12 @@ Common issues and fixes:
 - API calls return 404 -> check for double /api prefix (BASE_URL="/api" + path "/api/...")
 - Frontend crashes with undefined -> types don't match backend schemas, read schemas first
 - OIDC callback cookie not set -> redirect_uri must go through frontend proxy
+- Page uses plain HTML table -> replace with DataTable component (import from @/components/data-table)
+- DataTable missing Excel filtering -> column defs must use DataTableColumnHeader (not plain text headers)
+- DataTable missing pagination -> verify data-table-pagination.tsx exists and is imported in data-table.tsx
+- Theme toggle missing from header -> add <ModeToggle /> to authenticated layout header bar
+- Page doesn't respond to dark mode -> replace hardcoded colors with CSS variables or Tailwind semantic classes
+- Hydration mismatch on theme -> add suppressHydrationWarning to <html> and <body>, use mounted pattern in ModeToggle
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 
@@ -949,7 +1003,7 @@ The app should be in the best possible state.
 
 **PART D: Declare success and hand off**
 
-35. Tell the user:
+40. Tell the user:
 
 "Your app is built and verified! Here's what I created:
 
@@ -963,7 +1017,7 @@ The app should be in the best possible state.
 Everything is working -- login, permissions, data, and all your pages. Now let's
 see your app in action!"
 
-36. **Save project state** -- Write `.make-it-state.md` to the project root:
+41. **Save project state** -- Write `.make-it-state.md` to the project root:
 
 ```markdown
 # Project State -- [PROJECT_NAME]
@@ -1006,7 +1060,7 @@ permissions, pages, API, seed data, mock services, and logout all verified.
 - Run /resume-it to continue development
 ```
 
-37. **Automatically invoke /try-it** to present the app to the user. The app is already
+42. **Automatically invoke /try-it** to present the app to the user. The app is already
 running and verified -- /try-it just needs to present the demo, take screenshots, and
 stay available for the user to explore.
 
@@ -1113,9 +1167,10 @@ That's it -- you just built your first app!"
    - No external font imports (system fonts only -- Zscaler-safe)
    - Shared authenticated layout (one, not duplicated)
    - Header bar: SidebarTrigger, Breadcrumbs, Spacer, QuickSearch, ModeToggle
-   - All four standard UI components generated
-   - All list pages use DataTable (not plain HTML tables)
-   - ThemeProvider wraps app, oklch CSS variables
+   - All four standard UI components generated (U01 -- all 4-file DataTable system + theme files)
+   - All list pages use DataTable with full features (U06, U08 -- Excel filtering, sorting, pagination, state persistence)
+   - ModeToggle functional and wired (U09 -- ThemeProvider, oklch CSS variables, no hardcoded colors in pages)
+   - Every page responds to light/dark toggle (no hardcoded hex/rgb/hsl colors in .tsx page files)
    - Database seed data populates all pages on first startup
    - Seed user oidc_subjects match mock-oidc subject IDs
    - Mock services in docker-compose.yml with seed script

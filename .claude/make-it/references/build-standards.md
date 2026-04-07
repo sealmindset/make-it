@@ -90,11 +90,11 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ## UI & Frontend
 
-**U01** [Tier 1] [FIX] **Standard UI components** -- All four must exist and be wired:
+**U01** [Tier 1] [BLOCK] **Standard UI components** -- All four must exist and be wired:
 - `components/breadcrumbs.tsx` with SEGMENT_LABELS for all pages
-- `components/data-table.tsx` with sorting, filtering, pagination
+- `components/data-table.tsx` + `data-table-column-header.tsx` + `data-table-toolbar.tsx` + `data-table-pagination.tsx` -- the FULL 4-file DataTable system (not just the main file)
 - `components/quick-search.tsx` with NAVIGATION_ITEMS for all pages (Cmd+K)
-- `components/mode-toggle.tsx` for light/dark theme
+- `components/mode-toggle.tsx` + `components/theme-provider.tsx` for light/dark/system theme
 
 **U02** [Tier 1] [FIX] **Header bar structure** -- Authenticated layout header: `SidebarTrigger | Breadcrumbs | <spacer> | QuickSearch | ModeToggle`
 
@@ -104,9 +104,29 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **U05** [Tier 1] [BLOCK] **No hardcoded mock data in pages** -- Pages fetch through service/API layer, not inline arrays.
 
-**U06** [Tier 1] [FIX] **All list pages use DataTable** -- No plain HTML tables for data lists.
+**U06** [Tier 1] [BLOCK] **All list pages use DataTable** -- No plain HTML tables (`<table>`, `<tr>`, `<td>`) for data lists. Every page that displays tabular data MUST import and use the `<DataTable>` component from `@/components/data-table`. Grep for `<table` in page files -- any match outside the DataTable component itself is a violation.
 
 **U07** [Tier 1] [FIX] **Frontend types match backend schemas** -- Field name spelling, nesting, list vs paginated response. Cross-reference Pydantic schemas against TypeScript interfaces.
+
+**U08** [Tier 1] [BLOCK] **DataTable feature completeness** -- Every DataTable instance MUST have ALL of the following features working (these come from the scaffold's 4-file DataTable system -- if any are missing, the scaffold files were modified or bypassed):
+- **Excel-like column filtering**: `DataTableColumnHeader` renders a filter icon on each column header. Clicking opens a dropdown with search box, "Select All"/"Clear" buttons, checkbox list with row counts, and max-height scrollable area. Uses `getFacetedRowModel()` and `getFacetedUniqueValues()` from TanStack.
+- **Column sorting**: Click column headers to toggle ascending/descending/unsorted. Visual indicators (ArrowUp, ArrowDown, ChevronsUpDown icons).
+- **Toolbar search**: Optional `searchKey` prop targets a specific column for real-time text filtering.
+- **Toolbar faceted filters**: Optional `filterableColumns` prop renders filter buttons in the toolbar with badge showing active filter count.
+- **Pagination**: Page size selector (10/20/50/100), First/Prev/Next/Last page buttons, "Page X of Y" indicator.
+- **Column visibility toggle**: "Columns" dropdown button in toolbar to show/hide columns.
+- **State persistence**: Sorting, filters, column visibility, and pagination state saved to localStorage via `storageKey` prop.
+- **Row click**: `onRowClick` callback prop for row interaction.
+Verification: Read `components/data-table.tsx` and confirm it imports from `@tanstack/react-table` and uses `getSortedRowModel`, `getFilteredRowModel`, `getFacetedRowModel`, `getPaginationRowModel`. Confirm `data-table-column-header.tsx` contains the Excel filter dropdown. Confirm `data-table-pagination.tsx` has page size selector and navigation buttons. Confirm `data-table-toolbar.tsx` has search input, faceted filter buttons, and column visibility dropdown.
+
+**U09** [Tier 1] [BLOCK] **ModeToggle functional and wired** -- The light/dark/system theme toggle MUST be:
+- **Present in header**: The authenticated layout header bar MUST render `<ModeToggle />` as the rightmost element (after QuickSearch).
+- **ThemeProvider wrapping app**: Root layout MUST wrap children in `<ThemeProvider>` with `attribute="class"`, `defaultTheme="system"`, `enableSystem`, `disableTransitionOnChange`.
+- **oklch CSS variables**: `globals.css` MUST define CSS custom properties for BOTH `:root` (light) and `.dark` (dark) themes using oklch color space. At minimum: `--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, `--success`, `--warning`.
+- **Tailwind wired**: `tailwind.config.ts` MUST set `darkMode: "class"` and extend colors to reference CSS variables (e.g., `primary: "var(--primary)"`).
+- **All pages use theme variables**: No hardcoded colors in page components. All colors MUST use either CSS variables (`var(--primary)`, `var(--background)`) or Tailwind semantic classes (`bg-primary`, `text-muted-foreground`, `border-border`). Grep for hardcoded hex (`#[0-9a-fA-F]{3,8}`), `rgb(`, `hsl(`, or `oklch(` in page files -- any match in a `.tsx` page file (not globals.css) is a violation.
+- **Hydration safe**: `<html>` and `<body>` tags MUST have `suppressHydrationWarning`. ModeToggle component MUST use `mounted` state pattern to prevent server/client mismatch.
+Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `ThemeProvider` in root layout. Grep for `darkMode` in tailwind.config.ts. Check globals.css for `.dark` section.
 
 ---
 
@@ -300,6 +320,22 @@ These checks run after the app is started (Docker containers up, health checks p
 
 **V10** [Tier 1, 5] [FIX] **Notifications working** -- GET /api/notifications/count returns { unreadCount } > 0 (seed data). GET /api/notifications returns notifications scoped to the logged-in user. PATCH /api/notifications marks notification as read. Different users see different unread counts (validates scoping). Bell badge reflects count (Tier 1).
 
+**V12** [Tier 1] [BLOCK] **DataTable features work on every list page** -- For each page that displays tabular data, verify with a browser/curl check:
+- Page HTML contains TanStack DataTable markup (look for the pagination row-count text like "Page 1 of", page size selector, and column header buttons)
+- Page has data rows (seed data must populate tables -- no "No results" empty states on first load)
+- Column headers are clickable (rendered as `<button>` elements, not plain text)
+- Filter icon exists in column headers (the Excel-like filter dropdown trigger)
+- Toolbar area contains: search input (if searchKey configured), column visibility "Columns" button, and pagination controls
+- Pagination shows correct controls: page size dropdown, First/Prev/Next/Last buttons
+- If the page source contains `<table` or `<tr>` elements outside the DataTable component, this is a violation -- all tabular data must go through DataTable
+
+**V13** [Tier 1] [BLOCK] **Theme toggle works end-to-end** -- Verify:
+- The authenticated layout header contains the ModeToggle component (visible as a button with Sun/Moon/Monitor icon)
+- The `<html>` element has a `class` attribute that changes between light/dark (managed by next-themes)
+- globals.css contains both `:root` and `.dark` CSS variable blocks
+- Pages render correctly in both themes (no elements with hardcoded colors that ignore the theme)
+- localStorage key `"theme"` is used by next-themes for persistence
+
 **V11** [Tier 1, 5] [BLOCK] **File upload works end-to-end** -- If the app has a Documents page or file upload feature: upload a valid PDF via the upload API endpoint, verify 200 response with extracted text content (not empty). Upload an image, verify base64 return. Upload oversized file, verify 413 rejection. Verify Docker volume mount exists (`docker exec {container} ls /app/data/documents`). If pdf-parse is in package.json, verify the import uses `pdf-parse/lib/pdf-parse` (NOT default import) by grepping the source.
 
 ---
@@ -361,3 +397,11 @@ When live verification fails, these are the most common root causes and fixes:
 | PDF upload ENOENT 05-versions-space.pdf | pdf-parse index.js debug wrapper | Import `pdf-parse/lib/pdf-parse` directly (F03) |
 | Upload works locally but 500 in Docker | Temp file path doesn't exist in container | Process files in-memory buffers, not temp files (F02) |
 | Uploaded documents lost on rebuild | No persistent volume | Add named Docker volume for /app/data (F05) |
+| Page uses plain `<table>` HTML | DataTable component not used | Replace with `<DataTable>` import from `@/components/data-table` (U06) |
+| Table has no filtering/sorting | Column defs use plain text headers | Change all column `header` properties to use `DataTableColumnHeader` component (U08) |
+| Table has no pagination | data-table-pagination.tsx missing or not imported | Verify all 4 DataTable files exist and data-table.tsx imports DataTablePagination (U08) |
+| Table state resets on page navigation | `storageKey` prop not set | Add `storageKey="page-name-table"` prop to each DataTable instance (U08) |
+| Theme toggle missing from app | ModeToggle not in authenticated layout header | Add `<ModeToggle />` as rightmost element in header bar after QuickSearch (U09) |
+| Pages don't respond to dark mode | Hardcoded colors in page .tsx files | Replace hex/rgb/hsl literals with CSS variables (`var(--*)`) or Tailwind classes (U09) |
+| Hydration mismatch on theme | Missing suppressHydrationWarning | Add `suppressHydrationWarning` to `<html>` and `<body>` tags in root layout (U09) |
+| Theme flashes on load | ThemeProvider not configured correctly | Verify `attribute="class"`, `enableSystem`, `disableTransitionOnChange` props (U09) |

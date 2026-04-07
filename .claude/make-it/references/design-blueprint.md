@@ -1654,21 +1654,44 @@ Auto-generated breadcrumbs from the current URL path. Positioned in the header b
 **Component 2: DataTable with Excel-Style Filters**
 
 Reusable paginated DataTable built on TanStack React Table v8 with Excel-style column filter popovers.
+The scaffold provides the complete 4-file DataTable system. These files are COPIED AS-IS from the
+scaffold and MUST NOT be regenerated or simplified. Every list page in every app MUST use this
+component -- no plain HTML tables, no simplified alternatives.
 
-- Multi-select filtering with checkbox lists and value counts
-- Comparison filtering for dates/numbers (>=, <=, >, <, =, !=)
-- Column sorting (A→Z, Z→A) via header popover
-- Global search across all columns
-- Column visibility toggle
-- Row grouping with expandable groups
-- Pagination with configurable page size (10/20/30/40/50)
-- LocalStorage persistence for filters, sorting, visibility, and page size
-- Hover actions on filter values: "Select Only" and "Select All Except"
-- Active filter count badge in toolbar
-- Reset button to clear all customizations
-- Dependencies: `@tanstack/react-table` v8
-- Components: `components/data-table.tsx`, `components/data-table-column-header.tsx`, `components/data-table-toolbar.tsx`, `components/data-table-pagination.tsx`
-- Every list page in the app uses this DataTable component instead of plain HTML tables
+**4-file system (all required -- missing any file means broken features):**
+- `components/data-table.tsx` -- Main container: wires TanStack models, renders table, delegates to sub-components
+- `components/data-table-column-header.tsx` -- Excel-like filter popover per column: sort toggle (ArrowUp/ArrowDown/ChevronsUpDown), filter dropdown with search box, "Select All"/"Clear" buttons, checkbox list with row counts, max-height scrollable area. Uses `getFacetedRowModel()` and `getFacetedUniqueValues()` for smart value extraction.
+- `components/data-table-toolbar.tsx` -- Toolbar: global search input (via `searchKey` prop), faceted filter buttons (via `filterableColumns` prop) with active-count badges, column visibility "Columns" dropdown, reset button to clear all customizations
+- `components/data-table-pagination.tsx` -- Pagination: page size selector (10/20/50/100), First/Prev/Next/Last page buttons with icons, "Page X of Y" indicator, row count display
+
+**Mandatory features (build-verify checks U06, U08, V12):**
+- Excel-like column filtering with multi-select checkboxes and value counts
+- Column sorting with visual direction indicators (ascending/descending/unsorted)
+- Toolbar search targeting a specific column via `searchKey` prop
+- Toolbar faceted filters via `filterableColumns` prop with badge showing active count
+- Pagination with page size selector and navigation buttons
+- Column visibility toggle (show/hide columns)
+- State persistence to localStorage via `storageKey` prop (filters, sorting, visibility, page size)
+- Row click callback via `onRowClick` prop
+
+**Every column definition MUST use DataTableColumnHeader:**
+```typescript
+// CORRECT -- provides Excel filtering + sorting on this column
+header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />
+
+// WRONG -- no filtering, no sorting, just plain text
+header: "Status"
+```
+
+**Every DataTable instance MUST set these props:**
+- `columns` -- with DataTableColumnHeader on every column
+- `data` -- from API fetch (never hardcoded)
+- `storageKey` -- unique per page (e.g., "projects-table") for state persistence
+- `searchKey` -- the most-searched column ID for toolbar search
+- Optional: `filterableColumns` for toolbar-level faceted filters, `onRowClick` for navigation
+
+Dependencies: `@tanstack/react-table` v8
+Every list page in the app uses this DataTable component instead of plain HTML tables.
 
 **Component 3: Navigation Search (Command Palette)**
 
@@ -1688,17 +1711,28 @@ Quick search / command palette accessible via ⌘K (Mac) or Ctrl+K (Windows). Po
 **Component 4: Theme Toggle (Light/Dark/System)**
 
 Light/dark/system theme toggle using `next-themes`. Positioned as the rightmost item in the header bar.
+The scaffold provides both files. These are COPIED AS-IS and MUST NOT be regenerated.
+Build-verify check U09 verifies the toggle is wired and all pages respond to theme changes.
 
-- Dropdown menu with Light, Dark, and System options
-- Animated Sun/Moon icon transition
+- Cycles through three themes: light → dark → system → light (single button click)
+- Icons change per theme: Sun (light), Moon (dark), Monitor (system)
 - `suppressHydrationWarning` on `<html>` and `<body>` to prevent mismatches
 - `mounted` state pattern to prevent server/client rendering conflicts
-- Persists theme choice in localStorage across sessions
+- ThemeProvider with `attribute="class"`, `defaultTheme="system"`, `enableSystem`, `disableTransitionOnChange`
+- Persists theme choice in localStorage (key: `"theme"`) across sessions
 - Respects OS `prefers-color-scheme` preference when set to System
-- oklch CSS variables for both light and dark color schemes
+- oklch CSS variables for both `:root` (light) and `.dark` (dark) color schemes
+- `tailwind.config.ts` MUST set `darkMode: "class"` and extend all colors via CSS variables
 - Dependencies: `next-themes`
 - Components: `components/theme-provider.tsx`, `components/mode-toggle.tsx`
 - ThemeProvider wraps the entire app in the root layout
+
+**CRITICAL: All pages must respond to the theme toggle (U09):**
+- No hardcoded colors (hex, rgb, hsl, oklch literals) in `.tsx` page files
+- All colors via CSS variables (`var(--primary)`, `var(--background)`) or Tailwind semantic classes (`bg-primary`, `text-muted-foreground`, `border-border`)
+- Status badges use `color-mix(in oklch, var(--*) 15%, transparent)` for theme-aware tinting
+- Inline styles MUST reference CSS variables, never literal color values
+- Build-verify greps all page files for hardcoded colors -- any match is a violation
 
 **Implementation generates:**
 

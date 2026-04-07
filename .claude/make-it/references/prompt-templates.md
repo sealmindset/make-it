@@ -2337,38 +2337,68 @@ Requirements:
 
 --- Component 2: DataTable with Excel-Style Filters ---
 
-Files:
-- components/data-table.tsx (main container)
-- components/data-table-column-header.tsx (Excel-style filter popover per column)
-- components/data-table-toolbar.tsx (global search, filter badges, column visibility, reset)
-- components/data-table-pagination.tsx (rows per page, page navigation)
+**IMPORTANT: For FastAPI + Next.js scaffold builds, the DataTable is PROVIDED by the scaffold
+(4 files copied as-is). Do NOT regenerate these files. Only use this section for non-scaffold
+builds or as a reference for what the scaffold provides.**
 
-Create a reusable, paginated DataTable using TanStack React Table v8 (@tanstack/react-table).
+Files (all 4 are REQUIRED -- missing any file breaks features):
+- components/data-table.tsx (main container -- wires TanStack models, renders table)
+- components/data-table-column-header.tsx (Excel-style filter popover per column)
+- components/data-table-toolbar.tsx (global search, faceted filter buttons, column visibility)
+- components/data-table-pagination.tsx (page size selector, page navigation buttons)
 
 Dependencies to install: @tanstack/react-table
-shadcn components needed: button, input, badge, checkbox, popover, dropdown-menu, select,
-  scroll-area, table, separator
 
 Requirements:
-- Custom FilterValue type supporting both array (multi-select) and comparison operators
-- arrayIncludesFilter function handling: array filtering, comparison (>=, <=, >, <, =, !=),
-  date parsing, numeric parsing, string comparison
-- State: sorting, columnFilters, columnVisibility, globalFilter, grouping, expanded, pagination
-- LocalStorage persistence with storage key "table-filters-{tableId}"
-- Persisted state validation against current column definitions
-- Column header popover with:
-  - Sort A→Z / Z→A buttons with clear
-  - Hide column button
-  - Mode toggle for date/number columns (Multi-select vs Comparison)
-  - Multi-select mode: search within values, Select All / Clear / Invert,
-    checkbox list with counts, hover actions (Select Only, Exclude)
-  - Comparison mode: operator selector + value input
-- Toolbar: global search, active filter count badge, group by dropdown,
-  column visibility popover, reset button (orange when customizations active)
-- Pagination: rows per page (10/20/30/40/50), direct page input, First/Prev/Next/Last buttons
+- Custom filter function (arrIncludesFilter) for array-based multi-select filtering
+- State: sorting, columnFilters, columnVisibility, pagination -- ALL persisted to localStorage
+- LocalStorage persistence with configurable storageKey prop (e.g., "users-table")
+- Persisted state keys: {storageKey}:sorting, {storageKey}:columnFilters, etc.
+- Error handling on localStorage (graceful fallback on quota or parse errors)
+- Column header (DataTableColumnHeader) with:
+  - Sort toggle: click to cycle ascending → descending → unsorted
+  - Visual sort indicators: ArrowUp (asc), ArrowDown (desc), ChevronsUpDown (unsorted)
+  - Excel-like filter dropdown with:
+    - Search box to filter available values ("Search values...")
+    - "Select All" / "Clear" buttons
+    - Checkbox list showing each unique value with row count
+    - Max-height scrollable area (192px) for long value lists
+    - "X of Y selected" indicator
+    - Close on outside click (useRef + document mousedown listener)
+  - Uses getFacetedRowModel() and getFacetedUniqueValues() for smart value extraction
+- Toolbar (DataTableToolbar) with:
+  - Search input targeting a specific column (via searchKey prop)
+  - Faceted filter buttons (via filterableColumns prop) with badge showing active count
+  - Column visibility "Columns" dropdown with checkboxes per column
+  - Active filter count badge
+  - "Reset" button to clear all filters when customizations are active
+- Pagination (DataTablePagination) with:
+  - Page size selector dropdown: 10, 20, 50, 100 rows
+  - Navigation: First (ChevronsLeft), Prev (ChevronLeft), Next (ChevronRight), Last (ChevronsRight)
+  - "Page X of Y" text indicator
+  - Row count display (total filtered rows)
+  - Smart button disabling (first page disables First/Prev, last page disables Next/Last)
 
-Every list page in the app MUST use this DataTable component. Define column definitions
-with DataTableColumnHeader for each list page:
+DataTable component props:
+  columns: ColumnDef<TData, TValue>[]   -- column definitions (MUST use DataTableColumnHeader)
+  data: TData[]                          -- data array from API
+  searchKey?: string                     -- column ID for toolbar search
+  searchPlaceholder?: string             -- search input placeholder text
+  filterableColumns?: FilterableColumn[] -- toolbar faceted filter definitions
+  storageKey?: string                    -- localStorage key prefix for state persistence
+  onRowClick?: (row: TData) => void      -- row click callback
+
+**MANDATORY: Every column definition MUST use DataTableColumnHeader for the header property:**
+```typescript
+// CORRECT -- provides Excel filtering + sorting
+header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />
+
+// WRONG -- no filtering, no sorting, defeats the purpose of the DataTable
+header: "Status"
+```
+
+Every list page in the app MUST use this DataTable component with ALL props configured.
+Define column definitions with DataTableColumnHeader for each list page:
 [PAGES_THAT_HAVE_LISTS]
 
 --- Component 3: Navigation Search (Command Palette) ---
@@ -2402,9 +2432,12 @@ Populate SETTINGS_ITEMS for any settings/admin pages.
 
 --- Component 4: Theme Toggle (Light/Dark/System) ---
 
-Files:
+**IMPORTANT: For FastAPI + Next.js scaffold builds, both theme files are PROVIDED by the scaffold
+(copied as-is). Do NOT regenerate these files. Only use this section for non-scaffold builds.**
+
+Files (both REQUIRED):
 - components/theme-provider.tsx (next-themes wrapper)
-- components/mode-toggle.tsx (dropdown toggle)
+- components/mode-toggle.tsx (cycle toggle button)
 
 Dependencies to install: next-themes
 
@@ -2415,12 +2448,22 @@ Requirements:
   - <body suppressHydrationWarning>
   - ThemeProvider with attribute="class", defaultTheme="system", enableSystem,
     disableTransitionOnChange
-- ModeToggle: dropdown menu with Light (Sun icon), Dark (Moon icon), System (Monitor icon)
-- Animated Sun/Moon icon transition using rotate/scale with dark: variant
-- mounted state pattern to prevent hydration mismatch (render disabled placeholder until mounted)
+- ModeToggle: single button that CYCLES through themes on click: light → dark → system → light
+  - Icons change per current theme: Sun (light), Moon (dark), Monitor (system)
+  - mounted state pattern to prevent hydration mismatch (render disabled placeholder until mounted)
+  - Title attribute shows current theme name
 - globals.css must include oklch CSS variables for both :root (light) and .dark themes
   covering: background, foreground, card, popover, primary, secondary, muted, accent,
-  destructive, border, input, ring, chart-1 through chart-5, sidebar variants
+  destructive, border, input, ring, success, warning, and their -foreground variants
+- tailwind.config.ts must set darkMode: "class" and extend all theme colors via CSS variables
+
+**CRITICAL: All pages MUST respond to the theme toggle (build-verify check U09, V13):**
+- No hardcoded colors anywhere in .tsx page files (no hex #fff, no rgb(), no hsl(), no oklch() literals)
+- All colors via CSS variables (var(--primary), var(--background), etc.) or Tailwind semantic
+  classes (bg-primary, text-muted-foreground, border-border)
+- Status badges use color-mix: `color-mix(in oklch, var(--primary) 15%, transparent)`
+- Inline styles must reference CSS variables, never literal color values
+- Build-verify greps page files for hardcoded color patterns -- violations are auto-fixed
 
 --- Layout Integration ---
 
