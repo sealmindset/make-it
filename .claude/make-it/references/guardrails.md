@@ -254,7 +254,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 
 #### Prompt Size Validation
 - Maximum prompt size MUST be enforced BEFORE sending to the AI provider
-- Configurable via AI_MAX_PROMPT_CHARS env var (default: 100,000 characters)
+- Configurable via AI_MAX_PROMPT_CHARS env var (default: 300,000 characters)
 - For document analysis agents: AI_MAX_DOCUMENT_CHARS env var (default: 500,000 characters)
 - Validation happens in the BaseAgent or provider abstraction layer -- NOT in individual routes
 - Reject oversized prompts with HTTP 413 and a clear error message
@@ -305,6 +305,99 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Log the full provider error server-side for debugging
 - NEVER expose provider name, model name, token counts, or API keys in error responses
 - Build-verify: force an AI error (invalid endpoint or misconfigured credentials); confirm client sees generic message
+
+#### AI Pre-Flight Health Checks (MANDATORY for all AI apps)
+- Pre-flight checks run on application startup AFTER database migrations, BEFORE binding HTTP port
+- This ensures the app never accepts requests when AI infrastructure is broken
+- Prevents silent failures where uploads succeed but AI analysis silently errors
+
+**Checks (all must pass within 5 seconds total, 2-second timeout per check):**
+1. **Provider reachable:** HTTP HEAD or lightweight API call to the configured AI provider endpoint.
+   Catches: wrong endpoint URL, DNS failures, network segmentation, corporate proxy blocking.
+2. **Authentication valid:** Send a minimal request to the configured provider and confirm
+   200 not 401/403. Catches: rotated API keys, misconfigured credentials, expired secrets.
+3. **Model available:** Send a minimal request (max_tokens=1) to the configured model name.
+   Catches: model name typos, model deprecated/removed, wrong model tier.
+4. **Upload infrastructure ready (if file upload enabled):** Verify DOCUMENTS_PATH and
+   UPLOAD_CACHE_PATH directories exist and are writable (create a temp file, delete it).
+   Catches: missing Docker volume mount, wrong permissions, read-only filesystem.
+5. **Extraction libraries loadable (if file upload enabled):** Import pdf-parse/pdfplumber,
+   docx parser, xlsx parser and confirm no ImportError/ModuleNotFoundError.
+   Catches: missing dependencies after Docker image rebuild, broken installations.
+
+**On failure:**
+- Log the specific check that failed with a clear, actionable message:
+  `"AI pre-flight FAILED: check 2 (authentication) — 401 Unauthorized from https://... — verify AZURE_AI_FOUNDRY_API_KEY or run 'az login'"`
+- Exit with non-zero code so Docker/orchestrator restarts the container
+- Do NOT start accepting HTTP requests — a half-functional app is worse than a restart loop
+
+**Implementation:**
+```python
+# In entrypoint.sh or app startup (before uvicorn binds):
+async def run_preflight():
+    checks = [
+        ("provider_reachable", check_provider_reachable),
+        ("auth_valid", check_auth_valid),
+        ("model_available", check_model_available),
+    ]
+    if settings.DOCUMENTS_PATH:
+        checks.append(("upload_dirs", check_upload_dirs))
+        checks.append(("extraction_libs", check_extraction_libs))
+
+    for name, check_fn in checks:
+        try:
+            await asyncio.wait_for(check_fn(), timeout=2.0)
+            logger.info(f"AI pre-flight PASSED: {name}")
+        except Exception as e:
+            logger.error(f"AI pre-flight FAILED: {name} — {e}")
+            sys.exit(1)
+```
+
+**Environment variables:**
+- `AI_PREFLIGHT_ENABLED` (default: true) — set to false in CI/test environments to skip
+- Pre-flight uses the SAME credentials as the running app — no separate config needed
+
+#### AI-Powered Document Analysis Pipeline (when file upload + AI both enabled)
+- When an app has BOTH file upload (F01-F09) AND AI features, the upload pipeline extends
+  to include AI analysis — this is NOT optional, it is the primary value of AI-powered uploads
+- The pipeline runs: extract -> validate size -> sanitize -> AI analyze -> validate output -> store
+
+**Document analysis flow:**
+```
+Upload → Extract Text (F04) → Size Check (AI_MAX_DOCUMENT_CHARS) → Sanitize
+    → Wrap in <document> tags → AI Provider (document-analysis prompt from managed_prompts)
+    → Validate AI Output → Store (raw text + AI analysis, separate fields)
+```
+
+**Critical rules:**
+- AI analysis uses AI_MAX_DOCUMENT_CHARS (300k), NOT AI_MAX_PROMPT_CHARS
+  Documents are larger than chat messages; the limits exist for different reasons
+- Documents are wrapped in `<document>` tags (not `<user_input>`):
+  `<document>{sanitized_extracted_text}</document>`
+- The document-analysis prompt is loaded from managed_prompts (not hardcoded)
+  — admin can edit the analysis instructions without code deploy
+- AI failure MUST NOT block document storage — if AI errors, save the document
+  with extracted text and null AI analysis. Log the error. Show the user:
+  "Document uploaded successfully. AI analysis is temporarily unavailable."
+- Raw extracted text and AI analysis are ALWAYS stored separately (never merged)
+  — this preserves the source of truth and allows re-analysis later
+- The upload wizard (F07) adds an "AI Analysis" step with a streaming progress indicator
+  — uses the same SSE mechanism from AI11 so users see incremental progress
+
+**Upload wizard with AI step:**
+1. Upload zone (drag/drop/browse) — unchanged from F07
+2. Processing: "Extracting content..." — unchanged from F07
+3. **NEW: AI Analysis: "Analyzing document..."** — streaming progress indicator
+   showing AI processing with typewriter-style token display
+4. Review: extracted fields + AI analysis results + confidence indicators
+5. Confirm and save
+
+**Managed prompt for document analysis:**
+- Slug: `document-analysis` (or domain-specific like `contract-analysis`)
+- Seeded in managed_prompts table during migration
+- Editable via admin UI (AI Instructions page)
+- Includes structured output schema (JSON mode) for consistent results
+- Safety preamble prepended at runtime (as with all managed prompts)
 
 #### Conversation History Management (if app has multi-turn AI)
 - Maximum conversation history depth: configurable via AI_MAX_HISTORY_TURNS env var (default: 20)
@@ -619,6 +712,20 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] Provider abstraction includes stream() method alongside complete() and embed()
 - [ ] Chat page at /chat (or /ai/chat) with sidebar + panel layout
 - [ ] ai.chat permission exists in RBAC seed data
+
+**AI Pre-Flight & Document Analysis (when AI features enabled):**
+- [ ] AI pre-flight checks run on startup before HTTP port binds
+- [ ] Pre-flight verifies: provider reachable, auth valid, model available
+- [ ] Pre-flight verifies upload infrastructure if file upload enabled (dirs writable, libs loadable)
+- [ ] Pre-flight failure logs specific check name and exits non-zero
+- [ ] AI_PREFLIGHT_ENABLED env var exists (default: true, false for CI/test)
+- [ ] If file upload + AI: upload pipeline includes AI analysis step after extraction
+- [ ] Document analysis uses AI_MAX_DOCUMENT_CHARS (300k), not AI_MAX_PROMPT_CHARS
+- [ ] Extracted text wrapped in `<document>` tags before AI submission
+- [ ] AI failure does NOT block document storage (graceful degradation)
+- [ ] Raw extracted text and AI analysis stored separately (never merged)
+- [ ] Upload wizard includes "AI Analysis" step with streaming progress
+- [ ] Document-analysis prompt seeded in managed_prompts table
 
 **Prompt Management (Tier 2 MANDATORY for any AI app):**
 - [ ] Prompts externalized (not hardcoded in business logic)

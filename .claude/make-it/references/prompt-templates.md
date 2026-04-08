@@ -1803,7 +1803,7 @@ Apply this middleware to ALL routes that invoke AI agents:
 
 Add to BaseAgent (or provider abstraction):
 - Before sending to AI provider, check total prompt length
-- Max chars: AI_MAX_PROMPT_CHARS env var (default: 100,000)
+- Max chars: AI_MAX_PROMPT_CHARS env var (default: 300,000)
 - For document analysis: AI_MAX_DOCUMENT_CHARS env var (default: 500,000)
 - Reject oversized prompts with HTTP 413: { error: "Input too large", maxChars: N }
 
@@ -1972,7 +1972,7 @@ Update the admin UI:
 Add to .env.example:
 AI_RATE_LIMIT_REQUESTS_PER_MINUTE=20
 AI_RATE_LIMIT_TOKENS_PER_MINUTE=50000
-AI_MAX_PROMPT_CHARS=100000
+AI_MAX_PROMPT_CHARS=300000
 AI_MAX_DOCUMENT_CHARS=500000
 AI_MAX_HISTORY_TURNS=20
 AI_PII_MASKING_ENABLED=true

@@ -299,6 +299,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Security (X01-X06):** Grep for hardcoded secrets, external font imports
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **AI (AI01-AI15):** Only if AI features detected -- check for provider abstraction, sanitization, SSE streaming (chat-panel.tsx, use-streaming.ts, conversations table, ai_chat router), conversation persistence
+   - **File Upload + AI (F10-F11):** Only if BOTH file upload AND AI detected -- check for AI analysis in upload pipeline, document-analysis prompt in managed_prompts, AI pre-flight checks on startup (AI_PREFLIGHT_ENABLED env var, pre-flight module)
 
 c. **Categorize results:**
    - **PASS:** Check is satisfied
@@ -368,6 +369,8 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | AI prompts: Tier 3 Custom (protected) | (Do NOT suggest upgrade -- note as "Custom prompt management: up to date" in status) |
 | SSE streaming missing (AI11-AI15 gaps) | "Your AI responses load all-at-once after a long wait. Want me to add streaming? You'll get a ChatGPT-style typewriter effect and no more timeout problems." |
 | SSE streaming partial | "Your AI has some streaming support but it's incomplete -- [missing pieces]. Want me to finish wiring it up?" |
+| File upload + AI without AI analysis (F10 gap) | "Your app has file upload and AI features but uploads aren't AI-powered yet. Want me to add AI document analysis with streaming progress to the upload pipeline?" |
+| AI without pre-flight checks (F11 gap) | "Your app uses AI but doesn't verify AI connectivity on startup. Want me to add pre-flight health checks so misconfigurations are caught at deploy time, not when users are mid-upload?" |
 | Notifications missing (N01-N08 gaps) | "Your app doesn't have an in-app notification system yet -- users won't know when things need their attention. Want me to add one?" |
 | File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
 | pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |
