@@ -239,6 +239,37 @@ Tier 3 indicators (any ONE triggers Tier 3 classification):
 
 Reference build-standards.md AI08 and AI08-upgrade for the full specification.
 
+**h. ALWAYS check for SSE streaming gaps (if AI features detected):**
+
+```bash
+# Check for SSE streaming components
+ls frontend/components/chat-panel.tsx frontend/components/chat-message.tsx \
+   frontend/components/chat-input.tsx frontend/components/conversation-sidebar.tsx 2>/dev/null
+
+# Check for useStreamingResponse hook
+ls frontend/lib/ai/use-streaming.ts frontend/hooks/use-streaming.ts 2>/dev/null
+
+# Check for conversation tables
+grep -r "conversations\|conversation_messages" backend/alembic/versions/ 2>/dev/null
+
+# Check for SSE chat router
+ls backend/app/routers/ai_chat.py 2>/dev/null
+grep -r "text/event-stream\|StreamingResponse" backend/app/routers/ 2>/dev/null
+
+# Check for provider stream() method
+grep -r "async def stream\|def stream" backend/app/services/ai_provider.py 2>/dev/null
+```
+
+**Classify SSE status:**
+- **SSE Standard:** All 4 chat components exist, useStreamingResponse hook exists, conversations table exists, ai_chat router with StreamingResponse
+- **SSE Missing:** AI features detected but no SSE streaming infrastructure
+- **SSE Partial:** Some components exist but not all (e.g., has StreamingResponse but no chat UI)
+
+**If SSE Missing or Partial:**
+- Add to catch-up work: "SSE streaming can be added for ChatGPT-style typewriter effect and timeout elimination"
+- List what's missing: components, hook, tables, router, provider stream() method
+- Note: this is a BLOCK check (AI11) -- required for all AI apps
+
 **8. Standards catch-up scan (build-standards.md):**
 
 Compare the current project against the latest `build-standards.md` to detect patterns
@@ -267,7 +298,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Settings (G01-G07):** Check for app_settings table in migrations, settings service, admin page
    - **Security (X01-X06):** Grep for hardcoded secrets, external font imports
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
-   - **AI (AI01-AI10):** Only if AI features detected -- check for provider abstraction, sanitization
+   - **AI (AI01-AI15):** Only if AI features detected -- check for provider abstraction, sanitization, SSE streaming (chat-panel.tsx, use-streaming.ts, conversations table, ai_chat router), conversation persistence
 
 c. **Categorize results:**
    - **PASS:** Check is satisfied
@@ -335,6 +366,8 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | AI prompts: Tier 0 (no prompt mgmt) | "Your AI agents have [N] prompts hardcoded in the code. Want me to add a prompt management system so they can be edited without redeploying?" |
 | AI prompts: Tier 2 Outdated | "Your AI prompt management can be upgraded to the latest standard -- better editing experience, version history, and safety indicators. Want me to upgrade it?" |
 | AI prompts: Tier 3 Custom (protected) | (Do NOT suggest upgrade -- note as "Custom prompt management: up to date" in status) |
+| SSE streaming missing (AI11-AI15 gaps) | "Your AI responses load all-at-once after a long wait. Want me to add streaming? You'll get a ChatGPT-style typewriter effect and no more timeout problems." |
+| SSE streaming partial | "Your AI has some streaming support but it's incomplete -- [missing pieces]. Want me to finish wiring it up?" |
 | Notifications missing (N01-N08 gaps) | "Your app doesn't have an in-app notification system yet -- users won't know when things need their attention. Want me to add one?" |
 | File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
 | pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |

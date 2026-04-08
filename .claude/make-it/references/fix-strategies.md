@@ -366,8 +366,8 @@ safety preamble.
 ### Risk Level: MEDIUM-HIGH (must understand each file's LLM usage pattern)
 
 ### When to classify as MANUAL
-- File has complex multi-turn conversation management
-- File uses streaming responses
+- File has complex multi-turn conversation management with custom state machines
+- File uses streaming responses with custom SSE event formats (non-standard)
 - File has custom error handling that conflicts with safety wrappers
 - File uses multiple LLM providers with different call signatures
 
@@ -552,9 +552,9 @@ Is it a code pattern with a mechanical fix?
 
 Is it an AI safety integration gap?
   Yes -> Can I identify all LLM call sites in the file?
-    Yes -> Is the calling pattern standard (single call, sync/async)?
+    Yes -> Is the calling pattern standard (single call, sync/async, or scaffold SSE streaming)?
       Yes -> SEMI-AUTO (Strategy 8)
-      No  -> MANUAL (streaming, multi-turn, custom patterns)
+      No  -> MANUAL (custom streaming formats, non-standard multi-turn patterns)
     No  -> MANUAL
   No -> Continue
 

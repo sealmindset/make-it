@@ -314,6 +314,117 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - History storage: server-side only (database or cache) -- NEVER in JWT or client-side storage
 - Build-verify: confirm history truncation works by sending messages exceeding the limit
 
+#### SSE Streaming for AI Responses (MANDATORY for all AI apps)
+- ALL AI endpoints that generate text responses MUST stream tokens via Server-Sent Events (SSE)
+- Non-streaming AI endpoints are ONLY acceptable for sub-second structured extraction
+  (JSON schema responses under 500 tokens, e.g., classification, scoring, entity extraction)
+- This eliminates timeout problems: SSE keeps the HTTP connection alive indefinitely with
+  heartbeat events, so corporate proxies, load balancers, and browser timeouts never kill
+  the request mid-generation
+
+**Backend SSE Pattern (FastAPI):**
+- AI chat routes return `StreamingResponse(media_type="text/event-stream")`
+- The route calls the AI provider's `stream()` method (not `complete()`)
+- Each token is sent as: `data: {"token": "word ", "done": false}\n\n`
+- Final event: `data: {"token": "", "done": true, "conversation_id": "uuid", "message_id": "uuid", "token_count": 347}\n\n`
+- Heartbeat every AI_SSE_HEARTBEAT_INTERVAL_SECONDS (default 15): `data: {"heartbeat": true}\n\n`
+- On provider error mid-stream: `data: {"error": "AI processing failed. Please try again.", "done": true}\n\n`
+  (generic message -- never expose provider details in the SSE stream)
+- Backend MUST support both SSE and non-streaming via Accept header:
+  `Accept: text/event-stream` -> streaming, `Accept: application/json` -> wait for complete response
+- Cache-Control: no-cache, Connection: keep-alive, X-Accel-Buffering: no (disables nginx/proxy buffering)
+
+**Frontend SSE Proxy Pattern (Next.js):**
+- Browser connects to Next.js API route (same-origin), NOT directly to the backend
+- Next.js route proxies the SSE stream from backend, forwarding auth cookies
+- This preserves the same-origin cookie model used for all other API calls
+- The proxy route reads the backend stream and re-emits events to the browser
+- If the backend stream errors, the proxy sends the error event and closes cleanly
+
+**Frontend Hook: useStreamingResponse**
+- Located in `lib/ai/use-streaming.ts` (or `hooks/use-streaming.ts`)
+- Returns: `{ sendMessage, tokens, isStreaming, error, abort, retryCount }`
+- `sendMessage(content)`: POST to SSE endpoint, begin consuming events
+- `tokens`: accumulated string, updated on each SSE event (triggers re-render)
+- `isStreaming`: true while receiving events, false on done/error
+- `error`: null or error message string
+- `abort()`: AbortController.abort() to cancel mid-stream (user clicks stop)
+- Uses `fetch()` with ReadableStream (not EventSource) for POST support and auth headers
+- Incremental token assembly: concatenates `event.token` to running string on each event
+- Heartbeat events are consumed silently (reset a client-side timeout, not displayed)
+
+**SSE Error Recovery Chain:**
+1. SSE connection fails or stream interrupts -> auto-retry (1s, 2s, 4s exponential backoff, max 3 attempts)
+2. All SSE retries exhausted -> fall back to polling mode:
+   - POST message with `Accept: application/json` (non-streaming)
+   - Poll `GET /api/ai/conversations/{id}/messages?after={last_id}` every AI_SSE_POLL_INTERVAL_SECONDS
+   - Timeout after AI_SSE_POLL_TIMEOUT_SECONDS
+3. Polling timeout -> show user-friendly error with retry button:
+   "AI is temporarily unavailable. Please try again."
+- The `useStreamingResponse` hook manages this full lifecycle transparently
+- Users see seamless degradation: streaming -> buffered response -> error with retry
+
+**Conversation Persistence:**
+- AI chat conversations are stored server-side in the database (NEVER client-side only)
+- 2 tables: `conversations` (id, user_id, title, agent_slug, created_at, updated_at, archived_at)
+  and `conversation_messages` (id, conversation_id, role, content, token_count, model, created_at)
+- `role` is enum: "user", "assistant", "system" (system messages never displayed in UI)
+- Title auto-generated from first user message (truncated to 80 chars), editable via PATCH
+- Soft-delete via `archived_at` timestamp (not hard delete)
+- Session isolation: ALL conversation queries include `WHERE user_id = current_user.id`
+- History loading: `GET /api/ai/conversations/{id}` returns conversation + all messages ordered by created_at
+- Message creation: `POST /api/ai/conversations/{id}/messages` accepts `{ content: string }`,
+  creates the user message row, invokes the AI provider stream, creates the assistant message
+  row on stream completion (with token_count and model), returns SSE stream to the caller
+- Conversation list: `GET /api/ai/conversations` returns user's conversations ordered by
+  updated_at desc, paginated (limit/offset), excludes archived
+
+**Chat Panel Scaffold Components (4 components):**
+- `chat-panel.tsx`: Full chat interface. Props: `agentSlug` (routes to correct AI agent),
+  `conversationId?` (resume existing or create new). Contains message list (scroll-to-bottom
+  on new messages, auto-scroll disabled if user scrolled up), streaming message bubble
+  (blinking cursor during generation), and ChatInput. Empty state: centered with agent
+  description and 3-4 suggested starter questions (configurable per agent via managed_prompts).
+  Uses `useStreamingResponse` hook internally.
+- `chat-message.tsx`: Single message bubble. Props: `role`, `content`, `timestamp`, `isStreaming`.
+  User messages: right-aligned, themed primary color. Assistant messages: left-aligned, muted
+  background. Content rendered via react-markdown (code blocks with syntax highlighting via
+  rehype-highlight, inline code styled). Copy button (copies raw markdown). Timestamp shown
+  on hover. During streaming (`isStreaming=true`): content updates incrementally, blinking
+  cursor appended after last token.
+- `chat-input.tsx`: Auto-resizing textarea (min 1 row, max 6 rows). Send button (disabled
+  when empty or during streaming). Shift+Enter for newlines, Enter to send. Stop button
+  replaces Send during streaming (calls abort()). Character count indicator when approaching
+  AI_MAX_PROMPT_CHARS limit.
+- `conversation-sidebar.tsx`: Left sidebar (w-72, collapsible via hamburger icon). "New Chat"
+  button at top. Conversation list: title, relative timestamp ("2m ago"), unread indicator
+  for conversations with new assistant messages. Active conversation highlighted. Search/filter
+  by title. Archive button on hover (soft-delete). Grouped by date: Today, Yesterday, Previous
+  7 Days, Older. Click loads conversation into ChatPanel.
+
+**Chat Page Layout:**
+- Route: `/chat` (or `/ai/chat` depending on app structure)
+- Layout: `conversation-sidebar` (left, collapsible) + `chat-panel` (right, flex-1)
+- URL updates to `/chat/{conversationId}` when a conversation is selected (shareable/bookmarkable)
+- Sidebar navigation item: MessageSquare icon, label "AI Chat", permission: `ai.chat`
+- RBAC: `ai.chat` permission required (included in standard roles by default)
+
+**AI Provider stream() Method:**
+- The provider abstraction interface includes `stream()` alongside `complete()` and `embed()`
+- Signature: `async def stream(messages, system_message, parameters) -> AsyncIterator[str]`
+- Each `yield` produces one token (or small token group)
+- The provider wraps the SDK's native streaming (Anthropic: `client.messages.stream()`,
+  OpenAI: `client.chat.completions.create(stream=True)`)
+- Error handling: provider catches SDK errors and raises a generic `AIStreamError`
+  with a safe message (no provider details)
+- The route function consumes the AsyncIterator and formats each token as an SSE event
+
+**Environment Variables:**
+- `AI_SSE_HEARTBEAT_INTERVAL_SECONDS` (default: 15) -- heartbeat frequency to keep connections alive
+- `AI_SSE_RETRY_MAX_ATTEMPTS` (default: 3) -- client-side SSE retry attempts before polling fallback
+- `AI_SSE_POLL_INTERVAL_SECONDS` (default: 2) -- polling interval when in fallback mode
+- `AI_SSE_POLL_TIMEOUT_SECONDS` (default: 30) -- max time to wait in polling mode before showing error
+
 #### AI Fallback Model Safety
 - If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH
   the primary and fallback models
@@ -485,6 +596,29 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] guardrails/ directory exists with config.yml and Colang rail files
 - [ ] Basic test suite passes (minimum 3 per category = 18 tests)
 - [ ] AI Safety Attestation generated in docs/
+
+**SSE Streaming & Chat (MANDATORY for any AI app):**
+- [ ] AI chat/agent endpoints return `Content-Type: text/event-stream` when `Accept: text/event-stream`
+- [ ] AI chat/agent endpoints return `Content-Type: application/json` when `Accept: application/json` (fallback)
+- [ ] SSE events follow format: `data: {"token": "...", "done": false}\n\n`
+- [ ] Final SSE event includes `done: true`, `conversation_id`, `message_id`, `token_count`
+- [ ] Heartbeat events sent every AI_SSE_HEARTBEAT_INTERVAL_SECONDS (default 15s)
+- [ ] Error events use generic message (no provider details in SSE stream)
+- [ ] Frontend proxies SSE through same-origin Next.js API route (not direct to backend)
+- [ ] `useStreamingResponse` hook exists in lib/ai/ with sendMessage, tokens, isStreaming, error, abort
+- [ ] SSE retry with exponential backoff (1s/2s/4s, max 3 attempts) before polling fallback
+- [ ] Polling fallback delivers complete response if all SSE retries fail
+- [ ] User sees error with retry button only after both SSE and polling fail
+- [ ] conversations and conversation_messages tables exist with correct columns
+- [ ] Session isolation: user A cannot access user B's conversations (returns 404)
+- [ ] Conversation history preserved across page reloads
+- [ ] ChatPanel component renders with streaming typewriter effect
+- [ ] conversation-sidebar lists previous conversations with search and archive
+- [ ] AI_SSE_HEARTBEAT_INTERVAL_SECONDS, AI_SSE_RETRY_MAX_ATTEMPTS, AI_SSE_POLL_INTERVAL_SECONDS,
+      AI_SSE_POLL_TIMEOUT_SECONDS in .env.example and docker-compose.yml
+- [ ] Provider abstraction includes stream() method alongside complete() and embed()
+- [ ] Chat page at /chat (or /ai/chat) with sidebar + panel layout
+- [ ] ai.chat permission exists in RBAC seed data
 
 **Prompt Management (Tier 2 MANDATORY for any AI app):**
 - [ ] Prompts externalized (not hardcoded in business logic)

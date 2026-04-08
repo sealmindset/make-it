@@ -531,9 +531,18 @@ lib/ai/
 │   ├── anthropic-direct.ts          # Direct Anthropic API
 │   ├── openai.ts                    # OpenAI API (direct or Azure)
 │   └── ollama.ts                    # Local Ollama for development
+├── use-streaming.ts                 # useStreamingResponse hook (frontend only)
 ├── model-tier.ts                    # Maps feature complexity to model selection
 └── index.ts                         # Factory: reads AI_PROVIDER env var, returns provider
 ```
+
+**Provider interface includes three methods:**
+- `complete(messages, system_message, parameters) -> str` -- single response (for structured extraction)
+- `stream(messages, system_message, parameters) -> AsyncIterator[str]` -- token-by-token streaming (for chat/generation)
+- `embed(text) -> list[float]` -- text embeddings
+
+All AI chat/agent endpoints use `stream()` by default. `complete()` is only used for sub-second
+structured extraction (JSON schema responses under 500 tokens). See Section 11c for full SSE details.
 
 **Model tiering (per-feature complexity):**
 
@@ -996,6 +1005,248 @@ AI_MAX_HISTORY_TURNS=20                  # Max conversation history depth (multi
 - Rate limiting middleware applied to all AI agent routes
 - Environment variables in .env.example
 - BaseAgent updated to call sanitize -> validate -> mask pipeline automatically
+
+---
+
+## 11c. SSE Streaming & Chat Persistence (MANDATORY for AI apps)
+
+**What we need to know from the user:**
+- (Nothing -- this is automatic. If the app has AI features, SSE streaming and chat
+  persistence are built in. Non-streaming is only acceptable for sub-second structured
+  extraction endpoints.)
+
+**Why SSE, not WebSockets:**
+- SSE works over standard HTTP/1.1 -- no upgrade handshake, no firewall issues
+- Corporate proxies (Zscaler, Netskope) pass SSE through without special config
+- Natural fit for AI token streaming: server pushes, client receives (unidirectional)
+- Built-in browser reconnection (EventSource) and easy fetch()-based consumption
+- Compatible with all load balancers and CDNs without configuration
+- WebSockets are bidirectional complexity for a unidirectional use case
+
+**Architecture:**
+
+```
+Browser                    Next.js (same-origin)         FastAPI Backend
+  |                              |                              |
+  |  POST /api/ai/chat          |                              |
+  |  Accept: text/event-stream  |                              |
+  |----------------------------->|  POST /api/ai/conversations  |
+  |                              |  /{id}/messages              |
+  |                              |  Accept: text/event-stream   |
+  |                              |----------------------------->|
+  |                              |                              | provider.stream()
+  |                              |  data: {"token":"Hello"}     |<-- AI SDK stream
+  |  data: {"token":"Hello"}     |<-----------------------------|
+  |<-----------------------------|                              |
+  |                              |  data: {"token":" world"}    |
+  |  data: {"token":" world"}    |<-----------------------------|
+  |<-----------------------------|                              |
+  |                              |  data: {"done":true,...}     |
+  |  data: {"done":true,...}     |<-----------------------------|
+  |<-----------------------------|                              |
+  |                              |                              | save assistant msg to DB
+```
+
+**Backend Implementation (FastAPI):**
+
+```python
+# backend/app/routers/ai_chat.py
+
+router = APIRouter(prefix="/api/ai/conversations", tags=["ai-chat"])
+
+@router.post("/{conversation_id}/messages")
+async def send_message(
+    conversation_id: uuid.UUID,
+    body: ChatMessageCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission("ai", "chat")),
+):
+    # Verify conversation belongs to current user
+    conversation = await get_user_conversation(db, conversation_id, current_user.sub)
+    if not conversation:
+        raise HTTPException(404)
+
+    # Save user message
+    user_msg = await create_message(db, conversation_id, "user", body.content)
+
+    # Check Accept header for streaming vs non-streaming
+    if "text/event-stream" in request.headers.get("accept", ""):
+        return StreamingResponse(
+            _stream_response(db, conversation, user_msg),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    else:
+        # Non-streaming fallback
+        result = await _complete_response(db, conversation, user_msg)
+        return result
+
+async def _stream_response(db, conversation, user_msg):
+    provider = get_provider()
+    messages = await get_conversation_messages(db, conversation.id)
+    system_message = await get_rendered_prompt(db, conversation.agent_slug)
+
+    collected_tokens = []
+    heartbeat_task = asyncio.create_task(_heartbeat_emitter())
+
+    try:
+        async for token in provider.stream(messages, system_message, {}):
+            collected_tokens.append(token)
+            yield f"data: {json.dumps({'token': token, 'done': False})}\n\n"
+
+        # Save complete assistant message
+        full_content = "".join(collected_tokens)
+        assistant_msg = await create_message(
+            db, conversation.id, "assistant", full_content,
+            token_count=len(collected_tokens), model=provider.model_name,
+        )
+        yield f"data: {json.dumps({'token': '', 'done': True, 'conversation_id': str(conversation.id), 'message_id': str(assistant_msg.id), 'token_count': len(collected_tokens)})}\n\n"
+
+    except Exception:
+        yield f'data: {json.dumps({"error": "AI processing failed. Please try again.", "done": True})}\n\n'
+    finally:
+        heartbeat_task.cancel()
+```
+
+**Frontend SSE Hook:**
+
+```typescript
+// frontend/lib/ai/use-streaming.ts
+"use client";
+
+import { useState, useCallback, useRef } from "react";
+
+interface StreamState {
+  tokens: string;
+  isStreaming: boolean;
+  error: string | null;
+  retryCount: number;
+}
+
+export function useStreamingResponse(conversationId: string) {
+  const [state, setState] = useState<StreamState>({
+    tokens: "", isStreaming: false, error: null, retryCount: 0,
+  });
+  const abortRef = useRef<AbortController | null>(null);
+
+  const sendMessage = useCallback(async (content: string) => {
+    setState({ tokens: "", isStreaming: true, error: null, retryCount: 0 });
+    abortRef.current = new AbortController();
+
+    // Try SSE first, fall back to polling
+    const success = await trySSE(content, abortRef.current.signal, setState);
+    if (!success) {
+      await tryPolling(conversationId, setState);
+    }
+  }, [conversationId]);
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+    setState(s => ({ ...s, isStreaming: false }));
+  }, []);
+
+  return { ...state, sendMessage, abort };
+}
+
+async function trySSE(
+  content: string, signal: AbortSignal,
+  setState: React.Dispatch<React.SetStateAction<StreamState>>,
+): Promise<boolean> {
+  // ... fetch with ReadableStream, parse SSE events,
+  // accumulate tokens, retry on failure (max 3, exponential backoff)
+}
+
+async function tryPolling(
+  conversationId: string,
+  setState: React.Dispatch<React.SetStateAction<StreamState>>,
+): Promise<void> {
+  // ... POST non-streaming, poll for assistant message, timeout after 30s
+}
+```
+
+**Database Tables:**
+
+```sql
+-- conversations
+CREATE TABLE conversations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id VARCHAR NOT NULL,          -- oidc_subject of the owner
+    title VARCHAR(200),                -- auto-generated from first message, editable
+    agent_slug VARCHAR(100) NOT NULL,  -- which AI agent this conversation uses
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    archived_at TIMESTAMPTZ            -- soft-delete (NULL = active)
+);
+CREATE INDEX idx_conversations_user ON conversations(user_id, archived_at, updated_at DESC);
+
+-- conversation_messages
+CREATE TABLE conversation_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,         -- 'user', 'assistant', 'system'
+    content TEXT NOT NULL,
+    token_count INTEGER,               -- populated for assistant messages
+    model VARCHAR(100),                -- model used for assistant messages
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_messages_conversation ON conversation_messages(conversation_id, created_at);
+```
+
+**Scaffold Files Generated:**
+
+```
+Frontend:
+├── components/
+│   ├── chat-panel.tsx              # Full chat interface (messages + input + streaming)
+│   ├── chat-message.tsx            # Individual message bubble with markdown
+│   ├── chat-input.tsx              # Auto-resizing textarea with send/stop
+│   └── conversation-sidebar.tsx    # Conversation list with search/archive
+├── app/(auth)/chat/
+│   ├── page.tsx                    # Chat page (new conversation)
+│   └── [id]/page.tsx              # Chat page (resume conversation)
+├── app/api/ai/chat/
+│   └── route.ts                   # SSE proxy (same-origin -> backend)
+└── lib/ai/
+    └── use-streaming.ts           # useStreamingResponse hook
+
+Backend:
+├── app/routers/
+│   └── ai_chat.py                 # Conversation + message + SSE endpoints
+├── app/models/
+│   └── conversation.py            # Conversation + ConversationMessage models
+├── app/schemas/
+│   └── conversation.py            # Pydantic schemas for chat API
+└── alembic/versions/
+    └── 00X_conversations.py       # Migration for conversation tables
+```
+
+**Provider stream() Interface:**
+
+The existing provider abstraction (`lib/ai/provider.py`) adds a `stream()` method:
+
+```python
+class AIProvider(ABC):
+    @abstractmethod
+    async def complete(self, messages, system_message, parameters) -> str: ...
+
+    @abstractmethod
+    async def stream(self, messages, system_message, parameters) -> AsyncIterator[str]:
+        """Yield tokens incrementally. Each yield is one token or small token group."""
+        ...
+
+    @abstractmethod
+    async def embed(self, text) -> list[float]: ...
+```
+
+Each provider implements `stream()` using the SDK's native streaming:
+- Anthropic: `async with client.messages.stream(...) as stream: async for text in stream.text_stream: yield text`
+- OpenAI: `async for chunk in client.chat.completions.create(stream=True): yield chunk.choices[0].delta.content`
+- Ollama: `async for part in client.chat(stream=True): yield part['message']['content']`
 
 ---
 
