@@ -996,3 +996,22 @@ The Design phase summary to the user should reflect the project type without usi
 *Y* = when auth is needed for the API service
 *AI* = when ai_features.needed = true (applies to ANY project type that uses AI)
 *DB* = OIDC/Auth, Database RBAC, Seed data, and Activity Logs require a database. If PostgreSQL is excluded (see design-blueprint.md Section 3b), these guardrails are skipped. Docker Compose is always generated but omits the `db` service when no database is needed.
+
+## Variant-Specific Guardrails
+
+When a variant is active (recorded as `"variant"` in `app-context.json`), additional guardrail checks are loaded from the variant's definition file in `~/.claude/make-it/variants/<name>.md`. These checks use the format `[Tier N+variant_name]` (e.g., `[Tier 1+mobile]`) and are **additive** — they never replace base tier checks.
+
+See `variants/registry.md` for available variants and each variant's `.md` file for its guardrail additions.
+
+### Currently Available Variant Guardrails
+
+| Variant | Check IDs | Tier | Summary |
+|---------|----------|------|---------|
+| mobile (PWA) | P01-P08 | Tier 1+mobile | Viewport meta, manifest, service worker, touch targets, offline fallback, Apple PWA meta |
+
+### How Variant Checks Are Applied
+
+1. During **Build-Verify Part A** (static), variant checks are run alongside the base tier checks
+2. During **Build-Verify Part B** (live), variant-specific live checks are executed
+3. Severity rules are the same: `[BLOCK]` must pass, `[FIX]` is auto-fixed, `[WARN]` goes to TODO.md
+4. `/resume-it` catch-up scan includes variant checks when it detects `variant` in app-context.json

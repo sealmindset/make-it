@@ -48,6 +48,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/fix-strategies.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
+@~/.claude/make-it/variants/registry.md
 
 </execution_context>
 
@@ -110,7 +111,38 @@ curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>
 
 6. **STOP here. Do NOT continue to Preflight or any other phase.** The update flow is complete.
 
-If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Preflight below.
+If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Variant Resolution below.
+
+</step>
+
+<!-- ============================================================ -->
+<!-- VARIANT RESOLUTION -- Detect and load variant if specified     -->
+<!-- ============================================================ -->
+
+<step name="variant-resolution">
+
+**Check `$ARGUMENTS` for a variant name (if not "update" and not empty).**
+
+If `$ARGUMENTS` is empty, set `ACTIVE_VARIANT = null` and proceed to Preflight.
+
+If `$ARGUMENTS` is non-empty (and was not caught by the update-interceptor above):
+
+1. Read `~/.claude/make-it/variants/registry.md`
+2. Look up `$ARGUMENTS` (case-insensitive) in the "Available Variants" table
+3. **If found:**
+   - Read the variant definition file (e.g., `~/.claude/make-it/variants/mobile.md`)
+   - Set `ACTIVE_VARIANT` to the variant name for the rest of this session
+   - Set `ACTIVE_VARIANT_FILE` to the path of the variant definition
+   - Tell the user: "Got it -- I'll build your app with **[variant name]** support ([variant description])."
+   - Proceed to Preflight
+4. **If NOT found:**
+   - List all available variants from the registry table
+   - Tell the user: "I don't have a variant called '[argument]'. Here are the ones available:
+     - **mobile** -- PWA with offline support, install prompt, responsive-first layouts
+     - [any other active variants from the registry]
+     
+     You can also just type **/make-it** with no argument for a standard web app."
+   - **STOP. Do not proceed to Preflight.**
 
 </step>
 
@@ -257,6 +289,13 @@ Based on their initial answer, conduct a conversational deep-dive. You need to u
 4. **The Name:** "What do you want to call your app?"
    - If they don't have a name, suggest a few based on the purpose
 
+5. **Variant-specific questions (if ACTIVE_VARIANT is set):**
+   - Read the variant definition file's "Ideation Additions" section
+   - Ask those questions **conversationally, interspersed with the standard questions above**
+     (NOT as a separate block at the end)
+   - Record answers in memory for later use in the Design phase's `variant_config`
+   - These questions should feel natural -- the user should not notice they are variant-specific
+
 **AI-powered follow-up logic:**
 - After each answer, assess: "Do I have enough information to make all the technical decisions?"
 - If NOT, ask targeted follow-up questions about gaps
@@ -343,6 +382,16 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
   - Other external integrations -> one custom mock per integration
   - Pre-seed mock-oidc test users to match the app's defined roles
 
+**Variant-specific design decisions (if ACTIVE_VARIANT is set):**
+
+If a variant is active:
+1. Read the variant definition file's "Design Additions" section
+2. Apply the variant's silent design decisions (e.g., PWA library selection, responsive strategy)
+3. Record `"variant": "[name]"` and `"variant_config": {...}` in app-context.json
+4. The variant_config fields are populated from the variant's ideation answers and design decisions
+
+If no variant is active, set `"variant": null` and `"variant_config": {}` in app-context.json.
+
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
 **After all decisions are made, give the user a PLAIN ENGLISH summary:**
@@ -428,6 +477,18 @@ The user sees progress updates, NOT the technical details.
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
    g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
+
+   h. **Apply variant scaffold overlay (if ACTIVE_VARIANT is set):**
+      If a variant is active and its definition specifies a scaffold overlay directory:
+
+      - Copy overlay files from `~/.claude/make-it/scaffolds/overlays/[overlay-name]/` into the project,
+        merging with the base scaffold (overlay files add new files, they don't replace base files)
+      - Replace `[BRACKET_PLACEHOLDERS]` in overlay files using the same app-context values
+      - Read the variant definition's "Base scaffold modifications" section and apply each instruction
+        (e.g., add dependencies to package.json, wrap next.config.ts, add meta tags to layout)
+      - These modifications are instructions for you to follow, not file patches
+
+      Tell user: "Adding [variant name] support to your app..."
 
    Tell user: "Foundation is ready! Now building your specific features..."
 
@@ -844,6 +905,10 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 
+**Variant-specific checks (if ACTIVE_VARIANT is set):**
+If a variant is active, also run checks from `build-standards.md` that match the variant qualifier
+(e.g., `[Tier 1+mobile]` checks for the mobile variant). These are in addition to the base tier checks.
+
 For each failing check:
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
@@ -960,6 +1025,17 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
        The default import crashes in production Docker with ENOENT on test data file.
     f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
 
+34. **Variant-specific live checks (if ACTIVE_VARIANT is set):**
+    If a variant is active, read the variant definition's "Build-Verify Additions" → "Live checks"
+    section and execute those checks. For example, for the mobile/PWA variant:
+    a. Fetch `/manifest.json` and validate it returns valid JSON with correct MIME type
+    b. Fetch `/sw.js` and verify it returns a JavaScript file (service worker compiled)
+    c. Check that the install prompt component is rendered in the page HTML
+    d. Verify Apple-specific meta tags are present in the served HTML
+
+    Include variant check IDs (e.g., P01-P08) in the pass/fail reporting alongside
+    standard check results.
+
 **PART C: Fix cycle (silent, automatic)**
 
 If ANY test fails in Part B:
@@ -1068,6 +1144,10 @@ see your app in action!"
 # Project State -- [PROJECT_NAME]
 > Last updated: [TIMESTAMP]
 > Last session: make-it (initial build)
+
+## Variant
+[If ACTIVE_VARIANT is set: "Active variant: [name] ([description])" and list key variant_config values]
+[If no variant: "No variant (standard web-app)"]
 
 ## Current Status
 App is running locally with all services healthy. Build-verify passed -- login, roles,

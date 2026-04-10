@@ -394,6 +394,28 @@ These checks apply to ANY project type that uses AI/LLM features.
 
 ---
 
+## PWA / Mobile (variant: mobile)
+
+These checks only activate when `variant == "mobile"` in app-context.json. They are additive to the base Tier 1 web-app checks.
+
+**P01** [Tier 1+mobile] [FIX] **Viewport meta** -- Root layout (`app/layout.tsx`) has `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`. The `viewport-fit=cover` enables `env(safe-area-inset-*)` for notched devices (iPhone, etc.).
+
+**P02** [Tier 1+mobile] [BLOCK] **Manifest valid** -- `public/manifest.json` exists and contains: `name`, `short_name`, `start_url: "/"`, `display: "standalone"`, `background_color`, `theme_color`, and `icons` array with at least 192x192 and 512x512 entries. All referenced icon files in `public/icons/` must exist on disk.
+
+**P03** [Tier 1+mobile] [BLOCK] **Service worker compiles** -- `app/sw.ts` exists. `@serwist/next` and `serwist` are in `package.json` dependencies. `next.config.ts` imports and uses `withSerwist()`. At runtime, `/sw.js` is served with a JavaScript content type.
+
+**P04** [Tier 1+mobile] [FIX] **Touch targets 44px+** -- All interactive elements (buttons, links, form controls) meet minimum 44x44px touch target size per WCAG 2.5.8. Use Tailwind `min-h-11 min-w-11` or the `.touch-target` utility class. Grep page files for interactive elements using `h-6`, `h-7`, `h-8`, `w-6`, `w-7`, `w-8` as potential violations.
+
+**P05** [Tier 1+mobile] [FIX] **No horizontal overflow** -- No page causes horizontal scroll on a 375px viewport (iPhone SE width). Check for fixed-width elements wider than the viewport (`w-[400px]`, `min-w-[400px]`, etc.). `overflow-x: hidden` on body is a safeguard, not a fix — the root cause must be proper responsive layout.
+
+**P06** [Tier 1+mobile] [FIX] **Offline fallback** -- `app/offline/page.tsx` exists. Service worker config (`sw.ts`) includes a navigation fallback entry pointing to `/offline`. When the app is offline, navigating to any page shows the fallback instead of the browser's default error.
+
+**P07** [Tier 1+mobile] [WARN] **Lighthouse PWA** -- The app meets Lighthouse PWA installability criteria (valid manifest, registered service worker, served over HTTPS or localhost). This is informational — document in TODO.md if not passing. Full Lighthouse audit requires a browser and is not automated during build-verify.
+
+**P08** [Tier 1+mobile] [FIX] **Apple PWA meta** -- Root layout has: `<meta name="apple-mobile-web-app-capable" content="yes">`, `<meta name="apple-mobile-web-app-status-bar-style" content="default">`, and `<link rel="apple-touch-icon" href="/icons/icon-192x192.png">`. Required for iOS home screen app experience.
+
+---
+
 ## Common Fix Cycle Issues
 
 When live verification fails, these are the most common root causes and fixes:

@@ -7,6 +7,8 @@ This template is populated by /make-it as the user answers questions. It becomes
   "project_name": "",
   "purpose": "",
   "project_type": "",
+  "variant": null,
+  "variant_config": {},
   "active_tiers": [0],
   "scaffold": null,
   "features": [],
@@ -158,6 +160,7 @@ The `scaffold` field determines whether the Build phase uses a pre-built scaffol
 |-----------|-----------------|----------------|
 | `web-app` + Python backend | `"fastapi-nextjs"` | Copy scaffold, replace placeholders, generate domain code on top |
 | `web-app` + Node.js full-stack (API routes) | `"nextjs-fullstack"` | Copy scaffold, replace placeholders, generate domain code on top |
+| `web-app` + Python backend + variant | `"fastapi-nextjs"` | Copy scaffold + variant overlay, replace placeholders, generate domain code on top |
 | All other combinations | `null` | Generate from prompt-templates.md (Prompts #1-#14) |
 
 When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, mock-oidc, and standard UI components — these come pre-built from the scaffold. Only domain-specific code is generated fresh.
@@ -169,6 +172,8 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | project_name | Ideation | "What do you want to call your app?" |
 | purpose | Ideation | "What problem does it solve?" |
 | project_type | Design | Auto-classified from ideation answers (user never sees this) |
+| variant | Argument parsing | Set from `/make-it <variant>` argument; null if no argument. See `variants/registry.md` |
+| variant_config | Ideation + Design | Variant-specific questions and decisions; empty object if no variant |
 | active_tiers | Design | Auto-set from project_type |
 | scaffold | Design | Auto-set: `"fastapi-nextjs"` for web-app + Python backend, `"nextjs-fullstack"` for web-app + Node.js full-stack, `null` otherwise |
 | features | Ideation | "What should it do?" (iterative) |

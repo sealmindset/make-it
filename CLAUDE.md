@@ -148,6 +148,10 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       fix-strategies.md          # 12 fix strategies for auto-remediation (AUTO/SEMI-AUTO/MANUAL)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
+    variants/
+      registry.md               # Maps variant names -> definition files (read by make-it.md)
+      _template.md              # Template for creating new variants
+      mobile.md                 # PWA mobile variant (first implementation)
     scaffolds/
       fastapi-nextjs/             # Pre-built scaffold for FastAPI + Next.js web apps
         backend/                  # FastAPI app (auth, RBAC, models, routers, schemas, Alembic)
@@ -158,6 +162,12 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
         .env.example              # Environment variable documentation
         .gitignore                # Standard Python + Node.js + Docker ignores
         README.md                 # Scaffold documentation (placeholders, architecture, patterns)
+      overlays/
+        pwa/                      # PWA scaffold overlay (mobile variant)
+          frontend/components/    # install-prompt, offline-indicator, pull-to-refresh
+          frontend/lib/           # pwa.ts, use-online-status.ts
+          frontend/app/           # sw.ts (service worker), offline/page.tsx
+          frontend/public/        # manifest.json, icons/
 ```
 
 ## Scaffolds
@@ -183,6 +193,40 @@ What the scaffold does NOT provide (generated fresh per app):
 - Dashboard widgets
 - External integration mock services
 - Terraform infrastructure
+
+## Variants (Plugin System)
+
+Variants extend the standard /make-it flow with different design patterns, scaffold overlays, and guardrail checks. They are activated by CLI argument: `/make-it <variant-name>`.
+
+### How Variants Work
+
+- `/make-it` (no argument) = standard web-app (unchanged)
+- `/make-it mobile` = web-app + PWA overlay (service workers, manifest, responsive-first)
+- `/make-it <name>` = looks up variant in `variants/registry.md`, loads its definition file
+
+A variant is always layered ON TOP of a base project type. It augments each phase (Ideation, Design, Build, Build-Verify) — it never replaces them. The variant is recorded in `app-context.json` as `"variant": "mobile"` so downstream skills (/resume-it, /try-it, /ship-it) are aware.
+
+### Available Variants
+
+| Variant | Command | Description |
+|---------|---------|-------------|
+| mobile (PWA) | `/make-it mobile` | Progressive Web App with offline support, install prompt, responsive-first layouts. Uses Serwist for service worker. Adds 8 guardrail checks (P01-P08). |
+
+### Creating a New Variant
+
+1. Copy `variants/_template.md` to `variants/<your-variant>.md`
+2. Fill in all sections (metadata, ideation additions, design additions, scaffold overlay, guardrails, build-verify)
+3. Create overlay files in `scaffolds/overlays/<name>/` if the variant needs new frontend files
+4. Add a row to `variants/registry.md`
+5. Add check IDs to `build-standards.md`
+
+### Architecture
+
+- **Registry**: `variants/registry.md` — maps variant names to definition files
+- **Definitions**: `variants/<name>.md` — complete spec for a variant (questions, decisions, overlay, checks)
+- **Overlays**: `scaffolds/overlays/<name>/` — files copied on top of the base scaffold during Build
+- **Guardrail checks**: `[Tier N+variant_name]` format in build-standards.md (e.g., `[Tier 1+mobile]`)
+- **App-context**: `variant` and `variant_config` fields track the active variant and its configuration
 
 ## Source Documents
 
