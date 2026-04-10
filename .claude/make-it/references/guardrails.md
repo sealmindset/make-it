@@ -91,6 +91,9 @@ These apply to every project /make-it builds, no exceptions.
 Activate when `project_type == "web-app"`. These are the existing /make-it guardrails for browser-based applications with frontend + backend.
 
 ### Authentication & Authorization
+
+**This section applies to the SaaS auth pattern (OIDC + local RBAC) only.** This is /make-it's primary and default pattern. If EasyAuth is selected (see design-blueprint.md Section 1b), skip all OIDC and RBAC guardrails below -- authorization is handled by Azure AD Object IDs outside the app.
+
 - OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
@@ -169,6 +172,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Pages fetch data through service/API layer (no hardcoded mock data)
 
 ### Database-Backed Application Settings
+
+**Requires database.** If PostgreSQL is excluded (see design-blueprint.md Section 3b), skip this section.
+
 - app_settings and app_setting_audit_logs tables exist in a migration
 - Settings service with in-memory cache (60s TTL) and cascading precedence: DB > .env > code default
 - All .env variables seeded into app_settings with metadata (group_name, display_name, description, value_type, is_sensitive, requires_restart)
@@ -182,16 +188,21 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Audit log tracks every setting change with old_value, new_value, changed_by, timestamp
 
 ### Data & Backend
-- Database migrations generated (Alembic or Prisma -- not just models)
-- Seed data mandatory -- app starts with populated pages, not empty screens
-- Seed user oidc_subjects match mock-oidc subject IDs exactly
-- Parameterized database queries (never string concatenation)
+
+**Database-specific items below require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip migration, seed data, and parameterized query guardrails. API-first principle always applies.
+
+- Database migrations generated (Alembic or Prisma -- not just models) **(when database included)**
+- Seed data mandatory -- app starts with populated pages, not empty screens **(when database included)**
+- Seed user oidc_subjects match mock-oidc subject IDs exactly **(when SaaS auth pattern + database)**
+- Parameterized database queries (never string concatenation) **(when database included)**
 - API-first: backend returns JSON, frontend is separate concern
 
 ### Infrastructure
 - Docker Compose for local development (profiles: default for app, "dev" for mocks)
+- PostgreSQL `db` service in Docker Compose **(when database included; omit when excluded -- see design-blueprint.md Section 3b)**
 - Mock services for all external integrations
-- Mock service seed script (scripts/seed-mock-services.sh)
+- Mock-oidc service **(SaaS auth pattern only; omit for EasyAuth)**
+- Mock service seed script (scripts/seed-mock-services.sh) **(when mock services exist)**
 - Service client endpoints verified against mock API contracts
 - Terraform (or equivalent IaC) generated for the user's chosen cloud provider as DevOps handoff artifact (user never applies)
 - IaC state backend configured for the chosen cloud provider's state storage
@@ -227,7 +238,10 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   4. Topic boundary enforcement -- AI stays within its defined domain scope
   5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
-- Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
+- Build-verify Part D runs code-level AI safety wiring checks automatically (see
+  build-verify-security.md Phase 2). These verify sanitization, validation, delimiter tags,
+  rate limiting, and safety preambles are correctly wired -- no external tools required.
+- Build-verify runs BASIC behavioral checks (minimum 3 test cases per category = 18 tests)
 - /ship-it runs FULL suite (minimum 10 test cases per category = 60 tests)
 - Self-healing: failures trigger automatic remediation (prompt hardening, rail adjustments,
   output filters). Re-test after each fix attempt (up to 3 cycles).
@@ -753,6 +767,17 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 ### Build-Verify (Web App)
 Full static verification + live verification per make-it.md build-verify step.
 
+**Part D: Automatic Security Hardening** -- After Part A (static checks), Part B (live
+verification), and Part C (fix cycle) pass, build-verify runs an automatic security scan
+before handing off to /try-it. This is silent and invisible to the user. See
+`build-verify-security.md` for the full specification. Key points:
+- Static analysis (code patterns, semgrep, bandit, dependency audit) with graceful tool degradation
+- AI safety wiring verification (if AI features are present)
+- Auto-fix cycle: scan → fix → rebuild → re-scan (up to 3 cycles, AUTO-class fixes only)
+- Remaining findings logged to TODO.md, never blocks handoff
+- This does NOT replace standalone /nemo-it + /fix-it (which provide deeper interactive analysis
+  with attestation documents for GRC teams)
+
 Additional OIDC/auth/type checks (CRITICAL -- these prevent recurring issues across apps):
 - Frontend uses same-origin proxy: next.config.ts rewrites /api/* to backend
 - Frontend BASE_URL="/api" (relative path, not hardcoded hostname)
@@ -970,3 +995,4 @@ The Design phase summary to the user should reflect the project type without usi
 
 *Y* = when auth is needed for the API service
 *AI* = when ai_features.needed = true (applies to ANY project type that uses AI)
+*DB* = OIDC/Auth, Database RBAC, Seed data, and Activity Logs require a database. If PostgreSQL is excluded (see design-blueprint.md Section 3b), these guardrails are skipped. Docker Compose is always generated but omits the `db` service when no database is needed.

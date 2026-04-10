@@ -44,6 +44,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ## Authentication & OIDC
 
+**These checks apply to the SaaS auth pattern (OIDC + local RBAC) only.** If EasyAuth is selected (see design-blueprint.md Section 1b), skip all A01-A10 checks.
+
 **A01** [Tier 1, 5*] [BLOCK] **Auth callback reads roles from database** -- Callback queries users table by oidc_subject. NEVER uses OIDC claims for roles.
 
 **A02** [Tier 1, 5*] [BLOCK] **Logout is POST** -- Backend POST endpoint clears JWT cookie. Frontend logout button calls via POST (not GET link or `<a href>`).
@@ -67,6 +69,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 ---
 
 ## RBAC & Permissions
+
+**These checks apply to the SaaS auth pattern (OIDC + local RBAC) only.** If EasyAuth is selected, skip all R01-R07 checks. If database is excluded (design-blueprint.md Section 3b), these checks are not applicable.
 
 **R01** [Tier 1, 5*] [BLOCK] **Database-driven RBAC tables** -- roles, permissions, role_permissions, AND user_roles tables exist in migration. users table has a `primary_role_id` FK for display purposes. The `user_roles` many-to-many junction table (user_id, role_id) stores ALL effective roles per user. Authorization MUST check `user_roles` (not just `primary_role_id`).
 
@@ -132,6 +136,8 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 ## Database & Seed Data
 
+**These checks require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip all D01-D05 checks.
+
 **D01** [Tier 1, 5] [BLOCK] **Database migrations exist** -- Alembic versions/ or Prisma migrations/ (not just model files).
 
 **D02** [Tier 1, 5] [FIX] **Seed data exists** -- At least one user per role (oidc_subject matching mock-oidc), 10-20 domain items per list page, dashboard metrics show non-zero, recent timestamps.
@@ -157,11 +163,11 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 - Frontend: `wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/`
 - Backend: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"`
 - mock-oidc: `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10090/health')"`
-- PostgreSQL: `pg_isready -U [APP_SLUG]`
+- PostgreSQL: `pg_isready -U [APP_SLUG]` **(when database included)**
 
 **I04** [Tier 1, 5] [FIX] **Non-root Docker user** -- Every Dockerfile creates and switches to appuser:appgroup (UID/GID 1001).
 
-**I05** [Tier 1, 5] [BLOCK] **Backend Dockerfile uses entrypoint.sh** -- If DB migrations needed (Alembic/Prisma), CMD invokes entrypoint.sh (wait-for-DB → run migrations → exec server). NOT direct uvicorn/node.
+**I05** [Tier 1, 5] [BLOCK] **Backend Dockerfile uses entrypoint.sh** -- If DB migrations needed (Alembic/Prisma), CMD invokes entrypoint.sh (wait-for-DB → run migrations → exec server). NOT direct uvicorn/node. **If database is excluded (Section 3b), entrypoint.sh is not needed -- CMD can invoke the server directly.**
 
 **I06** [Tier 1, 5] [BLOCK] **Env var names match backend config** -- Cross-reference pydantic Settings fields against docker-compose.yml environment block. Fix mismatches (OIDC_ISSUER vs OIDC_ISSUER_URL, etc.).
 
@@ -173,7 +179,7 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 ## Mock Services
 
-**M01** [Tier 1, 5] [FIX] **mock-oidc exists** -- Copied from scaffold as-is (never regenerated). In docker-compose with profile: dev. Internal/external URL split configured.
+**M01** [Tier 1, 5] [FIX] **mock-oidc exists** -- Copied from scaffold as-is (never regenerated). In docker-compose with profile: dev. Internal/external URL split configured. **SaaS auth pattern only -- skip if EasyAuth is selected.**
 
 **M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs.
 
@@ -254,6 +260,8 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 ## Application Settings
 
+**These checks require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip all G01-G07 checks.
+
 **G01** [Tier 1] [FIX] **Settings tables exist** -- app_settings and app_setting_audit_logs tables in migration.
 
 **G02** [Tier 1] [FIX] **Settings service** -- get_setting() with cascading precedence: DB > .env > code default. In-memory cache (60s TTL). invalidate_cache() and mask_sensitive().
@@ -308,9 +316,9 @@ These checks run after the app is started (Docker containers up, health checks p
 
 **V02** [Tier 1, 5] [BLOCK] **All containers healthy** -- Poll health endpoints (timeout 120s per service).
 
-**V03** [Tier 1, 5] [BLOCK] **Seed script runs** -- `bash scripts/seed-mock-services.sh` completes without error.
+**V03** [Tier 1, 5] [BLOCK] **Seed script runs** -- `bash scripts/seed-mock-services.sh` completes without error. **SaaS auth pattern only -- skip if EasyAuth or no mock services.**
 
-**V04** [Tier 1, 5*] [BLOCK] **Auth flow works for EACH role** -- Login through mock-oidc, JWT cookie set, /auth/me returns correct roles from DB (primary role + all effective roles), permissions are the union across all effective roles, dashboard loads with content, logout clears cookie. For users with multiple roles, verify that permissions from ALL roles are present in the JWT.
+**V04** [Tier 1, 5*] [BLOCK] **Auth flow works for EACH role** -- **SaaS auth pattern only -- skip if EasyAuth.** -- Login through mock-oidc, JWT cookie set, /auth/me returns correct roles from DB (primary role + all effective roles), permissions are the union across all effective roles, dashboard loads with content, logout clears cookie. For users with multiple roles, verify that permissions from ALL roles are present in the JWT.
 
 **V05** [Tier 1, 5] [BLOCK] **Every API endpoint responds** -- 2xx, valid JSON, non-empty arrays from list endpoints.
 
@@ -343,6 +351,8 @@ These checks run after the app is started (Docker containers up, health checks p
 **V11** [Tier 1, 5] [BLOCK] **File upload works end-to-end** -- If the app has a Documents page or file upload feature: upload a valid PDF via the upload API endpoint, verify 200 response with extracted text content (not empty). Upload an image, verify base64 return. Upload oversized file, verify 413 rejection. Verify Docker volume mount exists (`docker exec {container} ls /app/data/documents`). If pdf-parse is in package.json, verify the import uses `pdf-parse/lib/pdf-parse` (NOT default import) by grepping the source.
 
 **V14** [AI] [BLOCK] **SSE streaming and chat work end-to-end** -- If the app has AI features: navigate to the chat page, send a message, verify tokens stream incrementally (not all-at-once after a delay). Verify conversation appears in the sidebar. Reload the page -- verify conversation history is preserved. Open a second browser/incognito session as a different user -- verify they cannot see the first user's conversations. POST to the chat endpoint with `Accept: text/event-stream` and verify `Content-Type: text/event-stream` response with `data:` events. POST with `Accept: application/json` and verify a complete JSON response (non-streaming fallback). Verify heartbeat events arrive during long generations (check for `{"heartbeat": true}` events).
+
+**V15** [Tier 0] [FIX] **Security hardening ran (build-verify Part D)** -- After Part A/B/C pass, the automatic security scan must have executed. Verify: (1) Code pattern scan ran (grep-based checks for hardcoded secrets, SQL injection, XSS, insecure deserialization, missing timeouts). (2) If AI features present, AI safety wiring checks ran (sanitizePromptInput, validateAgentOutput, delimiter tags, rate limiting). (3) Any AUTO-class findings were fixed and verified in a re-scan cycle. (4) Remaining findings (if any) are logged in TODO.md under "Security Improvements". See `build-verify-security.md` for the full specification.
 
 ---
 

@@ -129,7 +129,53 @@ Browser                    App Backend                mock-oidc / Real OIDC Prov
 
 ---
 
+## 1b. Authentication Alternative: EasyAuth (Microsoft Platform Only)
+
+**EasyAuth is a Microsoft-specific platform feature** where Azure App Service handles both authentication AND authorization via Entra ID and AD Object IDs. It is NOT an OIDC flow -- the platform intercepts requests before they reach the app, injecting identity headers.
+
+**This is NOT the default pattern.** The SaaS pattern (Section 1: OIDC + Section 2: local RBAC) is /make-it's primary and default authentication/authorization architecture. EasyAuth is offered ONLY when all of the following are true:
+
+1. The user explicitly states they want Microsoft/Azure-only authentication
+2. The user confirms they want EasyAuth (platform-level auth), not Entra ID as an OIDC provider
+3. The app is deployed exclusively to Azure App Service (EasyAuth does not exist on other platforms)
+
+**Critical distinction:**
+- **Entra ID as OIDC provider** → Use Section 1 (SaaS pattern). Entra ID is OIDC-compliant. This still uses local RBAC (Section 2) and requires PostgreSQL. This is the RECOMMENDED approach.
+- **EasyAuth** → Use this section (1b). Platform handles auth entirely. No OIDC flow to implement, no local RBAC tables, no mock-oidc needed for local dev.
+
+**When EasyAuth is selected:**
+- No `/auth/login`, `/auth/callback`, `/auth/me`, `/auth/logout` endpoints generated
+- No mock-oidc service in Docker Compose
+- No OIDC-related environment variables (OIDC_ISSUER_URL, OIDC_CLIENT_ID, etc.)
+- No JWT signing/validation (platform handles session)
+- Authorization via AD Object IDs and Azure role assignments (managed outside the app)
+- No local RBAC tables (Section 2 is skipped entirely)
+- No `users`, `roles`, `permissions`, `role_permissions`, or `user_roles` tables
+- No admin UI for user/role management (managed in Azure portal)
+
+**Impact on database requirement:** See Section 3b (Database Inclusion Decision).
+
+**Local development note:** EasyAuth does not run locally. For local dev, the app either:
+- Runs without auth (all endpoints open)
+- Uses a lightweight header-injection middleware that simulates EasyAuth headers
+
+**Decision tree for auth pattern:**
+```
+User wants login?
+  No  → Skip auth entirely
+  Yes → Is this Microsoft-only, Azure App Service, using EasyAuth?
+    Yes to ALL three → EasyAuth (Section 1b)
+    Anything else    → SaaS pattern: OIDC (Section 1) + local RBAC (Section 2)
+                       (Even if using Entra ID -- it's OIDC-compliant)
+```
+
+If ambiguous or unclear which pattern the user wants, **default to the SaaS pattern (OIDC + local RBAC)**. The user can always request EasyAuth explicitly.
+
+---
+
 ## 2. Authorization (Database-Driven RBAC with User Management)
+
+**Applies to: SaaS auth pattern (Section 1: OIDC) only.** If EasyAuth (Section 1b) is selected, skip this entire section -- authorization is handled by Azure AD Object IDs and role assignments outside the app.
 
 **What we need to know from the user:**
 - What types of users will use this app? (e.g., admins, managers, regular users)
@@ -202,7 +248,9 @@ runtime permission loader with multi-role union caching, middleware for route pr
 
 ## 2b. Database-Backed Application Settings
 
-**Applied by default for all web-app projects (no user questions needed).** Every web app includes a database-backed settings management system that allows admins to configure application behavior without code changes or redeployment.
+**Applied by default for all web-app projects that include a database (see Section 3b).** If PostgreSQL is excluded, this entire section is skipped -- there is no database to store settings in.
+
+Every web app with a database includes a database-backed settings management system that allows admins to configure application behavior without code changes or redeployment.
 
 **Cascading precedence:** DB value > .env value > code default. The app always works without any DB settings rows -- .env is the fallback.
 
@@ -311,6 +359,78 @@ High-traffic API service
 | Validation | Zod | Pydantic |
 | Auth tokens | Stateless JWT (jsonwebtoken) | Stateless JWT (PyJWT) |
 
+**Note:** PostgreSQL appears in the stack table above because it is required for MOST web apps. See Section 3b for the precise decision tree on when PostgreSQL is included vs excluded.
+
+---
+
+## 3b. Database Inclusion Decision
+
+**PostgreSQL is included by default.** The vast majority of /make-it apps require a database. This section documents the narrow conditions under which PostgreSQL may be excluded.
+
+**Decision tree:**
+```
+Auth pattern = SaaS (OIDC + local RBAC)?
+  Yes → PostgreSQL REQUIRED (always). Stop here.
+
+Auth pattern = EasyAuth (Section 1b)?
+  → Does the app have domain data requiring a database?
+      Yes → PostgreSQL REQUIRED. Stop here.
+  → Does the app have ANY of these DB-backed features?
+      - Application settings (Section 2b)
+      - Activity logs (database-backed)
+      - Notifications
+      - AI prompt management (Tier 2+)
+      - Multi-tenancy
+      - File metadata storage
+      - Any other feature requiring persistent structured data
+      Yes → PostgreSQL REQUIRED. Stop here.
+  → None of the above?
+      → PostgreSQL MAY BE EXCLUDED.
+
+Auth pattern = None (no login)?
+  → Same domain data / DB-backed feature checks as above.
+  → If none require a database → PostgreSQL MAY BE EXCLUDED.
+
+If ambiguous or unclear → PostgreSQL STAYS (default to caution).
+The user can always request removal at their own risk.
+```
+
+**When PostgreSQL is excluded, also remove:**
+- `db` service from docker-compose.yml
+- `DATABASE_URL` environment variable from all services
+- `postgres_data` volume
+- `pg_isready` health checks
+- `entrypoint.sh` migration logic (Alembic)
+- All `backend/alembic/` directory contents
+- SQLAlchemy / asyncpg dependencies (unless needed for another database)
+- Database session middleware / dependency injection
+- Seed data scripts that target PostgreSQL
+
+**When PostgreSQL is excluded, keep:**
+- Docker Compose (for frontend, backend, mock services if any)
+- All other infrastructure patterns (health checks, networking, etc.)
+- The backend framework and API endpoints (they just don't use a database)
+
+**Record in app-context.json:**
+```json
+{
+  "database": {
+    "included": false,
+    "reason": "EasyAuth pattern with no domain data or DB-backed features",
+    "excluded_components": ["db service", "DATABASE_URL", "Alembic", "seed data"]
+  }
+}
+```
+Or when included:
+```json
+{
+  "database": {
+    "included": true,
+    "reason": "SaaS auth pattern (OIDC + local RBAC)"
+  }
+}
+```
+
 ---
 
 ## 4. Multi-Tenancy
@@ -325,7 +445,7 @@ High-traffic API service
 - Multiple orgs sharing deployment -> Shared-schema with tenant_id + RLS
 - B2B SaaS product -> Required, use tenant_id on every table
 
-**Implementation generates:** tenant_id UUID column, PostgreSQL RLS policies
+**Implementation generates:** tenant_id UUID column, PostgreSQL RLS policies (requires database -- see Section 3b)
 
 ---
 
@@ -477,6 +597,7 @@ Single runtime (just Node.js OR just Python)?
 
 **Always generate:** Docker Compose for local development (even if deploying without containers)
 **Dockerfile pattern:** Multi-stage builds, non-root user, Alpine base images, copy package files first
+**Database service:** Include PostgreSQL (`db` service) in Docker Compose only when database is required (see Section 3b). When excluded, remove `db` service, `postgres_data` volume, `DATABASE_URL` env vars, and `depends_on: db` conditions from all services.
 
 ---
 

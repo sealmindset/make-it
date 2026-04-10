@@ -124,7 +124,7 @@ Requirements:
 Suggest a modern technology stack:
 - Next.js frontend
 - [BACKEND_FRAMEWORK] backend (FastAPI, Node.js/Express, or similar)
-- [DATABASE_TYPE] database
+- [DATABASE_TYPE] database (when database is required -- see design-blueprint.md Section 3b)
 - [CLOUD_PROVIDER] cloud services
 
 Version policy: Always use the latest stable release of each dependency.
@@ -133,6 +133,7 @@ Do NOT pin to older major versions (e.g., Next.js 14 when 15 is stable).
 
 **Required context:** app type, user count, compliance, special features
 **Always runs:** Yes (validates/confirms stack decision from Phase 2)
+**Database note:** If database is excluded per Section 3b decision tree, omit [DATABASE_TYPE] from the stack.
 
 ---
 
@@ -150,12 +151,13 @@ Show me:
 - How frontend and backend connect
 - Cloud services to use
 
-Database setup:
+Database setup (when database is included -- see design-blueprint.md Section 3b):
 - If using Python + SQLAlchemy: initialize Alembic (`alembic init alembic`),
   configure alembic.ini and env.py to use the async engine, and generate
   the initial migration from the models (`alembic revision --autogenerate -m "initial schema"`)
 - If using Node + Prisma: initialize Prisma schema and generate the initial migration
 - The database must be usable immediately after `docker-compose up` without manual steps
+- If database is excluded: skip all migration, ORM, and seed data setup
 ```
 
 **Required context:** features list, stack choice
@@ -188,7 +190,7 @@ Directory structure:
 Services needed:
 - Web app for frontend
 - Functions for backend
-- [DATABASE_TYPE] database
+- [DATABASE_TYPE] database (omit if database excluded -- see design-blueprint.md Section 3b)
 - File storage
 [AI_SERVICES_LINE]
 
@@ -227,8 +229,8 @@ Each mock service should:
 - Use environment variables from .env for configuration
 
 Use Docker Compose profiles to separate mock services from production services:
-- Default profile: app services only (frontend, backend, database, redis)
-- "dev" profile: adds all mock services
+- Default profile: app services only (frontend, backend, database if included, redis if needed)
+- "dev" profile: adds all mock services (mock-oidc only for SaaS auth pattern)
 - Local development runs: docker-compose --profile dev up
 - Production deploys: docker-compose up (no mock services included)
 
@@ -254,6 +256,9 @@ Dockerfile and entrypoint rules:
     RUN chmod +x entrypoint.sh
     CMD ["./entrypoint.sh"]
 - If using pg_isready in entrypoint.sh, install postgresql-client in the Dockerfile
+- If database is excluded (design-blueprint.md Section 3b): no entrypoint.sh needed,
+  CMD can invoke the server directly. Omit the db service, DATABASE_URL, postgres_data
+  volume, and depends_on: db from docker-compose.yml.
 
 Registry proxy support (I08):
 - Every Dockerfile MUST have `ARG DOCKER_HUB_PREFIX=` before each FROM instruction
@@ -430,7 +435,7 @@ Same-origin proxy for OIDC flow:
 ```
 
 **Required context:** auth provider, token expiry, auth library
-**Runs when:** Authentication needed
+**Runs when:** SaaS auth pattern (OIDC + local RBAC). **Skip if EasyAuth is selected** (see design-blueprint.md Section 1b).
 
 ---
 
@@ -659,7 +664,7 @@ Update the frontend sidebar/navigation to:
 ```
 
 **Required context:** stack, database, auth provider, pages/resources list
-**Always runs:** Yes -- every app gets database-driven RBAC with user management
+**Runs when:** SaaS auth pattern (OIDC + local RBAC) is selected. **Skip if EasyAuth** (design-blueprint.md Section 1b) or if database is excluded (Section 3b).
 
 ---
 
@@ -667,7 +672,7 @@ Update the frontend sidebar/navigation to:
 
 ```
 Create the database-backed application settings system for [PROJECT_NAME].
-This is a STANDARD component of every web app -- not optional.
+This is a STANDARD component of every web app that includes a database.
 
 Stack: [STACK]
 Database: [DATABASE]
@@ -813,7 +818,7 @@ Create /admin/settings page with:
 ```
 
 **Required context:** stack, database, list of all .env variables from the project
-**Always runs:** Yes -- every web app gets database-backed settings management
+**Runs when:** Database is included (see design-blueprint.md Section 3b). **Skip if database is excluded.**
 
 ---
 
@@ -2187,7 +2192,7 @@ Verification:
 ```
 
 **Required context:** list of external integrations, auth roles for mock users
-**Runs when:** Always (every app has at least auth, which needs mock-oidc)
+**Runs when:** SaaS auth pattern (always needs mock-oidc) or when app has external integrations requiring mocks. **Skip mock-oidc if EasyAuth is selected.** Skip entirely if no auth and no external integrations.
 
 ---
 
@@ -2292,7 +2297,7 @@ Data volume guidelines:
 ```
 
 **Required context:** roles, pages, features, integrations, mock-oidc test users, database/ORM choice
-**Runs when:** Always -- every app needs seed data for a meaningful first-run experience
+**Runs when:** Database is included (see design-blueprint.md Section 3b). **Skip if database is excluded** -- there is nowhere to seed data.
 
 ---
 

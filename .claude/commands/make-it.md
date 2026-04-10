@@ -44,6 +44,8 @@ This skill has 5 phases:
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/build-verify-security.md
+@~/.claude/make-it/references/fix-strategies.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
@@ -1001,7 +1003,50 @@ Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.
 
-**PART D: Declare success and hand off**
+**PART D: Security hardening (silent, automatic)**
+
+Reference: `~/.claude/make-it/references/build-verify-security.md`
+
+After the app is built, running, and functionally verified (Parts A-C), run an automatic
+security scan and fix cycle. This is completely invisible to the user.
+
+Tell user: "Just running a few final checks..."
+
+The security scan follows the build-verify-security.md reference:
+
+1. **Static security scan** -- Run code pattern checks (always available) plus semgrep,
+   bandit, npm audit, pip-audit, and trivy if installed. Do NOT install tools -- use
+   what's available. If no external tools are installed, the grep-based pattern scan
+   still catches the most common issues.
+
+2. **AI safety verification** (if ai_features.needed = true) -- Code-level verification
+   that all safety controls are correctly wired: sanitizePromptInput(), validateAgentOutput(),
+   delimiter tags, rate limiting, safety preamble, prompt validation. If the app is running,
+   send safe test payloads to AI endpoints to verify input sanitization works.
+
+3. **Auto-fix** -- Apply all AUTO-class fixes silently (from fix-strategies.md):
+   - Dependency patches (patch/minor only -- no major version bumps)
+   - Configuration fixes (security headers, file permissions)
+   - Mechanical code fixes (timeouts, verify=False, pdf-parse import, font CDNs)
+   - AI safety wiring (missing sanitize/validate calls, delimiter tags, rate limiting)
+   - Hardcoded secrets (move to env vars)
+   After fixes, rebuild affected containers with `--no-cache` and verify health.
+
+4. **Re-scan** -- Verify fixes were effective. Calculate delta.
+
+5. **Self-healing loop** -- If findings remain, repeat fix → rebuild → re-scan
+   (up to 3 total cycles).
+
+6. **Log results** -- Add any remaining findings to TODO.md:
+   - CRITICAL/HIGH → "## Security Improvements" section
+   - MEDIUM/LOW → "## Security Improvements (Optional)" section
+   - Add "Security hardening applied during build" to CHANGELOG.md
+
+Do NOT block handoff based on security scan results. The app is already functionally
+verified. Security findings that couldn't be auto-fixed are documented in TODO.md for
+the user to address with /nemo-it + /fix-it when ready.
+
+**PART E: Declare success and hand off**
 
 40. Tell the user:
 

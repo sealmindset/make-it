@@ -144,6 +144,8 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       ship-it-guide.md            # /ship-it integration reference
       guardrails.md               # Tiered guardrail system (Tier 0-5)
       build-standards.md          # Shared verification checklist (single source of truth)
+      build-verify-security.md   # Automatic security scan during build-verify Part D
+      fix-strategies.md          # 12 fix strategies for auto-remediation (AUTO/SEMI-AUTO/MANUAL)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     scaffolds/
@@ -284,9 +286,10 @@ When build-standards.md is updated with new checks, `/resume-it` automatically d
 
 ## Build Quality
 
-The build process has four layers:
+The build process has six layers:
 1. **Foundation** -- Scaffold provides pre-verified auth, RBAC, Docker, and UI components (these patterns were debugged once and never regenerated)
 2. **Prevention** -- Prompts and build instructions encode lessons learned (API contract verification, seed data alignment, Alembic syntax rules)
 3. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
-4. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
-5. **Catch-up** -- /resume-it scans existing projects against the latest build-standards.md and applies any new patterns
+4. **Security Hardening** -- Build-verify Part D runs an automatic security scan (static analysis, dependency audit, AI safety checks) and auto-fixes findings in a self-healing loop (up to 3 cycles) before the user ever sees the app. Only mechanical AUTO-class fixes are applied silently; remaining findings go to TODO.md. This logic is fully internalized in /make-it (via `build-verify-security.md` + `fix-strategies.md`) -- no separate skill installation required. Standalone /nemo-it and /fix-it are optional skills for GRC teams needing formal attestation, interactive triage, or deeper analysis (OWASP ZAP, SQLMap, behavioral AI testing).
+5. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
+6. **Catch-up** -- /resume-it scans existing projects against the latest build-standards.md and applies any new patterns
