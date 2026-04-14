@@ -941,6 +941,25 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 
 ## Version History
 
+### v1.7.0 -- Variant System, Argo CD, and Build Hardening
+
+Adds a plugin architecture for project variants, Kubernetes deployment via Argo CD, and multiple build quality improvements.
+
+- Added variant/plugin system with registry, template, and PWA mobile as first variant (`/make-it mobile`)
+- Added `/argo-it` skill: generates Kustomize manifests, CI/CD pipelines, and onboarding docs for any K8s cluster via Argo CD
+- Added `/wrap-it` skill: saves progress, updates TODO/CHANGELOG/.make-it-state, shuts down containers cleanly
+- Added automatic security hardening to build-verify (Part D): static analysis, dependency audit, AI safety checks with self-healing loop
+- Added AI-powered upload pipeline with pre-flight checks (F10-F11)
+- Added SSE streaming build standard (AI11-AI15) for AI chat features
+- Added notification system build standards (N01-N08)
+- Added deployment profiles with schema, architecture, and non-technical UX
+- Added Dockyard Gateway auto-discovery for SSL proxy bypass (I08)
+- Added `.dockerignore` and `load_dotenv(override=False)` guardrails (I09, I10)
+- Added consistent DataTable and theme toggle enforcement (U08, U09, V12, V13)
+- Fixed OIDC dual-URL trust check in scaffold
+- Fixed cryptography pinned to 46.0.7 in mock-oidc scaffolds
+- Fixed /retrofit-it mock-oidc seed script, scaffold README leaking into builds, resume-it AI prompt detection
+
 ### v1.6.0 -- Database-Backed Application Settings
 
 Adds database-backed settings management as a standard feature for all Tier 1 (web app) projects.
