@@ -597,6 +597,8 @@ Single runtime (just Node.js OR just Python)?
 
 **Always generate:** Docker Compose for local development (even if deploying without containers)
 **Dockerfile pattern:** Multi-stage builds, non-root user, Alpine base images, copy package files first
+**`.dockerignore` mandatory:** Generated alongside every Dockerfile. Excludes `.env*` (except `.env.example`), `.git/`, `__pycache__/`, `node_modules/`, test dirs, IDE config. Prevents secrets from being baked into images via `COPY . .`.
+**`load_dotenv` safety:** All `load_dotenv()` calls for local override files (`.env.azure`, `.env.local`) MUST use `override=False`. This ensures Kubernetes/Docker Compose environment variables always take precedence over local dev files. `override=True` is banned -- it causes production to silently use stale dev endpoints and embedded credentials.
 **Database service:** Include PostgreSQL (`db` service) in Docker Compose only when database is required (see Section 3b). When excluded, remove `db` service, `postgres_data` volume, `DATABASE_URL` env vars, and `depends_on: db` conditions from all services.
 
 ---

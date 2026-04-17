@@ -175,6 +175,10 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 **I08** [Tier 0] [FIX] **Registry proxy support** -- All Dockerfiles use `ARG DOCKER_HUB_PREFIX=` before each `FROM` instruction, with `FROM ${DOCKER_HUB_PREFIX}image:tag`. In multi-stage builds, repeat `ARG DOCKER_HUB_PREFIX=` before EACH `FROM` (Docker ARGs do not persist across stages). All docker-compose.yml services with `build:` include `args: [DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}]`. Services with `image:` use `${DOCKER_HUB_PREFIX:-}image:tag`. `.env.example` documents `DOCKER_HUB_PREFIX`, `MCR_PREFIX`, `GHCR_PREFIX` with auto-discovery instructions. This enables developers behind corporate SSL-inspecting proxies (Zscaler, Netskope, GlobalProtect) to pull Docker images through an ACR proxy cache without disabling the proxy.
 
+**I09** [Tier 0] [BLOCK] **`.dockerignore` exists and excludes secrets** -- Every project with a Dockerfile MUST have a `.dockerignore` that excludes at minimum: `.env*` (except `.env.example`), `.git/`, `__pycache__/`, `node_modules/`, `*.md` (except README.md), test directories, IDE config (`.vscode/`, `.idea/`). Without this, `COPY . .` bakes gitignored secrets (`.env`, `.env.azure`, `.env.local`) into the Docker image. Verification: `.dockerignore` exists AND contains a line matching `.env*` or `.env`.
+
+**I10** [Tier 0] [BLOCK] **No `load_dotenv(override=True)`** -- Application code that loads local env files MUST NOT use `override=True` (Python) or `{ override: true }` (Node.js). This causes local dev files to silently overwrite environment variables injected by Kubernetes, Docker Compose, or CI/CD -- leading to production using stale dev endpoints or embedded credentials. Grep for `override=True` and `override: true` in all `.py`, `.ts`, `.js` files near `dotenv`/`load_dotenv` calls. Any match is a BLOCK finding. The correct pattern is `override=False` (or omitting the parameter).
+
 ---
 
 ## Mock Services
@@ -255,6 +259,56 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 **F10** [AI] [BLOCK] **AI-powered document analysis pipeline** -- When both file upload AND AI features are enabled, the upload pipeline MUST include an AI analysis step. After text extraction (F04), the extracted content is passed to the AI provider via the document analysis agent (not the chat agent). The pipeline: extract text -> validate size against AI_MAX_DOCUMENT_CHARS (300k, not AI_MAX_PROMPT_CHARS) -> sanitize via sanitizePromptInput() -> wrap in `<document>` tags -> send to AI with document-analysis prompt from managed_prompts -> validate AI output via validateAgentOutput() -> return structured result to user. The upload wizard (F07) adds a step between extraction and confirmation: "AI Analysis" with a streaming progress indicator showing the AI processing the document. If AI analysis fails, the upload still succeeds with extracted text only -- AI failure MUST NOT block document storage. The AI result is stored alongside the document (separate column or JSON field, never overwriting the raw extracted text). Verify: upload a PDF, confirm AI analysis runs, confirm extracted text AND AI analysis are both stored, confirm AI failure still saves the document.
 
 **F11** [AI] [BLOCK] **AI pre-flight health checks on startup** -- When the app has AI features, the startup sequence MUST verify AI readiness before accepting requests. Pre-flight checks run AFTER database migrations and BEFORE the app binds to its HTTP port. Checks (all must pass): (1) AI provider is reachable (HTTP HEAD or lightweight API call to the provider endpoint), (2) Authentication is valid (for bearer-token providers: token is not expired; for API-key providers: key returns 200 not 401), (3) Configured model is available (request with max_tokens=1 to verify model exists), (4) Upload infrastructure is ready (DOCUMENTS_PATH and UPLOAD_CACHE_PATH directories exist and are writable), (5) Extraction libraries loadable (import pdf-parse/pdfplumber, docx parser, xlsx parser without error). On failure: log the specific check that failed with a clear message (e.g., "AI pre-flight failed: provider unreachable at https://..."), exit with non-zero code so Docker restarts the container. Pre-flight is FAST (under 5 seconds total, 2-second timeout per check). Add `AI_PREFLIGHT_ENABLED` env var (default: true) to allow disabling in CI/test environments. Verify: misconfigure the AI provider endpoint, start the app, confirm it logs the failure and exits before binding the port.
+
+**F12** [Tier 1, 5] [BLOCK] **Single-action upload UX** -- From the user's perspective, file import is ONE action: drop file, get result. Validation, parsing, format detection, and error handling happen transparently in the backend pipeline. There is no user-facing "dry run" or "validate then apply" two-step flow. If the backend needs a validation pass before committing, it runs both stages internally within a single user-initiated request (or background task). The user never sees intermediate technical states. The response is either success with a summary, or failure with actionable plain-language errors ("Row 47: vendor name is missing", not "validation failed").
+
+**F13** [Tier 1, 5] [BLOCK] **Bounded API responses** -- Upload, import, and processing endpoints NEVER return unbounded data in the response body. Return counts, summaries, and status -- never the full parsed dataset. A response that scales linearly with input size is a timeout and memory bomb waiting for production data. Specifically: no returning all parsed rows, no returning all validated records, no returning full file contents in JSON. If the frontend needs to display row-level details, use pagination or a separate detail endpoint. Verification: review every response dict/object in upload handlers -- if any value is a list derived from the input data, it's a violation (exception: capped error lists, e.g., `failed_rows[:50]`).
+
+**F14** [Tier 1, 5] [BLOCK] **Resilient file structure detection** -- File parsing MUST auto-detect structure rather than assuming fixed layouts. For CSV/TSV: scan the first N lines (minimum 20) for a header row by matching known column names -- never hardcode a row offset ("skip 3 preamble rows"). For Excel: detect the header row per sheet. For all formats: handle BOM markers (UTF-8-sig), mixed line endings, trailing empty rows, and inconsistent whitespace in column names (strip + case-insensitive matching). If the header row cannot be found, return a specific error ("Could not find expected columns: X, Y, Z in the first 20 rows") not a generic parse failure. Verification: upload a file with 0 preamble rows, 3 preamble rows, and 7 preamble rows -- all three must succeed if they contain the expected columns.
+
+**F15** [Tier 1, 5] [FIX] **Batch processing for large datasets** -- Import operations processing more than a trivial number of records MUST commit in configurable batches (default: 1,000 rows). A single transaction spanning tens of thousands of rows holds database locks too long and risks OOM on large files. Each batch commits independently. Failed rows within a batch are skipped and tracked (row number, identifier, error message) -- a single bad row never aborts the entire import. The batch size is a class-level or config-level constant, not buried in loop logic. After each committed batch, an optional progress callback is invoked for progress reporting.
+
+**F16** [Tier 1, 5] [FIX] **Import progress reporting** -- When an import runs as a background task, progress updates MUST reflect actual committed work, not just "started" and "done". The background task record (or equivalent) is updated after each committed batch with: total items, processed count, successful count, failed count, and progress percentage. The frontend polls this record and displays a progress bar or percentage. Progress never jumps from 0% to 100%.
+
+**F17** [Tier 1, 5] [FIX] **Actionable error reporting** -- Import results distinguish between three outcomes: success, partial success (some rows failed), and total failure. Partial success returns the import summary (how many succeeded, how many failed) plus a capped list of failed rows with row numbers, identifiers, and plain-language error descriptions. The UI displays these as a reviewable list, not a raw JSON dump or stack trace. Total failure (e.g., unrecognizable file format) returns a single clear message. Error messages reference the user's data ("Row 47: VENDOR_NAME is missing"), not internal state ("KeyError: vendor_name in dict").
+
+---
+
+## Data Integration
+
+> Applies when an app ingests data from external systems on a schedule or in
+> batch -- Oracle exports, ERP feeds, partner file drops, etc. This is distinct
+> from user-initiated file upload (F section): the user didn't drop a file,
+> the system picked one up.
+
+**DI01** [Tier 1, 5] [BLOCK] **Integration method decision matrix** -- Before building a data integration, evaluate the source and choose the simplest viable method. The decision matrix:
+
+| Question | If Yes | If No |
+|----------|--------|-------|
+| Does the source system already export files (CSV, XML, flat file)? | File-based ingestion | Consider API |
+| Would middleware (MFT, iPaaS) add transforms, enrichment, or routing? | Middleware may add value | Skip middleware |
+| Is the middleware just passing files through without transformation? | File-based ingestion (middleware adds latency and a dependency for no value) | -- |
+| Is real-time or near-real-time data required? | API integration | File-based is fine |
+| Does the integration require a cross-functional team to change? | Prefer the approach with fewer team dependencies | -- |
+| Is the data volume large (>10k records per run)? | File-based with batch processing (F15) | Either approach works |
+
+**Decision rule: if the source already exports files and no transformation is needed, use file-based ingestion. Do not introduce middleware as a pass-through -- it adds latency, dependencies, and points of failure with no value.**
+
+Document the decision in the project's `app-context.json` under `data_integrations[]` with: source system, method chosen (file/api/mft), rationale, and frequency.
+
+**DI02** [Tier 1, 5] [BLOCK] **File-source-agnostic ingestion** -- Import services read from a configurable directory path (environment variable, e.g., `IMPORT_SOURCE_PATH`). The application code never knows or cares whether the file arrived via NFS mount, MFT delivery, S3 sync, or manual upload. The same import service handles both user-uploaded files and system-delivered files -- the only difference is the trigger (user action vs schedule). Verification: grep for hardcoded file paths in import/ingestion code -- any match is a violation.
+
+**DI03** [Tier 1, 5] [FIX] **Job status model** -- A generic background task / job status table exists (or is extended) to track all async operations: imports, scheduled integrations, AI processing, etc. Required fields: id, task_type (string enum), status (pending/running/completed/failed), total_items, processed_items, successful_items, failed_items, progress_percent, error_message, result_data (JSON), created_by, created_at, started_at, completed_at. The model is generic across task types -- not import-specific.
+
+**DI04** [Tier 1] [FIX] **Job status page** -- An admin-accessible UI page displays all background tasks and scheduled jobs. Features: filterable by task_type and status, sortable by date, shows progress bar for running tasks, shows duration for completed tasks, shows error message for failed tasks, and links to result details. This is the single monitoring surface for all async work in the app. RBAC: requires `admin.jobs.read` permission (or equivalent).
+
+**DI05** [Tier 1, 5] [FIX] **Idempotent processing** -- Scheduled import jobs MUST be safe to re-run. Use one of: (a) full replace (delete-and-reload, appropriate when the source is a complete snapshot), (b) upsert on natural key (insert or update based on a business identifier), or (c) watermark/checkpoint (track last-processed timestamp or sequence, only process new records). The strategy is documented in app-context.json per integration. Duplicate detection uses business keys (e.g., invoice_number + vendor_number), not database surrogate keys.
+
+**DI06** [Tier 1, 5] [FIX] **Ingestion inherits upload pipeline** -- All backend pipeline standards from the File Upload section apply to scheduled ingestion: auto-detect file structure (F14), batch commits (F15), progress reporting (F16), actionable error tracking (F17), and bounded responses (F13). Scheduled jobs inherit these patterns -- they are not reimplemented separately.
+
+**DI07** [Tier 1, 5] [WARN] **Scheduled execution** -- When the app requires periodic data ingestion, the scheduling mechanism is determined by the deployment environment. Options: K8s CronJob (preferred for containerized apps), APScheduler / node-cron (in-process, acceptable for simple schedules), or external orchestrator (Airflow, etc. -- only when multi-step DAGs are needed). Schedule configuration is externalized (environment variable or settings table), not hardcoded. The job status model (DI03) records each execution regardless of trigger method.
+
+**DI08** [Tier 1, 5] [WARN] **Job observability** -- Failed jobs create a notification (N01-N08 pattern) to alert administrators. Job execution is logged with: start time, end time, duration, record counts, and outcome. If the app has activity logs (L01-L08), job executions appear as log events. Production environments should expose job metrics (success/failure counts, duration) for monitoring dashboards.
 
 ---
 
@@ -453,3 +507,12 @@ When live verification fails, these are the most common root causes and fixes:
 | Pages don't respond to dark mode | Hardcoded colors in page .tsx files | Replace hex/rgb/hsl literals with CSS variables (`var(--*)`) or Tailwind classes (U09) |
 | Hydration mismatch on theme | Missing suppressHydrationWarning | Add `suppressHydrationWarning` to `<html>` and `<body>` tags in root layout (U09) |
 | Theme flashes on load | ThemeProvider not configured correctly | Verify `attribute="class"`, `enableSystem`, `disableTransitionOnChange` props (U09) |
+| Prod app uses dev endpoint/credentials | `load_dotenv(override=True)` + `.env.azure` baked into image | Change to `override=False` + add `.dockerignore` excluding `.env*` (I09, I10) |
+| K8s secrets ignored by app | Local `.env` file overrides real env vars | Ensure all `load_dotenv` calls use `override=False`; add `.dockerignore` (I10) |
+| Secrets baked into Docker image | No `.dockerignore`, `COPY . .` copies `.env*` files | Create `.dockerignore` excluding `.env*`, `.git/`, test dirs, IDE config (I09) |
+| Import returns "invalid JSON" or browser shows HTML error | Response includes full parsed dataset, causing timeout or truncation | Strip unbounded data from response; return counts and summaries only (F13) |
+| Import fails with "COLUMN_NAME is required" on valid files | Parser assumes fixed preamble row count | Auto-detect header row by scanning for known column names (F14) |
+| Large import holds DB locks for minutes or OOMs | Single transaction for entire file | Batch commits every 1,000 rows (F15) |
+| Progress bar jumps from 0% to 100% | Background task only updates at completion | Update task record after each committed batch (F16) |
+| One bad row kills entire import of 27k records | Exception in import loop raises and rolls back | Catch per-row errors, track failures, continue to next row (F15, F17) |
+| User confused by "dry run" / "validate" step | Technical validation exposed as UX step | Merge validation into single-action pipeline (F12) |

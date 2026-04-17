@@ -67,6 +67,33 @@ These apply to every project /make-it builds, no exceptions.
     This applies to middleware.ts, auth.ts, oidc.ts, and any other module that validates
     secrets or configuration at import time.
 
+15. **`.dockerignore` mandatory** -- Every project with a Dockerfile MUST have a `.dockerignore`
+    that excludes `.env*` files (except `.env.example`), `.git/`, `__pycache__/`, `node_modules/`,
+    test directories, and other non-runtime artifacts. Without this, `COPY . .` in the Dockerfile
+    bakes secrets, dev config, and bloat into the image. The `.dockerignore` is generated during
+    project setup alongside `.gitignore`.
+16. **No `load_dotenv(override=True)`** -- Application code that loads local env files (`.env`,
+    `.env.azure`, `.env.local`) MUST use `override=False` (or omit the parameter, since False is
+    the default). `override=True` causes local dev files to silently overwrite real environment
+    variables injected by Kubernetes, Docker Compose, or CI/CD -- leading to production using
+    stale dev endpoints, wrong credentials, or embedded secrets. Pattern:
+    ```python
+    # WRONG: local file beats K8s secrets
+    load_dotenv('.env.azure', override=True)
+
+    # RIGHT: real env vars always win, file provides defaults only
+    load_dotenv('.env.azure', override=False)
+    ```
+    ```typescript
+    // WRONG: dotenv overrides process.env
+    require('dotenv').config({ override: true })
+
+    // RIGHT: dotenv only fills in missing vars
+    require('dotenv').config()
+    ```
+    Build-verify and /ship-it grep for `override=True` and `override: true` in dotenv calls.
+    Any match is a BLOCK finding.
+
 ### Architecture
 
 13. **Separation of concerns** -- Distinct layers/modules with clear responsibilities. Models separate from business logic separate from presentation/UI.
