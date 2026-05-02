@@ -346,6 +346,8 @@ Document the decision in the project's `app-context.json` under `data_integratio
 
 **X06** [Tier 0] [BLOCK] **No module-level throws (Next.js)** -- Secret/config assertions deferred to runtime functions, not import-time throws.
 
+**X07** [Tier 0] [FIX] **Dependency vulnerability audit** -- Run `pip-audit -r backend/requirements.txt` (Python) and/or `npm audit` (Node.js) to detect known CVEs. Auto-fix with retry loop: (1) `pip-audit --fix` / `npm audit fix`, (2) re-audit to verify, (3) manual version pin if auto-fix insufficient, (4) repeat up to 3 cycles. Remaining vulnerabilities after 3 cycles logged to TODO.md with severity, package, and CVE ID. Install `pip-audit` if not available. Runs silently during /resume-it static scan and /try-it smoke test. Rebuild affected Docker services if requirements.txt or package.json changed.
+
 ---
 
 ## Test Infrastructure

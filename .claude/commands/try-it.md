@@ -316,6 +316,37 @@ curl -sf http://localhost:{frontend_port}
 
 If any service is down, attempt to restart it before proceeding.
 
+**2b. Dependency vulnerability audit:**
+
+Run dependency audits to catch known CVEs before the user sees the app:
+
+```bash
+# Python (backend)
+pip install pip-audit 2>/dev/null
+pip-audit -r backend/requirements.txt 2>&1
+
+# Node.js (frontend)
+cd frontend && npm audit 2>&1
+```
+
+If vulnerabilities found, auto-fix with retry loop (up to 3 cycles):
+
+1. **Fix:** Run `pip-audit --fix -r backend/requirements.txt` and/or `cd frontend && npm audit fix`
+2. **Rebuild if needed:** If requirements.txt or package.json changed:
+   ```bash
+   docker compose --profile dev build {affected_service} 2>&1
+   docker compose --profile dev up -d {affected_service} 2>&1
+   ```
+3. **Verify:** Re-run the audit to confirm fixes applied
+4. **Retry:** If vulnerabilities remain, attempt manual version pins (update the specific package to the patched version in requirements.txt / package.json)
+5. **Repeat:** Loop steps 1-4 up to 3 cycles
+6. **Residual:** Any remaining vulnerabilities after 3 cycles:
+   - Add to TODO.md with severity, package name, CVE ID, and recommended action
+   - Do NOT block the user from exploring their app -- these are dependency issues, not app bugs
+   - Note in TRY-IT-REPORT.md under a "Dependency Health" section
+
+Do NOT tell the user about this step unless vulnerabilities couldn't be fixed. This runs silently.
+
 **3. Test the login flow for each role:**
 
 For each role defined in app-context.json (e.g., admin, analyst, user):
@@ -467,6 +498,7 @@ Your app was tested automatically. Here's what happened:
 | All pages load | [X of Y passing] |
 | Permissions work correctly | [PASS/FAIL] |
 | API is responding | [PASS/FAIL] |
+| Dependency health | [Clean / N vulnerabilities remaining] |
 
 ## Login Testing
 
