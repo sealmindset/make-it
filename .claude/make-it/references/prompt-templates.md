@@ -124,7 +124,7 @@ Requirements:
 Suggest a modern technology stack:
 - Next.js frontend
 - [BACKEND_FRAMEWORK] backend (FastAPI, Node.js/Express, or similar)
-- [DATABASE_TYPE] database (when database is required -- see design-blueprint.md Section 3b)
+- [DATABASE_TYPE] database
 - [CLOUD_PROVIDER] cloud services
 
 Version policy: Always use the latest stable release of each dependency.
@@ -133,7 +133,6 @@ Do NOT pin to older major versions (e.g., Next.js 14 when 15 is stable).
 
 **Required context:** app type, user count, compliance, special features
 **Always runs:** Yes (validates/confirms stack decision from Phase 2)
-**Database note:** If database is excluded per Section 3b decision tree, omit [DATABASE_TYPE] from the stack.
 
 ---
 
@@ -151,13 +150,12 @@ Show me:
 - How frontend and backend connect
 - Cloud services to use
 
-Database setup (when database is included -- see design-blueprint.md Section 3b):
+Database setup:
 - If using Python + SQLAlchemy: initialize Alembic (`alembic init alembic`),
   configure alembic.ini and env.py to use the async engine, and generate
   the initial migration from the models (`alembic revision --autogenerate -m "initial schema"`)
 - If using Node + Prisma: initialize Prisma schema and generate the initial migration
 - The database must be usable immediately after `docker-compose up` without manual steps
-- If database is excluded: skip all migration, ORM, and seed data setup
 ```
 
 **Required context:** features list, stack choice
@@ -190,7 +188,7 @@ Directory structure:
 Services needed:
 - Web app for frontend
 - Functions for backend
-- [DATABASE_TYPE] database (omit if database excluded -- see design-blueprint.md Section 3b)
+- [DATABASE_TYPE] database
 - File storage
 [AI_SERVICES_LINE]
 
@@ -229,8 +227,8 @@ Each mock service should:
 - Use environment variables from .env for configuration
 
 Use Docker Compose profiles to separate mock services from production services:
-- Default profile: app services only (frontend, backend, database if included, redis if needed)
-- "dev" profile: adds all mock services (mock-oidc only for SaaS auth pattern)
+- Default profile: app services only (frontend, backend, database, redis)
+- "dev" profile: adds all mock services
 - Local development runs: docker-compose --profile dev up
 - Production deploys: docker-compose up (no mock services included)
 
@@ -256,9 +254,6 @@ Dockerfile and entrypoint rules:
     RUN chmod +x entrypoint.sh
     CMD ["./entrypoint.sh"]
 - If using pg_isready in entrypoint.sh, install postgresql-client in the Dockerfile
-- If database is excluded (design-blueprint.md Section 3b): no entrypoint.sh needed,
-  CMD can invoke the server directly. Omit the db service, DATABASE_URL, postgres_data
-  volume, and depends_on: db from docker-compose.yml.
 
 Registry proxy support (I08):
 - Every Dockerfile MUST have `ARG DOCKER_HUB_PREFIX=` before each FROM instruction
@@ -435,7 +430,7 @@ Same-origin proxy for OIDC flow:
 ```
 
 **Required context:** auth provider, token expiry, auth library
-**Runs when:** SaaS auth pattern (OIDC + local RBAC). **Skip if EasyAuth is selected** (see design-blueprint.md Section 1b).
+**Runs when:** Authentication needed
 
 ---
 
@@ -664,7 +659,7 @@ Update the frontend sidebar/navigation to:
 ```
 
 **Required context:** stack, database, auth provider, pages/resources list
-**Runs when:** SaaS auth pattern (OIDC + local RBAC) is selected. **Skip if EasyAuth** (design-blueprint.md Section 1b) or if database is excluded (Section 3b).
+**Always runs:** Yes -- every app gets database-driven RBAC with user management
 
 ---
 
@@ -672,7 +667,7 @@ Update the frontend sidebar/navigation to:
 
 ```
 Create the database-backed application settings system for [PROJECT_NAME].
-This is a STANDARD component of every web app that includes a database.
+This is a STANDARD component of every web app -- not optional.
 
 Stack: [STACK]
 Database: [DATABASE]
@@ -818,7 +813,7 @@ Create /admin/settings page with:
 ```
 
 **Required context:** stack, database, list of all .env variables from the project
-**Runs when:** Database is included (see design-blueprint.md Section 3b). **Skip if database is excluded.**
+**Always runs:** Yes -- every web app gets database-backed settings management
 
 ---
 
@@ -1349,59 +1344,92 @@ File type validation is server-side (check extension, not just Content-Type).
 management (tier-dependent). The provider setup runs FIRST, then the appropriate
 prompt management tier.**
 
-### Prompt #10-provider: AI Provider Abstraction (always runs if AI features exist)
+### Prompt #10-provider: AI Provider Abstraction -- SCAFFOLD-BASED (always runs if AI features exist)
 
 ```
 Set up the AI provider abstraction layer for [PROJECT_NAME].
 
 Primary provider: [AI_PROVIDER] (e.g., anthropic_foundry, anthropic, openai, ollama)
-Fallback provider: [AI_FALLBACK_PROVIDER] (optional)
+Failover provider: [AI_FAILOVER_PROVIDER] (optional -- auto-switches on primary failure)
 
 Model tiering:
 - Heavy tasks (complex reasoning, multi-step analysis): [AI_MODEL_HEAVY]
 - Standard tasks (summarization, classification): [AI_MODEL_STANDARD]
 - Light tasks (simple completion, routing): [AI_MODEL_LIGHT]
 
-Create the provider abstraction layer:
+Copy the provider abstraction scaffold from
+~/.claude/make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/
+into the project.  The scaffold provides a battle-tested, pre-built AI
+provider layer:
 
 lib/ai/
-├── provider.ts (or provider.py)     # Abstract interface
-│   - complete(prompt, options): string
-│   - stream(prompt, options): AsyncIterator
-│   - embed(text): number[] (optional, only if embeddings needed)
-├── providers/
-│   ├── anthropic-foundry.ts         # Azure AI Foundry with Claude models
-│   ├── anthropic-direct.ts          # Direct Anthropic API
-│   ├── openai.ts                    # OpenAI API (or Azure OpenAI)
-│   └── ollama.ts                    # Local Ollama for development
-├── model-tier.ts                    # Maps feature complexity to model
-│   - getModel(tier: 'heavy'|'standard'|'light'): string
+├── __init__.py                      # Re-exports get_ai_provider()
+├── provider.py                      # Abstract base class AIProvider
+│   - complete(system_prompt, user_prompt, model?, max_tokens?): str
+│   - stream(system_prompt, user_prompt, model?, max_tokens?): AsyncIterator[str]
+│   - estimate_cost(input_tokens, output_tokens): float  (override per-provider)
+│   - usage: UsageStats  (tracks tokens, cost, request count per instance)
+├── factory.py                       # Factory with failover support
+│   - _build_provider(name): AIProvider
+│   - get_ai_provider(): AIProvider  (wraps in FailoverProvider if AI_FAILOVER_PROVIDER set)
+├── model_tier.py                    # Maps feature complexity to model
+│   - get_model(tier: 'heavy'|'standard'|'light'): str
 │   - Reads from AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT env vars
-│   - Falls back to sensible defaults per provider
-└── index.ts                         # Factory function
-    - Reads AI_PROVIDER env var
-    - Returns configured provider instance
-    - Throws clear error if provider is not configured
+├── self_annealing.py                # Model auto-correction for Anthropic providers
+│   - validate_model(model): str  (catches non-Claude models, corrects to default)
+│   - detect_model_error(error_message): bool  (recognizes model-not-found API errors)
+│   - extract_corrected_model(error_message, current_model): str  (returns safe fallback)
+├── errors.py                        # Client-safe error sanitization
+│   - AIProviderError, AIRateLimitError, AIAuthenticationError,
+│     AIContextLengthError, AIServiceUnavailableError
+│   - sanitize_ai_error(exc): AIProviderError
+├── sanitize.py                      # Input sanitization (prompt injection defense)
+│   - sanitize_prompt_input(text): str  (filters injection patterns, wraps in <user_input> tags)
+├── validate.py                      # Output validation
+│   - strip_html(text): str  (XSS prevention)
+│   - validate_json_schema(text, schema): dict  (structured output validation)
+│   - sanitize_ai_output(text): str
+└── providers/
+    ├── anthropic_foundry.py         # Azure AI Foundry with Claude (dual-mode auth)
+    │   - Self-annealing: retries with corrected model on model errors
+    │   - Cost tracking: per-model pricing (per 1M tokens)
+    │   - Dual auth: API key or DefaultAzureCredential
+    ├── anthropic_direct.py          # Direct Anthropic API
+    │   - Self-annealing + cost tracking (same as foundry)
+    ├── openai_provider.py           # OpenAI API (GPT-4o, GPT-5, o-series)
+    │   - Reasoning model support: max_completion_tokens, merged system prompt
+    │   - Standard model support: max_tokens, temperature, system role
+    │   - Cost tracking: per-model pricing (per 1K tokens)
+    ├── ollama.py                    # Local Ollama (httpx, no auth, cost=0)
+    └── failover.py                  # Decorator: wraps primary + secondary provider
+        - On primary failure, marks _primary_failed, routes to secondary
+        - Works for both complete() and stream()
 
 Rules:
-- Business logic (agents, services, routes) MUST import from lib/ai/index.ts
-  -- NEVER import provider SDKs directly
+- Business logic (agents, services, routes) MUST import from lib/ai/
+  -- NEVER import provider SDKs (anthropic, openai) directly
 - Each agent/service declares its model tier (heavy, standard, or light)
 - The factory resolves the actual provider + model at runtime from env vars
 - All provider-specific configuration comes from environment variables
 - If AI_PROVIDER is not set, throw a helpful error with setup instructions
   (do NOT silently fall back to a hardcoded provider)
+- UsageStats on each provider tracks tokens + cost -- surface in admin/diagnostics
+- Self-annealing catches model misconfiguration at init AND at runtime (API errors)
+- Failover is opt-in via AI_FAILOVER_PROVIDER env var
 
 Environment variables to add to .env.example:
 AI_PROVIDER=[AI_PROVIDER]
+AI_FAILOVER_PROVIDER=              # Optional (e.g. ollama). Leave empty to disable.
 AI_MODEL_HEAVY=[AI_MODEL_HEAVY]
 AI_MODEL_STANDARD=[AI_MODEL_STANDARD]
 AI_MODEL_LIGHT=[AI_MODEL_LIGHT]
 [PROVIDER_SPECIFIC_VARS]
+OPENAI_API_KEY=                    # When AI_PROVIDER=openai
 ```
 
 **Required context:** AI provider choice, model tier assignments, provider-specific config
 **Runs when:** ai_features.needed = true (any AI usage level)
+**Scaffold source:** `~/.claude/make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/`
 
 ---
 
@@ -1808,7 +1836,7 @@ Apply this middleware to ALL routes that invoke AI agents:
 
 Add to BaseAgent (or provider abstraction):
 - Before sending to AI provider, check total prompt length
-- Max chars: AI_MAX_PROMPT_CHARS env var (default: 300,000)
+- Max chars: AI_MAX_PROMPT_CHARS env var (default: 100,000)
 - For document analysis: AI_MAX_DOCUMENT_CHARS env var (default: 500,000)
 - Reject oversized prompts with HTTP 413: { error: "Input too large", maxChars: N }
 
@@ -1977,7 +2005,7 @@ Update the admin UI:
 Add to .env.example:
 AI_RATE_LIMIT_REQUESTS_PER_MINUTE=20
 AI_RATE_LIMIT_TOKENS_PER_MINUTE=50000
-AI_MAX_PROMPT_CHARS=300000
+AI_MAX_PROMPT_CHARS=100000
 AI_MAX_DOCUMENT_CHARS=500000
 AI_MAX_HISTORY_TURNS=20
 AI_PII_MASKING_ENABLED=true
@@ -2192,7 +2220,7 @@ Verification:
 ```
 
 **Required context:** list of external integrations, auth roles for mock users
-**Runs when:** SaaS auth pattern (always needs mock-oidc) or when app has external integrations requiring mocks. **Skip mock-oidc if EasyAuth is selected.** Skip entirely if no auth and no external integrations.
+**Runs when:** Always (every app has at least auth, which needs mock-oidc)
 
 ---
 
@@ -2297,7 +2325,7 @@ Data volume guidelines:
 ```
 
 **Required context:** roles, pages, features, integrations, mock-oidc test users, database/ORM choice
-**Runs when:** Database is included (see design-blueprint.md Section 3b). **Skip if database is excluded** -- there is nowhere to seed data.
+**Runs when:** Always -- every app needs seed data for a meaningful first-run experience
 
 ---
 

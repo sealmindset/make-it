@@ -107,6 +107,10 @@ cat Dockerfile 2>/dev/null
 cat .env.example 2>/dev/null
 cat .env 2>/dev/null  # Check what's configured (don't display secrets)
 
+# K8s deployment manifests (detect secret key mappings)
+find env/ k8s/ kubernetes/ deploy/ manifests/ -name '*.yaml' -o -name '*.yml' 2>/dev/null | head -20
+# Read each manifest and extract secretKeyRef mappings
+
 # Existing state files
 cat .make-it-state.md 2>/dev/null
 cat .make-it/app-context.json 2>/dev/null
@@ -122,6 +126,7 @@ cat .make-it/app-context.json 2>/dev/null
 | Auth (if any) | Auth-related deps, middleware, login routes, JWT/session config |
 | Containerization | Dockerfile, docker-compose.yml |
 | Cloud/infra | terraform/, CDK, serverless.yml, .github/workflows |
+| K8s manifests | env/*/*.yaml, k8s/*.yaml, deploy/*.yaml -- extract `secretKeyRef` mappings per environment |
 | AI/LLM usage | AI SDK imports, agent classes, hardcoded system prompts, LLM provider config |
 
 **3. Understand the architecture:**
@@ -134,6 +139,7 @@ Read key files to understand:
 - **User types** -- Roles or user levels (from schema, middleware, or UI conditional rendering)
 - **External integrations** -- API calls to third-party services
 - **Business logic** -- What the app actually DOES (the domain logic)
+- **K8s secret mappings** -- If K8s manifests exist (env/*/*.yaml, k8s/*.yaml), extract ALL `secretKeyRef` entries: build a table of `{envVarName, secretName, secretKey}` per environment. Diff across environments to detect key name inconsistencies (I11). Cross-reference env var names against `os.getenv()` / `os.environ` / config class fields in application code to detect missing injections (I12).
 
 **4. Read the application code:**
 
@@ -453,6 +459,31 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - **Cross-reference env var names:** Read the backend config class (e.g., pydantic Settings)
      and verify every field name matches the docker-compose.yml environment block. Common
      mismatches: OIDC_ISSUER vs OIDC_ISSUER_URL, JIRA_API_TOKEN vs JIRA_AUTH_TOKEN. Fix any.
+   - **K8s secret key consistency (I11, I12):** If K8s deployment manifests exist (env/*/*.yaml,
+     k8s/*.yaml, deploy/*.yaml), perform a three-way cross-reference:
+     1. **Extract mappings:** For each environment manifest, build a table of
+        `{envVarName, secretName, secretKeyRef.key}` from all `valueFrom.secretKeyRef` entries.
+     2. **Diff across environments:** Compare dev vs prod (vs staging, etc.). For each env var
+        that appears in multiple manifests, flag where `secretKeyRef.key` differs. Example:
+        dev maps `AZURE_AD_TENANT_ID` from key `AZURE_AD_TENANT_ID`, but prod maps it from
+        key `AD_TENANT_ID` — this is a mismatch.
+     3. **Cross-reference with code:** Grep application code for `os.getenv()`, `os.environ`,
+        `app.config`, pydantic Settings fields, or `process.env.*` references. Confirm every
+        env var the code depends on has a corresponding `env[].name` entry in ALL K8s manifests.
+        Flag missing injections.
+     4. **Auto-fix strategy:** Standardize all `secretKeyRef.key` values to match the env var
+        name itself (e.g., key `AZURE_OPENAI_ENDPOINT` not `AI_ENDPOINT` or `OPENAI_ENDPOINT`).
+        This eliminates the translation layer between K8s Secret keys and container env vars,
+        making the mapping self-documenting. Update ALL environment manifests to use the same
+        canonical key names.
+     5. **Document for DevOps:** After fixing manifests, output a summary of changed key names
+        so the K8s Secrets in each cluster can be updated to match. Format:
+        ```
+        Secret: finance-dashboard-azure-prod
+        Old key: AD_TENANT_ID        → New key: AZURE_AD_TENANT_ID
+        Old key: OPENAI_ENDPOINT     → New key: AZURE_OPENAI_ENDPOINT
+        ```
+        Add this to TODO.md under a "DevOps: Update K8s Secrets" heading.
 
 3. **Database (Prompt #4 + #7 adapted):**
    - If existing DB: add RBAC tables (roles, permissions, role_permissions) via migration
@@ -671,10 +702,17 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
       - Add `e2e/tests/health.spec.ts` -- frontend loads + backend health endpoint tests
     - If the app already has tests, preserve them and ensure they pass alongside the new ones
 
-11. **AI Prompt Management (Prompt #10 adapted):**
+11. **AI Provider Abstraction + Prompt Management (Prompt #10 adapted):**
     - Detect AI usage: scan for LLM/AI provider calls, agent classes, hardcoded system prompts
-    - If AI agents or prompts exist, determine the tier:
-      - 1-3 prompts -> Tier 1 (prompts in code with env var override)
+    - **Provider layer:** If AI features exist but no provider abstraction (direct SDK imports
+      in business logic), copy the scaffold from
+      `~/.claude/make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/` into the project.
+      This provides: abstract base class with UsageStats cost tracking, factory with failover
+      support, self-annealing model correction for Anthropic providers, OpenAI reasoning model
+      support, error sanitization, input sanitization, output validation.
+      Add `AI_FAILOVER_PROVIDER` and `OPENAI_API_KEY` to config.py Settings and .env.
+    - **Prompt management:** If AI agents or prompts exist, determine the tier:
+      - 1-3 prompts -> Tier 2 minimum (Tier 1 eliminated)
       - 4-10 prompts -> Tier 2 (database-stored prompts, admin UI, version history)
       - 10+ prompts -> Tier 3 (full prompt management platform)
     - For Tier 2/3: add managed_prompts and prompt_versions tables, API routes,

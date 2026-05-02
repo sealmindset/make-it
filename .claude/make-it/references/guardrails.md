@@ -118,9 +118,6 @@ These apply to every project /make-it builds, no exceptions.
 Activate when `project_type == "web-app"`. These are the existing /make-it guardrails for browser-based applications with frontend + backend.
 
 ### Authentication & Authorization
-
-**This section applies to the SaaS auth pattern (OIDC + local RBAC) only.** This is /make-it's primary and default pattern. If EasyAuth is selected (see design-blueprint.md Section 1b), skip all OIDC and RBAC guardrails below -- authorization is handled by Azure AD Object IDs outside the app.
-
 - OIDC authentication (provider chosen during Design: Azure AD, Auth0, Okta, Google, GitHub, Keycloak, etc.)
 - Auth roles from application database (NOT OIDC provider claims)
 - Logout via POST to backend API (NOT GET links)
@@ -199,9 +196,6 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Pages fetch data through service/API layer (no hardcoded mock data)
 
 ### Database-Backed Application Settings
-
-**Requires database.** If PostgreSQL is excluded (see design-blueprint.md Section 3b), skip this section.
-
 - app_settings and app_setting_audit_logs tables exist in a migration
 - Settings service with in-memory cache (60s TTL) and cascading precedence: DB > .env > code default
 - All .env variables seeded into app_settings with metadata (group_name, display_name, description, value_type, is_sensitive, requires_restart)
@@ -215,21 +209,16 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Audit log tracks every setting change with old_value, new_value, changed_by, timestamp
 
 ### Data & Backend
-
-**Database-specific items below require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip migration, seed data, and parameterized query guardrails. API-first principle always applies.
-
-- Database migrations generated (Alembic or Prisma -- not just models) **(when database included)**
-- Seed data mandatory -- app starts with populated pages, not empty screens **(when database included)**
-- Seed user oidc_subjects match mock-oidc subject IDs exactly **(when SaaS auth pattern + database)**
-- Parameterized database queries (never string concatenation) **(when database included)**
+- Database migrations generated (Alembic or Prisma -- not just models)
+- Seed data mandatory -- app starts with populated pages, not empty screens
+- Seed user oidc_subjects match mock-oidc subject IDs exactly
+- Parameterized database queries (never string concatenation)
 - API-first: backend returns JSON, frontend is separate concern
 
 ### Infrastructure
 - Docker Compose for local development (profiles: default for app, "dev" for mocks)
-- PostgreSQL `db` service in Docker Compose **(when database included; omit when excluded -- see design-blueprint.md Section 3b)**
 - Mock services for all external integrations
-- Mock-oidc service **(SaaS auth pattern only; omit for EasyAuth)**
-- Mock service seed script (scripts/seed-mock-services.sh) **(when mock services exist)**
+- Mock service seed script (scripts/seed-mock-services.sh)
 - Service client endpoints verified against mock API contracts
 - Terraform (or equivalent IaC) generated for the user's chosen cloud provider as DevOps handoff artifact (user never applies)
 - IaC state backend configured for the chosen cloud provider's state storage
@@ -265,10 +254,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   4. Topic boundary enforcement -- AI stays within its defined domain scope
   5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
-- Build-verify Part D runs code-level AI safety wiring checks automatically (see
-  build-verify-security.md Phase 2). These verify sanitization, validation, delimiter tags,
-  rate limiting, and safety preambles are correctly wired -- no external tools required.
-- Build-verify runs BASIC behavioral checks (minimum 3 test cases per category = 18 tests)
+- Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
 - /ship-it runs FULL suite (minimum 10 test cases per category = 60 tests)
 - Self-healing: failures trigger automatic remediation (prompt hardening, rail adjustments,
   output filters). Re-test after each fix attempt (up to 3 cycles).
@@ -295,7 +281,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 
 #### Prompt Size Validation
 - Maximum prompt size MUST be enforced BEFORE sending to the AI provider
-- Configurable via AI_MAX_PROMPT_CHARS env var (default: 300,000 characters)
+- Configurable via AI_MAX_PROMPT_CHARS env var (default: 100,000 characters)
 - For document analysis agents: AI_MAX_DOCUMENT_CHARS env var (default: 500,000 characters)
 - Validation happens in the BaseAgent or provider abstraction layer -- NOT in individual routes
 - Reject oversized prompts with HTTP 413 and a clear error message
@@ -347,99 +333,6 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - NEVER expose provider name, model name, token counts, or API keys in error responses
 - Build-verify: force an AI error (invalid endpoint or misconfigured credentials); confirm client sees generic message
 
-#### AI Pre-Flight Health Checks (MANDATORY for all AI apps)
-- Pre-flight checks run on application startup AFTER database migrations, BEFORE binding HTTP port
-- This ensures the app never accepts requests when AI infrastructure is broken
-- Prevents silent failures where uploads succeed but AI analysis silently errors
-
-**Checks (all must pass within 5 seconds total, 2-second timeout per check):**
-1. **Provider reachable:** HTTP HEAD or lightweight API call to the configured AI provider endpoint.
-   Catches: wrong endpoint URL, DNS failures, network segmentation, corporate proxy blocking.
-2. **Authentication valid:** Send a minimal request to the configured provider and confirm
-   200 not 401/403. Catches: rotated API keys, misconfigured credentials, expired secrets.
-3. **Model available:** Send a minimal request (max_tokens=1) to the configured model name.
-   Catches: model name typos, model deprecated/removed, wrong model tier.
-4. **Upload infrastructure ready (if file upload enabled):** Verify DOCUMENTS_PATH and
-   UPLOAD_CACHE_PATH directories exist and are writable (create a temp file, delete it).
-   Catches: missing Docker volume mount, wrong permissions, read-only filesystem.
-5. **Extraction libraries loadable (if file upload enabled):** Import pdf-parse/pdfplumber,
-   docx parser, xlsx parser and confirm no ImportError/ModuleNotFoundError.
-   Catches: missing dependencies after Docker image rebuild, broken installations.
-
-**On failure:**
-- Log the specific check that failed with a clear, actionable message:
-  `"AI pre-flight FAILED: check 2 (authentication) — 401 Unauthorized from https://... — verify AZURE_AI_FOUNDRY_API_KEY or run 'az login'"`
-- Exit with non-zero code so Docker/orchestrator restarts the container
-- Do NOT start accepting HTTP requests — a half-functional app is worse than a restart loop
-
-**Implementation:**
-```python
-# In entrypoint.sh or app startup (before uvicorn binds):
-async def run_preflight():
-    checks = [
-        ("provider_reachable", check_provider_reachable),
-        ("auth_valid", check_auth_valid),
-        ("model_available", check_model_available),
-    ]
-    if settings.DOCUMENTS_PATH:
-        checks.append(("upload_dirs", check_upload_dirs))
-        checks.append(("extraction_libs", check_extraction_libs))
-
-    for name, check_fn in checks:
-        try:
-            await asyncio.wait_for(check_fn(), timeout=2.0)
-            logger.info(f"AI pre-flight PASSED: {name}")
-        except Exception as e:
-            logger.error(f"AI pre-flight FAILED: {name} — {e}")
-            sys.exit(1)
-```
-
-**Environment variables:**
-- `AI_PREFLIGHT_ENABLED` (default: true) — set to false in CI/test environments to skip
-- Pre-flight uses the SAME credentials as the running app — no separate config needed
-
-#### AI-Powered Document Analysis Pipeline (when file upload + AI both enabled)
-- When an app has BOTH file upload (F01-F09) AND AI features, the upload pipeline extends
-  to include AI analysis — this is NOT optional, it is the primary value of AI-powered uploads
-- The pipeline runs: extract -> validate size -> sanitize -> AI analyze -> validate output -> store
-
-**Document analysis flow:**
-```
-Upload → Extract Text (F04) → Size Check (AI_MAX_DOCUMENT_CHARS) → Sanitize
-    → Wrap in <document> tags → AI Provider (document-analysis prompt from managed_prompts)
-    → Validate AI Output → Store (raw text + AI analysis, separate fields)
-```
-
-**Critical rules:**
-- AI analysis uses AI_MAX_DOCUMENT_CHARS (300k), NOT AI_MAX_PROMPT_CHARS
-  Documents are larger than chat messages; the limits exist for different reasons
-- Documents are wrapped in `<document>` tags (not `<user_input>`):
-  `<document>{sanitized_extracted_text}</document>`
-- The document-analysis prompt is loaded from managed_prompts (not hardcoded)
-  — admin can edit the analysis instructions without code deploy
-- AI failure MUST NOT block document storage — if AI errors, save the document
-  with extracted text and null AI analysis. Log the error. Show the user:
-  "Document uploaded successfully. AI analysis is temporarily unavailable."
-- Raw extracted text and AI analysis are ALWAYS stored separately (never merged)
-  — this preserves the source of truth and allows re-analysis later
-- The upload wizard (F07) adds an "AI Analysis" step with a streaming progress indicator
-  — uses the same SSE mechanism from AI11 so users see incremental progress
-
-**Upload wizard with AI step:**
-1. Upload zone (drag/drop/browse) — unchanged from F07
-2. Processing: "Extracting content..." — unchanged from F07
-3. **NEW: AI Analysis: "Analyzing document..."** — streaming progress indicator
-   showing AI processing with typewriter-style token display
-4. Review: extracted fields + AI analysis results + confidence indicators
-5. Confirm and save
-
-**Managed prompt for document analysis:**
-- Slug: `document-analysis` (or domain-specific like `contract-analysis`)
-- Seeded in managed_prompts table during migration
-- Editable via admin UI (AI Instructions page)
-- Includes structured output schema (JSON mode) for consistent results
-- Safety preamble prepended at runtime (as with all managed prompts)
-
 #### Conversation History Management (if app has multi-turn AI)
 - Maximum conversation history depth: configurable via AI_MAX_HISTORY_TURNS env var (default: 20)
 - Truncate oldest messages when history exceeds the limit (keep system prompt + recent messages)
@@ -447,117 +340,6 @@ Upload → Extract Text (F04) → Size Check (AI_MAX_DOCUMENT_CHARS) → Sanitiz
 - Session isolation: one user's conversation history MUST NEVER leak into another user's context
 - History storage: server-side only (database or cache) -- NEVER in JWT or client-side storage
 - Build-verify: confirm history truncation works by sending messages exceeding the limit
-
-#### SSE Streaming for AI Responses (MANDATORY for all AI apps)
-- ALL AI endpoints that generate text responses MUST stream tokens via Server-Sent Events (SSE)
-- Non-streaming AI endpoints are ONLY acceptable for sub-second structured extraction
-  (JSON schema responses under 500 tokens, e.g., classification, scoring, entity extraction)
-- This eliminates timeout problems: SSE keeps the HTTP connection alive indefinitely with
-  heartbeat events, so corporate proxies, load balancers, and browser timeouts never kill
-  the request mid-generation
-
-**Backend SSE Pattern (FastAPI):**
-- AI chat routes return `StreamingResponse(media_type="text/event-stream")`
-- The route calls the AI provider's `stream()` method (not `complete()`)
-- Each token is sent as: `data: {"token": "word ", "done": false}\n\n`
-- Final event: `data: {"token": "", "done": true, "conversation_id": "uuid", "message_id": "uuid", "token_count": 347}\n\n`
-- Heartbeat every AI_SSE_HEARTBEAT_INTERVAL_SECONDS (default 15): `data: {"heartbeat": true}\n\n`
-- On provider error mid-stream: `data: {"error": "AI processing failed. Please try again.", "done": true}\n\n`
-  (generic message -- never expose provider details in the SSE stream)
-- Backend MUST support both SSE and non-streaming via Accept header:
-  `Accept: text/event-stream` -> streaming, `Accept: application/json` -> wait for complete response
-- Cache-Control: no-cache, Connection: keep-alive, X-Accel-Buffering: no (disables nginx/proxy buffering)
-
-**Frontend SSE Proxy Pattern (Next.js):**
-- Browser connects to Next.js API route (same-origin), NOT directly to the backend
-- Next.js route proxies the SSE stream from backend, forwarding auth cookies
-- This preserves the same-origin cookie model used for all other API calls
-- The proxy route reads the backend stream and re-emits events to the browser
-- If the backend stream errors, the proxy sends the error event and closes cleanly
-
-**Frontend Hook: useStreamingResponse**
-- Located in `lib/ai/use-streaming.ts` (or `hooks/use-streaming.ts`)
-- Returns: `{ sendMessage, tokens, isStreaming, error, abort, retryCount }`
-- `sendMessage(content)`: POST to SSE endpoint, begin consuming events
-- `tokens`: accumulated string, updated on each SSE event (triggers re-render)
-- `isStreaming`: true while receiving events, false on done/error
-- `error`: null or error message string
-- `abort()`: AbortController.abort() to cancel mid-stream (user clicks stop)
-- Uses `fetch()` with ReadableStream (not EventSource) for POST support and auth headers
-- Incremental token assembly: concatenates `event.token` to running string on each event
-- Heartbeat events are consumed silently (reset a client-side timeout, not displayed)
-
-**SSE Error Recovery Chain:**
-1. SSE connection fails or stream interrupts -> auto-retry (1s, 2s, 4s exponential backoff, max 3 attempts)
-2. All SSE retries exhausted -> fall back to polling mode:
-   - POST message with `Accept: application/json` (non-streaming)
-   - Poll `GET /api/ai/conversations/{id}/messages?after={last_id}` every AI_SSE_POLL_INTERVAL_SECONDS
-   - Timeout after AI_SSE_POLL_TIMEOUT_SECONDS
-3. Polling timeout -> show user-friendly error with retry button:
-   "AI is temporarily unavailable. Please try again."
-- The `useStreamingResponse` hook manages this full lifecycle transparently
-- Users see seamless degradation: streaming -> buffered response -> error with retry
-
-**Conversation Persistence:**
-- AI chat conversations are stored server-side in the database (NEVER client-side only)
-- 2 tables: `conversations` (id, user_id, title, agent_slug, created_at, updated_at, archived_at)
-  and `conversation_messages` (id, conversation_id, role, content, token_count, model, created_at)
-- `role` is enum: "user", "assistant", "system" (system messages never displayed in UI)
-- Title auto-generated from first user message (truncated to 80 chars), editable via PATCH
-- Soft-delete via `archived_at` timestamp (not hard delete)
-- Session isolation: ALL conversation queries include `WHERE user_id = current_user.id`
-- History loading: `GET /api/ai/conversations/{id}` returns conversation + all messages ordered by created_at
-- Message creation: `POST /api/ai/conversations/{id}/messages` accepts `{ content: string }`,
-  creates the user message row, invokes the AI provider stream, creates the assistant message
-  row on stream completion (with token_count and model), returns SSE stream to the caller
-- Conversation list: `GET /api/ai/conversations` returns user's conversations ordered by
-  updated_at desc, paginated (limit/offset), excludes archived
-
-**Chat Panel Scaffold Components (4 components):**
-- `chat-panel.tsx`: Full chat interface. Props: `agentSlug` (routes to correct AI agent),
-  `conversationId?` (resume existing or create new). Contains message list (scroll-to-bottom
-  on new messages, auto-scroll disabled if user scrolled up), streaming message bubble
-  (blinking cursor during generation), and ChatInput. Empty state: centered with agent
-  description and 3-4 suggested starter questions (configurable per agent via managed_prompts).
-  Uses `useStreamingResponse` hook internally.
-- `chat-message.tsx`: Single message bubble. Props: `role`, `content`, `timestamp`, `isStreaming`.
-  User messages: right-aligned, themed primary color. Assistant messages: left-aligned, muted
-  background. Content rendered via react-markdown (code blocks with syntax highlighting via
-  rehype-highlight, inline code styled). Copy button (copies raw markdown). Timestamp shown
-  on hover. During streaming (`isStreaming=true`): content updates incrementally, blinking
-  cursor appended after last token.
-- `chat-input.tsx`: Auto-resizing textarea (min 1 row, max 6 rows). Send button (disabled
-  when empty or during streaming). Shift+Enter for newlines, Enter to send. Stop button
-  replaces Send during streaming (calls abort()). Character count indicator when approaching
-  AI_MAX_PROMPT_CHARS limit.
-- `conversation-sidebar.tsx`: Left sidebar (w-72, collapsible via hamburger icon). "New Chat"
-  button at top. Conversation list: title, relative timestamp ("2m ago"), unread indicator
-  for conversations with new assistant messages. Active conversation highlighted. Search/filter
-  by title. Archive button on hover (soft-delete). Grouped by date: Today, Yesterday, Previous
-  7 Days, Older. Click loads conversation into ChatPanel.
-
-**Chat Page Layout:**
-- Route: `/chat` (or `/ai/chat` depending on app structure)
-- Layout: `conversation-sidebar` (left, collapsible) + `chat-panel` (right, flex-1)
-- URL updates to `/chat/{conversationId}` when a conversation is selected (shareable/bookmarkable)
-- Sidebar navigation item: MessageSquare icon, label "AI Chat", permission: `ai.chat`
-- RBAC: `ai.chat` permission required (included in standard roles by default)
-
-**AI Provider stream() Method:**
-- The provider abstraction interface includes `stream()` alongside `complete()` and `embed()`
-- Signature: `async def stream(messages, system_message, parameters) -> AsyncIterator[str]`
-- Each `yield` produces one token (or small token group)
-- The provider wraps the SDK's native streaming (Anthropic: `client.messages.stream()`,
-  OpenAI: `client.chat.completions.create(stream=True)`)
-- Error handling: provider catches SDK errors and raises a generic `AIStreamError`
-  with a safe message (no provider details)
-- The route function consumes the AsyncIterator and formats each token as an SSE event
-
-**Environment Variables:**
-- `AI_SSE_HEARTBEAT_INTERVAL_SECONDS` (default: 15) -- heartbeat frequency to keep connections alive
-- `AI_SSE_RETRY_MAX_ATTEMPTS` (default: 3) -- client-side SSE retry attempts before polling fallback
-- `AI_SSE_POLL_INTERVAL_SECONDS` (default: 2) -- polling interval when in fallback mode
-- `AI_SSE_POLL_TIMEOUT_SECONDS` (default: 30) -- max time to wait in polling mode before showing error
 
 #### AI Fallback Model Safety
 - If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH
@@ -731,43 +513,6 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] Basic test suite passes (minimum 3 per category = 18 tests)
 - [ ] AI Safety Attestation generated in docs/
 
-**SSE Streaming & Chat (MANDATORY for any AI app):**
-- [ ] AI chat/agent endpoints return `Content-Type: text/event-stream` when `Accept: text/event-stream`
-- [ ] AI chat/agent endpoints return `Content-Type: application/json` when `Accept: application/json` (fallback)
-- [ ] SSE events follow format: `data: {"token": "...", "done": false}\n\n`
-- [ ] Final SSE event includes `done: true`, `conversation_id`, `message_id`, `token_count`
-- [ ] Heartbeat events sent every AI_SSE_HEARTBEAT_INTERVAL_SECONDS (default 15s)
-- [ ] Error events use generic message (no provider details in SSE stream)
-- [ ] Frontend proxies SSE through same-origin Next.js API route (not direct to backend)
-- [ ] `useStreamingResponse` hook exists in lib/ai/ with sendMessage, tokens, isStreaming, error, abort
-- [ ] SSE retry with exponential backoff (1s/2s/4s, max 3 attempts) before polling fallback
-- [ ] Polling fallback delivers complete response if all SSE retries fail
-- [ ] User sees error with retry button only after both SSE and polling fail
-- [ ] conversations and conversation_messages tables exist with correct columns
-- [ ] Session isolation: user A cannot access user B's conversations (returns 404)
-- [ ] Conversation history preserved across page reloads
-- [ ] ChatPanel component renders with streaming typewriter effect
-- [ ] conversation-sidebar lists previous conversations with search and archive
-- [ ] AI_SSE_HEARTBEAT_INTERVAL_SECONDS, AI_SSE_RETRY_MAX_ATTEMPTS, AI_SSE_POLL_INTERVAL_SECONDS,
-      AI_SSE_POLL_TIMEOUT_SECONDS in .env.example and docker-compose.yml
-- [ ] Provider abstraction includes stream() method alongside complete() and embed()
-- [ ] Chat page at /chat (or /ai/chat) with sidebar + panel layout
-- [ ] ai.chat permission exists in RBAC seed data
-
-**AI Pre-Flight & Document Analysis (when AI features enabled):**
-- [ ] AI pre-flight checks run on startup before HTTP port binds
-- [ ] Pre-flight verifies: provider reachable, auth valid, model available
-- [ ] Pre-flight verifies upload infrastructure if file upload enabled (dirs writable, libs loadable)
-- [ ] Pre-flight failure logs specific check name and exits non-zero
-- [ ] AI_PREFLIGHT_ENABLED env var exists (default: true, false for CI/test)
-- [ ] If file upload + AI: upload pipeline includes AI analysis step after extraction
-- [ ] Document analysis uses AI_MAX_DOCUMENT_CHARS (300k), not AI_MAX_PROMPT_CHARS
-- [ ] Extracted text wrapped in `<document>` tags before AI submission
-- [ ] AI failure does NOT block document storage (graceful degradation)
-- [ ] Raw extracted text and AI analysis stored separately (never merged)
-- [ ] Upload wizard includes "AI Analysis" step with streaming progress
-- [ ] Document-analysis prompt seeded in managed_prompts table
-
 **Prompt Management (Tier 2 MANDATORY for any AI app):**
 - [ ] Prompts externalized (not hardcoded in business logic)
 - [ ] Tier 2 prompt management implemented (minimum): managed_prompts, prompt_versions,
@@ -793,17 +538,6 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 
 ### Build-Verify (Web App)
 Full static verification + live verification per make-it.md build-verify step.
-
-**Part D: Automatic Security Hardening** -- After Part A (static checks), Part B (live
-verification), and Part C (fix cycle) pass, build-verify runs an automatic security scan
-before handing off to /try-it. This is silent and invisible to the user. See
-`build-verify-security.md` for the full specification. Key points:
-- Static analysis (code patterns, semgrep, bandit, dependency audit) with graceful tool degradation
-- AI safety wiring verification (if AI features are present)
-- Auto-fix cycle: scan → fix → rebuild → re-scan (up to 3 cycles, AUTO-class fixes only)
-- Remaining findings logged to TODO.md, never blocks handoff
-- This does NOT replace standalone /nemo-it + /fix-it (which provide deeper interactive analysis
-  with attestation documents for GRC teams)
 
 Additional OIDC/auth/type checks (CRITICAL -- these prevent recurring issues across apps):
 - Frontend uses same-origin proxy: next.config.ts rewrites /api/* to backend
@@ -1022,23 +756,3 @@ The Design phase summary to the user should reflect the project type without usi
 
 *Y* = when auth is needed for the API service
 *AI* = when ai_features.needed = true (applies to ANY project type that uses AI)
-*DB* = OIDC/Auth, Database RBAC, Seed data, and Activity Logs require a database. If PostgreSQL is excluded (see design-blueprint.md Section 3b), these guardrails are skipped. Docker Compose is always generated but omits the `db` service when no database is needed.
-
-## Variant-Specific Guardrails
-
-When a variant is active (recorded as `"variant"` in `app-context.json`), additional guardrail checks are loaded from the variant's definition file in `~/.claude/make-it/variants/<name>.md`. These checks use the format `[Tier N+variant_name]` (e.g., `[Tier 1+mobile]`) and are **additive** — they never replace base tier checks.
-
-See `variants/registry.md` for available variants and each variant's `.md` file for its guardrail additions.
-
-### Currently Available Variant Guardrails
-
-| Variant | Check IDs | Tier | Summary |
-|---------|----------|------|---------|
-| mobile (PWA) | P01-P08 | Tier 1+mobile | Viewport meta, manifest, service worker, touch targets, offline fallback, Apple PWA meta |
-
-### How Variant Checks Are Applied
-
-1. During **Build-Verify Part A** (static), variant checks are run alongside the base tier checks
-2. During **Build-Verify Part B** (live), variant-specific live checks are executed
-3. Severity rules are the same: `[BLOCK]` must pass, `[FIX]` is auto-fixed, `[WARN]` goes to TODO.md
-4. `/resume-it` catch-up scan includes variant checks when it detects `variant` in app-context.json

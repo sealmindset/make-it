@@ -21,6 +21,30 @@ class Settings(BaseSettings):
     ENFORCE_SECRETS: bool = False
     # Activity Log
     LOG_BUFFER_SIZE: int = 10000
+
+    # AI Provider
+    AI_PROVIDER: str = "anthropic_foundry"
+    AI_FAILOVER_PROVIDER: str = ""
+    AI_MODEL_HEAVY: str = "claude-sonnet-4-20250514"
+    AI_MODEL_STANDARD: str = "claude-sonnet-4-20250514"
+    AI_MODEL_LIGHT: str = "claude-haiku-4-5-20251001"
+    AZURE_AI_FOUNDRY_ENDPOINT: str = ""
+    AZURE_AI_FOUNDRY_API_KEY: str = ""
+    APIM_PROJECT_ID: str = ""
+    APIM_SN_PROJECT: str = ""
+    APIM_SN_PRODUCT: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # AI Safety
+    AI_MAX_PROMPT_CHARS: int = 50000
+    AI_MAX_DOCUMENT_CHARS: int = 200000
+    AI_MAX_HISTORY_MESSAGES: int = 50
+    AI_RATE_LIMIT_RPM: int = 60
+    AI_SSE_HEARTBEAT_SEC: int = 15
+    AI_PREFLIGHT_CHECK: bool = True
+
     # [ADDITIONAL_SERVICE_URLS] -- e.g., JIRA_BASE_URL, TEMPO_BASE_URL
 
     model_config = {"env_file": ".env", "extra": "ignore"}

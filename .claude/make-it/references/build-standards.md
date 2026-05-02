@@ -414,9 +414,15 @@ These checks run after the app is started (Docker containers up, health checks p
 
 These checks apply to ANY project type that uses AI/LLM features.
 
-**AI01** [AI] [FIX] **Provider abstraction** -- lib/ai/ with factory function. No provider SDK imports in business logic.
+**AI01** [AI] [BLOCK] **Provider abstraction scaffold** -- Copy `~/.claude/make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/` into project. Verify: `lib/ai/provider.py` has `AIProvider` ABC with `UsageStats` dataclass. `lib/ai/factory.py` has `get_ai_provider()` factory with failover support. No provider SDK imports (`anthropic`, `openai`) in business logic -- only in `lib/ai/providers/`. Do NOT generate provider layer from scratch -- use the scaffold.
 
-**AI02** [AI] [FIX] **Input sanitization** -- sanitizePromptInput() in lib/ai/, called by BaseAgent before invoke(). User input in `<user_input>` tags.
+**AI01a** [AI] [FIX] **Self-annealing** -- `lib/ai/self_annealing.py` exists with `validate_model()`, `detect_model_error()`, `extract_corrected_model()`. Both Anthropic providers call `validate_model()` before API calls and retry with `extract_corrected_model()` on model-not-found errors. Verify: setting `AI_MODEL_STANDARD=llama3` logs a correction warning and uses `claude-sonnet-4-20250514` instead.
+
+**AI01b** [AI] [FIX] **Failover provider** -- `lib/ai/providers/failover.py` exists with `FailoverProvider` decorator. Factory wraps primary+secondary when `AI_FAILOVER_PROVIDER` env var is set. Verify: `AI_FAILOVER_PROVIDER=ollama` in .env causes factory to return `FailoverProvider`. On primary exception, subsequent calls route to secondary.
+
+**AI01c** [AI] [FIX] **Cost tracking** -- `AIProvider` base class has `usage: UsageStats` with `total_input_tokens`, `total_output_tokens`, `total_cost_usd`, `request_count`. Each cloud provider overrides `estimate_cost()` with model-specific pricing. Providers call `self.usage.record()` after every API call. Ollama returns cost=0.
+
+**AI02** [AI] [FIX] **Input sanitization** -- sanitize_prompt_input() in lib/ai/sanitize.py, called by BaseAgent before invoke(). User input in `<user_input>` tags.
 
 **AI03** [AI] [FIX] **Output validation** -- validateAgentOutput() called after every AI response. Structured outputs schema-validated. Free-text scanned for XSS.
 
@@ -424,7 +430,7 @@ These checks apply to ANY project type that uses AI/LLM features.
 
 **AI05** [AI] [FIX] **Prompt size validation** -- Rejects inputs exceeding AI_MAX_PROMPT_CHARS (413).
 
-**AI06** [AI] [FIX] **Error sanitization** -- Provider errors mapped to generic messages. No provider/model/key details in responses.
+**AI06** [AI] [FIX] **Error sanitization** -- `lib/ai/errors.py` maps provider exceptions to client-safe `AIProviderError` subclasses. No provider/model/key details in responses. Internal details logged via `sanitize_ai_error()`.
 
 **AI07** [AI] [FIX] **No dangerouslySetInnerHTML for AI output** -- Escaped rendering only.
 

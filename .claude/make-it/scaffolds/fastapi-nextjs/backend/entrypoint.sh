@@ -18,5 +18,27 @@ echo "Database is ready."
 echo "Running migrations..."
 alembic upgrade head
 
+# ---------------------------------------------------------------------------
+# Seed mock-oidc test users (local dev only)
+# In production OIDC_ISSUER_URL points to a real IdP and this is a harmless no-op.
+# ---------------------------------------------------------------------------
+OIDC_URL="${OIDC_ISSUER_URL:-http://mock-oidc:10090}"
+echo "Seeding mock-oidc test users..."
+for i in 1 2 3 4 5; do
+    curl -sf "${OIDC_URL}/api/users" >/dev/null 2>&1 && break
+    echo "mock-oidc not ready, retrying in 2s..."
+    sleep 2
+done
+
+curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+    -d '{"sub":"mock-superadmin","email":"superadmin@example.com","name":"Sarah SuperAdmin"}' >/dev/null 2>&1 || true
+curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+    -d '{"sub":"mock-admin","email":"admin@example.com","name":"Alex Admin"}' >/dev/null 2>&1 || true
+curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+    -d '{"sub":"mock-analyst","email":"analyst@example.com","name":"Ana Analyst"}' >/dev/null 2>&1 || true
+curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+    -d '{"sub":"mock-viewer","email":"viewer@example.com","name":"Victor Viewer"}' >/dev/null 2>&1 || true
+echo "Mock-oidc users seeded."
+
 echo "Starting server..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000

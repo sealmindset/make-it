@@ -44,11 +44,8 @@ This skill has 5 phases:
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
-@~/.claude/make-it/references/build-verify-security.md
-@~/.claude/make-it/references/fix-strategies.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
-@~/.claude/make-it/variants/registry.md
 
 </execution_context>
 
@@ -111,38 +108,7 @@ curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>
 
 6. **STOP here. Do NOT continue to Preflight or any other phase.** The update flow is complete.
 
-If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Variant Resolution below.
-
-</step>
-
-<!-- ============================================================ -->
-<!-- VARIANT RESOLUTION -- Detect and load variant if specified     -->
-<!-- ============================================================ -->
-
-<step name="variant-resolution">
-
-**Check `$ARGUMENTS` for a variant name (if not "update" and not empty).**
-
-If `$ARGUMENTS` is empty, set `ACTIVE_VARIANT = null` and proceed to Preflight.
-
-If `$ARGUMENTS` is non-empty (and was not caught by the update-interceptor above):
-
-1. Read `~/.claude/make-it/variants/registry.md`
-2. Look up `$ARGUMENTS` (case-insensitive) in the "Available Variants" table
-3. **If found:**
-   - Read the variant definition file (e.g., `~/.claude/make-it/variants/mobile.md`)
-   - Set `ACTIVE_VARIANT` to the variant name for the rest of this session
-   - Set `ACTIVE_VARIANT_FILE` to the path of the variant definition
-   - Tell the user: "Got it -- I'll build your app with **[variant name]** support ([variant description])."
-   - Proceed to Preflight
-4. **If NOT found:**
-   - List all available variants from the registry table
-   - Tell the user: "I don't have a variant called '[argument]'. Here are the ones available:
-     - **mobile** -- PWA with offline support, install prompt, responsive-first layouts
-     - [any other active variants from the registry]
-     
-     You can also just type **/make-it** with no argument for a standard web app."
-   - **STOP. Do not proceed to Preflight.**
+If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Preflight below.
 
 </step>
 
@@ -289,13 +255,6 @@ Based on their initial answer, conduct a conversational deep-dive. You need to u
 4. **The Name:** "What do you want to call your app?"
    - If they don't have a name, suggest a few based on the purpose
 
-5. **Variant-specific questions (if ACTIVE_VARIANT is set):**
-   - Read the variant definition file's "Ideation Additions" section
-   - Ask those questions **conversationally, interspersed with the standard questions above**
-     (NOT as a separate block at the end)
-   - Record answers in memory for later use in the Design phase's `variant_config`
-   - These questions should feel natural -- the user should not notice they are variant-specific
-
 **AI-powered follow-up logic:**
 - After each answer, assess: "Do I have enough information to make all the technical decisions?"
 - If NOT, ask targeted follow-up questions about gaps
@@ -382,16 +341,6 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
   - Other external integrations -> one custom mock per integration
   - Pre-seed mock-oidc test users to match the app's defined roles
 
-**Variant-specific design decisions (if ACTIVE_VARIANT is set):**
-
-If a variant is active:
-1. Read the variant definition file's "Design Additions" section
-2. Apply the variant's silent design decisions (e.g., PWA library selection, responsive strategy)
-3. Record `"variant": "[name]"` and `"variant_config": {...}` in app-context.json
-4. The variant_config fields are populated from the variant's ideation answers and design decisions
-
-If no variant is active, set `"variant": null` and `"variant_config": {}` in app-context.json.
-
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
 **After all decisions are made, give the user a PLAIN ENGLISH summary:**
@@ -477,18 +426,6 @@ The user sees progress updates, NOT the technical details.
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
    g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
-
-   h. **Apply variant scaffold overlay (if ACTIVE_VARIANT is set):**
-      If a variant is active and its definition specifies a scaffold overlay directory:
-
-      - Copy overlay files from `~/.claude/make-it/scaffolds/overlays/[overlay-name]/` into the project,
-        merging with the base scaffold (overlay files add new files, they don't replace base files)
-      - Replace `[BRACKET_PLACEHOLDERS]` in overlay files using the same app-context values
-      - Read the variant definition's "Base scaffold modifications" section and apply each instruction
-        (e.g., add dependencies to package.json, wrap next.config.ts, add meta tags to layout)
-      - These modifications are instructions for you to follow, not file patches
-
-      Tell user: "Adding [variant name] support to your app..."
 
    Tell user: "Foundation is ready! Now building your specific features..."
 
@@ -593,10 +530,17 @@ to understand the patterns, then generate new code that follows the same convent
 
 9. **AI Features** -- Skip if no AI features
    - Tell user: "Setting up AI features..."
-   - Determine tier from ai_usage_level in app-context:
-     - "minimal" → code + config overrides
-     - "moderate" → database + admin UI
-     - "heavy" → full management platform
+   - **AI Provider scaffold:** Copy the entire `~/.claude/make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/`
+     directory into the project. This provides the battle-tested provider abstraction layer with:
+     UsageStats cost tracking, self-annealing model correction, failover decorator, OpenAI
+     reasoning model support, error sanitization, input sanitization, and output validation.
+     Add `anthropic` and `openai` to requirements.txt if not already present.
+     The scaffold config.py already includes AI_PROVIDER, AI_FAILOVER_PROVIDER, model tier,
+     and provider-specific env vars.
+   - **Prompt management tier** from ai_usage_level in app-context:
+     - "minimal" → Tier 2 minimum (scaffold prompt management)
+     - "moderate" → Tier 2 (database + admin UI)
+     - "heavy" → Tier 3 (full management platform)
    - Reference prompt-templates.md Prompt #10 for implementation details per tier
 
 9b. **Activity Logs (In-Memory Observability)**
@@ -903,11 +847,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X06**: Security (secrets, validation, deps, headers, no Java, no module throws)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
-- **AI01-AI10**: AI features (if ai_features.needed = true)
-
-**Variant-specific checks (if ACTIVE_VARIANT is set):**
-If a variant is active, also run checks from `build-standards.md` that match the variant qualifier
-(e.g., `[Tier 1+mobile]` checks for the mobile variant). These are in addition to the base tier checks.
+- **AI01-AI13**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking
 
 For each failing check:
 - `[FIX]` items: auto-fix immediately
@@ -1025,17 +965,6 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
        The default import crashes in production Docker with ENOENT on test data file.
     f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
 
-34. **Variant-specific live checks (if ACTIVE_VARIANT is set):**
-    If a variant is active, read the variant definition's "Build-Verify Additions" → "Live checks"
-    section and execute those checks. For example, for the mobile/PWA variant:
-    a. Fetch `/manifest.json` and validate it returns valid JSON with correct MIME type
-    b. Fetch `/sw.js` and verify it returns a JavaScript file (service worker compiled)
-    c. Check that the install prompt component is rendered in the page HTML
-    d. Verify Apple-specific meta tags are present in the served HTML
-
-    Include variant check IDs (e.g., P01-P08) in the pass/fail reporting alongside
-    standard check results.
-
 **PART C: Fix cycle (silent, automatic)**
 
 If ANY test fails in Part B:
@@ -1079,50 +1008,7 @@ Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.
 
-**PART D: Security hardening (silent, automatic)**
-
-Reference: `~/.claude/make-it/references/build-verify-security.md`
-
-After the app is built, running, and functionally verified (Parts A-C), run an automatic
-security scan and fix cycle. This is completely invisible to the user.
-
-Tell user: "Just running a few final checks..."
-
-The security scan follows the build-verify-security.md reference:
-
-1. **Static security scan** -- Run code pattern checks (always available) plus semgrep,
-   bandit, npm audit, pip-audit, and trivy if installed. Do NOT install tools -- use
-   what's available. If no external tools are installed, the grep-based pattern scan
-   still catches the most common issues.
-
-2. **AI safety verification** (if ai_features.needed = true) -- Code-level verification
-   that all safety controls are correctly wired: sanitizePromptInput(), validateAgentOutput(),
-   delimiter tags, rate limiting, safety preamble, prompt validation. If the app is running,
-   send safe test payloads to AI endpoints to verify input sanitization works.
-
-3. **Auto-fix** -- Apply all AUTO-class fixes silently (from fix-strategies.md):
-   - Dependency patches (patch/minor only -- no major version bumps)
-   - Configuration fixes (security headers, file permissions)
-   - Mechanical code fixes (timeouts, verify=False, pdf-parse import, font CDNs)
-   - AI safety wiring (missing sanitize/validate calls, delimiter tags, rate limiting)
-   - Hardcoded secrets (move to env vars)
-   After fixes, rebuild affected containers with `--no-cache` and verify health.
-
-4. **Re-scan** -- Verify fixes were effective. Calculate delta.
-
-5. **Self-healing loop** -- If findings remain, repeat fix → rebuild → re-scan
-   (up to 3 total cycles).
-
-6. **Log results** -- Add any remaining findings to TODO.md:
-   - CRITICAL/HIGH → "## Security Improvements" section
-   - MEDIUM/LOW → "## Security Improvements (Optional)" section
-   - Add "Security hardening applied during build" to CHANGELOG.md
-
-Do NOT block handoff based on security scan results. The app is already functionally
-verified. Security findings that couldn't be auto-fixed are documented in TODO.md for
-the user to address with /nemo-it + /fix-it when ready.
-
-**PART E: Declare success and hand off**
+**PART D: Declare success and hand off**
 
 40. Tell the user:
 
@@ -1144,10 +1030,6 @@ see your app in action!"
 # Project State -- [PROJECT_NAME]
 > Last updated: [TIMESTAMP]
 > Last session: make-it (initial build)
-
-## Variant
-[If ACTIVE_VARIANT is set: "Active variant: [name] ([description])" and list key variant_config values]
-[If no variant: "No variant (standard web-app)"]
 
 ## Current Status
 App is running locally with all services healthy. Build-verify passed -- login, roles,

@@ -83,7 +83,10 @@ _tokens: dict[str, dict] = {}
 
 # Client config: {client_id: {redirect_uris: [...]}}
 _clients: dict[str, dict] = {
-    CLIENT_ID: {"redirect_uris": []},
+    CLIENT_ID: {"redirect_uris": [
+        "http://localhost:[FRONTEND_PORT]/api/auth/callback",
+        "http://localhost:[BACKEND_PORT]/api/auth/callback",
+    ]},
 }
 
 # Auth code expiry in seconds
