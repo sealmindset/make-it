@@ -43,6 +43,8 @@ This template is populated by /make-it as the user answers questions. It becomes
     "needed": false,
     "description": "",
     "usage_level": "none",
+    "interaction_level": "none",
+    "chat_layout": "",
     "prompt_count_estimate": 0,
     "prompts": [],
     "agents": [],
@@ -71,6 +73,15 @@ This template is populated by /make-it as the user answers questions. It becomes
         "base_url": "http://localhost:11434"
       }
     }
+  },
+  "brain_features": {
+    "enabled": false,
+    "user_memory": false,
+    "org_memory": false,
+    "curation_trigger": "scheduled",
+    "curation_schedule": "0 2 * * *",
+    "memory_ttl_days": 90,
+    "confidence_threshold": 0.5
   },
   "nemo_guardrails": {
     "enabled": false,
@@ -181,11 +192,23 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | multi_tenancy | Design | Inferred from users description |
 | ai_features | Ideation + Design | Detected from features keywords |
 | ai_features.usage_level | Design | Inferred: none / moderate / heavy (minimal is eliminated -- minimum is moderate) |
+| ai_features.interaction_level | Design | Inferred from AI feature descriptions: "none" \| "batch-only" \| "conversational" \| "hybrid" |
+| ai_features.chat_layout | Design | "dedicated" (full page) \| "embedded" (panel on domain pages) \| "both" (when conversational/hybrid) |
+| ai_features.agents[].slug | Design | Unique identifier, used in conversations.agent_slug and batch routing |
+| ai_features.agents[].type | Design | "conversational" (multi-turn chat) or "batch" (single-purpose, job-tracked) |
+| ai_features.agents[].prompt_key | Design | Matches a seeded row slug in managed_prompts table |
+| ai_features.agents[].model_tier | Design | "heavy" \| "standard" \| "light" -- maps to AI_MODEL_* env vars |
+| ai_features.agents[].context_sources | Design | Domain data the agent queries (table names, API sources) |
+| ai_features.agents[].rule_based_fallback | Design | Whether agent has deterministic fallback when AI unavailable |
 | ai_features.prompt_management_tier | Design | 0 (none -- no AI), 2 (db+admin -- MINIMUM for any AI app), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | ai_providers | Design | Auto-determined when ai_features.needed is true |
 | ai_providers.primary | Design | Inferred from cloud.provider + enterprise context: "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama" |
 | ai_providers.model_tiers | Design | Inferred from ai_features.agents complexity; defaults to latest Claude models |
+| brain_features.enabled | Design | Detected from keywords: "remember", "learn over time", "adapt", "know my preferences" |
+| brain_features.user_memory | Design | true when multi-user app with conversational AI |
+| brain_features.org_memory | Design | true when user describes institutional knowledge or team decisions |
+| brain_features.curation_trigger | Design | "scheduled" (default), "post_conversation", or "manual" |
 | nemo_guardrails.enabled | Design | Auto-set to true when ai_features.needed = true |
 | nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each /ship-it) |
 | nemo_guardrails.topic_domain | Design | Inferred from project purpose -- defines the AI's allowed scope (e.g., "vendor risk management") |

@@ -959,10 +959,12 @@ lib/ai/
     - Export: sanitizeAIError(error: Error): SafeErrorResponse
 ```
 
-**BaseAgent integration pattern:**
+**BaseAgent integration pattern (safety pipeline):**
 
 Every AI agent or service that extends BaseAgent (or equivalent) automatically gets
 these protections. The protections are NOT optional -- they are built into the base class.
+See Section 11c for the full BaseAgent lifecycle including agent registry, context assembly,
+batch job tracking, and rule-based fallback.
 
 ```typescript
 // Simplified BaseAgent with safety controls built in
@@ -1031,6 +1033,416 @@ AI_MAX_HISTORY_TURNS=20                  # Max conversation history depth (multi
 - Rate limiting middleware applied to all AI agent routes
 - Environment variables in .env.example
 - BaseAgent updated to call sanitize -> validate -> mask pipeline automatically
+
+---
+
+## 11c. AI Interaction Architecture (Agent Classification & Context Assembly)
+
+**What we need to know from the user:**
+- What should AI help users do in this app? (e.g., analyze data, answer questions, classify items, generate reports)
+- Should users be able to chat with AI, or does AI work behind the scenes?
+- Are there different AI tasks? (e.g., a chat assistant AND a batch scorer)
+- What app data should AI have access to when working? (e.g., vendor records, scan results, financial data)
+- Should the app still work if AI is temporarily down?
+
+**Decision rules -- AI interaction level:**
+```
+AI features needed?
+  No  -> ai_interaction_level = "none", skip this section entirely
+  Yes -> Classify by signals:
+
+  User says "analyze", "scan", "score", "classify", "extract", "process", "enrich"
+  (no "chat", "ask", "talk", "converse"):
+    -> ai_interaction_level = "batch-only"
+    -> Generates: BaseAgent scaffold, agent registry, context builders, job tracking
+    -> DOES NOT generate: conversation tables, chat UI, SSE streaming
+
+  User says "chat", "ask questions", "talk to", "assistant", "Q&A", "conversational":
+    -> ai_interaction_level = "conversational"
+    -> Generates: conversation tables, chat UI, SSE streaming, chat agent(s), context builders
+    -> MAY ALSO generate: batch agents if background analysis features also mentioned
+
+  User describes BOTH interactive chat AND background/batch processing:
+    -> ai_interaction_level = "hybrid"
+    -> Generates: EVERYTHING from both levels
+    -> Agent registry declares both conversational and batch agents
+```
+
+**Interaction level summary:**
+
+| Level | Name | When | What gets generated |
+|-------|------|------|---------------------|
+| `batch-only` | Single-Purpose Agents | Analysis, scoring, extraction -- no chat | BaseAgent, agent registry, context builders, job tracking |
+| `conversational` | Multi-Turn Chat | User chats with AI, history preserved | Above + conversation tables, chat UI, SSE streaming |
+| `hybrid` | Both | Chat for Q&A + batch agents for bulk work | Everything from both levels |
+
+Record `ai_features.interaction_level` in app-context.json. This is orthogonal to `usage_level` -- a 5-prompt app can be hybrid if it has both chat and batch agents.
+
+### 11c-1. Agent Registry
+
+Every AI app declares its agents. Each agent represents a distinct AI behavior with its own
+system prompt, model tier, and domain context.
+
+**Agent schema (stored in app-context.json `ai_features.agents[]`):**
+
+```json
+{
+  "slug": "security-architect",
+  "name": "Security Architect",
+  "type": "conversational",
+  "prompt_key": "security_architect_system",
+  "model_tier": "heavy",
+  "description": "Multi-turn security analysis chat focused on repository vulnerabilities",
+  "context_sources": ["repositories", "vulnerabilities", "security_findings", "architecture_reports"],
+  "rule_based_fallback": false
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| slug | string | Unique identifier. Used in `conversations.agent_slug` and batch routing |
+| name | string | Display name shown in chat UI and job status page |
+| type | "conversational" \| "batch" | Determines which infrastructure the agent uses |
+| prompt_key | string | Matches a row slug in `managed_prompts` table (Section 10) |
+| model_tier | "heavy" \| "standard" \| "light" | Maps to AI_MODEL_HEAVY/STANDARD/LIGHT env vars (Section 9) |
+| description | string | What the agent does, shown in admin UI |
+| context_sources | string[] | Domain data tables/APIs the agent's context builder queries |
+| rule_based_fallback | boolean | Whether agent has deterministic fallback when AI unavailable |
+
+**Backend registry module (`lib/ai/agents/registry.py` or `lib/ai/agents/__init__.py`):**
+
+```python
+AGENT_REGISTRY: dict[str, type[BaseAgent]] = {
+    "security-architect": SecurityArchitectAgent,
+    "vendor-enrichment": VendorEnrichmentAgent,
+    "cost-analyzer": CostAnalyzerAgent,
+}
+
+def get_agent(slug: str) -> BaseAgent:
+    agent_class = AGENT_REGISTRY.get(slug)
+    if not agent_class:
+        raise AgentNotFoundError(f"Unknown agent: {slug}")
+    return agent_class()
+```
+
+Every agent in app-context.json MUST have a corresponding class in the registry. Every
+agent's `prompt_key` MUST have a matching seeded row in `managed_prompts`.
+
+### 11c-2. BaseAgent Abstract Class (Full Lifecycle)
+
+Section 11b defines the BaseAgent safety pipeline (sanitize -> validate -> mask). This section
+defines the complete lifecycle including context assembly, streaming, and batch job tracking.
+
+**Python reference implementation:**
+
+```python
+from abc import ABC, abstractmethod
+
+class BaseAgent(ABC):
+    slug: str
+    prompt_key: str
+    model_tier: str
+    rule_based_fallback: bool = False
+
+    # --- Core methods (all agents) ---
+
+    async def invoke(self, user_input: str, **context_params) -> str:
+        """Single-purpose call with full safety pipeline."""
+        # 1. Sanitize input (Section 11b)
+        sanitized = sanitize_prompt_input(user_input)
+
+        # 2. Validate prompt size
+        if len(sanitized) > settings.AI_MAX_PROMPT_CHARS:
+            raise PromptTooLargeError()
+
+        # 3. Mask PII if applicable
+        masked, mappings = mask_pii(sanitized)
+
+        # 4. Assemble full prompt
+        system_prompt = await self.get_system_prompt()
+        context = await self.build_context(**context_params)
+        full_prompt = self._assemble_prompt(system_prompt, context, masked)
+
+        # 5. Call AI provider (with fallback)
+        try:
+            provider = get_ai_provider()
+            result = await provider.complete(full_prompt, tier=self.model_tier)
+        except AIProviderError:
+            if self.rule_based_fallback:
+                return await self.fallback(user_input, **context_params)
+            raise
+
+        # 6. Unmask PII in response
+        unmasked = unmask_pii(result, mappings)
+
+        # 7. Validate output
+        return self.validate_output(unmasked)
+
+    async def stream(self, user_input: str, **context_params) -> AsyncIterator[str]:
+        """Streaming variant for conversational agents. Same pipeline, yields tokens."""
+        # Same steps 1-4 as invoke()
+        # Step 5 uses provider.stream() instead of provider.complete()
+        # Steps 6-7 applied to accumulated response after stream completes
+        ...
+
+    async def get_system_prompt(self) -> str:
+        """Load from managed_prompts DB with code fallback (Section 10)."""
+        prompt = await prompt_service.get_active_prompt(self.prompt_key)
+        if not prompt:
+            return self._default_system_prompt()  # Code fallback
+        return prompt.content
+
+    @abstractmethod
+    async def build_context(self, **kwargs) -> str:
+        """Domain-specific data gathering. Subclasses override."""
+        ...
+
+    async def fallback(self, user_input: str, **kwargs) -> str:
+        """Rule-based response when AI unavailable. Override per agent."""
+        raise NotImplementedError("No fallback configured")
+
+    # --- Batch agent methods (optional, used by type="batch" agents) ---
+
+    async def create_job(self, user_id: str, params: dict) -> Job:
+        """Create a job status record (DI03 table)."""
+        return await job_service.create(
+            task_type=f"ai_agent:{self.slug}",
+            created_by=user_id,
+            total_items=params.get("total_items", 1),
+        )
+
+    async def complete_job(self, job_id: str, result: dict):
+        """Mark job completed with AI-specific metadata."""
+        await job_service.complete(job_id, result_data={
+            "agent_slug": self.slug,
+            "model_used": self._last_model,
+            "total_input_tokens": self._usage.total_input_tokens,
+            "total_output_tokens": self._usage.total_output_tokens,
+            "cost_usd": self._usage.total_cost_usd,
+            **result,
+        })
+
+    async def fail_job(self, job_id: str, error: str):
+        """Mark job failed."""
+        await job_service.fail(job_id, error_message=error)
+```
+
+**Conversational agents** extend BaseAgent and add conversation history assembly:
+
+```python
+class ConversationalAgent(BaseAgent):
+    async def chat(self, conversation_id: str, user_input: str) -> AsyncIterator[str]:
+        """Multi-turn chat with history."""
+        history = await self._get_conversation_history(conversation_id)
+        context_params = {"conversation_history": history}
+        async for token in self.stream(user_input, **context_params):
+            yield token
+
+    async def _get_conversation_history(self, conversation_id: str) -> list[dict]:
+        """Fetch last N messages from conversation_messages table."""
+        messages = await message_service.get_recent(
+            conversation_id, limit=settings.AI_MAX_HISTORY_TURNS
+        )
+        return [{"role": m.role, "content": m.content} for m in messages]
+```
+
+**Batch agents** extend BaseAgent and add job lifecycle:
+
+```python
+class BatchAgent(BaseAgent):
+    async def run_batch(self, user_id: str, items: list, **params) -> str:
+        """Process multiple items with job tracking (DI03 pattern)."""
+        job = await self.create_job(user_id, {"total_items": len(items)})
+        try:
+            results = []
+            for i, item in enumerate(items):
+                result = await self.invoke(item, **params)
+                results.append(result)
+                await job_service.update_progress(job.id, processed=i + 1)
+            await self.complete_job(job.id, {"results": results})
+            return job.id
+        except Exception as e:
+            await self.fail_job(job.id, str(e))
+            raise
+```
+
+### 11c-3. Context Builder Pattern
+
+Each agent's `build_context()` gathers domain-specific data to feed into the AI prompt.
+This is the primary customization point per app -- the scaffold provides the structure,
+the Build phase fills in the domain queries.
+
+**Context assembly order (full prompt composition):**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 1. Safety preamble (immutable, from Section 10a)        │  ← Never truncated
+├─────────────────────────────────────────────────────────┤
+│ 2. System prompt (from managed_prompts DB, per agent)   │  ← Never truncated
+├─────────────────────────────────────────────────────────┤
+│ 3. Domain context (from build_context -- DB queries,    │  ← Truncated FIRST
+│    document content, external API data)                 │     when budget exceeded
+├─────────────────────────────────────────────────────────┤
+│ 4. Conversation history (conversational agents only --  │  ← Truncated SECOND
+│    last N turns from conversation_messages)             │     (oldest messages dropped)
+├─────────────────────────────────────────────────────────┤
+│ 5. User input (sanitized, in <user_input> tags)         │  ← Never truncated
+└─────────────────────────────────────────────────────────┘
+```
+
+**Truncation strategy (when total exceeds AI_MAX_PROMPT_CHARS):**
+1. Calculate budget: total - (preamble + system_prompt + user_input) = remaining for context + history
+2. Allocate 70% of remaining to domain context, 30% to conversation history
+3. If domain context exceeds its budget, truncate least-important sections (agent decides priority)
+4. If history exceeds its budget, drop oldest messages first (keep most recent turns)
+5. Never truncate preamble, system prompt, or user input
+
+**Domain context examples (from real apps):**
+
+| App Type | Agent | Context Sources | Data Gathered |
+|----------|-------|-----------------|---------------|
+| Security audit | Security Architect | repos, vulns, findings | Repo metadata, CVE list, severity counts, architecture patterns |
+| Finance | Spend Analyst | vendors, contracts, invoices | Vendor profiles, contract terms, spend by fiscal year |
+| IT portfolio | App Rationalizer | applications, usage, costs | App metadata, sign-in trends, annual cost, risk scores |
+| Shadow IT | SaaS Detector | emails, expenses, vendors | Email signals, expense line items, vendor catalog |
+
+Context builders query the app's own database tables. The `context_sources` field in the
+agent registry documents which tables/APIs are accessed, making the data flow auditable.
+
+### 11c-4. Background Job Tracking (Batch Agents)
+
+Batch agents (type="batch") process data in bulk -- enriching vendors, scoring applications,
+extracting contracts. These operations can take minutes and need lifecycle tracking.
+
+**Reuse DI03 job status table** (Section 12d Data Integration). No separate ai_jobs table.
+The `task_type` column distinguishes AI jobs: `"ai_agent:{slug}"`.
+
+**AI-specific data in `result_data` JSON:**
+
+```json
+{
+  "agent_slug": "vendor-enrichment",
+  "model_used": "claude-sonnet-4-20250514",
+  "total_input_tokens": 45200,
+  "total_output_tokens": 12800,
+  "cost_usd": 0.34,
+  "items_processed": 47,
+  "items_succeeded": 45,
+  "items_failed": 2,
+  "failed_items": [
+    {"id": "vendor-123", "error": "Insufficient data for enrichment"},
+    {"id": "vendor-456", "error": "Context exceeded token limit"}
+  ]
+}
+```
+
+**Batch processing pattern:** Agents that process multiple items commit results per-item
+(DI03 batch pattern from F15), report per-item progress (F16), and track per-item failures
+(F17). A single bad item never aborts the entire batch.
+
+**Job status page (DI04):** AI agent jobs appear alongside data integration jobs. The agent
+name is a filterable column. Token usage and cost are visible for AI jobs.
+
+### 11c-5. Agent Routing
+
+**Conversational agents** are routed via the `agent_slug` field on the `conversations` table
+(defined in AI12). The chat endpoint flow:
+
+```
+POST /api/ai/conversations/{id}/messages
+  │
+  ├── Look up conversation → get agent_slug
+  ├── Look up agent class from registry
+  ├── agent.build_context(conversation_id=id)
+  ├── agent.stream(user_input)
+  │   └── SSE stream tokens to client (AI11)
+  ├── Store complete response in conversation_messages
+  └── Return
+```
+
+When creating a new conversation, the frontend passes the desired `agent_slug`:
+```
+POST /api/ai/conversations
+  Body: { "agent_slug": "security-architect" }
+```
+
+**Batch agents** use a separate endpoint:
+
+```
+POST /api/ai/agents/{slug}/run
+  Body: { "params": { ... } }  // Agent-specific parameters
+  │
+  ├── Look up agent class from registry (404 if unknown)
+  ├── Validate params
+  ├── agent.create_job(user_id, params)
+  ├── Launch agent.run_batch() as background task
+  └── Return { "job_id": "..." }
+
+GET /api/ai/agents/{slug}/jobs
+  └── List jobs for this agent (filtered by current user)
+```
+
+### 11c-6. Rule-Based Fallback
+
+When the AI provider is unavailable (network error, rate limit, misconfiguration), agents
+with `rule_based_fallback: true` can return useful responses without AI.
+
+**Conversational agents in fallback mode:**
+- Return a system message: "AI is temporarily unavailable. Please try again shortly."
+- Do NOT store a conversation_message (the failed attempt is invisible to the user)
+- The chat panel shows a retry button
+
+**Batch agents in fallback mode:**
+- Apply deterministic analysis: threshold-based scoring, keyword matching, rule engines
+- Mark the job as `status: "completed_without_ai"` in the job status table
+- Include a note in result_data: `"ai_fallback": true, "fallback_reason": "Provider unreachable"`
+- The job status page shows a badge indicating the result used fallback logic
+
+**Example -- Tailspend Recommendation Agent fallback:**
+```python
+async def fallback(self, contract_data: str, **kwargs) -> str:
+    # Deterministic rules when AI unavailable
+    contract = json.loads(contract_data)
+    if contract["annual_cost"] < 5000:
+        return json.dumps({"recommendation": "ELIMINATE", "confidence": 0.7,
+                           "reason": "Below $5k threshold -- likely shadow IT"})
+    if contract["similar_vendors_count"] > 2:
+        return json.dumps({"recommendation": "CONSOLIDATE", "confidence": 0.6,
+                           "reason": f"{contract['similar_vendors_count']} similar vendors detected"})
+    return json.dumps({"recommendation": "REVIEW", "confidence": 0.3,
+                       "reason": "Insufficient signals for automated recommendation"})
+```
+
+Fallback is declared per agent in the registry, not globally. Not all agents need it --
+some are better off returning an error than a low-confidence deterministic result.
+
+### 11c-7. Chat UI Layout
+
+When `ai_interaction_level` is `"conversational"` or `"hybrid"`, the app needs a chat
+interface. The layout choice determines WHERE the chat lives.
+
+**Record in app-context.json as `ai_features.chat_layout`:**
+
+| Layout | Description | When to use |
+|--------|-------------|-------------|
+| `dedicated` | Full-page chat at `/ai/chat` or `/assistant` with conversation sidebar | Chat is a primary feature -- users spend significant time in conversation |
+| `embedded` | Slide-out panel on domain pages (e.g., vendor detail has an AI assistant panel) | Chat supports specific workflows -- context is page-scoped |
+| `both` | Dedicated page + embedded panels on key domain pages | Chat is both a primary feature and a contextual tool |
+
+The chat panel components (AI13) work in both layouts. The difference is routing and
+how the `agent_slug` is determined:
+- **Dedicated:** User selects an agent or the app has a single default agent
+- **Embedded:** The page determines the agent (vendor detail → vendor analyst agent)
+
+**Implementation generates:**
+- Agent registry module (lib/ai/agents/)
+- BaseAgent abstract class with full lifecycle
+- Concrete agent subclasses (one per registered agent)
+- Context builder per agent (domain-specific DB queries)
+- Agent routing: chat endpoint agent_slug lookup + batch agent endpoint
+- Background job tracking wired to DI03 table (for batch agents)
+- Rule-based fallback methods (for agents with fallback: true)
+- Chat layout per ai_features.chat_layout choice
 
 ---
 
@@ -1780,6 +2192,391 @@ Build-verify check U09 verifies the toggle is wired and all pages respond to the
 
 ---
 
+## 14. AI Memory Layer (Persistent Context)
+
+**Activates when `ai_features.needed = true` AND `brain_features.enabled = true` in app-context.json.**
+
+Applied when the user describes AI features that should "remember", "learn", "get better over time", "know my preferences", or "understand context from past interactions". This layer gives AI agents persistent memory that survives across conversations and sessions.
+
+**What we need to know from the user:**
+- Should the AI remember things between conversations? (e.g., preferences, past decisions)
+- Should the AI learn how different users prefer to interact?
+- Are there organizational decisions or knowledge the AI should accumulate over time?
+- Should users be able to see and edit what the AI has learned about them?
+
+**Decision rules:**
+```
+User says "remember", "learn over time", "get smarter", "know my preferences",
+"adapt to me", "remember what I told you":
+  -> brain_features.enabled = true
+
+User describes multi-user app with AI:
+  -> brain_features.user_memory = true (per-user learned context)
+
+User describes team/org decisions, institutional knowledge:
+  -> brain_features.org_memory = true (shared cross-user knowledge)
+
+If interaction_level = "conversational" or "hybrid":
+  -> strong candidate for brain layer (has conversation data to mine)
+
+If interaction_level = "batch-only" with no user interaction:
+  -> brain layer adds less value, ask user to confirm intent
+```
+
+**Memory types:**
+
+| Type | Scope | Example | Source |
+|------|-------|---------|--------|
+| `user` | Per user | "Prefers bullet-point summaries over paragraphs" | Distilled from conversations |
+| `org` | Shared | "Q4 always over-allocated, start planning Sept" | Promoted from cross-user patterns |
+| `decision` | Shared | "Moved 2 FTEs Platform→Mobile, May 2026 — Mobile 40% over-allocated" | Agent-recorded after decision assistance |
+
+### 14a. Database Schema (3 tables + 1 audit)
+
+**`brain_memories` table:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID PK | |
+| memory_type | enum('user', 'org', 'decision') | Determines scope and visibility |
+| owner_id | UUID FK → users, nullable | Null for org/decision memories |
+| agent_slug | string | Which agent created this memory |
+| title | string(200) | Short description for UI display |
+| content | text | The memory itself — distilled, never raw transcript |
+| source_conversation_id | UUID FK → conversations, nullable | Provenance link |
+| source_message_ids | UUID[] | Messages that led to this memory |
+| confidence | float 0.0–1.0 | How confident the agent is this is worth keeping |
+| is_active | boolean, default true | Soft-delete flag |
+| expires_at | timestamp, nullable | For time-bound context (e.g., "sprint ends Friday") |
+| created_at | timestamp | |
+| updated_at | timestamp | |
+
+**`brain_memory_tags` table:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| memory_id | UUID FK → brain_memories | |
+| tag | string | e.g., 'preference', 'decision', 'pattern', 'lesson', 'correction' |
+
+**`brain_memory_feedback` table:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID PK | |
+| memory_id | UUID FK → brain_memories | |
+| user_id | UUID FK → users | |
+| feedback_type | enum('confirmed', 'corrected', 'deleted') | |
+| correction_text | text, nullable | What the user corrected it to |
+| created_at | timestamp | |
+
+**`brain_memory_audit_log` table:**
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID PK | |
+| memory_id | UUID FK → brain_memories | |
+| action | enum('created', 'updated', 'deactivated', 'deleted', 'promoted', 'demoted') | |
+| actor_type | enum('agent', 'user', 'system') | |
+| actor_id | string | Agent slug or user ID |
+| old_content | text, nullable | |
+| new_content | text, nullable | |
+| reason | text | Why this change happened |
+| created_at | timestamp | |
+
+### 14b. Memory Curation Agent
+
+A batch agent registered in the agent registry that periodically distills conversations into
+curated memories. Follows the existing BaseAgent pattern (Section 11c-2) with job tracking
+(Section 11c-4).
+
+**Agent registry entry:**
+
+```json
+{
+  "slug": "memory-curator",
+  "name": "Memory Curator",
+  "type": "batch",
+  "prompt_key": "memory_curator_system",
+  "model_tier": "light",
+  "description": "Distills conversation patterns into persistent memories",
+  "context_sources": ["conversation_messages", "brain_memories"],
+  "rule_based_fallback": false
+}
+```
+
+**Why AI-driven curation (not rule-based):**
+Memory curation is the highest-value use of the brain layer. Rule-based extraction (regex for
+"I prefer...", "don't do...") catches only explicit statements. AI-driven curation catches:
+- Implicit preferences revealed through behavior ("user always reformats my tables as bullets")
+- Nuanced decisions with multi-factor reasoning
+- Patterns across conversations that no single exchange makes obvious
+- Contextual distinctions (a preference in one domain doesn't apply to another)
+
+The cost is modest — `model_tier: "light"` processes batched conversations, typically under
+$0.05/day for active users. The quality difference is substantial.
+
+**Curation pipeline (AI-driven):**
+
+```
+Trigger (schedule or post-conversation hook)
+  │
+  ├── 1. Gather: Fetch unprocessed conversations since last curation
+  │     (conversation_messages WHERE created_at > last_curation_run)
+  │     Group by user_id for per-user analysis
+  │
+  ├── 2. AI Extract: Per user's conversation batch, send to curator prompt:
+  │     "Analyze these conversations and identify:"
+  │     - User preferences (format, tone, detail level, domain focus)
+  │     - Decisions made with reasoning (what was decided, why, what tradeoffs)
+  │     - Corrections and refinements (what the user pushed back on)
+  │     - Repeated behavioral patterns across conversations
+  │     - Domain-specific insights worth preserving for future context
+  │     AI returns structured JSON: [{type, title, content, confidence, tags}]
+  │
+  ├── 3. AI Deduplicate: Compare extracted memories against existing brain_memories
+  │     Send both sets to AI with instruction:
+  │     "Which of these new memories are genuinely new vs duplicates of existing?"
+  │     - Similar memory exists with confidence >= 0.7: update content, boost confidence
+  │     - Contradicts existing memory: create both, flag for user review
+  │     - New insight: create with AI-assigned confidence (0.4-0.9 based on signal strength)
+  │
+  ├── 4. Promote: AI evaluates high-confidence user memories for org-level relevance
+  │     "Does this user-specific insight apply broadly to the organization?"
+  │     → Eligible org memories require admin approval before promotion
+  │
+  ├── 5. Expire: Deactivate memories not referenced in BRAIN_MEMORY_TTL_DAYS
+  │     (default 90 days, configurable — deterministic, no AI needed)
+  │
+  └── 6. Record: Job status entry (DI03) with counts and cost:
+        memories_created, memories_updated, memories_expired, memories_promoted,
+        total_input_tokens, total_output_tokens, cost_usd
+```
+
+**Degraded mode (AI provider unavailable):**
+When the AI provider is down, curation silently skips. Conversations are queued and processed
+on the next successful run. No rule-based fallback — partial extraction is worse than waiting,
+because low-quality memories injected into prompts actively degrade agent responses.
+The `rule_based_fallback: false` registry setting causes the job to fail cleanly with
+`status: "failed"` and `error_message: "AI provider unavailable"` in DI03. The next scheduled
+run picks up the backlog.
+
+**Trigger options (configurable via `brain_features.curation_trigger`):**
+
+| Trigger | When | Tradeoff |
+|---------|------|----------|
+| `post_conversation` | After each conversation ends | More current, more API calls |
+| `scheduled` | Cron schedule via DI07 pattern | Default. Batched, cost-efficient |
+| `manual` | Admin triggers via UI button | Full control, no automation |
+
+### 14c. Context Assembly Enhancement
+
+The brain layer injects memory context into the existing context assembly order (Section 11c-3).
+Memory slots between system prompt and domain context — available to all agents automatically.
+
+**Updated context assembly order:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 1. Safety preamble (immutable)                           │  ← Unchanged
+├─────────────────────────────────────────────────────────┤
+│ 2. System prompt (from managed_prompts DB)               │  ← Unchanged
+├─────────────────────────────────────────────────────────┤
+│ 3. User memory context (brain_memories WHERE             │  ← NEW
+│    owner_id = current_user AND is_active = true          │
+│    AND confidence >= BRAIN_CONFIDENCE_THRESHOLD)          │
+├─────────────────────────────────────────────────────────┤
+│ 4. Org memory context (brain_memories WHERE              │  ← NEW
+│    memory_type IN ('org', 'decision') AND is_active)     │
+├─────────────────────────────────────────────────────────┤
+│ 5. Domain context (from build_context -- DB queries)     │  ← Unchanged
+├─────────────────────────────────────────────────────────┤
+│ 6. Conversation history (last N turns)                   │  ← Unchanged
+├─────────────────────────────────────────────────────────┤
+│ 7. User input (sanitized, in <user_input> tags)          │  ← Unchanged
+└─────────────────────────────────────────────────────────┘
+```
+
+**Truncation budget adjustment:**
+- Memory context (user + org) gets 15% of remaining budget
+- Domain context drops from 70% to 55%
+- Conversation history stays at 30%
+- Within memory budget, user memories get 60%, org memories get 40%
+- Truncation order: lowest confidence dropped first
+
+**BaseAgent enhancement (automatic for all agents):**
+
+```python
+class BaseAgent(ABC):
+    # ... existing methods unchanged ...
+
+    async def _load_brain_context(self, user_id: str) -> str:
+        """Load relevant memories for the current user and org."""
+        if not settings.BRAIN_FEATURES_ENABLED:
+            return ""
+
+        user_memories = await brain_service.get_active_memories(
+            owner_id=user_id,
+            memory_type="user",
+            min_confidence=settings.BRAIN_CONFIDENCE_THRESHOLD,
+            limit=settings.BRAIN_MAX_USER_MEMORIES,
+        )
+        org_memories = await brain_service.get_active_memories(
+            memory_type__in=["org", "decision"],
+            min_confidence=settings.BRAIN_CONFIDENCE_THRESHOLD,
+            limit=settings.BRAIN_MAX_ORG_MEMORIES,
+        )
+
+        sections = []
+        if user_memories:
+            items = "\n".join(f"- {m.content}" for m in user_memories)
+            sections.append(f"<user_context>\n{items}\n</user_context>")
+        if org_memories:
+            items = "\n".join(
+                f"- [{m.memory_type}] {m.content}" for m in org_memories
+            )
+            sections.append(f"<org_context>\n{items}\n</org_context>")
+
+        return "\n\n".join(sections)
+```
+
+The `invoke()` and `stream()` methods in BaseAgent call `_load_brain_context()` before
+`build_context()` and include the result in prompt assembly. This is automatic for all agents
+when brain features are enabled — individual agents do not need modification.
+
+**Memory recording hook (post-response):**
+
+```python
+class ConversationalAgent(BaseAgent):
+    async def chat(self, conversation_id: str, user_input: str) -> AsyncIterator[str]:
+        # ... existing chat flow ...
+        # After response is complete:
+        if settings.BRAIN_CURATION_TRIGGER == "post_conversation":
+            await self._maybe_queue_for_curation(
+                conversation_id, user_input, response
+            )
+
+    async def _maybe_queue_for_curation(
+        self, conv_id: str, user_input: str, response: str
+    ):
+        """Lightweight pre-filter: does this exchange contain memorable content?"""
+        memory_signals = [
+            "i prefer", "don't do", "always use", "never", "remember that",
+            "from now on", "last time", "we decided", "going forward",
+            "that's wrong", "no i meant", "actually i want",
+        ]
+        input_lower = user_input.lower()
+        if not any(signal in input_lower for signal in memory_signals):
+            return
+
+        await brain_service.queue_for_curation(conv_id, user_input, response)
+```
+
+### 14d. Transparency UI ("What AI Knows")
+
+Every user can view, correct, and delete memories the AI has stored about them. Admins can
+additionally view and manage org-level memories. This is the key differentiator — no black box.
+
+**User-facing page: `/settings/ai-memory`**
+
+| Element | Behavior |
+|---------|----------|
+| Memory list | User's own memories, sorted by most recently referenced |
+| Memory card | Title, content, created date, source agent badge, confidence meter |
+| "This is wrong" button | Opens correction dialog → creates brain_memory_feedback record (type: corrected) |
+| "Forget this" button | Sets is_active=false → creates audit log entry (action: deactivated) |
+| Confirmation dialog | "The AI will no longer use this memory. Are you sure?" |
+| Filters | By tag, agent, date range |
+| Search | Full-text within memory content |
+| Empty state | "The AI hasn't learned anything about you yet. It builds context as you interact." |
+
+**Admin page: `/admin/ai-memory`**
+
+| Element | Behavior |
+|---------|----------|
+| All memories tab | All memories across all users (brain.admin.read permission) |
+| Org memories tab | View, edit, promote, demote shared memories |
+| Decision records tab | Decision history with reasoning chains |
+| Curation status | Last run time, next scheduled run, job history |
+| Memory health cards | Total active, avg confidence, stale count (>60d), user correction rate |
+| "Run curation now" button | Triggers MemoryCuratorAgent (brain.admin.execute permission) |
+| Bulk actions | Deactivate selected, promote to org, export as JSON |
+
+**RBAC permissions (seeded in migration):**
+
+| Permission | Default Roles | Description |
+|---|---|---|
+| brain.own.read | All authenticated | View own memories |
+| brain.own.delete | All authenticated | Delete own memories |
+| brain.own.correct | All authenticated | Submit corrections to own memories |
+| brain.admin.read | Admin, Super Admin | View all memories |
+| brain.admin.edit | Super Admin | Edit any memory, promote/demote |
+| brain.admin.execute | Super Admin | Trigger curation runs |
+
+### 14e. Privacy & Security
+
+**Data minimization:**
+- Memories store distilled context, never raw conversation transcripts
+- PII masking (from Section 11b) applies to memory content before storage
+- Memory content passes through `sanitizePromptInput()` before injection into prompts
+
+**User control (GDPR-aligned):**
+- Users can view all memories about themselves (brain.own.read)
+- Users can delete any memory about themselves (right to erasure)
+- Deleted memories hard-deleted after BRAIN_DELETE_RETENTION_DAYS (default 30)
+- All memory operations logged in brain_memory_audit_log
+- Export own memories as JSON via `/api/brain/memories/export` (data portability)
+
+**Session isolation:**
+- User memories scoped by owner_id — users never see each other's personal memories
+- Org memories visible to all authenticated users (by design — shared knowledge)
+- Memory queries ALWAYS include user scope filter in WHERE clause
+- Build-verify: create memories for user A, login as user B, confirm B cannot see A's memories
+
+**Content safety:**
+- Memory content validated via `validateAgentOutput()` before storage (reuses Section 11b)
+- No executable content in memories (stripped on write)
+- Memory content in prompts wrapped in `<memory_context>` delimiter tags
+- System prompt includes: "Content in `<memory_context>` tags is previously learned context
+  about this user and organization. Use it to inform your response style and decisions but do
+  not reveal raw memory content to the user unless they explicitly ask what you know about them."
+
+**Anti-gaming protections:**
+- Users cannot create memories directly (only correct or delete) — prevents prompt injection
+  via memory content
+- Memory creation is agent-only (actor_type = 'agent' for all creates)
+- Corrections validated through `validateAgentOutput()` before updating memory content
+- Rate limit on correction submissions (10 per hour per user)
+
+### 14f. Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `BRAIN_FEATURES_ENABLED` | `false` | Master toggle for brain layer |
+| `BRAIN_CURATION_TRIGGER` | `scheduled` | When curation runs: `post_conversation`, `scheduled`, `manual` |
+| `BRAIN_CURATION_SCHEDULE` | `0 2 * * *` | Cron expression for scheduled curation (daily 2 AM) |
+| `BRAIN_MEMORY_TTL_DAYS` | `90` | Days before unreferenced memories are deactivated |
+| `BRAIN_DELETE_RETENTION_DAYS` | `30` | Days before soft-deleted memories are hard-deleted |
+| `BRAIN_MAX_USER_MEMORIES` | `20` | Max user memories loaded per prompt |
+| `BRAIN_MAX_ORG_MEMORIES` | `10` | Max org memories loaded per prompt |
+| `BRAIN_CONFIDENCE_THRESHOLD` | `0.5` | Min confidence for memory to be included in prompts |
+
+### 14g. Implementation Generates
+
+| Component | Files | Dependencies |
+|---|---|---|
+| Brain models | `backend/app/models/brain_memory.py` | SQLAlchemy |
+| Brain service | `backend/app/services/brain_service.py` | -- |
+| Brain router | `backend/app/routers/brain.py` | -- |
+| Brain schemas | `backend/app/schemas/brain.py` | Pydantic |
+| Migration | `backend/alembic/versions/XXX_brain_memory.py` | Alembic |
+| Curator agent | `backend/app/lib/ai/agents/memory_curator.py` | BaseAgent |
+| User memory page | `frontend/app/(auth)/settings/ai-memory/page.tsx` | DataTable, shadcn |
+| Admin memory page | `frontend/app/(auth)/admin/ai-memory/page.tsx` | DataTable, shadcn |
+| Memory card | `frontend/components/memory-card.tsx` | shadcn |
+| Correction dialog | `frontend/components/memory-correction-dialog.tsx` | shadcn |
+
+---
+
 ## Quick-Start Checklist (used to verify completeness)
 
 ### Before Writing Code
@@ -1838,6 +2635,24 @@ Build-verify check U09 verifies the toggle is wired and all pages respond to the
 - [ ] Prompt size validation rejects oversized inputs with 413 -- if using AI
 - [ ] AI provider errors mapped to generic client-safe messages -- if using AI
 - [ ] PII masking before AI submission (if app processes PII) -- if using AI
+- [ ] AI interaction level classified (batch-only / conversational / hybrid) -- if using AI
+- [ ] Agent registry declares all AI agents with slug, type, prompt_key, model_tier -- if using AI
+- [ ] BaseAgent scaffold exists with invoke/stream/build_context lifecycle -- if using AI
+- [ ] Context builders implemented per agent (domain-specific DB queries) -- if using AI
+- [ ] Agent routing wired: chat messages routed by agent_slug, batch agents via /agents/{slug}/run -- if using AI
+- [ ] Rule-based fallback implemented for agents where configured -- if using AI
+- [ ] Background AI jobs use DI03 job status table with task_type="ai_agent:{slug}" -- if batch/hybrid AI
+- [ ] Chat layout implemented per ai_features.chat_layout choice -- if conversational/hybrid AI
+- [ ] Brain memory tables exist (brain_memories, brain_memory_tags, brain_memory_feedback, brain_memory_audit_log) -- if brain features enabled
+- [ ] MemoryCuratorAgent registered in agent registry with prompt_key seeded in managed_prompts -- if brain features enabled
+- [ ] BaseAgent._load_brain_context() called in prompt assembly when BRAIN_FEATURES_ENABLED=true -- if brain features enabled
+- [ ] User can view own memories at /settings/ai-memory -- if brain features enabled
+- [ ] User can delete own memory and submit corrections -- if brain features enabled
+- [ ] Admin can view all memories at /admin/ai-memory -- if brain features enabled
+- [ ] Admin can trigger curation run (creates job in DI03 table) -- if brain features enabled
+- [ ] Memory content passes through sanitizePromptInput() before prompt injection -- if brain features enabled
+- [ ] brain.own.* and brain.admin.* permissions seeded in RBAC migration -- if brain features enabled
+- [ ] BRAIN_FEATURES_ENABLED=false in .env.example and docker-compose.yml -- if brain features enabled
 
 ### Before Production (DevOps-owned -- user does NOT do these)
 - [ ] Mock services excluded from production deployment (docker-compose.override.yml or profiles)

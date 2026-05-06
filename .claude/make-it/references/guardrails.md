@@ -455,6 +455,68 @@ frictionless for non-technical users (80% of the audience).
 - [ ] Risk warnings appear for blocklist-adjacent patterns; overrides logged with risk_flag
 - [ ] /ship-it checks prompt_audit_log for risk_flag entries since last deploy
 
+### AI Memory / Brain Layer (when brain_features.enabled = true)
+
+Activates when the user describes AI that should learn, remember, or adapt across sessions.
+Requires `ai_features.needed = true`. See design-blueprint.md Section 14 for full specification.
+
+#### Memory Storage & Curation
+- 4 database tables: brain_memories, brain_memory_tags, brain_memory_feedback, brain_memory_audit_log
+- 3 memory types: user (per-person preferences), org (shared institutional knowledge), decision (recorded choices with reasoning)
+- MemoryCuratorAgent (batch type) distills conversations into curated memories using AI
+- Curation is AI-only (model_tier: light) — no rule-based fallback. When AI unavailable,
+  curation silently skips and processes backlog on next successful run. Partial extraction
+  is worse than waiting because low-quality memories actively degrade agent responses.
+- Curation trigger configurable: post_conversation, scheduled (default: daily 2 AM), or manual
+- Memory confidence scoring (0.0-1.0) determines prompt inclusion and expiry priority
+- Automatic memory expiry after BRAIN_MEMORY_TTL_DAYS (default: 90 days unreferenced)
+
+#### Context Assembly Integration
+- BaseAgent automatically loads brain context between system prompt and domain context
+- User memories (personal preferences, corrections) loaded first, then org memories (shared knowledge)
+- Memory budget: 15% of remaining token budget (carved from domain context allocation)
+- Truncation by confidence score (lowest confidence dropped first)
+- Memory content wrapped in `<memory_context>` delimiter tags with anti-instruction preamble
+- Feature toggle: BRAIN_FEATURES_ENABLED=false is no-op (zero overhead when disabled)
+
+#### User Transparency (MANDATORY)
+- Every user can view all memories the AI has stored about them (/settings/ai-memory)
+- Every user can delete their own memories ("Forget this") and submit corrections ("This is wrong")
+- Users CANNOT create memories directly (prevents prompt injection via memory content)
+- Memory creation is agent-only; corrections go through validation pipeline
+- No black box — full audit trail of all memory mutations
+
+#### Admin Controls
+- Admin memory dashboard at /admin/ai-memory (brain.admin.read permission)
+- Promote user memories to org memories, run curation manually, view health metrics
+- Memory health: total active, avg confidence, stale count, user correction rate
+- Curation jobs tracked in DI03 job status table (same infrastructure as other batch agents)
+
+#### Privacy & Security
+- Memories store distilled context, never raw conversation transcripts
+- PII masking (Section 11b) applies to memory content before storage
+- Memory content passes through sanitizePromptInput() and validateAgentOutput()
+- Session isolation: user memories scoped by owner_id, never leak cross-user
+- Org memories visible to all authenticated users by design (shared knowledge)
+- GDPR-aligned: users can view, correct, delete, and export their own memories
+- Anti-gaming: rate limit on corrections, validation on all content mutations
+
+#### Brain Build-Verify Checklist
+- [ ] brain_memories + brain_memory_tags + brain_memory_feedback + brain_memory_audit_log tables exist
+- [ ] MemoryCuratorAgent registered in agent registry with seeded prompt in managed_prompts
+- [ ] BaseAgent._load_brain_context() called in invoke/stream when BRAIN_FEATURES_ENABLED=true
+- [ ] Memory content sanitized and wrapped in `<memory_context>` delimiter tags
+- [ ] User memory isolation: user A cannot see user B's personal memories
+- [ ] /settings/ai-memory page: view, correct, delete own memories
+- [ ] /admin/ai-memory page: all memories, health metrics, curation controls
+- [ ] brain.own.* and brain.admin.* RBAC permissions seeded
+- [ ] Curation job tracked in DI03 with correct task_type and result_data
+- [ ] Brain env vars in .env.example with documented defaults
+- [ ] Seed data: 5+ memories, mixed types, different users, different confidence levels
+- [ ] Live: brain context influences AI response style (BNV01)
+- [ ] Live: curation produces memories from conversations (BNV02)
+- [ ] Live: memory isolation holds across users (BNV03)
+
 ### Settings Build-Verify Checklist
 - [ ] app_settings table exists with correct columns (key, value, group_name, display_name, description, value_type, is_sensitive, requires_restart, updated_by, timestamps)
 - [ ] app_setting_audit_logs table exists with correct columns (setting_id, old_value, new_value, changed_by, timestamp)
@@ -531,6 +593,34 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] HTML/script in template variables is escaped in rendered output
 - [ ] Risk warnings displayed for blocklist-adjacent patterns; overrides logged with risk_flag
 - [ ] /ship-it flags risk_flag audit entries in PR description for security review
+
+**AI Memory / Brain Layer (when brain_features.enabled = true):**
+- [ ] brain_memories, brain_memory_tags, brain_memory_feedback, brain_memory_audit_log tables exist
+- [ ] MemoryCuratorAgent registered in agent registry with prompt seeded in managed_prompts
+- [ ] BaseAgent._load_brain_context() injects memory into prompt assembly when enabled
+- [ ] Memory content sanitized via sanitizePromptInput() and wrapped in `<memory_context>` tags
+- [ ] User memories scoped by owner_id (session isolation verified)
+- [ ] User transparency page at /settings/ai-memory with view, correct, delete actions
+- [ ] Admin memory page at /admin/ai-memory with health metrics and curation controls
+- [ ] brain.own.* and brain.admin.* RBAC permissions seeded
+- [ ] Curation job tracked in DI03 with task_type="ai_agent:memory-curator"
+- [ ] Brain env vars in .env.example (BRAIN_FEATURES_ENABLED=false default)
+- [ ] Seed brain_memories with sample data (5+ memories, mixed types)
+- [ ] Live: brain context influences AI responses (BNV01)
+- [ ] Live: curation job produces memories from conversation data (BNV02)
+- [ ] Live: user A cannot see user B's personal memories (BNV03)
+
+**Agent Infrastructure (all AI apps):**
+- [ ] AI interaction level in app-context.json matches generated code (batch-only/conversational/hybrid)
+- [ ] Agent registry module exists and maps all slugs to agent classes
+- [ ] BaseAgent abstract class exists with invoke/stream/build_context/get_system_prompt
+- [ ] Every concrete agent extends BaseAgent (safety pipeline not bypassed)
+- [ ] Context builders return relevant domain data per agent (not empty strings)
+- [ ] Chat messages route to correct agent by conversation.agent_slug
+- [ ] Batch agents triggered via POST /api/ai/agents/{slug}/run
+- [ ] Rule-based fallback works when AI provider is down (for agents with fallback=true)
+- [ ] Batch jobs create records in job status table (DI03) with task_type="ai_agent:{slug}"
+- [ ] Job result_data includes agent_slug, model_used, token counts, cost
 
 ### Prompts
 - Execute all 14 prompts in order (#1-#14)
@@ -753,6 +843,9 @@ The Design phase summary to the user should reflect the project type without usi
 | AI prompt size limits | AI* | AI* | AI* | AI* | AI* | AI* |
 | AI PII masking | AI* | AI* | AI* | AI* | AI* | AI* |
 | NeMo Guardrails tests | AI* | AI* | AI* | AI* | AI* | AI* |
+| Brain memory layer | BN* | BN* | BN* | BN* | BN* | BN* |
+| Brain transparency UI | BN* | BN* | | | | BN* |
 
 *Y* = when auth is needed for the API service
 *AI* = when ai_features.needed = true (applies to ANY project type that uses AI)
+*BN* = when brain_features.enabled = true (requires AI features active)
