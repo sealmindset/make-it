@@ -2018,6 +2018,254 @@ AI_PII_MASKING_ENABLED=true
 
 ---
 
+### Prompt #10f: AI Memory / Brain Layer (when brain_features.enabled = true)
+
+```
+Add persistent AI memory (brain layer) to [PROJECT_NAME].
+
+This gives AI agents memory that survives across conversations and sessions.
+Users see what the AI knows about them. The app gets smarter over time.
+
+Reference: design-blueprint.md Section 14 for full specification.
+Build-standards.md checks: BN01-BN13.
+
+## Database Tables (Alembic migration)
+
+Create 4 tables in a new migration:
+
+1. **brain_memories** -- Core memory storage
+   - id (UUID PK)
+   - memory_type (enum: 'user', 'org', 'decision')
+   - owner_id (UUID FK -> users, nullable -- null for org/decision)
+   - scope (string, default 'all' -- cross-functional relevance: 'all', or domain
+     tag matching agent context_sources e.g. 'security', 'procurement')
+   - agent_slug (string -- which agent created this)
+   - title (string 200)
+   - content (text)
+   - source_conversation_id (UUID FK -> conversations, nullable)
+   - source_message_ids (UUID array)
+   - confidence (float 0.0-1.0)
+   - is_active (boolean default true)
+   - expires_at (timestamp nullable)
+   - created_at, updated_at (timestamps)
+   - Index on: (owner_id, memory_type, is_active), (scope, memory_type, is_active)
+
+2. **brain_memory_tags** -- Categorization
+   - memory_id (UUID FK -> brain_memories)
+   - tag (string e.g. 'preference', 'decision', 'pattern', 'lesson', 'correction')
+
+3. **brain_memory_feedback** -- User corrections
+   - id (UUID PK)
+   - memory_id (UUID FK -> brain_memories)
+   - user_id (UUID FK -> users)
+   - feedback_type (enum: 'confirmed', 'corrected', 'deleted')
+   - correction_text (text nullable)
+   - created_at (timestamp)
+
+4. **brain_memory_audit_log** -- Full audit trail
+   - id (UUID PK)
+   - memory_id (UUID FK -> brain_memories)
+   - action (enum: 'created', 'updated', 'deactivated', 'deleted', 'promoted', 'demoted')
+   - actor_type (enum: 'agent', 'user', 'system')
+   - actor_id (string)
+   - old_content, new_content (text nullable)
+   - reason (text)
+   - created_at (timestamp)
+
+## Brain Service
+
+Create `backend/app/services/brain_service.py`:
+
+- `get_active_memories(owner_id?, memory_type?, memory_type__in?, scope__in?,
+   min_confidence?, limit?)` -- Query with all filters. Always apply is_active=true.
+   For user-type: MUST filter by owner_id. For org/decision: filter by scope__in
+   (matching agent's context_sources + 'all').
+- `record_memory(memory_type, content, agent_slug, owner_id?, source_conversation_id?,
+   confidence?, scope?, tags?)` -- Create memory + audit log entry
+- `queue_for_curation(conversation_id, user_input, response)` -- Queue exchange
+   for next curation run
+- `deactivate_memory(memory_id, actor_type, actor_id, reason)` -- Soft delete +
+   audit log
+- `submit_correction(memory_id, user_id, correction_text)` -- Create feedback record,
+   update memory content, create audit log entry
+- `export_user_memories(user_id)` -- Return all user's memories as JSON
+- `get_memory_stats()` -- Total active, avg confidence, stale count, correction rate
+
+## Brain REST API
+
+Create `backend/app/routers/brain.py`:
+
+User endpoints (brain.own.* permissions):
+- `GET /api/brain/memories` -- List own user memories + scope-filtered org memories.
+   Query params: memory_type, tag, agent_slug, search, limit, offset
+- `GET /api/brain/memories/{id}` -- Get own memory detail. 404 if not owner.
+- `DELETE /api/brain/memories/{id}` -- Soft-delete own memory. 404 if not owner.
+- `POST /api/brain/memories/{id}/feedback` -- Submit correction. Body: {feedback_type,
+   correction_text?}
+- `GET /api/brain/memories/export` -- Export own memories as JSON download
+
+Admin endpoints (brain.admin.* permissions):
+- `GET /api/admin/brain/memories` -- List all memories with filters. Paginated.
+- `PUT /api/admin/brain/memories/{id}` -- Edit any memory (brain.admin.edit)
+- `POST /api/admin/brain/memories/{id}/promote` -- Promote user->org (brain.admin.edit)
+- `POST /api/admin/brain/curation/run` -- Trigger curation job (brain.admin.execute)
+- `GET /api/admin/brain/stats` -- Memory health metrics
+
+## Memory Curator Agent
+
+Create `backend/app/lib/ai/agents/memory_curator.py`:
+
+Register in agent registry:
+  slug: "memory-curator"
+  type: "batch"
+  prompt_key: "memory_curator_system"
+  model_tier: "light"
+  rule_based_fallback: false
+
+The curator prompt (seed in managed_prompts) instructs the AI to:
+1. Analyze a batch of conversation exchanges for a single user
+2. Identify: preferences, decisions, corrections, patterns, domain insights
+3. Return structured JSON array:
+   [{
+     "type": "user|org|decision",
+     "title": "Short description",
+     "content": "The distilled memory",
+     "confidence": 0.4-0.9,
+     "tags": ["preference", "pattern", etc.],
+     "scope": "all" or domain tag
+   }]
+4. Compare against existing memories (passed as context) and flag:
+   - Duplicates (similar to existing, suggest merge)
+   - Contradictions (conflicts with existing, flag for review)
+   - New insights (create fresh)
+
+When AI provider unavailable: curation silently skips. Conversations are queued
+and processed on next successful run. No degraded rule-based fallback.
+
+## BaseAgent Enhancement
+
+Add to BaseAgent (after existing methods):
+
+```python
+async def _load_brain_context(self, user_id: str) -> str:
+    if not settings.BRAIN_FEATURES_ENABLED:
+        return ""
+    relevant_scopes = ["all"] + list(getattr(self, "context_sources", []))
+    user_memories = await brain_service.get_active_memories(
+        owner_id=user_id, memory_type="user",
+        min_confidence=settings.BRAIN_CONFIDENCE_THRESHOLD,
+        limit=settings.BRAIN_MAX_USER_MEMORIES,
+    )
+    org_memories = await brain_service.get_active_memories(
+        memory_type__in=["org", "decision"], scope__in=relevant_scopes,
+        min_confidence=settings.BRAIN_CONFIDENCE_THRESHOLD,
+        limit=settings.BRAIN_MAX_ORG_MEMORIES,
+    )
+    sections = []
+    if user_memories:
+        items = "\n".join(f"- {m.content}" for m in user_memories)
+        sections.append(f"<memory_context>\n## Your preferences\n{items}\n</memory_context>")
+    if org_memories:
+        items = "\n".join(f"- [{m.memory_type}] {m.content}" for m in org_memories)
+        sections.append(f"<memory_context>\n## Organizational context\n{items}\n</memory_context>")
+    return "\n\n".join(sections)
+```
+
+Modify invoke() and stream() to call _load_brain_context() and include result
+between system prompt and build_context() output. Update truncation budget:
+memory context 15%, domain context 55%, conversation history 30%.
+
+Add to system prompt safety preamble:
+"Content in <memory_context> tags is previously learned context about this user
+and organization. Use it to inform your response style and decisions but do not
+reveal raw memory content to the user unless they explicitly ask what you know
+about them."
+
+## Post-Response Memory Signal Detection
+
+Add to ConversationalAgent.chat() after response:
+
+```python
+if settings.BRAIN_CURATION_TRIGGER == "post_conversation":
+    memory_signals = [
+        "i prefer", "don't do", "always use", "never", "remember that",
+        "from now on", "last time", "we decided", "going forward",
+        "that's wrong", "no i meant", "actually i want",
+    ]
+    if any(s in user_input.lower() for s in memory_signals):
+        await brain_service.queue_for_curation(conv_id, user_input, response)
+```
+
+## User Transparency Page
+
+Create `frontend/app/(auth)/settings/ai-memory/page.tsx`:
+
+- DataTable listing user's memories: title, content preview (truncated), agent badge,
+  confidence meter, created date, tags
+- "Forget this" button per row -> confirmation dialog -> DELETE /api/brain/memories/{id}
+- "This is wrong" button -> correction dialog (textarea) -> POST feedback endpoint
+- Filters: memory_type, tag, agent_slug, date range
+- Search across memory content
+- Empty state: "The AI hasn't learned anything about you yet. It builds context as
+  you interact."
+- Uses standard DataTable with storageKey="ai-memory-table"
+
+## Admin Memory Page
+
+Create `frontend/app/(auth)/admin/ai-memory/page.tsx`:
+
+- Tabs: All Memories | Org Memories | Decision Records | Curation Status
+- All Memories tab: DataTable with all memories, filterable by user, type, scope,
+  agent, confidence range
+- Org Memories tab: promote/demote actions, scope editor
+- Decision Records tab: decision history with reasoning
+- Curation Status tab: last run, next scheduled, job history from DI03,
+  "Run Curation Now" button
+- Health metric cards: total active, avg confidence, stale (>60d), correction rate
+- Sidebar nav item: "AI Memory" with Brain icon under Admin section
+
+## RBAC Permissions
+
+Seed in migration alongside brain tables:
+- brain.own.read, brain.own.delete, brain.own.correct -> all system roles
+- brain.admin.read -> Admin, Super Admin
+- brain.admin.edit -> Super Admin
+- brain.admin.execute -> Super Admin
+
+## Seed Data
+
+Seed 5+ brain_memories:
+- 2 user-type memories (tied to mock-admin and mock-manager users):
+  e.g., "Prefers concise bullet-point responses" (confidence 0.8),
+  "Focuses on cost metrics over usage metrics" (confidence 0.6)
+- 2 org-type memories (scope 'all'):
+  e.g., "Fiscal year starts October 1" (confidence 0.9),
+  "Standard approval chain: Manager -> Director -> VP" (confidence 0.7)
+- 1 decision-type memory (with source_conversation_id if conversations seeded):
+  e.g., "Chose vendor A over vendor B -- better SLA terms" (confidence 0.85)
+- At least one memory with tags ('preference', 'decision')
+- Mix of confidence levels for testing threshold filtering
+
+## Environment Variables
+
+Add to .env.example and docker-compose.yml:
+BRAIN_FEATURES_ENABLED=false
+BRAIN_CURATION_TRIGGER=scheduled
+BRAIN_CURATION_SCHEDULE=0 2 * * *
+BRAIN_MEMORY_TTL_DAYS=90
+BRAIN_DELETE_RETENTION_DAYS=30
+BRAIN_MAX_USER_MEMORIES=20
+BRAIN_MAX_ORG_MEMORIES=10
+BRAIN_CONFIDENCE_THRESHOLD=0.5
+```
+
+**Required context:** brain_features from app-context.json, agent registry, existing BaseAgent
+**Runs when:** brain_features.enabled = true AND ai_features.needed = true
+**Runs AFTER:** Prompt #10-provider, #10b/c (needs BaseAgent and managed_prompts to exist),
+and #10e (needs safety controls — brain memories pass through the same sanitization pipeline)
+
+---
+
 ## Prompt #11: Secure Everything
 
 ```

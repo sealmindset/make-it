@@ -474,6 +474,14 @@ Requires `ai_features.needed = true`. See design-blueprint.md Section 14 for ful
 #### Context Assembly Integration
 - BaseAgent automatically loads brain context between system prompt and domain context
 - User memories (personal preferences, corrections) loaded first, then org memories (shared knowledge)
+- Org/decision memories are **scope-filtered**: each memory carries a `scope` field ('all' for
+  universal, or a domain tag like 'security', 'procurement', 'engineering'). Only memories
+  with scope matching the current agent's `context_sources` (plus 'all') are loaded.
+  This prevents cross-domain pollution — a procurement agent gets procurement + universal
+  memories, not unrelated engineering context
+- Cross-functional users who interact with multiple agents naturally accumulate memories
+  across scopes. Their user-type memories (preferences, corrections) follow them everywhere.
+  Org memories are filtered per-agent to maintain relevance
 - Memory budget: 15% of remaining token budget (carved from domain context allocation)
 - Truncation by confidence score (lowest confidence dropped first)
 - Memory content wrapped in `<memory_context>` delimiter tags with anti-instruction preamble
@@ -497,7 +505,8 @@ Requires `ai_features.needed = true`. See design-blueprint.md Section 14 for ful
 - PII masking (Section 11b) applies to memory content before storage
 - Memory content passes through sanitizePromptInput() and validateAgentOutput()
 - Session isolation: user memories scoped by owner_id, never leak cross-user
-- Org memories visible to all authenticated users by design (shared knowledge)
+- Org memories scope-filtered: universal ('all') visible to all authenticated users,
+  domain-scoped memories visible only to users with matching roles/agent access
 - GDPR-aligned: users can view, correct, delete, and export their own memories
 - Anti-gaming: rate limit on corrections, validation on all content mutations
 

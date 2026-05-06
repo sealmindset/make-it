@@ -332,6 +332,15 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
   - 1-3 prompts, devs only -> tier 1 (code + config)
   - 4-10 prompts OR non-devs edit -> tier 2 (database + admin UI)
   - 10+ prompts OR AI-native app -> tier 3 (full platform)
+- AI Memory / Brain Layer: Detect from ideation keywords and set brain_features
+  - User said "remember", "learn over time", "get smarter", "know my preferences",
+    "adapt to me", "remember what I told you" -> brain_features.enabled = true
+  - Multi-user app with conversational AI -> brain_features.user_memory = true
+  - Team/org decisions, institutional knowledge mentioned -> brain_features.org_memory = true
+  - Batch-only AI with no user interaction -> ask user to confirm brain intent
+  - Set brain_features.curation_trigger = "scheduled" (default) unless user
+    specifically wants real-time learning ("post_conversation")
+  - Reference design-blueprint.md Section 14 for decision rules
 - Mock Services: Determine which mock services are needed
   - Auth needed -> mock-oidc (always)
   - Jira integration -> mock-jira (port 8443)
@@ -606,6 +615,46 @@ to understand the patterns, then generate new code that follows the same convent
       f. Add upload wizard for document-centric pages (F07)
       g. Add RBAC to upload endpoints (F08)
 
+9e. **AI Memory / Brain Layer**
+    - Tell user: "Adding persistent AI memory..."
+    - This step runs when `brain_features.enabled = true` in app-context.json
+    - Requires AI features to be active (`ai_features.needed = true`)
+    - Reference prompt-templates.md Prompt #10f and design-blueprint.md Section 14
+    - Build-standards.md checks: BN01-BN13, BNV01-BNV03
+    - Steps:
+      a. Create brain memory database models: `brain_memories`, `brain_memory_tags`,
+         `brain_memory_feedback`, `brain_memory_audit_log` tables (BN01).
+         brain_memories has `scope` column (default 'all') for cross-functional filtering.
+      b. Create brain service (`services/brain_service.py`): get_active_memories() with
+         owner_id scoping and scope filtering, queue_for_curation(), record_memory(),
+         get_memory_stats(), export_user_memories()
+      c. Create brain REST API (`routers/brain.py`): user endpoints (list own, delete own,
+         submit correction, export) + admin endpoints (list all, edit, promote, trigger
+         curation, view stats). All endpoints use require_permission() (BN06, BN09)
+      d. Register MemoryCuratorAgent in agent registry (slug: "memory-curator", type: batch,
+         model_tier: light, rule_based_fallback: false). AI-driven curation — silently
+         skips when provider unavailable, processes backlog on next run (BN02)
+      e. Seed `memory_curator_system` prompt in managed_prompts with structured JSON
+         output format for extracted memories
+      f. Enhance BaseAgent: add `_load_brain_context(user_id)` method that loads user +
+         scope-filtered org memories into prompt assembly between system prompt and
+         domain context. No-op when BRAIN_FEATURES_ENABLED=false (BN03, BN04)
+      g. Add user transparency page at `/settings/ai-memory`: view, correct, delete own
+         memories with DataTable, memory cards, correction dialog (BN07)
+      h. Add admin memory page at `/admin/ai-memory`: all memories, health metrics,
+         curation controls, scope management (BN08)
+      i. Seed brain RBAC permissions: brain.own.read/delete/correct for all authenticated
+         roles, brain.admin.read/edit/execute for Admin/Super Admin (BN06)
+      j. Seed 5+ sample brain_memories: mixed types (user, org, decision), mixed scopes,
+         different confidence levels, tied to real seeded users (BN13)
+      k. Add brain env vars to .env.example and docker-compose.yml:
+         BRAIN_FEATURES_ENABLED=false, BRAIN_CURATION_TRIGGER=scheduled,
+         BRAIN_CURATION_SCHEDULE, BRAIN_MEMORY_TTL_DAYS, BRAIN_MAX_USER_MEMORIES,
+         BRAIN_MAX_ORG_MEMORIES, BRAIN_CONFIDENCE_THRESHOLD (BN12)
+      l. Wire curation trigger: if scheduled, register cron job (DI07 pattern).
+         If post_conversation, add hook in ConversationalAgent.chat() with
+         signal-based pre-filter (BN10)
+
 10. **Security Hardening**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
@@ -847,7 +896,8 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X06**: Security (secrets, validation, deps, headers, no Java, no module throws)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
-- **AI01-AI13**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking
+- **AI01-AI22**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking
+- **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data
 
 For each failing check:
 - `[FIX]` items: auto-fix immediately
@@ -1004,6 +1054,21 @@ Common issues and fixes:
 - Hydration mismatch on theme -> add suppressHydrationWarning to <html> and <body>, use mounted pattern in ModeToggle
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
+
+33. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
+    a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
+       and seed memories in place, send a chat message to an AI agent. Verify the response
+       reflects memory context (e.g., if seed memory says "prefers bullet points", response
+       should use bullet format). Disable brain features, send same message, verify response
+       format differs.
+    b. **BNV02: Curation produces memories** -- Trigger MemoryCuratorAgent via admin API
+       (POST /api/admin/brain/curation/run). Verify job record created in DI03 table.
+       Verify job completes. If unprocessed conversations with memory signals exist,
+       verify at least one new memory created in brain_memories.
+    c. **BNV03: Memory isolation** -- Login as user A, GET /api/brain/memories, note
+       user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
+       user-type memories are NOT returned. Confirm org-type memories with scope 'all'
+       ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
 
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.

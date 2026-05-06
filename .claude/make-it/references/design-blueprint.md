@@ -2228,8 +2228,29 @@ If interaction_level = "batch-only" with no user interaction:
 | Type | Scope | Example | Source |
 |------|-------|---------|--------|
 | `user` | Per user | "Prefers bullet-point summaries over paragraphs" | Distilled from conversations |
-| `org` | Shared | "Q4 always over-allocated, start planning Sept" | Promoted from cross-user patterns |
-| `decision` | Shared | "Moved 2 FTEs Platform→Mobile, May 2026 — Mobile 40% over-allocated" | Agent-recorded after decision assistance |
+| `org` | Shared, scope-tagged | "Vendor onboarding takes 3 weeks, not 1 — account for in timelines" | Promoted from cross-user patterns |
+| `decision` | Shared, scope-tagged | "Chose Approach B over A for data migration — A had compliance risk" | Agent-recorded after decision assistance |
+
+**Cross-functional scoping:**
+Org and decision memories are NOT flat — they carry a `scope` tag that determines relevance.
+When multiple teams use the same app, a procurement insight shouldn't pollute an engineering
+user's context, and vice versa. The scoping mechanism is lightweight and automatic:
+
+- Scope is inferred from the agent that created the memory (`agent_slug`) and the
+  conversation's domain context
+- Org memories tagged with broad scope (e.g., `"scope": "all"`) are loaded for every user
+- Org memories tagged with narrow scope (e.g., `"scope": "security"`, `"scope": "procurement"`)
+  are loaded only when the user is interacting with a matching agent or has matching role permissions
+- Users who work across domains (cross-functional) see memories from all scopes they have
+  permission to access — the union of their roles determines visible scopes
+- Scope matching uses the agent registry's `context_sources` as the linkage: if an agent's
+  context_sources overlap with a memory's scope, the memory is relevant
+- Admin can re-scope any org memory via the admin UI
+
+This ensures the brain layer works for:
+- Single-team apps (all memories scope: "all", no filtering needed)
+- Multi-team apps (memories auto-scoped by originating agent/context)
+- Cross-functional users (see union of all relevant scopes)
 
 ### 14a. Database Schema (3 tables + 1 audit)
 
@@ -2240,6 +2261,7 @@ If interaction_level = "batch-only" with no user interaction:
 | id | UUID PK | |
 | memory_type | enum('user', 'org', 'decision') | Determines scope and visibility |
 | owner_id | UUID FK → users, nullable | Null for org/decision memories |
+| scope | string, default 'all' | Cross-functional relevance filter. 'all' = universal. Otherwise matches agent context_sources (e.g., 'security', 'procurement', 'engineering'). Inferred from originating agent_slug at creation time. |
 | agent_slug | string | Which agent created this memory |
 | title | string(200) | Short description for UI display |
 | content | text | The memory itself — distilled, never raw transcript |
@@ -2410,9 +2432,18 @@ class BaseAgent(ABC):
     # ... existing methods unchanged ...
 
     async def _load_brain_context(self, user_id: str) -> str:
-        """Load relevant memories for the current user and org."""
+        """Load relevant memories for the current user and org.
+        
+        Scope filtering ensures cross-functional relevance:
+        - User memories: always scoped to owner_id (personal)
+        - Org/decision memories: filtered by scope matching this agent's
+          context_sources, plus 'all' (universal) memories
+        """
         if not settings.BRAIN_FEATURES_ENABLED:
             return ""
+
+        # Determine relevant scopes from this agent's context_sources
+        relevant_scopes = ["all"] + list(getattr(self, "context_sources", []))
 
         user_memories = await brain_service.get_active_memories(
             owner_id=user_id,
@@ -2422,6 +2453,7 @@ class BaseAgent(ABC):
         )
         org_memories = await brain_service.get_active_memories(
             memory_type__in=["org", "decision"],
+            scope__in=relevant_scopes,
             min_confidence=settings.BRAIN_CONFIDENCE_THRESHOLD,
             limit=settings.BRAIN_MAX_ORG_MEMORIES,
         )

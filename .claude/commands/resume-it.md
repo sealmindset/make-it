@@ -274,7 +274,8 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
      5. **Residual:** Any remaining vulnerabilities after 3 cycles go to TODO.md with severity, package name, and CVE ID
      Install `pip-audit` if not available: `pip install pip-audit`
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
-   - **AI (AI01-AI13):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence
+   - **AI (AI01-AI22):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking
+   - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
 
 c. **Categorize results:**
    - **PASS:** Check is satisfied
@@ -345,6 +346,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Notifications missing (N01-N08 gaps) | "Your app doesn't have an in-app notification system yet -- users won't know when things need their attention. Want me to add one?" |
 | File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
 | pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |
+| AI features exist but no brain layer (BN01-BN13 all GAP) | "Your app has AI features but no persistent memory -- the AI starts fresh every conversation. Want me to add a brain layer so it learns user preferences, remembers decisions, and gets smarter over time?" |
 | Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- want me to apply them now?" |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
@@ -873,6 +875,126 @@ Report to user:
 - The sidebar now shows 'AI Instructions' with the new interface
 
 Want to explore the new prompt management, or continue with something else?"
+
+</step>
+
+<!-- ============================================================ -->
+<!-- BRAIN LAYER ADDITION -- Add persistent AI memory to app       -->
+<!-- ============================================================ -->
+
+<step name="brain-layer-addition">
+
+**Triggered when:**
+- Catch-up scan detected AI features exist but no brain layer (BN01-BN13 all GAP) and user chose to add it
+- User explicitly asked for brain features ("add memory", "make AI learn", "persistent context")
+- User accepted standards gap suggestion that includes brain layer
+
+**This step has 4 phases.**
+
+---
+
+**Phase 1: Stack Eligibility & Context**
+
+Check tech stack from app-context.json or codebase detection:
+- FastAPI + Next.js (scaffold match) → Full brain layer generation
+- NestJS + Next.js → Adapt Python patterns to TypeScript/NestJS
+- Other stacks → Generate from spec, adapt to detected patterns
+
+Read existing AI infrastructure:
+- Where is BaseAgent? (lib/ai/agents/base_agent.py or equivalent)
+- Where is the agent registry? (lib/ai/agents/registry.py or equivalent)
+- Where are managed_prompts? (models, routers, services)
+- Where are conversation tables? (if conversational AI exists)
+- What agents exist? (list from registry for scope inference)
+
+Update app-context.json:
+```json
+"brain_features": {
+  "enabled": true,
+  "user_memory": true,
+  "org_memory": true,
+  "curation_trigger": "scheduled",
+  "curation_schedule": "0 2 * * *",
+  "memory_ttl_days": 90,
+  "confidence_threshold": 0.5
+}
+```
+
+**Phase 2: Confirm with User**
+
+"I'll add a brain layer to [PROJECT_NAME] so the AI remembers user preferences,
+records decisions, and gets smarter over time. Here's what this includes:
+
+- **4 new database tables** for memory storage, tags, user feedback, and audit trail
+- **Memory Curator agent** that distills conversations into curated memories (runs daily)
+- **BaseAgent enhancement** so ALL your existing agents automatically use memory context
+- **User page** (/settings/ai-memory) where users see and manage what the AI knows about them
+- **Admin page** (/admin/ai-memory) for memory health, curation controls, scope management
+- **6 new RBAC permissions** (brain.own.* and brain.admin.*)
+- **Cross-functional scoping** so memories are relevant per-agent, not one-size-fits-all
+
+Your existing AI agents ([list agents]) will automatically benefit -- no changes needed to them.
+Brain features are OFF by default (BRAIN_FEATURES_ENABLED=false) until you're ready to enable.
+
+Ready to proceed?"
+
+Wait for confirmation.
+
+**Phase 3: Implement**
+
+Reference prompt-templates.md Prompt #10f and design-blueprint.md Section 14 for full spec.
+Build-standards.md checks: BN01-BN13.
+
+Execute in order:
+1. Create Alembic/Prisma migration for brain_memories, brain_memory_tags,
+   brain_memory_feedback, brain_memory_audit_log tables (BN01)
+2. Create brain service with memory queries, recording, curation queue, export (BN09)
+3. Create brain REST API with user + admin endpoints (BN09)
+4. Register MemoryCuratorAgent in existing agent registry (BN02)
+5. Seed memory_curator_system prompt in managed_prompts (BN02)
+6. Add _load_brain_context() to existing BaseAgent with scope filtering (BN03)
+7. Update system prompt safety preamble to include memory_context instruction (BN04)
+8. Add post-response memory signal detection to ConversationalAgent if exists (14c)
+9. Create /settings/ai-memory user page (BN07)
+10. Create /admin/ai-memory admin page (BN08)
+11. Add brain.own.* and brain.admin.* RBAC permissions to seed migration (BN06)
+12. Seed 5+ sample brain_memories tied to existing seeded users (BN13)
+13. Add BRAIN_* env vars to .env.example and docker-compose.yml (BN12)
+14. Wire curation trigger (scheduled cron or post-conversation hook) (BN10)
+15. Add sidebar nav items: "AI Memory" under Settings (user) and Admin (admin)
+
+**Stack adaptation notes:**
+- **FastAPI apps:** Follow Prompt #10f directly (Python, SQLAlchemy, Alembic)
+- **NestJS apps:** Create brain.module.ts, brain.service.ts, brain.controller.ts,
+  brain-memory.entity.ts. Use TypeORM migration. Adapt Python patterns to
+  NestJS dependency injection and decorators. The BaseAgent pattern may be a
+  service class -- find the equivalent and add _loadBrainContext() method.
+- **Other stacks:** Adapt to detected patterns, maintain same API contract
+
+After each major component (tables, service, API, UI), run a quick check:
+- Tables: run migration, verify tables exist
+- API: start app, hit health endpoint, verify brain routes respond
+- UI: verify pages render
+
+**Phase 4: Verify & Report**
+
+Run BN01-BN13 static checks against the implemented code.
+If app is running (docker-compose up), also run BNV01-BNV03 live checks.
+
+Report to user:
+"Brain layer added to [PROJECT_NAME]! Here's what's new:
+
+- **[N] database tables** for persistent AI memory
+- **Memory Curator agent** registered (runs [trigger description])
+- **[N] existing agents** now automatically load memory context
+- **User memory page** at /settings/ai-memory
+- **Admin memory page** at /admin/ai-memory with health metrics
+- **[N] sample memories** seeded for testing
+
+Brain features are currently **OFF** (BRAIN_FEATURES_ENABLED=false in .env).
+To enable: set BRAIN_FEATURES_ENABLED=true and restart.
+
+Want to enable it now and test, or continue with something else?"
 
 </step>
 
