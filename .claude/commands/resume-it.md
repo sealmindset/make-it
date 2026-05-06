@@ -274,7 +274,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
      5. **Residual:** Any remaining vulnerabilities after 3 cycles go to TODO.md with severity, package name, and CVE ID
      Install `pip-audit` if not available: `pip install pip-audit`
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
-   - **AI (AI01-AI22):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking
+   - **AI (AI01-AI28):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
 
 c. **Categorize results:**

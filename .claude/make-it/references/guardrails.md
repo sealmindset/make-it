@@ -443,6 +443,18 @@ frictionless for non-technical users (80% of the audience).
 - /ship-it checks for any `risk_flag: true` entries in the audit log since the last deploy
   and flags them in the PR description for security review.
 
+**Agent Composition (when agents use invoke_agent, pipelines, delegation, or fan-out):**
+- [ ] `invoke_agent(slug, input)` method exists on BaseAgent with depth tracking and cycle detection
+- [ ] `AI_MAX_COMPOSITION_DEPTH` enforced (default 5) -- exceeding raises CompositionDepthExceeded
+- [ ] Cycle detection prevents Agent A → Agent B → Agent A (raises CompositionCycleDetected)
+- [ ] Token/cost usage from child agents rolled up to parent via `get_total_composition_cost()`
+- [ ] Every agent that calls `invoke_agent()` has `depends_on` in app-context.json listing called slugs
+- [ ] `depends_on` graph has no cycles (validated at startup or build-verify)
+- [ ] Pipeline agents track per-step results; step failure reports which step and why
+- [ ] Delegating agents update `conversation.agent_slug` and store handoff context for delegate
+- [ ] Fan-out agents handle partial results (some sub-agents fail, others succeed)
+- [ ] Composed batch agent job `result_data` includes full cost breakdown across all sub-agents
+
 **Build-verify additions for prompt template validation:**
 - [ ] `validatePromptTemplate()` utility exists in lib/ai/ and is called on all prompt save endpoints
 - [ ] Safety preamble is immutable: admin UI does not expose it, runtime always prepends it

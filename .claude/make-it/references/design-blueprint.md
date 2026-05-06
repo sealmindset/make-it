@@ -1444,6 +1444,319 @@ how the `agent_slug` is determined:
 - Rule-based fallback methods (for agents with fallback: true)
 - Chat layout per ai_features.chat_layout choice
 
+### 11c-8. Agent Composition & Orchestration
+
+Agents can operate independently OR compose together. Four patterns, from simplest to most
+complex. Each pattern builds on the `invoke_agent()` primitive.
+
+**Agent schema addition -- `depends_on` (optional):**
+
+```json
+{
+  "slug": "full-analysis",
+  "name": "Full Analysis",
+  "type": "batch",
+  "prompt_key": "full_analysis_system",
+  "model_tier": "standard",
+  "depends_on": ["risk-scorer", "cost-analyzer", "compliance-checker"],
+  "context_sources": ["applications", "costs", "policies"],
+  "rule_based_fallback": false
+}
+```
+
+The `depends_on` array documents which agents this agent calls. It is declarative only --
+the actual calls happen in code via `invoke_agent()`. Purpose: makes the dependency graph
+visible in app-context.json without reading code, enables cycle detection at design time,
+and allows build-verify to validate that all dependencies exist in the registry.
+
+#### 11c-8a. invoke_agent() Primitive
+
+BaseAgent provides a helper to call any other agent through the registry. This is the
+foundation for all composition patterns.
+
+```python
+class BaseAgent(ABC):
+    # ... existing methods ...
+
+    _composition_depth: int = 0
+    _composition_visited: set[str] = set()
+    _composition_usage: dict = {}  # rolled-up token/cost tracking
+
+    async def invoke_agent(self, slug: str, input: str, **context_params) -> str:
+        """Call another agent through the registry. Tracks depth, prevents loops, rolls up cost."""
+        max_depth = settings.AI_MAX_COMPOSITION_DEPTH  # default: 5
+        if self._composition_depth >= max_depth:
+            raise CompositionDepthExceeded(
+                f"Agent composition depth {self._composition_depth} exceeds max {max_depth}"
+            )
+        if slug in self._composition_visited:
+            raise CompositionCycleDetected(
+                f"Cycle detected: {slug} already in call chain {self._composition_visited}"
+            )
+
+        agent = get_agent(slug)
+        # Propagate composition tracking to child
+        agent._composition_depth = self._composition_depth + 1
+        agent._composition_visited = self._composition_visited | {self.slug}
+
+        result = await agent.invoke(input, **context_params)
+
+        # Roll up usage stats to parent
+        self._composition_usage[slug] = {
+            "input_tokens": agent._usage.total_input_tokens,
+            "output_tokens": agent._usage.total_output_tokens,
+            "cost_usd": agent._usage.total_cost_usd,
+            "model_used": agent._last_model,
+        }
+
+        return result
+
+    def get_total_composition_cost(self) -> dict:
+        """Sum all nested agent costs including self."""
+        total_input = self._usage.total_input_tokens
+        total_output = self._usage.total_output_tokens
+        total_cost = self._usage.total_cost_usd
+        for slug, usage in self._composition_usage.items():
+            total_input += usage["input_tokens"]
+            total_output += usage["output_tokens"]
+            total_cost += usage["cost_usd"]
+        return {
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_cost_usd": total_cost,
+            "agents_called": list(self._composition_usage.keys()),
+            "breakdown": self._composition_usage,
+        }
+```
+
+**Safety guarantees:**
+- **Depth limit:** Default 5 (configurable via `AI_MAX_COMPOSITION_DEPTH`). Prevents runaway chains.
+- **Cycle detection:** Visited set tracks every slug in the current call chain. Agent A calling Agent B calling Agent A raises `CompositionCycleDetected`.
+- **Cost rollup:** Parent agent accumulates token/cost data from all children. Job `result_data` includes the full breakdown.
+
+#### 11c-8b. Pipeline Pattern (Sequential Orchestration)
+
+Agent A's output feeds into Agent B's input, which feeds into Agent C. Sequential chain
+where each step transforms or enriches the data.
+
+```python
+class PipelineAgent(BatchAgent):
+    """Executes a sequence of agents, each feeding into the next."""
+    pipeline_slugs: list[str]  # e.g., ["extract", "classify", "recommend"]
+
+    async def build_context(self, **kwargs) -> str:
+        """Pipeline agents build context for the first step only."""
+        return await self._build_initial_context(**kwargs)
+
+    async def invoke(self, input: str, **context_params) -> str:
+        result = input
+        step_results = []
+
+        for i, slug in enumerate(self.pipeline_slugs):
+            try:
+                result = await self.invoke_agent(slug, result, **context_params)
+                step_results.append({"step": i, "agent": slug, "status": "completed"})
+            except Exception as e:
+                step_results.append({"step": i, "agent": slug, "status": "failed", "error": str(e)})
+                if self.rule_based_fallback:
+                    return await self.fallback(input, step_results=step_results, **context_params)
+                raise PipelineStepFailed(slug, i, e)
+
+        self._pipeline_results = step_results
+        return result
+```
+
+**When to use:** Data flows linearly through stages. Example: Extract text from PDF →
+Classify document type → Score risk → Generate recommendation.
+
+**Job tracking:** Pipeline batch agents create one parent job. Each pipeline step updates
+progress. `result_data` includes `step_results` array showing what each agent produced.
+
+#### 11c-8c. Delegation Pattern (Conversational Handoff)
+
+A conversational agent recognizes it can't handle a request and hands off to a specialist
+agent -- mid-conversation, with context preserved.
+
+```python
+class DelegatingAgent(ConversationalAgent):
+    """Conversational agent that can delegate to specialists."""
+    delegation_map: dict[str, str]  # condition_key -> agent_slug
+
+    async def chat(self, conversation_id: str, user_input: str) -> AsyncIterator[str]:
+        # Check if delegation is needed
+        delegate_slug = await self._should_delegate(user_input)
+
+        if delegate_slug:
+            # Update conversation to route future messages to delegate
+            await conversation_service.update_agent(
+                conversation_id,
+                agent_slug=delegate_slug,
+                delegated_from=self.slug,
+            )
+            # Build handoff context: conversation summary + delegation reason
+            handoff_context = await self._build_handoff_context(conversation_id)
+            delegate = get_agent(delegate_slug)
+            delegate._composition_depth = self._composition_depth + 1
+
+            # First message to delegate includes handoff context
+            async for token in delegate.stream(
+                user_input,
+                handoff_context=handoff_context,
+                conversation_id=conversation_id,
+            ):
+                yield token
+
+            # Store delegation event in conversation
+            await message_service.create(
+                conversation_id=conversation_id,
+                role="system",
+                content=f"Delegated from {self.name} to {delegate.name}",
+            )
+            return
+
+        # Normal chat flow
+        async for token in super().chat(conversation_id, user_input):
+            yield token
+
+    async def _should_delegate(self, user_input: str) -> str | None:
+        """Determine if input should be routed to a specialist. Returns slug or None.
+        Can use keyword matching, classifier, or ask the AI itself."""
+        for condition, slug in self.delegation_map.items():
+            if condition.lower() in user_input.lower():
+                return slug
+        return None
+
+    async def _build_handoff_context(self, conversation_id: str) -> str:
+        """Summarize conversation so the delegate agent has full context."""
+        history = await self._get_conversation_history(conversation_id)
+        summary = f"Conversation handoff from {self.name}.\n"
+        summary += f"Previous {len(history)} messages:\n"
+        for msg in history[-5:]:  # Last 5 messages for delegate context
+            summary += f"  {msg['role']}: {msg['content'][:200]}\n"
+        return summary
+```
+
+**Database support:**
+
+```sql
+ALTER TABLE conversations ADD COLUMN delegated_from VARCHAR(100) NULL;
+ALTER TABLE conversations ADD COLUMN delegation_chain JSONB DEFAULT '[]';
+```
+
+The `delegation_chain` tracks the full handoff history:
+```json
+[
+  {"from": "general-assistant", "to": "procurement-specialist", "reason": "vendor question", "at": "2026-05-06T10:30:00Z"},
+  {"from": "procurement-specialist", "to": "contract-analyst", "reason": "contract terms", "at": "2026-05-06T10:35:00Z"}
+]
+```
+
+**When to use:** App has a generalist agent that users start conversations with, plus
+specialist agents for specific domains. Example: general IT assistant delegates to
+network specialist, security specialist, or procurement specialist based on the question.
+
+**Return delegation:** A delegate can hand back by delegating to the original agent.
+The conversation's `delegated_from` field shows who to return to.
+
+#### 11c-8d. Fan-Out Pattern (Parallel Execution)
+
+One agent dispatches work to multiple sub-agents in parallel, then merges their results.
+The parent agent is an orchestrator -- it may or may not do its own AI work.
+
+```python
+class FanOutAgent(BatchAgent):
+    """Dispatches input to multiple agents in parallel, merges results."""
+    fan_out_slugs: list[str]  # agents to run in parallel
+    fan_out_timeout: int = 300  # seconds per sub-agent
+
+    async def invoke(self, input: str, **context_params) -> str:
+        # Launch all sub-agents concurrently
+        tasks = {}
+        for slug in self.fan_out_slugs:
+            tasks[slug] = asyncio.create_task(
+                asyncio.wait_for(
+                    self.invoke_agent(slug, input, **context_params),
+                    timeout=self.fan_out_timeout,
+                )
+            )
+
+        # Gather results (partial results on timeout/failure)
+        results = {}
+        for slug, task in tasks.items():
+            try:
+                results[slug] = {"status": "completed", "result": await task}
+            except asyncio.TimeoutError:
+                results[slug] = {"status": "timeout", "result": None}
+            except Exception as e:
+                results[slug] = {"status": "failed", "error": str(e), "result": None}
+
+        # Merge results (subclass defines merge strategy)
+        return await self.merge_results(input, results, **context_params)
+
+    @abstractmethod
+    async def merge_results(self, original_input: str, results: dict, **kwargs) -> str:
+        """Combine sub-agent results into a single response.
+        Override per app -- the merge strategy is domain-specific."""
+        ...
+```
+
+**Example -- Full Portfolio Analysis Agent:**
+```python
+class FullAnalysisAgent(FanOutAgent):
+    slug = "full-analysis"
+    fan_out_slugs = ["risk-scorer", "cost-analyzer", "compliance-checker"]
+
+    async def merge_results(self, input: str, results: dict, **kwargs) -> str:
+        risk = json.loads(results["risk-scorer"]["result"]) if results["risk-scorer"]["status"] == "completed" else None
+        cost = json.loads(results["cost-analyzer"]["result"]) if results["cost-analyzer"]["status"] == "completed" else None
+        compliance = json.loads(results["compliance-checker"]["result"]) if results["compliance-checker"]["status"] == "completed" else None
+
+        # Use AI to synthesize if at least 2 of 3 succeeded
+        succeeded = sum(1 for r in results.values() if r["status"] == "completed")
+        if succeeded >= 2:
+            synthesis_prompt = self._build_synthesis_prompt(risk, cost, compliance)
+            return await self._call_provider(synthesis_prompt)
+
+        # Partial results fallback
+        return json.dumps({
+            "status": "partial",
+            "available_results": {k: v for k, v in results.items() if v["status"] == "completed"},
+            "failed_agents": [k for k, v in results.items() if v["status"] != "completed"],
+        })
+```
+
+**When to use:** Multiple independent analyses need to run on the same data, then be
+combined. Example: scoring an application from risk + cost + compliance + usage
+perspectives simultaneously, then synthesizing a recommendation.
+
+**Job tracking:** Fan-out batch agents create one parent job. Each sub-agent's result
+is stored in `result_data.breakdown`. Total cost includes all parallel branches.
+
+#### 11c-8e. Composition Patterns Summary
+
+| Pattern | Type | Agents | Data Flow | Use Case |
+|---------|------|--------|-----------|----------|
+| **Independent** | Any | N standalone | No interaction | Most apps -- agents serve different features |
+| **Pipeline** | Batch | N sequential | A → B → C | Multi-stage processing (extract → classify → score) |
+| **Delegation** | Conversational | 1 generalist + N specialists | Generalist → specialist | Triage routing to domain experts |
+| **Fan-out** | Batch | 1 orchestrator + N parallel | 1 → N → merge | Multi-perspective analysis |
+
+Patterns can combine: a pipeline stage can be a fan-out agent. A delegate can be a
+pipeline agent. Depth limit (default 5) prevents runaway nesting.
+
+**Environment variables:**
+```bash
+AI_MAX_COMPOSITION_DEPTH=5        # Max agent-to-agent call depth
+AI_FAN_OUT_TIMEOUT_SECONDS=300    # Max time per sub-agent in fan-out
+```
+
+**Implementation generates (only when composition patterns are used):**
+- `invoke_agent()` method on BaseAgent (always generated for AI apps -- lightweight)
+- PipelineAgent base class (when pipeline pattern declared)
+- DelegatingAgent base class + delegation_chain column (when delegation pattern declared)
+- FanOutAgent base class (when fan-out pattern declared)
+- Composition error classes (CompositionDepthExceeded, CompositionCycleDetected, PipelineStepFailed)
+
 ---
 
 ## 12. Mock Services & Local Development
@@ -2675,6 +2988,12 @@ additionally view and manage org-level memories. This is the key differentiator 
 - [ ] Rule-based fallback implemented for agents where configured -- if using AI
 - [ ] Background AI jobs use DI03 job status table with task_type="ai_agent:{slug}" -- if batch/hybrid AI
 - [ ] Chat layout implemented per ai_features.chat_layout choice -- if conversational/hybrid AI
+- [ ] invoke_agent() primitive on BaseAgent with depth limit and cycle detection -- if using AI
+- [ ] depends_on declared for all composed agents, no cycles in dependency graph -- if agents compose
+- [ ] Pipeline agents execute sequentially with per-step tracking -- if pipeline pattern used
+- [ ] Delegation updates conversation.agent_slug with handoff context -- if delegation pattern used
+- [ ] Fan-out agents run in parallel with partial result support -- if fan-out pattern used
+- [ ] Composed agent jobs include full cost breakdown from all sub-agents -- if agents compose
 - [ ] Brain memory tables exist (brain_memories, brain_memory_tags, brain_memory_feedback, brain_memory_audit_log) -- if brain features enabled
 - [ ] MemoryCuratorAgent registered in agent registry with prompt_key seeded in managed_prompts -- if brain features enabled
 - [ ] BaseAgent._load_brain_context() called in prompt assembly when BRAIN_FEATURES_ENABLED=true -- if brain features enabled

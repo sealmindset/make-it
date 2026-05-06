@@ -200,6 +200,8 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_features.agents[].model_tier | Design | "heavy" \| "standard" \| "light" -- maps to AI_MODEL_* env vars |
 | ai_features.agents[].context_sources | Design | Domain data the agent queries (table names, API sources) |
 | ai_features.agents[].rule_based_fallback | Design | Whether agent has deterministic fallback when AI unavailable |
+| ai_features.agents[].depends_on | Design | Array of agent slugs this agent calls via invoke_agent(). Empty for standalone agents. Used for dependency graph validation and cycle detection. |
+| ai_features.agents[].composition_type | Design | "standalone" (default) \| "pipeline" \| "delegator" \| "fan-out". Determines which base class the agent extends. |
 | ai_features.prompt_management_tier | Design | 0 (none -- no AI), 2 (db+admin -- MINIMUM for any AI app), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | ai_providers | Design | Auto-determined when ai_features.needed is true |

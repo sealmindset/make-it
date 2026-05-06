@@ -280,9 +280,106 @@ The architecture is enforced by 7 build-standards checks (AI16-AI22) plus 1 live
 | AI20 | FIX | Agent routing: chat by agent_slug, batch by /agents/{slug}/run, unknown = 404 |
 | AI21 | FIX | Rule-based fallback works for configured agents, errors for non-configured |
 | AI22 | FIX | Batch jobs use DI03 table with task_type="ai_agent:{slug}" and token/cost metadata |
+| AI23 | BLOCK | invoke_agent() primitive with depth limit, cycle detection, and cost rollup |
+| AI24 | FIX | depends_on declared for composed agents, no cycles in dependency graph |
+| AI25 | FIX | Pipeline pattern: sequential execution with per-step tracking |
+| AI26 | FIX | Delegation pattern: conversation handoff with context transfer |
+| AI27 | FIX | Fan-out pattern: parallel execution with partial result support |
+| AI28 | FIX | Composition environment variables (AI_MAX_COMPOSITION_DEPTH, AI_FAN_OUT_TIMEOUT_SECONDS) |
 | V16 | BLOCK | End-to-end: each agent responds correctly, unknown slugs return 404, fallback works |
 
 `BLOCK` checks must pass before the app is handed to the user. `FIX` checks are auto-remediated during build-verify.
+
+## Agent Composition & Orchestration
+
+Agents can operate independently or compose together. Four patterns, from simplest to most complex.
+
+### The invoke_agent() Primitive
+
+Every AI app gets `invoke_agent(slug, input)` on BaseAgent. This is the foundation for all composition. It resolves the target from the registry, tracks call depth, detects cycles, and rolls up token/cost to the parent.
+
+**Safety guards:**
+- **Depth limit:** `AI_MAX_COMPOSITION_DEPTH` (default 5). Prevents runaway chains.
+- **Cycle detection:** Agent A calling Agent B calling Agent A raises `CompositionCycleDetected`.
+- **Cost rollup:** `get_total_composition_cost()` returns total tokens/cost across all nested agents.
+
+### Pattern 1: Pipeline (Sequential)
+
+Agent A's output feeds into Agent B, which feeds into Agent C. Each step transforms or enriches data.
+
+```
+Input → [Extract] → [Classify] → [Score] → [Recommend] → Output
+```
+
+- **When:** Data flows linearly through stages
+- **Example:** Extract text from PDF, classify document type, score risk, generate recommendation
+- **Failure:** Per-step tracking. If step 2 fails, step 1's result is preserved. Fallback optional.
+- **Job tracking:** One parent job, per-step progress updates, step_results in result_data
+
+### Pattern 2: Delegation (Conversational Handoff)
+
+A generalist conversational agent recognizes it can't handle a request and hands off to a specialist mid-conversation, with context preserved.
+
+```
+User → [General Assistant] → detects vendor question → [Procurement Specialist]
+                                                        (conversation continues here)
+```
+
+- **When:** App has a generalist + domain specialists
+- **Example:** IT assistant delegates to network, security, or procurement specialists
+- **Mechanism:** Updates `conversation.agent_slug`, stores delegation in `delegation_chain` JSONB
+- **Context:** Last 5 messages summarized as handoff context for the delegate
+- **Return:** Delegate can hand back to original agent (bi-directional)
+
+**Database additions:**
+```sql
+ALTER TABLE conversations ADD COLUMN delegated_from VARCHAR(100) NULL;
+ALTER TABLE conversations ADD COLUMN delegation_chain JSONB DEFAULT '[]';
+```
+
+### Pattern 3: Fan-Out (Parallel)
+
+One agent dispatches work to N sub-agents simultaneously, then merges their results.
+
+```
+              ┌→ [Risk Scorer]      ─┐
+Input → [Orchestrator] → [Cost Analyzer]    ─┼→ [Merge] → Output
+              └→ [Compliance Check] ─┘
+```
+
+- **When:** Multiple independent analyses on the same data, combined into one result
+- **Example:** Score an application from risk + cost + compliance + usage perspectives, synthesize recommendation
+- **Partial results:** If 2 of 3 sub-agents succeed, merge_results() can still produce output
+- **Timeout:** Per-agent timeout (`AI_FAN_OUT_TIMEOUT_SECONDS`, default 300)
+- **Job tracking:** One parent job, per-agent breakdown in result_data
+
+### Pattern Summary
+
+| Pattern | Type | Data Flow | Use Case |
+|---------|------|-----------|----------|
+| **Independent** | Any | No interaction | Most apps -- agents serve different features |
+| **Pipeline** | Batch | A → B → C | Multi-stage processing |
+| **Delegation** | Conversational | Generalist → specialist | Triage routing to domain experts |
+| **Fan-out** | Batch | 1 → N → merge | Multi-perspective analysis |
+
+Patterns combine: a pipeline step can be a fan-out agent. A delegate can be a pipeline agent. Depth limit prevents runaway nesting.
+
+### Agent Schema Addition
+
+Composed agents declare their dependencies:
+
+```json
+{
+  "slug": "full-analysis",
+  "type": "batch",
+  "composition_type": "fan-out",
+  "depends_on": ["risk-scorer", "cost-analyzer", "compliance-checker"],
+  "context_sources": ["applications", "costs", "policies"]
+}
+```
+
+- `depends_on` -- lists all agent slugs called via invoke_agent(). Validated: all must exist, no cycles.
+- `composition_type` -- "standalone" (default), "pipeline", "delegator", or "fan-out". Determines base class.
 
 ## Relationship to Other AI Components
 
@@ -306,8 +403,13 @@ backend/app/
   lib/ai/
     agents/
       __init__.py           -- AGENT_REGISTRY dict + get_agent()
-      base_agent.py         -- BaseAgent abstract class (invoke, stream, build_context, fallback, job methods)
-      {agent_slug}.py       -- One file per declared agent (extends BaseAgent or ConversationalAgent/BatchAgent)
+      base_agent.py         -- BaseAgent abstract class (invoke, stream, build_context, fallback,
+                               job methods, invoke_agent, composition tracking)
+      pipeline_agent.py     -- PipelineAgent base class (when pipeline pattern used)
+      delegating_agent.py   -- DelegatingAgent base class (when delegation pattern used)
+      fan_out_agent.py      -- FanOutAgent base class (when fan-out pattern used)
+      errors.py             -- CompositionDepthExceeded, CompositionCycleDetected, PipelineStepFailed
+      {agent_slug}.py       -- One file per declared agent
     providers/              -- AI provider abstraction (Section 9)
     sanitize.py             -- Input sanitization (Section 11b)
     validate.py             -- Output validation (Section 11b)
@@ -316,10 +418,10 @@ backend/app/
     ai_conversations.py     -- Chat endpoints (conversational/hybrid only)
     ai_agents.py            -- Batch agent trigger endpoints
   services/
-    conversation_service.py -- Conversation CRUD + message storage
+    conversation_service.py -- Conversation CRUD + message storage + delegation tracking
     job_service.py          -- Job lifecycle (DI03 pattern)
   models/
-    conversation.py         -- conversations + conversation_messages tables
+    conversation.py         -- conversations (+ delegated_from, delegation_chain) + conversation_messages
     job_status.py           -- Job status table (DI03)
 
 frontend/
