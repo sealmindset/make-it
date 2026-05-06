@@ -255,18 +255,26 @@ Dockerfile and entrypoint rules:
     CMD ["./entrypoint.sh"]
 - If using pg_isready in entrypoint.sh, install postgresql-client in the Dockerfile
 
-Registry proxy support (I08):
-- Every Dockerfile MUST have `ARG DOCKER_HUB_PREFIX=` before each FROM instruction
-- FROM lines use: `FROM ${DOCKER_HUB_PREFIX}image:tag`
-- In multi-stage builds, repeat `ARG DOCKER_HUB_PREFIX=` before EACH FROM
+Registry proxy support (I08 -- Dockyard Gateway / ACR cache):
+- Three prefix variables cover all upstream registries:
+  - DOCKER_HUB_PREFIX -- for Docker Hub images (python, node, postgres, etc.)
+  - MCR_PREFIX -- for Microsoft Container Registry images (mssql, dotnet, etc.)
+  - GHCR_PREFIX -- for GitHub Container Registry images (zaproxy, org-specific, etc.)
+- Every Dockerfile MUST declare the relevant ARG before each FROM instruction:
+  - Docker Hub: `ARG DOCKER_HUB_PREFIX=` then `FROM ${DOCKER_HUB_PREFIX}python:3.12-slim`
+  - MCR: `ARG MCR_PREFIX=` then `FROM ${MCR_PREFIX}mcr.microsoft.com/mssql/server:2022-latest`
+  - GHCR: `ARG GHCR_PREFIX=` then `FROM ${GHCR_PREFIX}ghcr.io/zaproxy/zaproxy:stable`
+- In multi-stage builds, repeat the relevant ARG before EACH FROM
   (Docker ARGs do not persist across build stages)
-- docker-compose.yml services with `build:` include build args:
+- docker-compose.yml services with `build:` include ALL three prefix args:
     args:
       - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
-- docker-compose.yml services with `image:` use: `${DOCKER_HUB_PREFIX:-}image:tag`
-- .env.example documents DOCKER_HUB_PREFIX, MCR_PREFIX, GHCR_PREFIX
-- This allows developers behind corporate SSL proxies (Zscaler, Netskope) to route
-  Docker image pulls through an ACR proxy cache without code changes
+      - MCR_PREFIX=${MCR_PREFIX:-}
+      - GHCR_PREFIX=${GHCR_PREFIX:-}
+- docker-compose.yml services with `image:` use the matching prefix variable
+- .env.example documents all three with auto-discovery instructions
+- When a Dockyard Gateway (ACR proxy cache) is detected, all three prefixes route
+  through the corporate registry, bypassing SSL-inspecting proxies entirely
 
 Make containers secure and optimized for production.
 ```

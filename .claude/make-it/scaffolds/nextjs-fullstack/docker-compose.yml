@@ -26,6 +26,8 @@ services:
       dockerfile: Dockerfile
       args:
         - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
+        - MCR_PREFIX=${MCR_PREFIX:-}
+        - GHCR_PREFIX=${GHCR_PREFIX:-}
     ports:
       - "[APP_PORT]:3000"
     depends_on:
@@ -81,6 +83,8 @@ services:
       dockerfile: Dockerfile
       args:
         - DOCKER_HUB_PREFIX=${DOCKER_HUB_PREFIX:-}
+        - MCR_PREFIX=${MCR_PREFIX:-}
+        - GHCR_PREFIX=${GHCR_PREFIX:-}
     ports:
       - "[MOCK_OIDC_PORT]:10090"
     profiles:
