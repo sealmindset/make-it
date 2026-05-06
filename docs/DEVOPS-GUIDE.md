@@ -100,6 +100,8 @@ Every app built by `/make-it` follows the same architecture. No exceptions.
 | **Docker Compose** | Backend, frontend, PostgreSQL, mock-oidc. Health checks on all services. |
 | **Alembic migrations** | Database schema management with up/down migrations |
 | **Test infrastructure** | pytest (backend), Playwright scaffolding (e2e) |
+| **Code quality tools** | Ruff, ESLint+Prettier, pre-commit hooks, gitleaks, Trivy config -- all configured automatically |
+| **Pre-commit hooks** | 9 hooks: lint, format, type check, secret detection, file hygiene |
 | **Environment config** | `.env` / `.env.example` -- no hardcoded secrets |
 
 ### File Structure (Predictable)
@@ -122,13 +124,17 @@ my-app/
   docker-compose.yml
   .env.example
   .ship-it.yml         # Deployment config (DevOps fills infra section)
+  pyproject.toml       # Python quality config (Ruff, mypy, coverage)
+  .pre-commit-config.yaml  # Git commit hooks
+  .gitleaks.toml       # Secret detection config
+  trivy.yaml           # Container scanning config (CI)
 ```
 
 ---
 
 ## The Build Standard
 
-Every app is verified against a checklist of ~40 checks before the user ever sees it. These checks cover:
+Every app is verified against a checklist of 130+ checks before the user ever sees it. These checks cover:
 
 | Category | Examples | Severity |
 |----------|---------|----------|
@@ -138,6 +144,7 @@ Every app is verified against a checklist of ~40 checks before the user ever see
 | **Database** | Alembic migrations run, seed data loads, no raw SQL | FIX |
 | **Docker** | Health checks use 127.0.0.1, .env.example complete | FIX |
 | **Security** | No secrets in code, input validation, parameterized queries | BLOCK |
+| **Code Quality** | Ruff lint+format, ESLint+Prettier, pre-commit hooks, gitleaks, Trivy config, mypy, coverage | FIX |
 | **UI** | Standard components, system fonts only, responsive | WARN |
 
 **BLOCK** = must pass before PR. **FIX** = auto-fixed. **WARN** = noted in TODO.
@@ -153,7 +160,8 @@ The full checklist is in `build-standards.md`. When new checks are added, `/resu
 | Scan | When | What |
 |------|------|------|
 | **Dependency audit** | `/ship-it` | pip-audit (Python), npm audit (Node.js) -- auto-upgrades vulnerable packages |
-| **Secret detection** | Build-verify | Scans for hardcoded keys, tokens, passwords in committed files |
+| **Secret detection (gitleaks)** | Build-verify | Scans for hardcoded keys, tokens, passwords in committed files (pre-commit hook) |
+| **Trivy config** | Build-verify | Container scanning config verified (CI consumption) |
 | **NeMo Guardrails** | `/ship-it` (if AI features) | 60+ test cases: prompt injection, jailbreak, toxicity, PII leakage, hallucination |
 | **OWASP patterns** | Build-verify | Input validation, parameterized queries, security headers |
 
@@ -525,9 +533,10 @@ They can't. Here's why:
 2. **`/resume-it`** auto-fixes security findings
 3. **`/ship-it`** scans again before creating the PR
 4. **CI/CD pipeline** scans again before deploying
-5. **The user never directly modifies code** -- they describe what they want
+5. **Pre-commit hooks** catch lint errors, formatting issues, and leaked secrets before code reaches the repo
+6. **The user never directly modifies code** -- they describe what they want
 
-If the AI generates something problematic, it's caught at one of these four gates.
+If the AI generates something problematic, it's caught at one of these five gates.
 
 ### What Does DevOps Need to Do for a New App?
 
