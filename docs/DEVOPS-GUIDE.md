@@ -358,6 +358,81 @@ The CI/CD contract is fully defined in `ship-it-guide.md` -- it specifies trigge
 
 ---
 
+## /ship-it vs /argo-it: When to Use Which
+
+Two deployment paths exist. They're not mutually exclusive.
+
+| Target Environment | Skill | Pipeline |
+|-------------------|-------|----------|
+| Docker Compose (VM, App Service, ECS) | `/ship-it` | GitHub Actions → build → push → deploy via Docker Compose |
+| Kubernetes (AKS, EKS, GKE, on-prem) | `/argo-it` | GitHub Actions → build → push → mirror → Argo CD syncs |
+| Both (dev on Docker, prod on K8s) | Both | `/ship-it` for PR governance + `/argo-it` for K8s manifests |
+
+### /ship-it GitHub Actions Flow
+
+```mermaid
+flowchart LR
+    A["User runs<br/>/ship-it"] --> B["Pre-push checks<br/>(6 silent checks)"]
+    B --> C["Push + Create PR<br/>(labels, reviewers)"]
+    C --> D["GitHub Actions<br/>(CI/CD pipeline)"]
+    D --> E{"All checks<br/>pass?"}
+    E -- Yes --> F["Deploy to dev"]
+    E -- No --> G{"Auto-fixable?"}
+    G -- Yes --> H["BOT commits fix"]
+    H --> D
+    G -- No --> I["DevOps reviews"]
+    I --> D
+    F --> J{"User tests<br/>in dev"}
+    J -- Ready --> K["Production gate<br/>(DevOps approves)"]
+    K --> L["Deploy to prod"]
+
+    style A fill:#e8f5e9
+    style L fill:#e8f5e9
+    style D fill:#fff3e0
+    style I fill:#fce4ec
+    style K fill:#fce4ec
+```
+
+### /argo-it GitHub Actions Flow
+
+```mermaid
+flowchart LR
+    A["User runs<br/>/argo-it"] --> B["Detect conventions<br/>from docker-compose"]
+    B --> C["Generate Kustomize<br/>manifests + CI workflow"]
+    C --> D["Push to main"]
+    D --> E["GitHub Actions"]
+    E --> F["Build + push<br/>Docker images"]
+    F --> G["rsync source →<br/>deploy branch"]
+    G --> H["yq patch<br/>image tags"]
+    H --> I["Push deploy<br/>branch"]
+    I --> J["Argo CD<br/>detects change"]
+    J --> K["Apply manifests<br/>to K8s cluster"]
+    K --> L["App is live<br/>in Kubernetes"]
+
+    style A fill:#e8f5e9
+    style L fill:#e8f5e9
+    style E fill:#fff3e0
+    style J fill:#fff3e0
+```
+
+**Key difference:** /ship-it creates PRs and monitors CI (governance-focused). /argo-it generates manifests and a GitOps pipeline (infrastructure-focused). For K8s deployments, both can work together.
+
+---
+
+## Governance Gates (5 Automated Checkpoints)
+
+Every app passes through five gates before reaching production:
+
+| Gate | When | What |
+|------|------|------|
+| **1. Build-Verify** | During `/make-it` build | 130+ checks: auth, RBAC, code quality (Q01-Q12), AI safety (AI01-AI28) |
+| **2. Pre-Push** | When `/ship-it` runs | Lint, type-check, dependency audit, secret scan, migration validation |
+| **3. Pre-Commit** | Every `git commit` | ruff, eslint, prettier, gitleaks (via `.pre-commit-config.yaml`) |
+| **4. CI/CD** | GitHub Actions on PR | Security CVEs, compliance, Terraform validate, Trivy container scan |
+| **5. Production** | Before prod deploy | ENFORCE_SECRETS=true, real OIDC, stricter scan thresholds, DevOps approval |
+
+---
+
 ## What DevOps Owns vs What's Automated
 
 | Responsibility | Owner | Notes |

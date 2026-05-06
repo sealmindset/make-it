@@ -204,46 +204,88 @@ For clusters using standard Kubernetes Ingress (nginx, ALB), it generates the ap
 
 ### Example: Generated CI Workflow
 
+The generated `build-and-deploy.yml` handles the **full pipeline** from source push through to Argo CD deploy:
+
 ```yaml
-name: Build and Push Container Images
+name: Build and Deploy
 
 on:
   push:
-    branches: [main, deploy-nonprod]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'Dockerfile*'
-      - 'docker-compose.yml'
+    branches-ignore: [deploy-nonprod, deploy-prod]   # Prevent infinite loop
+  pull_request:
+
+permissions:
+  contents: write     # Push to deploy branch
+  packages: write     # Push to container registry
+
+concurrency:
+  group: deploy-nonprod
+  cancel-in-progress: false    # Don't cancel in-progress deploys
 
 jobs:
-  build-and-push:
+  build-and-publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    if: github.ref_name != 'deploy-nonprod'   # Guard against infinite loop
     steps:
+      # --- Setup ---
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push backend
-        uses: docker/build-push-action@v5
+      # --- Build + Push ---
+      - uses: docker/metadata-action@v5     # Compute image tags (sha, branch, latest)
+        id: meta
+      - uses: docker/build-push-action@v6
         with:
           context: ./backend
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}   # Push only on non-PR
           tags: ghcr.io/your-org/my-app/backend:dev-latest
 
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
           context: ./frontend
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/your-org/my-app/frontend:dev-latest
+
+      # --- Deploy (non-PR only) ---
+      - if: github.event_name != 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: deploy-nonprod
+          path: deploy
+
+      - if: github.event_name != 'pull_request'
+        run: |
+          # Mirror source → deploy branch
+          rsync -a --delete --exclude='.git' --exclude='deploy' ./ deploy/
+          # Patch image tags in K8s manifests
+          cd deploy
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/backend:dev-latest"' env/dev/backend.yaml
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/frontend:dev-latest"' env/dev/frontend.yaml
+          # Commit and push (triggers Argo CD sync)
+          git config user.name "ci-bot"
+          git config user.email "ci@noreply"
+          git add -A
+          git diff --staged --quiet || git commit -m "deploy: $(git -C .. rev-parse --short HEAD)"
+          git push origin deploy-nonprod
 ```
+
+**Key design decisions in the generated workflow:**
+
+| Decision | Why |
+|----------|-----|
+| `branches-ignore: [deploy-*]` | Prevents deploy branch push from re-triggering CI (infinite loop) |
+| `contents: write` permission | Needed to push to deploy branch |
+| `concurrency` with `cancel-in-progress: false` | Prevents parallel deploys that could corrupt the deploy branch |
+| PR builds don't push | PRs are validation gates — no image push, no deploy branch edits |
+| `rsync` mirror | Deploy branch gets full source (not just manifests) — enables Argo CD to reference any file |
+| `yq` for tag patching | YAML-safe editing (not sed/grep) — preserves comments and structure |
+| `ci-bot` commit | Distinguishes automated commits from human ones |
 
 ---
 
@@ -321,11 +363,13 @@ graph LR
     style D fill:#fff3e0
 ```
 
-**Two-step deployment:**
-1. **Push to `main`** -- CI builds and pushes container images to registry
-2. **Merge `main` into deploy branch** (e.g., `deploy-nonprod`) -- Argo CD syncs manifests
+**Automated deployment pipeline:**
+1. **Developer pushes to `main`** -- CI builds and pushes container images to registry
+2. **CI mirrors source to deploy branch** -- `rsync` copies full source tree, `yq` patches image tags in manifests
+3. **CI pushes deploy branch** -- Argo CD detects the change
+4. **Argo CD syncs** -- Applies Kustomize manifests to the cluster, K8s pulls new images
 
-This separation means you can build images without deploying, and deploy without rebuilding.
+The deploy branch update is fully automated — developers never manually merge to deploy branches.
 
 ### Branch Strategy
 
