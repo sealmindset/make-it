@@ -19,6 +19,7 @@ Set up the project structure with:
 - Frontend [FRONTEND_FRAMEWORK]
 - Backend [BACKEND_FRAMEWORK]
 - Mock services (for local development testing)
+- Code quality tools (linting, formatting, type checking, pre-commit hooks -- configured automatically)
 - Infrastructure [Terraform]
 - Documentation
 
@@ -2286,6 +2287,8 @@ Protect:
 - Input: Validate all user input
 [AI_SECURITY_LINE]
 - Access: Only authenticated users with right permissions
+- Secrets in git: gitleaks pre-commit hook configured (.gitleaks.toml allowlists mock tokens)
+- Container scanning: Trivy config (trivy.yaml) for CI pipeline consumption
 
 Rate limits: [RATE_LIMIT]
 AI rate limits (if AI features): [AI_RATE_LIMIT] (separate from general API rate limits)

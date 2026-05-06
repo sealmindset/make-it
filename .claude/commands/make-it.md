@@ -896,6 +896,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X06**: Security (secrets, validation, deps, headers, no Java, no module throws)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
+- **Q01-Q12**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts)
 - **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
 - **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data
 

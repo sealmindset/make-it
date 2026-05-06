@@ -11,4 +11,9 @@ python-multipart
 # Test dependencies
 pytest
 pytest-asyncio
+pytest-cov
 aiosqlite
+
+# Quality / dev tools
+ruff
+mypy

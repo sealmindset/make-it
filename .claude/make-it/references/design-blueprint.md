@@ -2922,6 +2922,85 @@ additionally view and manage org-level memories. This is the key differentiator 
 
 ---
 
+## 15. Code Quality Foundation (Built-In Defaults)
+
+Every scaffolded app ships with linting, formatting, type checking, secret detection, and coverage measurement configured out of the box. The vibe coder never sees or configures these tools. DevOps can override any setting by editing the config files.
+
+### 15a. Python Quality Stack
+
+**Single tool: Ruff** -- Replaces flake8, isort, black, pyflakes, and bandit in one binary (10-100x faster).
+
+| Function | Ruff command | Rule prefix |
+|----------|-------------|-------------|
+| Lint | `ruff check backend/` | E (errors), F (pyflakes), W (warnings), I (isort), B (bugbear), UP (pyupgrade), N (naming) |
+| Security (Bandit) | `ruff check --select S backend/` | S (flake8-bandit rules) |
+| Format | `ruff format backend/` | — |
+
+**mypy** -- Type checking in lenient mode (`ignore_missing_imports = true`). Catches real type errors without drowning in third-party noise. Strict mode is a DevOps/CI escalation, not a scaffold default.
+
+**pytest-cov** -- Coverage measurement during test runs. Reports to terminal + HTML. No minimum threshold at scaffold time -- the organization sets coverage floors in CI.
+
+**All configuration in `pyproject.toml`** at the project root. No scattered config files.
+
+### 15b. TypeScript/JavaScript Quality Stack
+
+**ESLint 9 (flat config)** -- `eslint.config.mjs` extends `next/core-web-vitals`, `next/typescript`, and `prettier`. Adds `eslint-plugin-security` for security rules (`no-eval`, `no-implied-eval`, detect-unsafe-regex, etc.).
+
+**Prettier** -- `.prettierrc` with sensible defaults (100 char width, 2-space tabs, double quotes, ES5 trailing commas). `.prettierignore` excludes `.next/`, `node_modules/`, `coverage/`.
+
+**`eslint-config-prettier`** -- Disables ESLint formatting rules that conflict with Prettier. ESLint handles logic; Prettier handles style. No conflicts.
+
+**`tsc --noEmit`** -- TypeScript type checking (already enabled via `"strict": true` in `tsconfig.json`). Added as `type-check` script in `package.json`.
+
+### 15c. Pre-commit Hooks
+
+`.pre-commit-config.yaml` at project root installs git hooks that run on every commit:
+
+| Hook | Source | What it catches |
+|------|--------|----------------|
+| trailing-whitespace | pre-commit-hooks | Trailing spaces |
+| end-of-file-fixer | pre-commit-hooks | Missing final newline |
+| check-yaml | pre-commit-hooks | Invalid YAML syntax |
+| check-added-large-files | pre-commit-hooks | Files > 500KB accidentally committed |
+| check-merge-conflict | pre-commit-hooks | Unresolved merge markers |
+| ruff (check + format) | ruff-pre-commit | Python lint + format violations |
+| eslint | local | TS/JS lint violations |
+| prettier | local | TS/JS format violations |
+| gitleaks | gitleaks | Leaked secrets, tokens, passwords |
+
+**Graceful degradation:** If `pre-commit` is not installed on the user's machine, hooks don't run. Noted in TODO.md as a setup step. CI catches issues regardless.
+
+### 15d. Secret Detection (gitleaks)
+
+`.gitleaks.toml` configures secret detection with allowlists for known-safe patterns:
+- `.env.example` (placeholder values, not real secrets)
+- `mock-services/` (mock OIDC tokens are not real)
+- `scripts/seed-mock-services.sh` (mock data)
+- Test fixtures
+- Specific mock token patterns (`mock-oidc-secret`, `mock-oidc-client`, etc.)
+
+Runs as a pre-commit hook (fast, local) and can also run in CI pipelines.
+
+### 15e. Container Scanning (Trivy)
+
+`trivy.yaml` at project root configures Trivy for CI pipeline consumption:
+- Severity filter: CRITICAL and HIGH only
+- `ignore-unfixed: true` (don't flag CVEs with no available fix)
+- Skip directories: `node_modules`, `.venv`, `__pycache__`, `.next`
+
+Trivy is NOT a local tool or pre-commit hook -- it scans Docker images in CI.
+
+### 15f. Design Principle
+
+Config files are scaffold defaults. They represent the minimum quality bar that every vibe-coded app meets. DevOps can raise the bar (stricter rules, coverage thresholds, additional scanners) by editing the files. The scaffold provides:
+
+1. **Correct defaults** -- Generated code passes all quality checks on day one
+2. **No configuration burden** -- The vibe coder never touches these files
+3. **DevOps compatibility** -- Standard tools (Ruff, ESLint, Prettier, Trivy, gitleaks) that integrate with any CI/CD pipeline
+4. **Graceful separation** -- Pre-commit hooks for local dev, Trivy/Semgrep for CI, coverage for reporting
+
+---
+
 ## Quick-Start Checklist (used to verify completeness)
 
 ### Before Writing Code
@@ -2952,6 +3031,12 @@ additionally view and manage org-level memories. This is the key differentiator 
 - [ ] QuickSearch (⌘K) populated with all navigation items and app actions
 - [ ] ThemeProvider wraps app, ModeToggle in header, oklch CSS variables for light/dark
 - [ ] CHANGELOG.md and TODO.md maintained
+- [ ] Code quality: `pyproject.toml` with Ruff + mypy + coverage config
+- [ ] Code quality: `eslint.config.mjs` with security plugin + Prettier configured
+- [ ] Code quality: `.pre-commit-config.yaml` with ruff, eslint, prettier, gitleaks hooks
+- [ ] Code quality: `.gitleaks.toml` with mock token allowlist
+- [ ] Code quality: `trivy.yaml` for CI container scanning
+- [ ] Code quality: All quality scripts in `package.json` (lint, format, format:check, type-check)
 - [ ] Activity Log module exists with circular buffer, inbound middleware, outbound interceptors
 - [ ] Activity Log middleware skips health checks and static assets
 - [ ] Outbound logger attached to ALL HTTP client creation points (including reconnect/OAuth refresh)

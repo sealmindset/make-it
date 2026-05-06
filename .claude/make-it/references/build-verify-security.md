@@ -58,6 +58,9 @@ Scan for:
 - Module-level throws in Next.js files
 - External font CDN imports
 - pdf-parse default import (must use pdf-parse/lib/pdf-parse)
+- gitleaks config exists (.gitleaks.toml) with mock token allowlist
+- Trivy config exists (trivy.yaml) with severity filter for CI
+- Pre-commit hooks configured (.pre-commit-config.yaml) with gitleaks hook
 ```
 
 ### 1b. Semgrep Scan (if available)

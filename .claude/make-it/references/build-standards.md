@@ -364,6 +364,34 @@ Document the decision in the project's `app-context.json` under `data_integratio
 
 ---
 
+## Code Quality & Formatting
+
+**Q01** [Tier 0] [FIX] **Python linter configured (Ruff)** -- `pyproject.toml` exists at project root with `[tool.ruff]` section. `ruff` is in `backend/requirements.txt`. `ruff check backend/` exits 0 on scaffold code. Ruff replaces flake8, isort, pyflakes, and bandit (via `S` security rules).
+
+**Q02** [Tier 0] [FIX] **Python formatter configured (Ruff format)** -- `pyproject.toml` has `[tool.ruff.format]` section. `ruff format --check backend/` produces zero diffs on scaffold code.
+
+**Q03** [Tier 0] [FIX] **TypeScript/JavaScript linter configured (ESLint)** -- `eslint.config.mjs` (flat config) exists in the frontend directory. `eslint-plugin-security` is in `devDependencies`. `npx eslint .` from `frontend/` exits 0 on scaffold code.
+
+**Q04** [Tier 0] [FIX] **TypeScript/JavaScript formatter configured (Prettier)** -- `.prettierrc` exists in the frontend directory. `prettier` is in `devDependencies`. `npx prettier --check .` from `frontend/` produces zero diffs on scaffold code.
+
+**Q05** [Tier 0] [FIX] **Pre-commit hooks configured** -- `.pre-commit-config.yaml` exists at project root. Hooks include: trailing-whitespace, end-of-file-fixer, ruff (check + format), eslint, prettier, and gitleaks. Verification: `pre-commit run --all-files` exits 0 (or produces only auto-fixable changes).
+
+**Q06** [Tier 0] [WARN] **Python test coverage measured** -- `pytest-cov` is in `backend/requirements.txt`. `pyproject.toml` has `[tool.coverage.run]` section. `pytest --cov` produces a coverage report. No minimum threshold enforced at scaffold time -- the organization sets thresholds in CI.
+
+**Q07** [Tier 0] [FIX] **Python type checking configured (mypy)** -- `pyproject.toml` has `[tool.mypy]` section. `mypy` is in `backend/requirements.txt`. Lenient mode (`ignore_missing_imports = true`). Configuration errors are BLOCK; type-check warnings are WARN.
+
+**Q08** [Tier 0] [FIX] **Secret detection configured (gitleaks)** -- `.gitleaks.toml` exists at project root. gitleaks hook is in `.pre-commit-config.yaml`. Allowlist excludes `.env.example`, `mock-services/`, and test fixtures.
+
+**Q09** [Tier 0] [FIX] **Container scanning configured (Trivy)** -- `trivy.yaml` exists at project root with severity filter (`CRITICAL`, `HIGH`) and `skip-dirs`. This is a configuration file for CI pipelines -- Trivy itself runs in CI, not locally.
+
+**Q10** [Tier 0] [FIX] **Quality scripts in package.json** -- Frontend `package.json` has all four quality scripts: `lint` (eslint + prettier check), `format` (prettier --write), `format:check` (prettier --check), `type-check` (tsc --noEmit).
+
+**Q11** [Tier 0] [FIX] **Python config consolidated in pyproject.toml** -- All Python tool configuration (ruff, mypy, pytest, coverage) lives in `pyproject.toml` at the project root. No scattered `.flake8`, `.isort.cfg`, `.black`, or `mypy.ini` files.
+
+**Q12** [Tier 0] [WARN] **Pre-commit hooks installed locally** -- After `git init`, `pre-commit install` has been run so hooks execute on every commit. If `pre-commit` is not installed on the user's machine, note in TODO.md as a setup step. CI does not depend on pre-commit hooks.
+
+---
+
 ## Live Verification Checks
 
 These checks run after the app is started (Docker containers up, health checks passing).
@@ -612,3 +640,8 @@ When live verification fails, these are the most common root causes and fixes:
 | Fan-out returns empty when one sub-agent fails | merge_results() requires all results | FanOutAgent must handle partial results -- succeeded agents' data still usable (AI27) |
 | Composed agent cost shows only parent tokens | Child agent costs not rolled up | invoke_agent() must aggregate _composition_usage from all children; job result_data must call get_total_composition_cost() (AI23) |
 | Cross-functional user missing memories from second team | Scope filtering too restrictive | Verify scope union: user sees memories from ALL scopes matching their roles/agent access, not just primary (BN05) |
+| Ruff reports errors on scaffold code | pyproject.toml missing or wrong config | Verify [tool.ruff] section exists with correct src path and rule selections (Q01) |
+| ESLint fails with "config not found" | eslint.config.mjs missing or wrong extends | Verify eslint.config.mjs exists in frontend dir, eslint-config-next and eslint-config-prettier in devDependencies (Q03) |
+| Prettier and ESLint conflict on formatting | Missing eslint-config-prettier | Add eslint-config-prettier to devDependencies and include "prettier" in eslint extends (Q03, Q04) |
+| Pre-commit hook runs but skips files | Hook types_or doesn't match file extensions | Verify pre-commit hook types_or includes all relevant file types; use pass_filenames: false for project-wide checks (Q05) |
+| gitleaks flags mock service tokens | Missing allowlist in .gitleaks.toml | Add mock token patterns (mock-oidc-secret, etc.) to .gitleaks.toml [allowlist].regexes (Q08) |

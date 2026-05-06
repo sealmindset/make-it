@@ -274,6 +274,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
      5. **Residual:** Any remaining vulnerabilities after 3 cycles go to TODO.md with severity, package name, and CVE ID
      Install `pip-audit` if not available: `pip install pip-audit`
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
+   - **Code Quality (Q01-Q12):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check)
    - **AI (AI01-AI28):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
 
@@ -347,6 +348,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
 | pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |
 | AI features exist but no brain layer (BN01-BN13 all GAP) | "Your app has AI features but no persistent memory -- the AI starts fresh every conversation. Want me to add a brain layer so it learns user preferences, remembers decisions, and gets smarter over time?" |
+| Code quality missing (Q01-Q12 gaps) | "Your app doesn't have linting, formatting, or pre-commit hooks set up yet -- DevOps will flag this. Want me to add code quality tools? They catch problems before code gets committed." |
 | Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- want me to apply them now?" |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
