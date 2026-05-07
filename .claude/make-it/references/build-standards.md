@@ -402,6 +402,8 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 **Q12** [Tier 0] [WARN] **Pre-commit hooks installed locally** -- After `git init`, `pre-commit install` has been run so hooks execute on every commit. If `pre-commit` is not installed on the user's machine, note in TODO.md as a setup step. CI does not depend on pre-commit hooks.
 
+**Q13** [Tier 0] [FIX] **CI quality gate workflow exists** -- `.github/workflows/quality-gate.yml` exists with four jobs: `python-quality` (ruff lint, ruff format, mypy, pytest), `frontend-quality` (eslint, prettier, tsc), `security-scan` (gitleaks, pip-audit, npm audit, trivy), and `attestation` (generates `quality-gate-report.json`). Workflow triggers on PRs to `main`. Attestation job uploads the report as a workflow artifact with 90-day retention. **Fix:** Copy from scaffold template (`.claude/make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml`), replace `[APP_SLUG]` with app slug from `app-context.json`.
+
 ---
 
 ## Live Verification Checks

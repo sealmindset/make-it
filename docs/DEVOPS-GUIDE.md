@@ -101,6 +101,7 @@ Every app built by `/make-it` follows the same architecture. No exceptions.
 | **Alembic migrations** | Database schema management with up/down migrations |
 | **Test infrastructure** | pytest (backend), Playwright scaffolding (e2e) |
 | **Code quality tools** | Ruff, ESLint+Prettier, pre-commit hooks, gitleaks, Trivy config -- all configured automatically |
+| **CI quality gate workflow** | `.github/workflows/quality-gate.yml` -- runs all quality checks on every PR, generates attestation artifact |
 | **Pre-commit hooks** | 9 hooks: lint, format, type check, secret detection, file hygiene |
 | **Environment config** | `.env` / `.env.example` -- no hardcoded secrets |
 
@@ -128,6 +129,9 @@ my-app/
   .pre-commit-config.yaml  # Git commit hooks
   .gitleaks.toml       # Secret detection config
   trivy.yaml           # Container scanning config (CI)
+  .github/
+    workflows/
+      quality-gate.yml # CI quality checks + attestation (runs on every PR)
 ```
 
 ---
@@ -425,10 +429,10 @@ Every app passes through five gates before reaching production:
 
 | Gate | When | What |
 |------|------|------|
-| **1. Build-Verify** | During `/make-it` build | 130+ checks: auth, RBAC, code quality (Q01-Q12), AI safety (AI01-AI28) |
+| **1. Build-Verify** | During `/make-it` build | 130+ checks: auth, RBAC, code quality (Q01-Q13), AI safety (AI01-AI28) |
 | **2. Pre-Push** | When `/ship-it` runs | Lint, type-check, dependency audit, secret scan, migration validation |
 | **3. Pre-Commit** | Every `git commit` | ruff, eslint, prettier, gitleaks (via `.pre-commit-config.yaml`) |
-| **4. CI/CD** | GitHub Actions on PR | Security CVEs, compliance, Terraform validate, Trivy container scan |
+| **4. CI/CD** | GitHub Actions on PR | Quality gate workflow: lint, format, type-check, tests, secret scan, CVE audit, Trivy container scan. Generates `quality-gate-report.json` attestation artifact. |
 | **5. Production** | Before prod deploy | ENFORCE_SECRETS=true, real OIDC, stricter scan thresholds, DevOps approval |
 
 ---
