@@ -61,6 +61,7 @@ Scan for:
 - gitleaks config exists (.gitleaks.toml) with mock token allowlist
 - Trivy config exists (trivy.yaml) with severity filter for CI
 - Pre-commit hooks configured (.pre-commit-config.yaml) with gitleaks hook
+- ICS/OT protocol references in service clients, dependencies, or env vars (X08)
 ```
 
 ### 1b. Semgrep Scan (if available)

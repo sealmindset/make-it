@@ -226,6 +226,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Terraform (or equivalent IaC) generated for the user's chosen cloud provider as DevOps handoff artifact (user never applies)
 - IaC state backend configured for the chosen cloud provider's state storage
 - All cloud resources tagged (app, environment, managed-by, owner)
+- ICS/OT integration detection: if app connects to industrial control systems (Modbus, OPC-UA, BACnet, DNP3, S7, EtherNet/IP), flag for OT security team review with SANS ICS Five Critical Controls checklist. /ship-it requires explicit sign-off before production. See build-standards.md X08.
 
 ### AI Provider Architecture (if app uses AI/LLM features)
 - AI provider MUST be configurable via AI_PROVIDER environment variable

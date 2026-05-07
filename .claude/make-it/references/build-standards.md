@@ -348,6 +348,18 @@ Document the decision in the project's `app-context.json` under `data_integratio
 
 **X07** [Tier 0] [FIX] **Dependency vulnerability audit** -- Run `pip-audit -r backend/requirements.txt` (Python) and/or `npm audit` (Node.js) to detect known CVEs. Auto-fix with retry loop: (1) `pip-audit --fix` / `npm audit fix`, (2) re-audit to verify, (3) manual version pin if auto-fix insufficient, (4) repeat up to 3 cycles. Remaining vulnerabilities after 3 cycles logged to TODO.md with severity, package, and CVE ID. Install `pip-audit` if not available. Runs silently during /resume-it static scan and /try-it smoke test. Rebuild affected Docker services if requirements.txt or package.json changed.
 
+**X08** [Tier 1, 5] [WARN] **ICS/OT integration detection** -- Scan service client code, dependency lists, and environment variables for references to industrial control system protocols and endpoints. Detection patterns:
+- **Protocol libraries**: `pymodbus`, `opcua`, `asyncua`, `python-opcua`, `bacpypes`, `pydnp3`, `snap7`, `pycomm3`, `cpppo`, `node-opcua`, `modbus-serial`, `jsmodbus`
+- **Protocol URIs/ports**: `opc.tcp://`, `modbus://`, port references to 502 (Modbus), 4840 (OPC-UA), 47808 (BACnet), 20000 (DNP3), 102 (S7/ISO-TSAP), 44818 (EtherNet/IP)
+- **Env var patterns**: variable names containing `SCADA`, `PLC`, `HMI`, `RTU`, `DCS`, `OPC_UA`, `MODBUS`, `BACNET`, `DNP3`, `ICS_`, `OT_`
+- **Endpoint patterns**: URL paths containing `/api/v*/scada`, `/api/v*/plc`, `/historian`, `/tags`, `/points`, service client class names containing `ScadaClient`, `PlcClient`, `HistorianClient`, `OpcClient`
+On detection: do NOT block the build. Add a `[SECURITY-OT]` section to TODO.md with:
+  1. "This app connects to industrial control systems — verify network segmentation with your OT security team before production deployment"
+  2. "Ensure ICS/OT endpoints are only reachable from an isolated network segment, not from the general enterprise network"
+  3. "Review SANS ICS Five Critical Controls: ICS-specific incident response plan, defensible network architecture, ICS network visibility and monitoring, secure remote access, risk-based vulnerability management"
+  4. List each detected protocol/endpoint with the file and line where it was found
+Also add `ics_ot_integration: true` to app-context.json and include the detected protocols in `ics_ot_protocols[]`. /ship-it checks for `ics_ot_integration: true` and requires explicit OT security review sign-off in the PR description before production deployment. Motivation: the January 2026 SADM Monterrey water utility attack (Dragos report) demonstrated that AI-assisted attackers can identify and target ICS endpoints from enterprise IT networks without prior OT knowledge — network segmentation is the critical control that prevented deeper compromise.
+
 ---
 
 ## Test Infrastructure
