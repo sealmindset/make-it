@@ -141,6 +141,66 @@ If `SECURITY_SCANNER_API_KEY` is NOT set but issues exist, work from the GitHub 
 
 Security scanner findings become priority work items -- auto-fixed before any user-requested changes. See "Security Scanner Remediation" workflow below.
 
+**6b. Check for dependency safety (always -- three layers, independent of security scanner config):**
+
+This check runs regardless of whether a security scanner is configured. It uses three layers
+to catch vulnerabilities: local audit first (works without a remote), then auto-fix, then
+Dependabot as a final check for anything already flagged on the remote.
+
+**Layer 1: Local audit (run FIRST -- no GitHub remote needed)**
+
+```bash
+# npm projects (for each directory with a package.json)
+cd frontend && npm audit --json 2>/dev/null | head -100; cd ..
+
+# pip projects (for each directory with a requirements.txt)
+pip-audit -r backend/requirements.txt --format json 2>/dev/null || true
+pip-audit -r requirements.txt --format json 2>/dev/null || true
+```
+
+If `pip-audit` is not installed: `pip install pip-audit 2>/dev/null`
+
+**Layer 2: Auto-fix (apply available patches)**
+
+```bash
+# npm: auto-fix non-breaking updates
+cd frontend && npm audit fix 2>/dev/null; cd ..
+
+# pip: for each vulnerable package from pip-audit with a fix version,
+# update the version pin in the relevant requirements.txt
+# Verify: pip install -r requirements.txt 2>/dev/null
+```
+
+Do NOT run `npm audit fix --force` (breaking changes). If pip update breaks other
+dependencies, revert and note as "needs manual review".
+
+**Layer 3: Dependabot check (final safety net -- only if GitHub remote exists)**
+
+```bash
+REMOTE_URL=$(git remote get-url origin 2>/dev/null) && \
+OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#') && \
+gh api "repos/${OWNER_REPO}/dependabot/alerts" --jq '.[] | select(.state=="open") | "#\(.number) \(.security_advisory.severity) | \(.dependency.package.name)@\(.dependency.manifest_path) | fix: \(.security_advisory.vulnerabilities[0].first_patched_version.identifier // "no fix")"' 2>/dev/null || true
+```
+
+Fix any alerts not already resolved by Layer 2.
+
+**If no remote or gh not available:** Skip Layer 3 only. Layers 1-2 still run.
+
+**After all layers -- classify results:**
+- **Fixed items**: Add to auto-fix queue -- same priority as security scanner critical/high
+  findings. Will be committed during the security-scanner-remediation step.
+- **Unfixable items** ("no fix" or breaking changes): Add to TODO.md as a low-priority item:
+  "[Package name] has a known safety advisory without an available update yet."
+
+**Key difference from step 6:** Step 6 checks for scanner-filed GitHub Issues (requires
+scanner config). Step 6b audits dependencies locally AND checks the GitHub dependency
+alert API. Both feed into the same remediation workflow.
+
+Dependency safety uses the same plain-language rules as scanner findings:
+- NEVER say "Dependabot", "CVE", "vulnerability", or "advisory" to the user
+- Say "safety update", "safety patch", or "security update" if the user must be told anything
+- Auto-fix silently when possible -- the user should not know this happened
+
 **7. ALWAYS check for AI prompt management gaps (tier-aware detection):**
 
 **This step is MANDATORY -- always run it, do not skip.** First determine if the app uses AI,

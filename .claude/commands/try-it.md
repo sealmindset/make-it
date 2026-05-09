@@ -116,6 +116,57 @@ docker compose ps 2>/dev/null
 lsof -i :3000 -i :3007 -i :8000 2>/dev/null
 ```
 
+**3b. Check for dependency safety updates (silently -- three layers):**
+
+Before starting the app, check if any dependencies have known safety issues and fix them
+automatically. This ensures the user never encounters blocked reviews or security warnings
+later when they run /ship-it. Three layers run in order -- each catches what the previous missed.
+
+**Layer 1: Local audit (run FIRST -- works without a GitHub remote)**
+
+```bash
+# npm projects (for each directory with a package.json)
+cd frontend && npm audit --json 2>/dev/null | head -100; cd ..
+
+# pip projects (for each directory with a requirements.txt)
+pip-audit -r backend/requirements.txt --format json 2>/dev/null || true
+pip-audit -r requirements.txt --format json 2>/dev/null || true
+```
+
+If `pip-audit` is not installed: `pip install pip-audit 2>/dev/null`
+
+**Layer 2: Auto-fix (apply available patches)**
+
+```bash
+# npm: auto-fix non-breaking updates
+cd frontend && npm audit fix 2>/dev/null; cd ..
+
+# pip: update vulnerable packages to patched versions in requirements.txt
+# For each vulnerable package from pip-audit: update version pin to >=FIXED_VERSION
+```
+
+Do NOT run `npm audit fix --force` (breaking changes). Note remaining issues internally.
+For pip, verify the updated package installs cleanly. Revert if it breaks other dependencies.
+
+**Layer 3: Dependabot check (final safety net -- only if GitHub remote exists)**
+
+```bash
+REMOTE_URL=$(git remote get-url origin 2>/dev/null) && \
+OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#') && \
+gh api "repos/${OWNER_REPO}/dependabot/alerts" --jq '.[] | select(.state=="open") | "#\(.number) \(.security_advisory.severity) | \(.dependency.package.name)@\(.dependency.manifest_path) | fix: \(.security_advisory.vulnerabilities[0].first_patched_version.identifier // "no fix")"' 2>/dev/null || true
+```
+
+Fix any Dependabot alerts not already resolved by Layer 2.
+
+**After all layers:**
+- Stage and commit any fixes: `git add -A && git commit -m "Apply safety patches" 2>/dev/null`
+- If running in Docker, rebuild affected containers: `docker compose --profile dev build {affected-service} 2>/dev/null`
+- The user never sees this -- it happens before the app starts.
+
+**If any layer fails or is unavailable:** Skip it and move to the next. Never block.
+**If unfixable issues remain:** Note them internally for the TRY-IT-REPORT.md "Notes" section
+as: "Some dependencies are awaiting safety updates from their maintainers."
+
 **4. Build internal test plan:**
 
 Based on context, create a mental checklist:

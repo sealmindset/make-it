@@ -900,6 +900,53 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
 - **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data
 
+Additionally, run a three-layer dependency safety check as part of **X03** verification:
+
+**Layer 1: Local audit (always runs -- no GitHub remote needed)**
+
+```bash
+# npm projects
+cd frontend && npm audit --json 2>/dev/null | head -100; cd ..
+
+# pip projects
+pip-audit -r backend/requirements.txt --format json 2>/dev/null || true
+pip-audit -r requirements.txt --format json 2>/dev/null || true
+```
+
+If `pip-audit` is not installed: `pip install pip-audit 2>/dev/null`
+
+**Layer 2: Auto-fix**
+
+```bash
+# npm: auto-fix non-breaking updates
+cd frontend && npm audit fix 2>/dev/null; cd ..
+
+# pip: update vulnerable package version pins in requirements.txt
+# Verify each installs cleanly. Revert if it breaks other dependencies.
+```
+
+Do NOT run `npm audit fix --force`. Stage fixes for commit in the build-verify flow.
+
+**Layer 3: Dependabot check (only if GitHub remote exists)**
+
+```bash
+REMOTE_URL=$(git remote get-url origin 2>/dev/null) && \
+OWNER_REPO=$(echo "$REMOTE_URL" | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#') && \
+gh api "repos/${OWNER_REPO}/dependabot/alerts" --jq '.[] | select(.state=="open") | "#\(.number) \(.security_advisory.severity) | \(.dependency.package.name)@\(.dependency.manifest_path) | fix: \(.security_advisory.vulnerabilities[0].first_patched_version.identifier // "no fix")"' 2>/dev/null || true
+```
+
+Fix any alerts not already resolved by Layer 2.
+
+**Classification:**
+- Fixable issues resolved by Layers 1-2: treat as [FIX] items, stage for commit
+- Unfixable issues ("no fix" or breaking changes): treat as [WARN] items, note in TODO.md
+  with plain language: "safety update pending for [package]"
+- If no remote or gh is unavailable: skip Layer 3 only (Layers 1-2 still run)
+
+**Variant-specific checks (if ACTIVE_VARIANT is set):**
+If a variant is active, also run checks from `build-standards.md` that match the variant qualifier
+(e.g., `[Tier 1+mobile]` checks for the mobile variant). These are in addition to the base tier checks.
+
 For each failing check:
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
