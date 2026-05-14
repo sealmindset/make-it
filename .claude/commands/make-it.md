@@ -136,7 +136,6 @@ git --version 2>/dev/null
 docker --version 2>/dev/null
 gh --version 2>/dev/null
 gh auth status 2>/dev/null
-code --version 2>/dev/null
 # Cloud CLI checks are CONDITIONAL -- only run if user mentions cloud deployment:
 # az account show 2>/dev/null    # Azure
 # aws sts get-caller-identity 2>/dev/null  # AWS
@@ -715,7 +714,6 @@ to understand the patterns, then generate new code that follows the same convent
 
     - Docker Desktop (or Rancher Desktop)
     - Git
-    - (Optional) VS Code with recommended extensions
 
     ## Getting Started
 
