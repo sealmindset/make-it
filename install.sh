@@ -171,6 +171,7 @@ report() {
         argo-it)     desc="Deploy to Kubernetes via Argo CD" ;;
         nemo-it)     desc="Security attestation (scan any app)" ;;
         fix-it)      desc="Auto-fix security findings from /nemo-it" ;;
+        demo-it)     desc="Demo tenant lifecycle for prospect onboarding" ;;
         *)           desc="Custom skill" ;;
       esac
       printf "    /%-14s -- %s\n" "$cmd_name" "$desc"
