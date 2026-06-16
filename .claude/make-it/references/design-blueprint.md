@@ -11,6 +11,26 @@ The /make-it skill uses this to determine WHAT questions to ask and HOW to map a
 
 For each design pattern area below, the skill must gather enough information from the user's natural language answers to make the right architectural choice. The user does NOT need to understand these patterns -- the skill infers them.
 
+### Core Principle: AI Drafts, Human Enforces Invariants
+
+**The AI produces drafts; the human enforces the invariants.** AI-assisted code ages badly
+because the model lacks business context and takes invisible shortcuts. The Design phase exists
+precisely to front-load the human judgment that the AI lacks, so that generation has rails.
+This principle is universal (all tiers) and is enforced via `guardrails.md` Tier 0 rules 24-29
+and checks AM01-AM06 in `build-standards.md`.
+
+Operating rules for the Design phase:
+- **Design First, Prompt Second** -- Define the architecture, logical structures, and failure
+  modes BEFORE any code is generated. The decisions recorded here (and in app-context.json) are
+  the contract the generated code must satisfy. Capture failure modes explicitly, not just the
+  happy path.
+- **Invariants are named here** -- Identify the behaviors that must hold (security boundaries,
+  data contracts, authorization rules, audit guarantees). These become the immutable invariants
+  that tests pin and that AI refactors must never silently break.
+- **Scope is bounded here** -- The design defines what is in scope so generation stays minimal
+  and single-purpose; anything outside the recorded design is a deliberate decision, not a
+  drive-by AI addition.
+
 ### Step 0: Classify Project Type
 
 Before applying any design patterns, classify the project:

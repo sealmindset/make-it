@@ -406,6 +406,28 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 ---
 
+## AI-Assisted Code Maintainability
+
+**Core principle: the AI produces drafts, the human enforces the invariants.** AI-assisted code
+ages badly because the model lacks business context and silently takes shortcuts. These checks
+keep that debt from compounding. They apply to every project type. See `guardrails.md` Tier 0
+rules 24-29 for the full statement of intent. Most are `[WARN]` (judgment-based, surfaced for
+human review) rather than mechanically decidable.
+
+**AM01** [Tier 0] [WARN] **Explainability** -- Every non-obvious function carries a one-line rationale (docstring or comment) stating WHY it exists / why it is written that way. Heuristic: if a maintainer cannot explain an AI-generated function without re-prompting the AI, it must be rewritten or documented. Flag functions with non-trivial logic and no rationale.
+
+**AM02** [Tier 0] [WARN] **Design-first artifact** -- Architectural decisions, data flow, and failure modes are recorded (`app-context.json` + design notes) BEFORE the code that implements them. New features add a design note before generation. Flag features/modules with no corresponding decision record.
+
+**AM03** [Tier 0] [WARN] **Single Responsibility** -- Functions and classes do one thing. Flag for review: functions over ~50 logical lines, classes mixing unrelated concerns, grab-bag `utils` sprawl. Small units keep the context window small so the AI does not lose the architecture.
+
+**AM04** [Tier 0] [WARN] **Minimal-edit discipline** -- A change touches only what the task requires. No drive-by refactors, renames, reformatting, or restructuring of unrelated code in the same diff. Flag diffs where unrelated files/functions changed without a stated reason.
+
+**AM05** [Tier 0] [WARN] **Zero-trust review surface** -- Code is structured so a reviewer can judge architecture, complexity, and maintainability -- not just "does it run." Flag dead code, speculative abstractions, unreferenced exports, unreachable branches, and unused parameters left by the AI.
+
+**AM06** [Tier 0] [BLOCK] **Invariant tests guard behavior** -- Critical behaviors are covered by tests that pass BEFORE and AFTER any AI change. For any project that already has a test suite, the suite MUST pass at handoff; an AI refactor must not turn a passing suite red without an explicit, documented behavior change. Projects with zero tests: downgrade to WARN and note in TODO.md.
+
+---
+
 ## Live Verification Checks
 
 These checks run after the app is started (Docker containers up, health checks passing).

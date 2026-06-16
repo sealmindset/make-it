@@ -115,6 +115,37 @@ These apply to every project /make-it builds, no exceptions.
 22. **Secret detection in git workflow** -- gitleaks pre-commit hook catches leaked secrets before they reach the repository. `.gitleaks.toml` allowlists known-safe patterns (mock service tokens, `.env.example`).
 23. **CI quality gate workflow** -- `.github/workflows/quality-gate.yml` runs lint, format, type-check, tests, secret scan, CVE audit, and container scan on every PR. Generates `quality-gate-report.json` attestation artifact uploaded to GitHub Actions. Branch protection should require this workflow to pass before merge.
 
+### AI-Assisted Code Maintainability
+
+**Core principle: the AI produces drafts, the human enforces the invariants.** AI-assisted
+code ages badly because the model lacks business context and silently takes shortcuts that
+compound into technical debt. The human owns the architecture, the invariants, and the final
+say; the AI accelerates the typing. These constraints apply to every project type and map
+to checks AM01-AM06 in `build-standards.md`.
+
+24. **Explainability Rule** -- If a maintainer cannot clearly explain WHY an AI-generated
+    function is written the way it is *without re-prompting the AI*, the code must be rewritten
+    or documented until they can. Every non-obvious function carries a one-line rationale
+    (docstring/comment) stating its purpose. Understanding is a release gate, not a nicety.
+25. **Design First, Prompt Second** -- The architectural blueprint, the logical structures,
+    and the failure modes are defined and recorded (app-context.json + design notes) BEFORE
+    any code is generated. New features add a design note before generation. No generating
+    into a vacuum.
+26. **Single Responsibility** -- Functions and classes do one thing only. Keep units small
+    (functions ideally under ~50 logical lines, no grab-bag modules) so the context window
+    stays small and the AI cannot lose track of the architecture or hallucinate structure.
+27. **Minimal-Edit Directive** -- Constrain AI scope explicitly: "Make only the requested
+    changes. Do not refactor, rename, reformat, or restructure unrequested code." A change
+    touches only what the task requires; no drive-by edits to unrelated code in the same diff.
+28. **Zero-Trust Review** -- Review focuses on system architecture, complexity, and
+    maintainability -- not just "does it run." Reject dead code, speculative abstractions,
+    unused parameters, and invisible shortcuts the AI left behind. Functionality passing is
+    necessary, not sufficient.
+29. **Immutable Invariants** -- Critical behaviors are pinned by tests that pass BEFORE and
+    AFTER any AI refactor (the regression safety net). A passing suite must stay passing across
+    an AI change unless the behavior change is explicit and documented. Work in small, verified
+    iterations rather than large unreviewable batches.
+
 ---
 
 ## Tier 1: Web Application Guardrails

@@ -6,6 +6,28 @@ The skill executes these in order, skipping any that don't apply.
 
 ---
 
+## Generation Discipline (applies to EVERY prompt below)
+
+**Core principle: the AI produces drafts, the human enforces the invariants.** Prepend the
+spirit of these directives to every generation step. They keep AI-assisted code from aging
+badly. Full statement: `guardrails.md` Tier 0 rules 24-29; checks AM01-AM06 in `build-standards.md`.
+
+- **Design First, Prompt Second** -- The architecture, data structures, and failure modes for
+  what is being generated are already decided and recorded (app-context.json + design notes)
+  before this prompt runs. Generate against that design, not into a vacuum.
+- **Minimal-Edit Directive** -- Include in every code-modifying prompt: "Make only the requested
+  changes. Do NOT refactor, rename, reformat, or restructure unrequested code. Touch only what
+  the task requires." No drive-by edits.
+- **Single Responsibility** -- Generate small, single-purpose functions and classes (functions
+  ideally under ~50 logical lines). Keeps the working context small and the architecture legible.
+- **Explainability** -- Every non-obvious function gets a one-line rationale comment/docstring
+  stating WHY. If it cannot be explained without re-prompting, it is not done.
+- **Immutable Invariants** -- After generating or changing code, run the existing tests; a
+  passing suite must stay passing unless a behavior change is explicit and documented. Work in
+  small, verifiable iterations, not large unreviewable batches.
+
+---
+
 ## Prompt #1: Start a New Project
 
 ```
