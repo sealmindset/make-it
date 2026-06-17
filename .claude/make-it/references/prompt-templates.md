@@ -6,28 +6,6 @@ The skill executes these in order, skipping any that don't apply.
 
 ---
 
-## Generation Discipline (applies to EVERY prompt below)
-
-**Core principle: the AI produces drafts, the human enforces the invariants.** Prepend the
-spirit of these directives to every generation step. They keep AI-assisted code from aging
-badly. Full statement: `guardrails.md` Tier 0 rules 24-29; checks AM01-AM06 in `build-standards.md`.
-
-- **Design First, Prompt Second** -- The architecture, data structures, and failure modes for
-  what is being generated are already decided and recorded (app-context.json + design notes)
-  before this prompt runs. Generate against that design, not into a vacuum.
-- **Minimal-Edit Directive** -- Include in every code-modifying prompt: "Make only the requested
-  changes. Do NOT refactor, rename, reformat, or restructure unrequested code. Touch only what
-  the task requires." No drive-by edits.
-- **Single Responsibility** -- Generate small, single-purpose functions and classes (functions
-  ideally under ~50 logical lines). Keeps the working context small and the architecture legible.
-- **Explainability** -- Every non-obvious function gets a one-line rationale comment/docstring
-  stating WHY. If it cannot be explained without re-prompting, it is not done.
-- **Immutable Invariants** -- After generating or changing code, run the existing tests; a
-  passing suite must stay passing unless a behavior change is explicit and documented. Work in
-  small, verifiable iterations, not large unreviewable batches.
-
----
-
 ## Prompt #1: Start a New Project
 
 ```
@@ -1380,7 +1358,8 @@ prompt management tier.**
 ```
 Set up the AI provider abstraction layer for [PROJECT_NAME].
 
-Primary provider: [AI_PROVIDER] (e.g., anthropic_foundry, anthropic, openai, ollama)
+Primary provider: [AI_PROVIDER] (e.g., claude_agent, anthropic_foundry, anthropic, openai, ollama)
+  Default for single-user local apps: claude_agent (Claude Code subscription -- no API key).
 Failover provider: [AI_FAILOVER_PROVIDER] (optional -- auto-switches on primary failure)
 
 Model tiering:
@@ -1427,6 +1406,11 @@ lib/ai/
     │   - Dual auth: API key or DefaultAzureCredential
     ├── anthropic_direct.py          # Direct Anthropic API
     │   - Self-annealing + cost tracking (same as foundry)
+    ├── claude_agent.py              # Claude Code SUBSCRIPTION via Agent SDK (no API key)
+    │   - Default for single-user local apps; auth = CLAUDE_CODE_OAUTH_TOKEN
+    │   - Drives the local Claude Code CLI (claude-agent-sdk), single-shot/no-tools
+    │   - When selected: add claude-agent-sdk to requirements, install the Claude Code
+    │     CLI in the backend Dockerfile, wire CLAUDE_CODE_OAUTH_TOKEN through env
     ├── openai_provider.py           # OpenAI API (GPT-4o, GPT-5, o-series)
     │   - Reasoning model support: max_completion_tokens, merged system prompt
     │   - Standard model support: max_tokens, temperature, system role

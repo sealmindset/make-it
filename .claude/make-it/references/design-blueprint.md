@@ -11,26 +11,6 @@ The /make-it skill uses this to determine WHAT questions to ask and HOW to map a
 
 For each design pattern area below, the skill must gather enough information from the user's natural language answers to make the right architectural choice. The user does NOT need to understand these patterns -- the skill infers them.
 
-### Core Principle: AI Drafts, Human Enforces Invariants
-
-**The AI produces drafts; the human enforces the invariants.** AI-assisted code ages badly
-because the model lacks business context and takes invisible shortcuts. The Design phase exists
-precisely to front-load the human judgment that the AI lacks, so that generation has rails.
-This principle is universal (all tiers) and is enforced via `guardrails.md` Tier 0 rules 24-29
-and checks AM01-AM06 in `build-standards.md`.
-
-Operating rules for the Design phase:
-- **Design First, Prompt Second** -- Define the architecture, logical structures, and failure
-  modes BEFORE any code is generated. The decisions recorded here (and in app-context.json) are
-  the contract the generated code must satisfy. Capture failure modes explicitly, not just the
-  happy path.
-- **Invariants are named here** -- Identify the behaviors that must hold (security boundaries,
-  data contracts, authorization rules, audit guarantees). These become the immutable invariants
-  that tests pin and that AI refactors must never silently break.
-- **Scope is bounded here** -- The design defines what is in scope so generation stays minimal
-  and single-purpose; anything outside the recorded design is a deliberate decision, not a
-  drive-by AI addition.
-
 ### Step 0: Classify Project Type
 
 Before applying any design patterns, classify the project:
@@ -525,12 +505,24 @@ AI features mentioned?
   No  -> Skip AI provider entirely
   Yes -> Determine primary provider:
 
+  *** PRINCIPLE: Subscription by default for single-user local apps ***
+  Single individual + local run (users.estimated_count == 1 / "just me"
+  AND deployment.target == "local" or deployment.prototype_only == true):
+    -> Default: claude_agent (uses the builder's Claude Code Pro/Max subscription
+       via the Claude Agent SDK + local Claude Code CLI -- NO API key, no per-token billing)
+    -> Fallback / override: anthropic (direct API key) if the person prefers metered
+       billing or has no subscription
+    This is a SILENT smart default: select claude_agent automatically, state it in the
+    plain-English Design summary ("uses your Claude Code subscription -- no extra cost
+    beyond your plan"), and make switching to an API key a one-line .env change.
+
   Enterprise / corporate environment:
     -> Azure AI Foundry with Claude (primary -- complies with enterprise data policies)
     -> Fallback: OpenAI via Azure OpenAI Service
 
-  Individual developer / startup:
-    -> Direct Anthropic API (Claude)
+  Multi-user / shared / team (not a single individual), still pre-deployment:
+    -> Direct Anthropic API (Claude)   [a personal subscription token is single-identity;
+       do NOT default a multi-user app to claude_agent]
     -> OR OpenAI API
     -> OR local Ollama (for privacy / offline development)
 
@@ -538,6 +530,12 @@ AI features mentioned?
     -> Provider MUST be configurable via environment variable (AI_PROVIDER)
     -> Model MUST be configurable per feature tier (AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT)
     -> No provider names hardcoded in business logic -- only in the provider abstraction layer
+
+  *** ON SHIP: the subscription default is local-individual ONLY ***
+    When a claude_agent app later ships to others / production / multi-user, FLIP the
+    recommended provider to anthropic (API key) or the org's enterprise provider, and
+    WARN never to commit or ship the personal CLAUDE_CODE_OAUTH_TOKEN (it is single-identity,
+    has subscription usage limits, and is not a deployment credential). See ship-it-guide.md.
 ```
 
 **Multi-provider abstraction pattern (scaffold-based):**
@@ -564,6 +562,7 @@ lib/ai/
 └── providers/
     ├── anthropic_foundry.py         # Azure AI Foundry (dual auth + self-annealing + cost)
     ├── anthropic_direct.py          # Direct Anthropic API (self-annealing + cost)
+    ├── claude_agent.py              # Claude Code SUBSCRIPTION via Agent SDK (no API key)
     ├── openai_provider.py           # OpenAI (GPT-4o/5/o-series, reasoning model support)
     ├── ollama.py                    # Local Ollama (httpx, no auth, cost=0)
     └── failover.py                  # Decorator: primary -> secondary on failure
@@ -584,10 +583,33 @@ name from environment variables, falling back to sensible defaults.
 
 | Provider | Auth Method | Env Vars Needed |
 |----------|-----------|-----------------|
+| `claude_agent` | Claude Code subscription (Agent SDK + local CLI) | `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) -- no API key |
 | `anthropic_foundry` | API key **or** `DefaultAzureCredential` (dual-mode) | `AZURE_AI_FOUNDRY_ENDPOINT` + optionally `AZURE_AI_FOUNDRY_API_KEY` |
 | `anthropic` | API key | `ANTHROPIC_API_KEY` |
 | `openai` | API key | `OPENAI_API_KEY` |
 | `ollama` | None (local) | `OLLAMA_BASE_URL` |
+
+**`claude_agent` (Claude Code subscription) -- default for single-user local apps.**
+Drives the local Claude Code CLI via the `claude-agent-sdk` Python package; the CLI
+carries the subscription login, so there is no API key and no per-token billing (usage
+counts against the Claude Pro/Max plan, which has its own rate/usage limits).
+
+Build-time requirements when `ai_providers.primary == "claude_agent"`:
+1. Add `claude-agent-sdk` to `backend/requirements.txt`.
+2. Install the Claude Code CLI in the backend Dockerfile (after `USER appuser`):
+   ```dockerfile
+   ENV PATH="/home/appuser/.local/bin:${PATH}"
+   RUN curl -fsSL https://claude.ai/install.sh | bash || \
+       echo "WARNING: Claude Code CLI install skipped; claude_agent needs it at runtime."
+   ```
+3. Wire `CLAUDE_CODE_OAUTH_TOKEN` through `.env`, `.env.example`, and the backend
+   service env in `docker-compose.yml`.
+4. The agent layer treats AI as "available" only when `CLAUDE_CODE_OAUTH_TOKEN` is set;
+   otherwise it returns a friendly "run `claude setup-token`" message (no crash).
+
+The provider, factory registration, and config field already ship in the scaffold
+(`lib/ai/providers/claude_agent.py`); the SDK import is lazy, so these are inert for
+builds that use a different provider.
 
 **Azure AI Foundry supports TWO authentication modes.** The provider MUST try both
 in priority order:
@@ -634,8 +656,11 @@ class AnthropicFoundryProvider(AIProvider):
 **Environment variables (added to .env.example):**
 ```bash
 # AI Provider Configuration
-AI_PROVIDER=anthropic_foundry          # anthropic_foundry | anthropic | openai | ollama
+# claude_agent (subscription, default for single-user local apps) | anthropic_foundry | anthropic | openai | ollama
+AI_PROVIDER=claude_agent
 AI_FAILOVER_PROVIDER=                  # Optional failover (e.g. ollama). Leave empty to disable.
+# Claude Code subscription auth (claude_agent). Generate with: claude setup-token
+CLAUDE_CODE_OAUTH_TOKEN=
 AI_MODEL_HEAVY=claude-opus-4-6    # Complex reasoning tasks
 AI_MODEL_STANDARD=claude-sonnet-4-6  # Standard tasks
 AI_MODEL_LIGHT=claude-haiku-4-5     # Simple/fast tasks

@@ -16,6 +16,21 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
 
 ---
 
+## AI Provider on Ship (claude_agent -> API key)
+
+If the app was built with `ai_providers.primary == "claude_agent"` (the default for
+single-user local apps -- it uses the builder's personal Claude Code subscription token),
+that default is **local-individual only** and must NOT carry into a shared/production deploy:
+
+- A `CLAUDE_CODE_OAUTH_TOKEN` is single-identity, has subscription usage limits, and is not a
+  deployment credential. The secret-leak scan (below) already blocks it from being committed;
+  in addition, when shipping to others/production /ship-it should flip the recommended provider
+  to `anthropic` (API key) or the org's enterprise provider and tell the user to set the
+  appropriate key in the deployment environment.
+- Intent classification: `intent:experiment` may keep claude_agent (still local); `intent:shareable`
+  and `intent:prod-ready` should switch off claude_agent. Never write the personal token into
+  `.ship-it.yml`, workflows, or any committed file.
+
 ## What /ship-it Does
 
 /ship-it is a Claude Code skill that automates the path from local code to a pull request. The developer runs one command: `/ship-it`. That's it.
@@ -65,7 +80,7 @@ tool output.
 | 2 | **Env var cross-check** | Compare .env/.env.example against docker-compose.yml, K8s manifests, and .ship-it.yml | Warn if new env vars aren't documented in .env.example. Auto-add missing entries to .env.example with TODO values |
 | 3 | **Schema & migration alignment** | Check for untracked migration files (Alembic, Django, Prisma). Verify migration chain integrity (every down_revision exists as a revision) | Auto-add untracked migrations. If chain is broken: pause, explain "a database update file is missing" |
 | 4 | **Import & dependency check** | Parse changed Python files with `ast.parse()`. Check requirements.txt/package.json against lockfiles | If syntax error: pause, explain in plain language. If dependency mismatch: warn |
-| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a password in your changes." Move to .env, replace with env var reference |
+| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys — including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code subscription tokens. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a secret in your changes." Move to .env (gitignored), replace with env var reference. A personal Claude Code token must never be committed or shipped. |
 | 6 | **Build verification** | Run `docker compose build` to verify images build successfully | If build fails: diagnose, attempt auto-fix (missing dependency, syntax error), retry. If unfixable: pause, explain |
 
 **If ALL checks pass:** proceed silently (user never knows the review happened).

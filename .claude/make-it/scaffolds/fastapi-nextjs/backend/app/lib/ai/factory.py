@@ -16,6 +16,10 @@ def _build_provider(name: str) -> AIProvider:
         from app.lib.ai.providers.anthropic_direct import AnthropicDirectProvider
 
         return AnthropicDirectProvider()
+    elif name == "claude_agent":
+        from app.lib.ai.providers.claude_agent import ClaudeAgentProvider
+
+        return ClaudeAgentProvider()
     elif name == "openai":
         from app.lib.ai.providers.openai_provider import OpenAIProvider
 
