@@ -62,6 +62,9 @@ This template is populated by /make-it as the user answers questions. It becomes
       "light": ""
     },
     "provider_config": {
+      "claude_agent": {
+        "note": "Default for single-user local apps. Uses the Claude Code subscription via the Agent SDK + local CLI; auth = CLAUDE_CODE_OAUTH_TOKEN (claude setup-token). No API key."
+      },
       "anthropic_foundry": {
         "endpoint": "",
         "uses_default_credential": true,
@@ -205,7 +208,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_features.prompt_management_tier | Design | 0 (none -- no AI), 2 (db+admin -- MINIMUM for any AI app), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | ai_providers | Design | Auto-determined when ai_features.needed is true |
-| ai_providers.primary | Design | Inferred from cloud.provider + enterprise context: "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama" |
+| ai_providers.primary | Design | Values: "claude_agent" \| "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama". **Default = "claude_agent" for single-user local apps** (users.estimated_count == 1 AND deployment.target == "local"/prototype_only) -- uses the Claude Code subscription, no API key. Enterprise -> "anthropic_foundry". Multi-user/shared -> "anthropic". On ship to others/production, flip claude_agent -> "anthropic"/enterprise. |
 | ai_providers.model_tiers | Design | Inferred from ai_features.agents complexity; defaults to latest Claude models |
 | brain_features.enabled | Design | Detected from keywords: "remember", "learn over time", "adapt", "know my preferences" |
 | brain_features.user_memory | Design | true when multi-user app with conversational AI |

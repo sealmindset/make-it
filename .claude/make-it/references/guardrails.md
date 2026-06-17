@@ -115,37 +115,6 @@ These apply to every project /make-it builds, no exceptions.
 22. **Secret detection in git workflow** -- gitleaks pre-commit hook catches leaked secrets before they reach the repository. `.gitleaks.toml` allowlists known-safe patterns (mock service tokens, `.env.example`).
 23. **CI quality gate workflow** -- `.github/workflows/quality-gate.yml` runs lint, format, type-check, tests, secret scan, CVE audit, and container scan on every PR. Generates `quality-gate-report.json` attestation artifact uploaded to GitHub Actions. Branch protection should require this workflow to pass before merge.
 
-### AI-Assisted Code Maintainability
-
-**Core principle: the AI produces drafts, the human enforces the invariants.** AI-assisted
-code ages badly because the model lacks business context and silently takes shortcuts that
-compound into technical debt. The human owns the architecture, the invariants, and the final
-say; the AI accelerates the typing. These constraints apply to every project type and map
-to checks AM01-AM06 in `build-standards.md`.
-
-24. **Explainability Rule** -- If a maintainer cannot clearly explain WHY an AI-generated
-    function is written the way it is *without re-prompting the AI*, the code must be rewritten
-    or documented until they can. Every non-obvious function carries a one-line rationale
-    (docstring/comment) stating its purpose. Understanding is a release gate, not a nicety.
-25. **Design First, Prompt Second** -- The architectural blueprint, the logical structures,
-    and the failure modes are defined and recorded (app-context.json + design notes) BEFORE
-    any code is generated. New features add a design note before generation. No generating
-    into a vacuum.
-26. **Single Responsibility** -- Functions and classes do one thing only. Keep units small
-    (functions ideally under ~50 logical lines, no grab-bag modules) so the context window
-    stays small and the AI cannot lose track of the architecture or hallucinate structure.
-27. **Minimal-Edit Directive** -- Constrain AI scope explicitly: "Make only the requested
-    changes. Do not refactor, rename, reformat, or restructure unrequested code." A change
-    touches only what the task requires; no drive-by edits to unrelated code in the same diff.
-28. **Zero-Trust Review** -- Review focuses on system architecture, complexity, and
-    maintainability -- not just "does it run." Reject dead code, speculative abstractions,
-    unused parameters, and invisible shortcuts the AI left behind. Functionality passing is
-    necessary, not sufficient.
-29. **Immutable Invariants** -- Critical behaviors are pinned by tests that pass BEFORE and
-    AFTER any AI refactor (the regression safety net). A passing suite must stay passing across
-    an AI change unless the behavior change is explicit and documented. Work in small, verified
-    iterations rather than large unreviewable batches.
-
 ---
 
 ## Tier 1: Web Application Guardrails
@@ -266,7 +235,24 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Model selection MUST be configurable per feature complexity tier via env vars
   (AI_MODEL_HEAVY, AI_MODEL_STANDARD, AI_MODEL_LIGHT)
 - Provider abstraction layer: lib/ai/ with abstract interface + per-provider implementations
-- Supported providers: anthropic_foundry (Azure AI Foundry), anthropic (direct), openai, ollama
+- Supported providers: claude_agent (Claude Code subscription), anthropic_foundry (Azure AI Foundry), anthropic (direct), openai, ollama
+- **PRINCIPLE -- subscription by default for single-user local apps:** When the app is for a
+  single individual (users.estimated_count == 1) AND runs locally (deployment.target == "local"
+  or prototype_only), the DEFAULT provider is `claude_agent` -- it uses the builder's Claude Code
+  Pro/Max subscription via the Agent SDK, with NO API key and no per-token billing. This is a
+  silent smart default: select it automatically, mention it in the Design summary, and keep
+  switching to an API key a one-line `.env` change. Do NOT default multi-user/shared/team apps
+  to `claude_agent` (a subscription token is single-identity). On ship to others/production,
+  flip to `anthropic`/enterprise and never commit/ship the personal token.
+- **claude_agent (Claude Code subscription) auth:**
+  - Auth via `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) -- NO `ANTHROPIC_API_KEY`.
+  - Uses `claude-agent-sdk` (Python) driving the local Claude Code CLI subprocess in
+    single-shot, no-tools mode (behaves like a plain system+user completion).
+  - When selected, the build MUST: add `claude-agent-sdk` to requirements, install the
+    Claude Code CLI in the backend Dockerfile (`curl -fsSL https://claude.ai/install.sh | bash`),
+    and wire `CLAUDE_CODE_OAUTH_TOKEN` through .env / .env.example / docker-compose.
+  - Agent layer treats AI as available only when the token is set; otherwise returns a
+    friendly "run `claude setup-token`" message (graceful, no crash).
 - **Azure AI Foundry (anthropic_foundry) supports dual-mode auth:**
   1. API key (preferred): If `AZURE_AI_FOUNDRY_API_KEY` is set, pass it directly to the
      Anthropic SDK. No Azure-specific SDK needed.
@@ -278,6 +264,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Other providers (anthropic, openai) require their respective API keys
 - Ollama requires no authentication (local only)
 - Build-verify: confirm AI features work by calling the provider abstraction (not a specific SDK)
+- Build-verify (claude_agent): confirm `claude --version` runs inside the backend container,
+  `import claude_agent_sdk` succeeds, AI_PROVIDER resolves to claude_agent, and with no token
+  set the AI endpoints return the friendly "set up your token" message (available:false, no error)
 
 ### NeMo Guardrails -- AI Safety Testing (if app uses AI/LLM features)
 - MANDATORY for all apps with ai_features.needed = true -- required by GRC for production deployment
@@ -600,6 +589,11 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] If AI_PROVIDER=anthropic_foundry: dual-mode auth -- uses AZURE_AI_FOUNDRY_API_KEY
       if set (API key passed directly to Anthropic SDK), falls back to DefaultAzureCredential
       if no API key (azure-identity required in dependencies for fallback mode)
+- [ ] If AI_PROVIDER=claude_agent (default for single-user local apps): `claude-agent-sdk`
+      in requirements; Claude Code CLI installed in backend Dockerfile (`claude --version`
+      runs in the container); `CLAUDE_CODE_OAUTH_TOKEN` wired through .env/.env.example/
+      docker-compose; with no token set, AI endpoints return the friendly "run
+      `claude setup-token`" message (available:false) instead of erroring
 
 **Input Safety (Secure by Design):**
 - [ ] sanitizePromptInput() utility exists in lib/ai/ and strips injection patterns

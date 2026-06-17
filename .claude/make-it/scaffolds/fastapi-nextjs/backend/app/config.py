@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    # Claude Code subscription auth (used by the claude_agent provider; no API key).
+    # Generate with `claude setup-token`. Default provider for single-user local apps.
+    CLAUDE_CODE_OAUTH_TOKEN: str = ""
 
     # AI Safety
     AI_MAX_PROMPT_CHARS: int = 50000

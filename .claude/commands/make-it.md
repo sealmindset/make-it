@@ -326,6 +326,20 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
 - Architecture: M.A.C.H. principles applied by default
 - Containerization: Based on stack choice (single vs multi-runtime)
 - IaC: Terraform if going to production
+- AI Provider (PRINCIPLE -- subscription by default for single-user local apps):
+  - If the app uses AI AND it's for a single individual (users.estimated_count == 1 /
+    "just me") AND runs locally (deployment.target == "local" or prototype_only == true):
+    -> Default ai_providers.primary = "claude_agent" (uses the builder's Claude Code
+       Pro/Max subscription via the Agent SDK -- NO API key, no per-token billing).
+    -> This is a SILENT smart default: select it, MENTION it in the plain-English Design
+       summary ("uses your Claude Code subscription -- no cost beyond your plan"), and keep
+       switching to an API key a one-line .env change. No extra question needed.
+    -> When chosen, the Build phase must add `claude-agent-sdk` to requirements, install the
+       Claude Code CLI in the backend Dockerfile, and wire CLAUDE_CODE_OAUTH_TOKEN through
+       .env / .env.example / docker-compose (see design-blueprint.md + build-standards AI01d).
+  - Enterprise/corporate -> "anthropic_foundry". Multi-user/shared/team -> "anthropic".
+  - On ship to others/production, flip claude_agent -> "anthropic"/enterprise and warn never
+    to commit/ship the personal CLAUDE_CODE_OAUTH_TOKEN (see ship-handoff + ship-it-guide.md).
 - AI Prompt Management: Classify usage level and set tier
   - No AI features -> tier 0 (skip)
   - 1-3 prompts, devs only -> tier 1 (code + config)
@@ -544,7 +558,17 @@ to understand the patterns, then generate new code that follows the same convent
      reasoning model support, error sanitization, input sanitization, and output validation.
      Add `anthropic` and `openai` to requirements.txt if not already present.
      The scaffold config.py already includes AI_PROVIDER, AI_FAILOVER_PROVIDER, model tier,
-     and provider-specific env vars.
+     and provider-specific env vars (including the claude_agent provider + CLAUDE_CODE_OAUTH_TOKEN).
+   - **If ai_providers.primary == "claude_agent"** (the default for single-user local apps):
+     a. Add `claude-agent-sdk` to backend/requirements.txt.
+     b. Install the Claude Code CLI in the backend Dockerfile (after `USER appuser`):
+        `ENV PATH="/home/appuser/.local/bin:${PATH}"` then
+        `RUN curl -fsSL https://claude.ai/install.sh | bash || echo "CLI install skipped"`.
+     c. Set AI_PROVIDER=claude_agent and add CLAUDE_CODE_OAUTH_TOKEN (empty) to .env and
+        .env.example; pass CLAUDE_CODE_OAUTH_TOKEN through the backend service in docker-compose.
+     d. In the Design summary and README, tell the user to run `claude setup-token` once and
+        paste the value into CLAUDE_CODE_OAUTH_TOKEN -- no API key, billed to their Claude plan.
+     e. The provider + factory registration already ship in the scaffold (claude_agent.py).
    - **Prompt management tier** from ai_usage_level in app-context:
      - "minimal" → Tier 2 minimum (scaffold prompt management)
      - "moderate" → Tier 2 (database + admin UI)
@@ -1200,6 +1224,12 @@ Reference ship-it-guide.md for this phase.
 2. Check if GitHub CLI (gh) is installed: `which gh`
 3. Check if gh is authenticated: `gh auth status`
 4. Check if /ship-it skill is available
+
+**If the app uses the claude_agent provider (Claude Code subscription):**
+- This default is local-individual only. Before shipping to others/production, flip
+  ai_providers.primary to "anthropic" (API key) or the org's enterprise provider, and warn
+  the user NEVER to commit or ship their personal CLAUDE_CODE_OAUTH_TOKEN (single-identity,
+  subscription usage limits, not a deployment credential). Confirm it's only in .env (gitignored).
 
 **If prerequisites are missing, guide the user through setup:**
 - gh not installed: "Before we can deploy, I need you to install one tool. Run: `brew install gh`"

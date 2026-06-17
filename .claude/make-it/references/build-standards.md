@@ -406,28 +406,6 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 ---
 
-## AI-Assisted Code Maintainability
-
-**Core principle: the AI produces drafts, the human enforces the invariants.** AI-assisted code
-ages badly because the model lacks business context and silently takes shortcuts. These checks
-keep that debt from compounding. They apply to every project type. See `guardrails.md` Tier 0
-rules 24-29 for the full statement of intent. Most are `[WARN]` (judgment-based, surfaced for
-human review) rather than mechanically decidable.
-
-**AM01** [Tier 0] [WARN] **Explainability** -- Every non-obvious function carries a one-line rationale (docstring or comment) stating WHY it exists / why it is written that way. Heuristic: if a maintainer cannot explain an AI-generated function without re-prompting the AI, it must be rewritten or documented. Flag functions with non-trivial logic and no rationale.
-
-**AM02** [Tier 0] [WARN] **Design-first artifact** -- Architectural decisions, data flow, and failure modes are recorded (`app-context.json` + design notes) BEFORE the code that implements them. New features add a design note before generation. Flag features/modules with no corresponding decision record.
-
-**AM03** [Tier 0] [WARN] **Single Responsibility** -- Functions and classes do one thing. Flag for review: functions over ~50 logical lines, classes mixing unrelated concerns, grab-bag `utils` sprawl. Small units keep the context window small so the AI does not lose the architecture.
-
-**AM04** [Tier 0] [WARN] **Minimal-edit discipline** -- A change touches only what the task requires. No drive-by refactors, renames, reformatting, or restructuring of unrelated code in the same diff. Flag diffs where unrelated files/functions changed without a stated reason.
-
-**AM05** [Tier 0] [WARN] **Zero-trust review surface** -- Code is structured so a reviewer can judge architecture, complexity, and maintainability -- not just "does it run." Flag dead code, speculative abstractions, unreferenced exports, unreachable branches, and unused parameters left by the AI.
-
-**AM06** [Tier 0] [BLOCK] **Invariant tests guard behavior** -- Critical behaviors are covered by tests that pass BEFORE and AFTER any AI change. For any project that already has a test suite, the suite MUST pass at handoff; an AI refactor must not turn a passing suite red without an explicit, documented behavior change. Projects with zero tests: downgrade to WARN and note in TODO.md.
-
----
-
 ## Live Verification Checks
 
 These checks run after the app is started (Docker containers up, health checks passing).
@@ -487,6 +465,8 @@ These checks apply to ANY project type that uses AI/LLM features.
 **AI01a** [AI] [FIX] **Self-annealing** -- `lib/ai/self_annealing.py` exists with `validate_model()`, `detect_model_error()`, `extract_corrected_model()`. Both Anthropic providers call `validate_model()` before API calls and retry with `extract_corrected_model()` on model-not-found errors. Verify: setting `AI_MODEL_STANDARD=llama3` logs a correction warning and uses `claude-sonnet-4-20250514` instead.
 
 **AI01b** [AI] [FIX] **Failover provider** -- `lib/ai/providers/failover.py` exists with `FailoverProvider` decorator. Factory wraps primary+secondary when `AI_FAILOVER_PROVIDER` env var is set. Verify: `AI_FAILOVER_PROVIDER=ollama` in .env causes factory to return `FailoverProvider`. On primary exception, subsequent calls route to secondary.
+
+**AI01d** [AI] [BLOCK if selected] **Claude Code subscription provider (claude_agent)** -- Default for single-user local apps (users.estimated_count == 1 AND deployment local/prototype). `lib/ai/providers/claude_agent.py` exists and is registered in the factory (ships in the scaffold). When `ai_providers.primary == "claude_agent"`, the build MUST also: (1) add `claude-agent-sdk` to `backend/requirements.txt`; (2) install the Claude Code CLI in the backend Dockerfile (`RUN curl -fsSL https://claude.ai/install.sh | bash`, with `/home/appuser/.local/bin` on PATH); (3) wire `CLAUDE_CODE_OAUTH_TOKEN` through `.env`, `.env.example`, and the backend service env in `docker-compose.yml`; (4) set `AI_PROVIDER=claude_agent`. Verify: `claude --version` runs in the backend container, `import claude_agent_sdk` succeeds, and with no `CLAUDE_CODE_OAUTH_TOKEN` set the AI endpoints return the friendly "run `claude setup-token`" message (available:false, no crash). Do NOT default multi-user/shared apps to claude_agent; on ship to others/production, flip to `anthropic`/enterprise and never commit the personal token.
 
 **AI01c** [AI] [FIX] **Cost tracking** -- `AIProvider` base class has `usage: UsageStats` with `total_input_tokens`, `total_output_tokens`, `total_cost_usd`, `request_count`. Each cloud provider overrides `estimate_cost()` with model-specific pricing. Providers call `self.usage.record()` after every API call. Ollama returns cost=0.
 
