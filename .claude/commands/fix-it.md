@@ -37,7 +37,10 @@ an updated attestation showing the delta.
 This skill has 6 phases:
 0. **Preflight** -- Locate attestation, parse findings, detect project stack
 1. **Triage** -- Classify every finding as auto-fixable or manual-only, present plan, get approval
-2. **Fix** -- Apply all auto-fixable changes, grouped by category
+2. **Fix** -- Apply all auto-fixable changes, grouped by category. When findings span multiple
+   INDEPENDENT files/categories, dispatch them in parallel (`/dispatch-it`, see
+   `parallel-dispatch.md`) -- one agent per finding/file, writers isolated in their own
+   worktrees -- then integrate and re-verify together.
 3. **Verify** -- Run build, tests, and lint to ensure nothing is broken
 4. **Re-scan** -- Run `/nemo-it` to produce updated attestation with delta
 5. **Report** -- Present results: what was fixed, what remains, before/after comparison

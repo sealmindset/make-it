@@ -45,6 +45,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/worktree-workflow.md
+@~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
@@ -1100,6 +1101,11 @@ If ANY test fails in Part B:
 37. Re-run the failing test to confirm the fix
 38. After all fixes, re-run the FULL test suite to check for regressions
 39. Repeat the fix cycle (up to 3 full cycles)
+
+If several failures are INDEPENDENT (different files/subsystems/root causes), fix them in
+parallel instead of sequentially: dispatch one agent per domain (`/dispatch-it`, see
+`parallel-dispatch.md`), isolate writers in their own worktrees, then re-run the FULL suite
+once and integrate. Keep related failures together (find the shared cause first).
 
 Common issues and fixes:
 - Auth callback returns wrong role -> fix to query database by oidc_subject

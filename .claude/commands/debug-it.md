@@ -64,6 +64,10 @@ after repeated failures. Both are baked into the workflow below -- do not skip t
    passes and the fix structurally prevents recurrence.
 7. **Only ask what changes your actions.** Interview to remove real ambiguity, then proceed
    and state your assumptions. Don't stall on questions whose answer wouldn't change the fix.
+8. **Many independent bugs? Fan out.** If you have 3+ INDEPENDENT failures (different files /
+   subsystems / root causes), don't work them sequentially -- dispatch one agent per domain in
+   parallel (`/dispatch-it`, see `parallel-dispatch.md`), each running this method, isolating
+   writers in their own worktrees. Keep *related* failures together (find the shared cause first).
 
 ---
 

@@ -28,6 +28,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/worktree-workflow.md
+@~/.claude/make-it/references/parallel-dispatch.md
 
 </execution_context>
 
@@ -439,6 +440,10 @@ Route to a dedicated catch-up workflow:
 
 This is effectively a mini-retrofit that runs within /resume-it, using the
 same check IDs and fix patterns from build-standards.md.
+
+When the gaps are INDEPENDENT (different subsystems), apply them in parallel with
+`/dispatch-it` (see `parallel-dispatch.md`) -- one agent per gap, writers isolated in their
+own worktrees -- then run the suite once and integrate. Keep related gaps together.
 
 **4. Always end with the open question:**
 
