@@ -44,6 +44,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
@@ -417,6 +418,10 @@ The user sees progress updates, NOT the technical details.
       ```bash
       mkdir -p [PROJECT_DIR] && cd [PROJECT_DIR] && git init
       ```
+      The scaffold ships `scripts/worktree.sh` and a `no-commit-to-branch` pre-commit hook.
+      After the initial commit on the default branch, do all feature work on a branch --
+      ideally a worktree (`scripts/worktree.sh new <branch>`), never on `main`/`master`.
+      See `references/worktree-workflow.md` for the workflow and per-worktree Docker isolation.
 
    c. **Copy scaffold files** into the project directory:
       ```bash

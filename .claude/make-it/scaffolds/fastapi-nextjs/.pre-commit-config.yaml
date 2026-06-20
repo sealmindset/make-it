@@ -24,6 +24,10 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=500"]
       - id: check-merge-conflict
+      # Commit discipline: never commit to the default branch. Feature work
+      # happens on a branch (ideally a worktree -- see scripts/worktree.sh).
+      - id: no-commit-to-branch
+        args: ["--branch", "main", "--branch", "master"]
 
   # -------------------------------------------------------------------------
   # Python -- Ruff (lint + format, replaces flake8/isort/black/bandit)

@@ -17,6 +17,10 @@
 #   [ADDITIONAL_MOCK_SERVICES]   - extra mock service definitions
 # =============================================================================
 
+# Project name drives container/volume/network namespacing. Override per git
+# worktree (see scripts/worktree.sh) so parallel checkouts never collide.
+name: ${COMPOSE_PROJECT_NAME:-[APP_SLUG]}
+
 services:
   # --------------------------------------------------------------------------
   # Frontend (Next.js)
@@ -30,7 +34,7 @@ services:
         - MCR_PREFIX=${MCR_PREFIX:-}
         - GHCR_PREFIX=${GHCR_PREFIX:-}
     ports:
-      - "[FRONTEND_PORT]:3000"
+      - "${FRONTEND_PORT:-[FRONTEND_PORT]}:3000"
     depends_on:
       backend:
         condition: service_healthy
@@ -57,19 +61,19 @@ services:
         - MCR_PREFIX=${MCR_PREFIX:-}
         - GHCR_PREFIX=${GHCR_PREFIX:-}
     ports:
-      - "[BACKEND_PORT]:8000"
+      - "${BACKEND_PORT:-[BACKEND_PORT]}:8000"
     depends_on:
       db:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql+asyncpg://[APP_SLUG]:[APP_SLUG]@db:5432/[APP_SLUG]
       - OIDC_ISSUER_URL=http://mock-oidc:10090
-      - OIDC_EXTERNAL_URL=http://localhost:[MOCK_OIDC_PORT]
+      - OIDC_EXTERNAL_URL=http://localhost:${MOCK_OIDC_PORT:-[MOCK_OIDC_PORT]}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-mock-oidc-client}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-mock-oidc-secret}
       - JWT_SECRET=${JWT_SECRET}
-      - FRONTEND_URL=http://localhost:[FRONTEND_PORT]
-      - BACKEND_URL=http://localhost:[BACKEND_PORT]
+      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-[FRONTEND_PORT]}
+      - BACKEND_URL=http://localhost:${BACKEND_PORT:-[BACKEND_PORT]}
       - ENFORCE_SECRETS=false
       - LOG_BUFFER_SIZE=10000
       # [ADDITIONAL_SERVICE_URLS]
@@ -92,7 +96,7 @@ services:
   db:
     image: ${DOCKER_HUB_PREFIX:-}postgres:16-alpine
     ports:
-      - "[DB_PORT]:5432"
+      - "${DB_PORT:-[DB_PORT]}:5432"
     environment:
       - POSTGRES_USER=[APP_SLUG]
       - POSTGRES_PASSWORD=[APP_SLUG]
@@ -129,12 +133,12 @@ services:
         - MCR_PREFIX=${MCR_PREFIX:-}
         - GHCR_PREFIX=${GHCR_PREFIX:-}
     ports:
-      - "[MOCK_OIDC_PORT]:10090"
+      - "${MOCK_OIDC_PORT:-[MOCK_OIDC_PORT]}:10090"
     profiles:
       - dev
     environment:
       - MOCK_OIDC_PORT=10090
-      - MOCK_OIDC_EXTERNAL_BASE_URL=http://localhost:[MOCK_OIDC_PORT]
+      - MOCK_OIDC_EXTERNAL_BASE_URL=http://localhost:${MOCK_OIDC_PORT:-[MOCK_OIDC_PORT]}
       - MOCK_OIDC_INTERNAL_BASE_URL=http://mock-oidc:10090
       - MOCK_OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-mock-oidc-client}
       - MOCK_OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-mock-oidc-secret}

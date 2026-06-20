@@ -115,6 +115,27 @@ These apply to every project /make-it builds, no exceptions.
 22. **Secret detection in git workflow** -- gitleaks pre-commit hook catches leaked secrets before they reach the repository. `.gitleaks.toml` allowlists known-safe patterns (mock service tokens, `.env.example`).
 23. **CI quality gate workflow** -- `.github/workflows/quality-gate.yml` runs lint, format, type-check, tests, secret scan, CVE audit, and container scan on every PR. Generates `quality-gate-report.json` attestation artifact uploaded to GitHub Actions. Branch protection should require this workflow to pass before merge.
 
+### Version Control & Worktree Discipline
+
+Every project uses git worktrees + commit discipline as the default working model: never
+commit half-done work to switch context, never let an out-of-turn commit break the default
+branch, and let parallel agents/sessions work without clobbering each other. Automated for
+agents/advanced devs; mostly invisible to the vibe-coder. Full spec: `worktree-workflow.md`.
+
+24. **Never commit to the default branch.** All work happens on a feature branch, one feature
+    per branch; `main`/`master` stays deployable. The scaffold enforces this with a
+    `no-commit-to-branch` pre-commit hook -- do not bypass with `--no-verify`.
+25. **A worktree per concurrent line of work.** Switch context by `cd`-ing into a sibling
+    checkout, not by stashing/committing unfinished work. Helper: `scripts/worktree.sh new <branch>`.
+26. **Per-worktree runtime isolation is mandatory for Dockerized projects.** `docker-compose.yml`
+    declares `name: ${COMPOSE_PROJECT_NAME:-<slug>}` and every host port uses `${VAR:-default}`
+    (mappings AND browser-facing URLs). The helper seeds each worktree's `.env` with a unique
+    project name + offset ports so `docker compose up` in two worktrees never collides on
+    ports, containers, or the DB volume. (N/A for non-Docker project types.)
+27. **Stage only your own paths.** Prefer `git add <specific paths>` over `git add -A` in a
+    shared checkout; never sweep another session's unfinished files into your commit. Gate
+    (lint/build/tests) before committing.
+
 ---
 
 ## Tier 1: Web Application Guardrails

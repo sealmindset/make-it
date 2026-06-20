@@ -42,6 +42,20 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 ---
 
+## Version Control & Worktrees
+
+**VC01** [Tier 0] [FIX] **Worktree helper present** -- `scripts/worktree.sh` exists and is executable (new/list/rm). Stack-agnostic; seeds an isolated `.env` per worktree.
+
+**VC02** [Tier 0] [BLOCK] **No-commit-to-main hook** -- `.pre-commit-config.yaml` includes `no-commit-to-branch` blocking `main`/`master`. This is the teeth behind "never commit out-of-turn to the default branch."
+
+**VC03** [Tier 0] [FIX] **Compose is worktree-safe** -- `docker-compose.yml` declares `name: ${COMPOSE_PROJECT_NAME:-<slug>}` and every host port uses `${VAR:-default}` form (port mappings AND browser-facing URLs). Lets parallel worktrees isolate with zero edits. (N/A for non-Docker project types: cli, library.)
+
+**VC04** [Tier 0] [FIX] **Worktrees gitignored** -- `.gitignore` excludes the `*-worktrees/` sibling pattern.
+
+**VC05** [Tier 0] [FIX] **Branch discipline documented** -- The worktree + commit-discipline workflow is captured (see `worktree-workflow.md`): one feature per branch, never commit to the default branch, worktree-per-task, stage your own paths.
+
+---
+
 ## Authentication & OIDC
 
 **These checks apply to the SaaS auth pattern (OIDC + local RBAC) only.** If EasyAuth is selected (see design-blueprint.md Section 1b), skip all A01-A10 checks.
