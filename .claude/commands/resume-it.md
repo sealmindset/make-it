@@ -27,6 +27,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/worktree-workflow.md
 
 </execution_context>
 
@@ -458,6 +459,15 @@ Based on the user's response, route to the appropriate workflow:
 **PROMPT MANAGEMENT TRIGGER:** If the user says anything like "update the prompt management",
 "upgrade AI instructions", "update prompts to latest", or "upgrade the prompt system", route
 directly to the `prompt-management-upgrade` step below. Skip normal work routing.
+
+**WORKTREE FIRST (commit discipline -- applies to ALL routes below):** Before starting a new
+line of work, don't build on the default branch. Every /make-it project ships
+`scripts/worktree.sh`; create or reuse an isolated worktree for this task:
+`scripts/worktree.sh new <branch>`. It seeds an isolated `.env` (unique COMPOSE_PROJECT_NAME +
+offset ports) so the app runs without colliding with other worktrees/sessions. Never commit to
+`main`/`master` (a `no-commit-to-branch` hook enforces it), and never stash/commit unfinished
+work just to switch tasks -- switch worktrees instead. Keep this invisible to the vibe-coder
+unless they ask. Full spec: `worktree-workflow.md`.
 
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)

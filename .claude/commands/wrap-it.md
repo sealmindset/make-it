@@ -210,6 +210,25 @@ lsof -i :3000 -i :8000 -i :5432 -i :10090 2>/dev/null | grep LISTEN
 If orphaned processes are found, note them in the summary but do NOT kill them
 automatically -- they may belong to other projects.
 
+**4. Tidy up finished worktrees (if any):**
+
+```bash
+# List extra working directories (worktrees) beyond the main checkout
+git worktree list 2>/dev/null
+```
+
+If worktrees exist beyond the main checkout, check each for unsaved work
+(`git -C <path> status --short`). For any worktree that is BOTH fully merged into the default
+branch AND has no unsaved changes, offer to clean it up:
+
+```bash
+scripts/worktree.sh rm <branch>   # removes the worktree directory and prunes
+```
+
+NEVER remove a worktree that has uncommitted changes or an unmerged branch -- leave it and
+mention it in the summary so the user can return to it. If the project has no extra worktrees,
+skip this step silently.
+
 </step>
 
 <!-- ============================================================ -->
@@ -279,6 +298,7 @@ Have a good one!"
 - NEVER run `docker compose down -v` (would destroy data volumes)
 - NEVER run `docker system prune` or `docker volume prune`
 - NEVER kill processes -- only report orphaned ports
+- NEVER remove a worktree that has uncommitted changes or an unmerged branch
 - NEVER push to remote -- only local commits
 - NEVER start new work or suggest adding features
 - ALWAYS preserve data for fast restart
