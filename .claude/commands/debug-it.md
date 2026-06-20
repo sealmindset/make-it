@@ -64,8 +64,10 @@ hypotheses from BOTH families, every time.
    refactors. A pragmatic workaround beats a redesign unless only the redesign prevents recurrence.
 8. **Verify against the SAME reproduction.** The failing test goes green, the full suite still
    passes, and the original symptom is gone.
-9. **Say what you don't know.** "I don't understand X" beats pretending. Only ask the human what
-   changes your actions; otherwise proceed and state assumptions.
+9. **Align before acting; say what you don't know.** Front-load clarifying questions to reach
+   alignment before committing to a fix direction (ambiguous/underspecified/high-stakes); root every
+   claim in a fact, not an assumption; "I don't understand X" beats pretending. Once aligned, execute
+   without re-asking — don't ask trivia you can verify yourself; state assumptions as you proceed.
 10. **Many independent bugs? Fan out.** 3+ INDEPENDENT failures → one agent per domain in
     parallel (`/dispatch-it`), each running this method. Keep *related* failures together.
 
