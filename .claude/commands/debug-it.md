@@ -93,7 +93,9 @@ line to confirm you have the right bug.
 - **Reproduce & isolate** — pin the *exact* failing line / state / DOM node, not the area. UI →
   drive it (Playwright / a capture tool); backend → smallest script/test; intermittent → run N
   times and note what flips it. Not reproducible → gather data, don't guess.
-- **Check recent changes** — `git diff` / `git log`, new deps, config, env differences.
+- **Check recent changes** — `git diff` / `git log`, new deps, config, env differences. And
+  **external** changes: a working integration/automation that suddenly breaks is often an upstream
+  site/API/credential change, not your code — check that before suspecting your own commits.
 - **Multi-component systems** (CI→build→sign, API→service→DB, stage→stage pipelines): instrument
   each **boundary** — log what data ENTERS and EXITS each component. Run once to see *where* it
   breaks, THEN dig into that component. Don't guess which layer.
@@ -132,6 +134,11 @@ line to confirm you have the right bug.
   "massive refactoring," or spawns new symptoms — **STOP. This is not a failed hypothesis; it's
   likely the wrong architecture.** Question fundamentals (is this pattern sound, or are we
   continuing through inertia?) and escalate to the human before fix #4.
+- **Live / browser-automation bug? The breaker action is a CAPTURE, not another theory.** After 2
+  loops on a UI/automation failure you can't fully observe, STOP theorizing and get **fresh
+  ground-truth from the human** — a recorded session / real DOM capture / a verbose run log. The
+  breakthrough almost always comes from the capture, not the guess. (And if you hit an
+  anti-automation/WAF wall, stop automating and go human-in-the-loop — don't try to defeat it.)
 
 ---
 
