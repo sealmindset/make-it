@@ -65,6 +65,19 @@ that default is **local-individual only** and must NOT carry into a shared/produ
 | `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
 | `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No review. |
 
+### Git hygiene on the way to merge (see `git-operations.md`)
+
+Before merging any PR, apply the `/git-it` rules so nothing lands stale or conflicting:
+- **Branch off the latest `origin/main`**, commit atomically (Conventional Commits), stage only
+  your own paths, and push feature branches with `--force-with-lease` (never plain `--force`).
+- **Fresh CI before merge.** If `main` moved since the last green run, **rebase onto `main` and
+  re-run CI** — never merge on stale green (green that predates a later `main` merge proves
+  nothing). Watch checks to completion; verify the real state before claiming merged/green.
+- **Triage the open-PR backlog (drop / refine / safe):** superseded (content already on `main`)
+  → close + delete; conflicting or stale-CI → rebase + fresh CI + verify; clean + green + wanted
+  → merge. Anything touching live/irreversible paths → verify on rehearsal/staging first.
+- **Squash-merge + delete the branch.** In shared/multi-session repos, only delete branches you own.
+
 ### Pre-Push Self-Review (runs before every push)
 
 Before committing and pushing, /ship-it runs a silent automated review to catch issues

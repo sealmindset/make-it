@@ -30,6 +30,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
+@~/.claude/make-it/references/git-operations.md
 
 </execution_context>
 

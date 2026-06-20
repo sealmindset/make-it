@@ -24,6 +24,7 @@ The user just types /wrap-it when they're done. Everything else is automatic.
 <execution_context>
 
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/git-operations.md
 
 </execution_context>
 
@@ -228,6 +229,18 @@ scripts/worktree.sh rm <branch>   # removes the worktree directory and prunes
 NEVER remove a worktree that has uncommitted changes or an unmerged branch -- leave it and
 mention it in the summary so the user can return to it. If the project has no extra worktrees,
 skip this step silently.
+
+**5. Prune stale branches you own (safe hygiene — see `git-operations.md`):**
+
+```bash
+git fetch origin --prune 2>/dev/null   # drop tracking refs for deleted remote branches
+```
+
+Offer to delete LOCAL branches that are merged into the default branch AND not checked out in any
+worktree (`git branch --merged origin/main`). This is local-only and reflog-recoverable.
+**Do NOT** delete branches or worktrees you don't own — in a shared/multi-session checkout, other
+sessions' branches and tool-managed worktrees (audit caches, agent-isolation worktrees) are
+off-limits; report them, don't remove them. Never `git push` deletes of remote branches here.
 
 </step>
 

@@ -47,6 +47,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
+@~/.claude/make-it/references/git-operations.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
