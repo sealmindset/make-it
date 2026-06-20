@@ -29,6 +29,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
+@~/.claude/make-it/references/subagent-driven-development.md
 
 </execution_context>
 
@@ -477,6 +478,10 @@ unless they ask. Full spec: `worktree-workflow.md`.
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)
 - Reference design-blueprint.md for architectural consistency
+- For a multi-task feature or an approved plan, execute it via Subagent-Driven Development
+  (`/subagent-it`, see `subagent-driven-development.md`): a fresh implementer subagent per task +
+  per-task review (spec + quality) + a final whole-branch review, instead of hand-coding inline.
+  (Independent *parallel* problems that aren't an ordered plan → `/dispatch-it`.)
 - Implement the changes
 - After changes, automatically run existing tests (if any)
 - Update CHANGELOG.md with what was added

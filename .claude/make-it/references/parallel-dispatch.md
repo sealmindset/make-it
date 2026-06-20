@@ -7,6 +7,10 @@ preserves *your* context for coordination and integration.
 
 **Core principle:** one agent per independent problem domain; let them work in parallel.
 
+**Sibling — `/subagent-it`:** dispatch-it is for *independent problems run in parallel*; for an
+*ordered implementation plan* (sequential, possibly dependent tasks), use Subagent-Driven
+Development (`subagent-driven-development.md`) — one implementer at a time with review gates.
+
 This is an agent-side technique (the `/dispatch-it` command exposes it directly; other skills
 invoke it when they hit multiple independent problems). It is invisible to the vibe-coder.
 

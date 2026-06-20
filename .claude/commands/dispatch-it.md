@@ -29,6 +29,8 @@ Full doctrine: `~/.claude/make-it/references/parallel-dispatch.md`.
 **Core principle:** one agent per independent problem domain; let them work in parallel.
 **The trick:** multiple Agent dispatches in a SINGLE response run concurrently; one per
 response runs sequentially.
+**Sibling:** for an *ordered implementation plan* (sequential, possibly dependent tasks — not
+independent problems), use `/subagent-it` (Subagent-Driven Development) instead.
 
 ---
 

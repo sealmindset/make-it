@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# =============================================================================
+# task-brief -- extract one task's text from a plan into its own file
+# =============================================================================
+# Part of /subagent-it (Subagent-Driven Development). Pulls task N's section out
+# of a plan file (markdown headings like "## Task N", "### Task N:", "Task N -")
+# into .make-it/sdd/briefs/task-N-brief.md and prints the path, so the
+# implementer reads only its task -- never the whole plan.
+#
+# Usage:
+#   task-brief PLAN_FILE N
+#
+# Heuristic: a task block starts at a heading line containing "Task N" and ends
+# at the next heading line containing "Task <number>". Verify the brief looks
+# right before dispatching; hand-edit if your plan uses a different structure.
+# =============================================================================
+set -euo pipefail
+
+PLAN="${1:?usage: task-brief PLAN_FILE N}"
+N="${2:?usage: task-brief PLAN_FILE N}"
+[ -f "$PLAN" ] || { echo "plan not found: $PLAN" >&2; exit 1; }
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || dirname "$PLAN")"
+DIR="$ROOT/.make-it/sdd/briefs"
+mkdir -p "$DIR"
+F="$DIR/task-${N}-brief.md"
+
+awk -v n="$N" '
+  # Start of THIS task: a heading mentioning "Task n" (n, optionally zero-padded),
+  # not followed by another digit (so Task 1 != Task 10).
+  $0 ~ ("^#{1,6}[[:space:]].*[Tt]ask[[:space:]_-]*0*" n "([^0-9]|$)") { inblk=1; print; next }
+  # Any other task heading ends the block.
+  inblk && $0 ~ ("^#{1,6}[[:space:]].*[Tt]ask[[:space:]_-]*[0-9]") { inblk=0 }
+  inblk { print }
+' "$PLAN" > "$F"
+
+[ -s "$F" ] || { echo "task $N not found in $PLAN (check the plan's task headings)" >&2; rm -f "$F"; exit 1; }
+echo "$F"

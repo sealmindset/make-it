@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# =============================================================================
+# review-package -- bundle a commit range into ONE file for a reviewer subagent
+# =============================================================================
+# Part of /subagent-it (Subagent-Driven Development). Writes the commit list,
+# diffstat, and full diff (-U10) for BASE..HEAD to a uniquely named scratch file
+# under .make-it/sdd/reviews/ and prints the path. The output never enters the
+# controller's context -- the reviewer reads the file in one Read call.
+#
+# Usage:
+#   review-package BASE HEAD
+#     BASE = the commit recorded BEFORE dispatching the implementer
+#            (never HEAD~1 -- it drops all but the last commit of a multi-commit task)
+#     HEAD = current branch head (or the task's last commit)
+# =============================================================================
+set -euo pipefail
+
+BASE="${1:?usage: review-package BASE HEAD}"
+HEAD="${2:?usage: review-package BASE HEAD}"
+
+ROOT="$(git rev-parse --show-toplevel)"
+b="$(git rev-parse --short "$BASE")"
+h="$(git rev-parse --short "$HEAD")"
+DIR="$ROOT/.make-it/sdd/reviews"
+mkdir -p "$DIR"
+F="$DIR/review-${b}-${h}-$$.md"
+
+{
+  echo "# Review package ${b}..${h}"
+  echo
+  echo "## Commits"
+  echo '```'
+  git log --oneline "$BASE..$HEAD"
+  echo '```'
+  echo
+  echo "## Diffstat"
+  echo '```'
+  git diff --stat "$BASE" "$HEAD"
+  echo '```'
+  echo
+  echo "## Diff (-U10)"
+  echo '```diff'
+  git diff -U10 "$BASE" "$HEAD"
+  echo '```'
+} > "$F"
+
+echo "$F"

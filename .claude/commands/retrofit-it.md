@@ -38,6 +38,9 @@ This skill has 7 phases:
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/worktree-workflow.md
+@~/.claude/make-it/references/parallel-dispatch.md
+@~/.claude/make-it/references/subagent-driven-development.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -402,6 +405,11 @@ the exact state before any retrofit changes were made.
 <!-- ============================================================ -->
 
 <step name="retrofit">
+
+**Execution model:** for a multi-step retrofit plan, drive it via Subagent-Driven Development
+(`/subagent-it`, see `subagent-driven-development.md`) -- a fresh implementer subagent per
+retrofit step + per-step review (spec + quality) + a final whole-branch review -- on a
+branch/worktree, never main. Keep steps sequential (independent parallel problems → `/dispatch-it`).
 
 **Strategy selection based on risk score:**
 

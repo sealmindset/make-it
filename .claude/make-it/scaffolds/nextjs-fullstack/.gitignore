@@ -71,3 +71,9 @@ npm-debug.log*
 # ---------------------------------------------------------------------------
 *-worktrees/
 .worktrees/
+
+# ---------------------------------------------------------------------------
+# Subagent-Driven Development scratch + ledger (.make-it/sdd/) -- recoverable from git log
+# (note: .make-it/app-context.json IS committed; only the sdd/ subdir is ignored)
+# ---------------------------------------------------------------------------
+.make-it/sdd/

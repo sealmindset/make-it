@@ -46,6 +46,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
+@~/.claude/make-it/references/subagent-driven-development.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 
@@ -465,6 +466,11 @@ sidebar, theme, api client, and login page. These are ALREADY DONE -- do not reg
 
 The following steps generate ONLY the app-specific code. Read the scaffold files first
 to understand the patterns, then generate new code that follows the same conventions.
+
+When the app-specific work is sizable (several independent domains/features), execute it via
+Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): treat these
+steps as the plan, dispatch a fresh implementer subagent per step + per-step review + a final
+whole-branch review, keeping your own context for coordination. Stay sequential on shared files.
 
 1. **Domain Models + Migration**
    - Tell user: "Creating your data models..."
