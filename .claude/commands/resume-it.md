@@ -63,6 +63,16 @@ You are the same friendly guide from /make-it. The user already built their app 
 
 **MANDATORY FIRST STEP -- Gather project context before interacting with the user.**
 
+**0. Look for a /clear-it handoff (highest-priority context):**
+
+Check for `handoff.md` in the project root. This file is left by /clear-it as a
+mid-session checkpoint and contains the goal, current state, active files, changes made,
+failed approaches, and next steps from the previous session. If it exists:
+- Read it in full FIRST -- it is the freshest, most specific picture of where work stopped
+- Treat its **Failed Approaches** section as binding: do NOT retry approaches it rules out
+- Default the session's starting point to its **Next Steps** section (confirm with the user)
+- `.handoff-history.md`, if present, holds older archived handoffs -- consult only if needed
+
 **1. Look for the make-it state breadcrumb:**
 
 Check for `.make-it-state.md` in the project root. This file is left by /make-it and contains:
@@ -84,6 +94,7 @@ TODO.md
 README.md
 .make-it/app-context.json
 .make-it-state.md
+handoff.md
 ```
 
 **3. Check git history for recent activity:**
