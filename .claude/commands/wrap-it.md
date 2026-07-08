@@ -86,7 +86,11 @@ CHANGELOG.md
 TODO.md
 .make-it-state.md
 .make-it/app-context.json
+handoff.md
 ```
+
+If `handoff.md` exists (left by /clear-it), fold its next steps and failed approaches
+into the state files you update below -- do not delete it; /resume-it reads it first.
 
 **4. Build a mental model of:**
 - Project name (from app-context.json, README, or directory name)
