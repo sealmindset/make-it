@@ -941,6 +941,17 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 
 ## Version History
 
+### v1.20.0 -- Expert-Persona Layer
+
+Before high-stakes work, skills now adopt a specialist persona instead of working as a generalist -- a role-prompting quality lever. The persona is auto-inferred from `app-context.json` signals x the active skill: no user prompt, never gates, and stays a generalist below threshold.
+
+- Added `references/expert-personas.md`: persona catalog (identity + mental model + generalist blind spot + output standard), auto-inference rules, and skill invocation contract
+- `/debug-it` adopts SRE / performance engineer; `/nemo-it` + `/fix-it` adopt application security engineer; `/argo-it` adopts platform / DevOps + SRE; `/retrofit-it` adopts software architect
+- `/dispatch-it` and `/subagent-it` inject the matching persona into each spawned worker's brief (per-domain / per-task)
+- `/make-it` Design silently infers the dominant persona and caches it in `app-context.expert_persona`
+- Added `expert_persona` field to `templates/app-context.md`
+- Added `confluence-docs/`: business-user documentation for the whole framework, with a "Which expert does the AI become?" section per skill
+
 ### v1.7.0 -- Variant System, Argo CD, and Build Hardening
 
 Adds a plugin architecture for project variants, Kubernetes deployment via Argo CD, and multiple build quality improvements.
