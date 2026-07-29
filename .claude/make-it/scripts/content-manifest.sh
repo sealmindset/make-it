@@ -41,11 +41,22 @@ sha256_of() {
 }
 
 # Files that exist in a working tree but are never part of the published surface.
+#
+# Build artifacts matter here as much as OS cruft: running a scaffold service
+# leaves __pycache__/*.pyc behind, and a manifest that lists a GITIGNORED file is
+# actively harmful -- the installer never installs ignored files, so every user's
+# update check would report MISSING for it forever. (This happened: a local test
+# run of mock-oidc put app.cpython-313.pyc into the manifest.)
 is_excluded() {
   case "$1" in
     *.DS_Store) return 0 ;;
     settings.local.json | */settings.local.json) return 0 ;;
     make-it/VERSION | make-it/CONTENT_MANIFEST) return 0 ;;
+    # Build / dependency / cache artifacts
+    *__pycache__/* | *.pyc | *.pyo) return 0 ;;
+    *node_modules/* | *.next/* | *.turbo/*) return 0 ;;
+    *.venv/* | */venv/* | *.egg-info/*) return 0 ;;
+    *.pytest_cache/* | *.ruff_cache/* | *.mypy_cache/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -57,14 +68,29 @@ generate() {
   [ -d "$base/commands" ] || { echo "ERROR: $base/commands not found" >&2; exit 1; }
   [ -d "$base/make-it" ] || { echo "ERROR: $base/make-it not found" >&2; exit 1; }
 
-  # Only the two directories install.sh actually installs.
-  {
-    find "$base/commands" -maxdepth 1 -type f -name '*.md'
-    find "$base/make-it" -type f
-  } | {
-    while IFS= read -r f; do
-      rel="${f#"$base"/}"
+  # Prefer git's file list when we are inside a repo: the manifest must describe
+  # what the repo PUBLISHES, never whatever happens to sit in a working tree.
+  # `find` cannot tell a tracked file from a gitignored build artifact, and
+  # manifesting an ignored file breaks every consumer (see is_excluded above).
+  # The find path remains for tarball installs, where there is no .git; the
+  # exclusion list keeps the two paths in agreement for a clean tree.
+  if command -v git >/dev/null 2>&1 && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "$root" ls-files -- '.claude/commands/*.md' '.claude/make-it'
+  else
+    {
+      find "$base/commands" -maxdepth 1 -type f -name '*.md'
+      find "$base/make-it" -type f
+    } | while IFS= read -r f; do
+      # Normalise to a repo-root-relative path so both branches agree.
+      printf '%s\n' ".claude/${f#"$base"/}"
+    done
+  fi | {
+    while IFS= read -r repo_rel; do
+      [ -n "$repo_rel" ] || continue
+      rel="${repo_rel#.claude/}"
       is_excluded "$rel" && continue
+      f="$root/$repo_rel"
+      [ -f "$f" ] || continue
       printf '%s  %s\n' "$(sha256_of "$f")" "$rel"
     done
   } | LC_ALL=C sort -k2

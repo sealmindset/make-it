@@ -160,7 +160,6 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 ed2eb6ebc84f855691f6e031d8977cb14bbc3e81635e0f869e177198dd9bc932  make-it/scaffolds/fastapi-nextjs/frontend/tailwind.config.ts
 f376074b41f9ea59f63682af69f0a3b19879dc22751dc68479e8cacf83255600  make-it/scaffolds/fastapi-nextjs/frontend/tsconfig.json
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/Dockerfile
-56435acb0484f78d9db6477178e72dc30ab37321c2fc0fc459df6dc6c8d18615  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/__pycache__/app.cpython-313.pyc
 7719b9908602199e66a7d229259ba3b853aece4f2a87dd432de4ae3c700468a5  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/app.py
 a8b2a47f065be976c9d616d10f67118d534edf700704a58e43991a5fa2917ff8  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
 359b368676370a3e08da9ea260d341a3b18e0daa6fbf771383f3a1e7f68e7a7f  make-it/scaffolds/fastapi-nextjs/pyproject.toml
@@ -244,7 +243,7 @@ dcc97fff9ea94df0d2169a670571832122b1102a50ca712a8169a8158211a77c  make-it/scaffo
 4889cd502853e5aea5c681b08bf83ff74fb3242d5dda4bf59807e70a7c993cc5  make-it/scaffolds/overlays/pwa/frontend/lib/use-online-status.ts
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/overlays/pwa/frontend/public/icons/.gitkeep
 73cc5b4d9579e68001f68c131b918538da48aa824828e84405db7f93e8c88c4f  make-it/scaffolds/overlays/pwa/frontend/public/manifest.json
-033d11331d10668a681ac95053379d1d666f2396f4801416b7dd9e42c7d47cb5  make-it/scripts/content-manifest.sh
+878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
 fe758d3504d1ec1aac0498fa7f0b173da517ccfefd1fec181f8bdbf3b09947fb  make-it/sdd/implementer-prompt.md
 6495a6471a5c4e84842b451d4f38e893b379c1c37fb3a4f897bd564da65d0d02  make-it/sdd/scripts/review-package
 88b979defceb0005dbdf7a985aa0603ae272ab67bb68ed1ed4260f015944d288  make-it/sdd/scripts/task-brief
