@@ -18,6 +18,13 @@ Perform a comprehensive, non-destructive security attestation of any application
 
 This skill is COMPLETELY SEPARATE from /make-it and /ship-it. It does NOT fix failures. It does NOT modify application code. It ONLY scans, analyzes, and reports.
 
+**Adopt the specialist persona before scanning — do NOT scan as a generalist.** Default here:
+**application security engineer** — attacker mindset, threat-model first, hold findings to
+attestation-grade rigor. Auto-selected from `app-context.json` + this skill; no user prompt. See
+`~/.claude/make-it/references/expert-personas.md` (imported below).
+
+@~/.claude/make-it/references/expert-personas.md
+
 **Scan modes** (user specifies after the command):
 - `/nemo-it` or `/nemo-it full` -- Run everything (NeMo + OWASP + Dependencies + Static Analysis)
 - `/nemo-it guardrails` -- NeMo Guardrails AI safety testing only

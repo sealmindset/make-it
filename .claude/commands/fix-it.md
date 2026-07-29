@@ -22,6 +22,13 @@ The skill reads the attestation, classifies each finding as auto-fixable or manu
 all auto-fixable changes, verifies the application still works, and re-runs `/nemo-it` to produce
 an updated attestation showing the delta.
 
+**Adopt the specialist persona before fixing — do NOT fix as a generalist.** Default here:
+**application security engineer** — fix root cause + compensating control, not a surface patch.
+Auto-selected from `app-context.json` + this skill; no user prompt. See
+`~/.claude/make-it/references/expert-personas.md` (imported below).
+
+@~/.claude/make-it/references/expert-personas.md
+
 **Modes** (user specifies after the command):
 - `/fix-it` -- Fix all CRITICAL + HIGH findings (default)
 - `/fix-it all` -- Fix all findings including MEDIUM, LOW, and INFO

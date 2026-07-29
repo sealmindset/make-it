@@ -148,6 +148,7 @@ This template is populated by /make-it as the user answers questions. It becomes
   },
   "pages": [],
   "prompts_to_run": [],
+  "expert_persona": "",
   "skipped_guardrails": {}
 }
 ```
@@ -226,6 +227,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | deployment.target | Design | Populated from cloud.provider during Design |
 | security_scanner.type | Design / Enterprise config | Auto-detected from environment or asked in enterprise contexts -- values: "auditgithub" \| "github-advanced-security" \| "snyk" \| "sonarqube" \| "none" \| "" |
 | pages | Design | Derived from features |
+| expert_persona | Design / any skill | Optional cached hint of the dominant expert persona for this project (see `references/expert-personas.md`). Skills infer per-run from signals + active skill; this is only a recorded default. |
 | skipped_guardrails | Design | Documents why non-active-tier guardrails were skipped |
 
 ## Skipped Guardrails Documentation

@@ -324,6 +324,15 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
    - Real users -> Full production setup
    - Testing -> Prototype mode (simpler infra, can upgrade later)
 
+**Expert persona (SILENT -- no user question):**
+
+Reference `references/expert-personas.md`. From the app-context signals just gathered
+(sensitive data, scale, deployment target, AI depth, integrations), infer the **dominant expert
+persona** this build's sub-agents should adopt instead of a generalist, and record it in
+`expert_persona`. This is a build-quality lever, not a staffing recommendation -- the AI *becomes*
+the specialist for the risky work. No question to the user; it shapes how code is generated,
+reviewed, and hardened behind the scenes.
+
 **For everything else, use smart defaults from the design-blueprint.md:**
 - Stack selection: Use the decision tree based on app_type and features
 - Security: Always Tier 1, Tier 2 if going to production

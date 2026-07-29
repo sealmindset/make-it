@@ -21,6 +21,17 @@ Systematic debugging is FASTER than guess-and-check, especially under pressure.
 
 </objective>
 
+<expert_persona>
+
+Before investigating, adopt the specialist persona this work calls for — do NOT work as a
+generalist. Infer it from `app-context.json` signals + this skill (default here: **SRE /
+performance engineer** — think races, GC, N+1, resource limits, not "add a retry"). Auto-selected,
+no user prompt; work in character to that persona's output standard. See the reference below.
+
+@~/.claude/make-it/references/expert-personas.md
+
+</expert_persona>
+
 # /debug-it -- root cause first, no looping until 1AM
 
 > A project may ship its own `/debug-it` that shadows this one (capture tools, live-system
