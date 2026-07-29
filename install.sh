@@ -66,17 +66,30 @@ fetch_remote_manifest() {
   curl -fsSL "${GITHUB_RAW}/CONTENT_MANIFEST" -o "$1" 2>/dev/null && [ -s "$1" ]
 }
 
+# Download the published verifier to $1. Returns non-zero if unavailable.
+#
+# The check must NOT depend on the verifier already being installed: an install
+# that predates this feature has no verifier, which is exactly the install whose
+# content is most likely stale. Depending on the local copy there would fall back
+# to a version-only check and hide the update. So fetch it.
+fetch_remote_verifier() {
+  curl -fsSL "${GITHUB_RAW}/.claude/make-it/scripts/content-manifest.sh" -o "$1" 2>/dev/null && [ -s "$1" ]
+}
+
 # Compare the INSTALLED files against a manifest.
 #   0 = content matches      1 = drift detected      2 = cannot determine
 # On drift, the per-file detail from the verifier is echoed to stdout.
 CONTENT_DETAIL=""
 content_status() {
-  local manifest="$1" rc=0
+  local manifest="$1" verifier="${2:-}" rc=0
   [ -f "$manifest" ] || return 2
-  [ -f "$CONTENT_SCRIPT" ] || return 2
   [ -d "$CLAUDE_DIR" ] || return 2
 
-  CONTENT_DETAIL="$(bash "$CONTENT_SCRIPT" verify "$manifest" "$CLAUDE_DIR" 2>&1)" || rc=$?
+  # Prefer a freshly-fetched verifier; fall back to the installed one.
+  [ -n "$verifier" ] && [ -f "$verifier" ] || verifier="$CONTENT_SCRIPT"
+  [ -f "$verifier" ] || return 2
+
+  CONTENT_DETAIL="$(bash "$verifier" verify "$manifest" "$CLAUDE_DIR" 2>&1)" || rc=$?
   # The verifier exits 2 only when it cannot run at all (bad args / missing paths);
   # 1 means it ran and found drift. Keep those outcomes distinct.
   case "$rc" in
@@ -298,7 +311,7 @@ report() {
 # ---------------------------------------------------------------------------
 
 check_update() {
-  local current remote tmp_manifest cstat
+  local current remote tmp_manifest tmp_verifier cstat
   current="$(installed_version)"
   remote="$(remote_version)"
 
@@ -317,8 +330,9 @@ check_update() {
   # changed content without bumping VERSION, and local files can be edited after
   # install. Compare actual file content against the published manifest.
   tmp_manifest="$(mktemp)"
+  tmp_verifier="$(mktemp)"
   # shellcheck disable=SC2064
-  trap "rm -f '$tmp_manifest'" RETURN
+  trap "rm -f '$tmp_manifest' '$tmp_verifier'" RETURN
 
   if ! fetch_remote_manifest "$tmp_manifest"; then
     echo "You're on v${current} (matching the latest published version)."
@@ -327,8 +341,11 @@ check_update() {
     return 0
   fi
 
+  # Best-effort: if this fails, content_status falls back to the installed copy.
+  fetch_remote_verifier "$tmp_verifier" || true
+
   cstat=0
-  content_status "$tmp_manifest" || cstat=$?
+  content_status "$tmp_manifest" "$tmp_verifier" || cstat=$?
   case "$cstat" in
     0)
       echo "You're already on the latest version (v${current}), and all content matches."
