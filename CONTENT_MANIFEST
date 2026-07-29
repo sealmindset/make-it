@@ -161,7 +161,7 @@ ed2eb6ebc84f855691f6e031d8977cb14bbc3e81635e0f869e177198dd9bc932  make-it/scaffo
 f376074b41f9ea59f63682af69f0a3b19879dc22751dc68479e8cacf83255600  make-it/scaffolds/fastapi-nextjs/frontend/tsconfig.json
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/Dockerfile
 7719b9908602199e66a7d229259ba3b853aece4f2a87dd432de4ae3c700468a5  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/app.py
-65498b41b42da4a6ef3360c68d687398861d69f03fc9a09fbbd21c6ed209b1c5  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
+a8b2a47f065be976c9d616d10f67118d534edf700704a58e43991a5fa2917ff8  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
 359b368676370a3e08da9ea260d341a3b18e0daa6fbf771383f3a1e7f68e7a7f  make-it/scaffolds/fastapi-nextjs/pyproject.toml
 9c66da23d70ab4242ffd543293778f7f99acd73870bf57d54534a2b607fa0bc4  make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh
 794bdeaa8f1f9c59fd5f338615f6bc79a9ad2d17789e44ebee35a3383f69c416  make-it/scaffolds/fastapi-nextjs/scripts/worktree.sh
@@ -179,7 +179,7 @@ df6ada73b40d268e916188e82e207114182dfc9d7d21d3f56558502cbf764d92  make-it/scaffo
 668884f4903d8d9280d610d0647799927dfae24d787d9525124c4308d9a80213  make-it/scaffolds/nextjs-fullstack/eslint.config.mjs
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/Dockerfile
 28a97b0cb14aaa20bd4ed4a072eb4a6d3dc8fa244304b1df8655de7877e6abae  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/app.py
-65498b41b42da4a6ef3360c68d687398861d69f03fc9a09fbbd21c6ed209b1c5  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/requirements.txt
+a8b2a47f065be976c9d616d10f67118d534edf700704a58e43991a5fa2917ff8  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/requirements.txt
 64429a3b3ec4001151c5af63647eae573e8cd483de0801e03fe754846d1b0697  make-it/scaffolds/nextjs-fullstack/next.config.ts
 bfe93c89ffa9821f2d9b2f90faf21b9159cb4184c457e61d31f6a656c6f7fb38  make-it/scaffolds/nextjs-fullstack/package.json
 ac31e2a95ef64fe27ceb4124e101675273107aae2e33bc490b01d919e7f03646  make-it/scaffolds/nextjs-fullstack/postcss.config.mjs
@@ -243,7 +243,7 @@ dcc97fff9ea94df0d2169a670571832122b1102a50ca712a8169a8158211a77c  make-it/scaffo
 4889cd502853e5aea5c681b08bf83ff74fb3242d5dda4bf59807e70a7c993cc5  make-it/scaffolds/overlays/pwa/frontend/lib/use-online-status.ts
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/overlays/pwa/frontend/public/icons/.gitkeep
 73cc5b4d9579e68001f68c131b918538da48aa824828e84405db7f93e8c88c4f  make-it/scaffolds/overlays/pwa/frontend/public/manifest.json
-033d11331d10668a681ac95053379d1d666f2396f4801416b7dd9e42c7d47cb5  make-it/scripts/content-manifest.sh
+878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
 fe758d3504d1ec1aac0498fa7f0b173da517ccfefd1fec181f8bdbf3b09947fb  make-it/sdd/implementer-prompt.md
 6495a6471a5c4e84842b451d4f38e893b379c1c37fb3a4f897bd564da65d0d02  make-it/sdd/scripts/review-package
 88b979defceb0005dbdf7a985aa0603ae272ab67bb68ed1ed4260f015944d288  make-it/sdd/scripts/task-brief
