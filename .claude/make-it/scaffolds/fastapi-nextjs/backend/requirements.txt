@@ -1,19 +1,30 @@
-fastapi
-uvicorn[standard]
-sqlalchemy[asyncio]
-asyncpg
-alembic
-pydantic-settings
-PyJWT
-httpx
-python-multipart
+# Pinned for reproducibility. Unpinned requirements resolve to whatever is latest
+# at install time, so two builds of the same commit can differ -- and Dependabot
+# cannot report an advisory against a dependency with no declared version, which
+# is exactly why this file's PyJWT and python-multipart were invisible to it while
+# the same packages were flagged in mock-services/mock-oidc/requirements.txt.
+#
+# These versions were resolved TOGETHER by pip (not looked up package by package),
+# so they are known mutually compatible: `pip check` reports no broken requirements.
+#
+# To refresh: install this file with the pins removed in a clean venv, run
+# `pip check`, then pin to the versions pip resolved.
+fastapi==0.141.1
+uvicorn[standard]==0.52.0
+sqlalchemy[asyncio]==2.0.51
+asyncpg==0.31.0
+alembic==1.18.5
+pydantic-settings==2.14.2
+PyJWT==2.13.0
+httpx==0.28.1
+python-multipart==0.0.32
 
 # Test dependencies
-pytest
-pytest-asyncio
-pytest-cov
-aiosqlite
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+aiosqlite==0.22.1
 
 # Quality / dev tools
-ruff
-mypy
+ruff==0.16.0
+mypy==2.3.0

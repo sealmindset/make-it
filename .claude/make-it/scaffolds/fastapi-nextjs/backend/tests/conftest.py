@@ -18,23 +18,34 @@ from app.models.base import Base
 from app.schemas.auth import UserInfo
 
 # ---------------------------------------------------------------------------
-# SQLite UUID compatibility
+# SQLite compatibility for PostgreSQL column types
 # ---------------------------------------------------------------------------
-# PostgreSQL UUID columns don't work with SQLite. Override the dialect-level
-# compilation so UUID is stored as CHAR(36) in SQLite.
+# These tests run against in-memory SQLite, which cannot compile PostgreSQL
+# dialect types. Override the dialect-level compilation for each PG type the
+# models use, so metadata.create_all() succeeds:
+#   UUID  -> CHAR(36)
+#   JSONB -> JSON      (SQLite's JSON1; SQLAlchemy maps it to TEXT storage)
+#
+# Any new PostgreSQL-specific type added to a model needs a shim here, or every
+# test errors at table-creation time with "can't render element of type X".
 
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects import sqlite as sqlite_dialect
 
 
 @pytest.fixture(autouse=True)
-def _patch_uuid_for_sqlite():
-    """Make PostgreSQL UUID columns work with SQLite by rendering as CHAR(36)."""
+def _patch_pg_types_for_sqlite():
+    """Make PostgreSQL column types compile under SQLite."""
     from sqlalchemy.ext.compiler import compiles
 
     @compiles(PG_UUID, "sqlite")
     def _compile_uuid_sqlite(type_, compiler, **kw):
         return "CHAR(36)"
+
+    @compiles(PG_JSONB, "sqlite")
+    def _compile_jsonb_sqlite(type_, compiler, **kw):
+        return "JSON"
 
     yield
 
