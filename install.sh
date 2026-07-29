@@ -32,6 +32,21 @@ ok()    { echo "  + $*"; }
 warn()  { echo "  WARN: $*"; }
 fail()  { echo ""; echo "  ERROR: $*"; echo ""; exit 1; }
 
+# abs_path resolves a path to absolute form without requiring it to exist
+# (only its parent must exist). Used to compare source and destination.
+abs_path() {
+  local d b
+  d="$(dirname "$1")"
+  b="$(basename "$1")"
+  if [ -d "$d" ]; then
+    printf '%s/%s\n' "$(cd "$d" && pwd)" "$b"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+same_path() { [ "$(abs_path "$1")" = "$(abs_path "$2")" ]; }
+
 installed_version() {
   if [ -f "$VERSION_FILE" ]; then
     cat "$VERSION_FILE" | tr -d '[:space:]'
@@ -49,10 +64,28 @@ remote_version() {
 # ---------------------------------------------------------------------------
 
 detect_source() {
-  # Check if we're running from inside the cloned repo
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+  # Check if we're running from inside the cloned repo.
+  #
+  # BASH_SOURCE[0] is only meaningful when this script is a real FILE on disk.
+  # Under `curl ... | bash` there is no file: BASH_SOURCE is unset and $0 is
+  # "bash", so `dirname` yields "." and SCRIPT_DIR would silently become the
+  # CALLER'S cwd. If that cwd happens to hold a .claude/commands +
+  # .claude/make-it pair -- which $HOME always does once installed -- we would
+  # treat the install TARGET as the source and copy it onto itself.
+  # So: only trust SCRIPT_DIR when we can prove we are a file, and never accept
+  # $HOME or ~/.claude as a source tree.
+  local src="${BASH_SOURCE[0]:-}"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$src")" 2>/dev/null && pwd || echo "")"
+  else
+    SCRIPT_DIR=""
+  fi
 
-  if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/.claude/commands" ] && [ -d "$SCRIPT_DIR/.claude/make-it" ]; then
+  if [ -n "$SCRIPT_DIR" ] \
+    && [ "$SCRIPT_DIR" != "$HOME" ] \
+    && [ "$SCRIPT_DIR" != "$CLAUDE_DIR" ] \
+    && [ -d "$SCRIPT_DIR/.claude/commands" ] \
+    && [ -d "$SCRIPT_DIR/.claude/make-it" ]; then
     SOURCE="local"
     REPO_DIR="$SCRIPT_DIR"
   else
@@ -99,6 +132,20 @@ download_repo() {
 # ---------------------------------------------------------------------------
 
 install_skills() {
+  # Refuse to install a source tree onto itself. Without this, a mis-detected
+  # REPO_DIR (e.g. $HOME) makes the copies below self-referential -- and the
+  # `rm -rf "$MAKEIT_DIR"` further down would DELETE the very directory it is
+  # about to copy from, destroying the installation. Fail loudly instead.
+  if same_path "$REPO_DIR/.claude/commands" "$COMMANDS_DIR" \
+    || same_path "$REPO_DIR/.claude/make-it" "$MAKEIT_DIR"; then
+    fail "Refusing to install: source and destination are the same directory.
+    source: $REPO_DIR
+    target: $CLAUDE_DIR
+  This means the installer could not tell where it was run from.
+  Re-run from a real clone (bash install.sh), or:
+    cd /tmp && curl -fsSL ${GITHUB_RAW}/install.sh | bash"
+  fi
+
   mkdir -p "$COMMANDS_DIR"
   mkdir -p "$MAKEIT_DIR"
 
