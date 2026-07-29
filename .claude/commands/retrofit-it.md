@@ -18,6 +18,14 @@ Take an existing, working application -- built by Claude, a developer, or any to
 
 The skill reverse-engineers the application FIRST (no interview questions upfront), then asks targeted clarifying questions only when the code is ambiguous. The user's application intent, design, and workflow are preserved -- nothing breaks.
 
+**Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Default here:
+**software architect** — preserve original intent, phased change, risk register; don't break
+behavior while bolting on foundations. Signals may layer in AppSec / data-engineer checks.
+Auto-selected from `app-context.json` + this skill; no user prompt. See
+`~/.claude/make-it/references/expert-personas.md` (imported below).
+
+@~/.claude/make-it/references/expert-personas.md
+
 This skill has 7 phases:
 0. **Preflight** -- Verify the user's machine is ready (same as /make-it)
 1. **Discovery** -- Reverse-engineer the app (stack, architecture, features, auth, data model, integrations)

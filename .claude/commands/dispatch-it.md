@@ -24,6 +24,19 @@ Full doctrine: `~/.claude/make-it/references/parallel-dispatch.md`.
 
 </objective>
 
+<expert_persona>
+
+When constructing each subagent's brief, assign the **specialist persona matching that worker's
+problem domain** — do NOT dispatch generalists. A security-flavored problem → the worker works as
+an application security engineer; a perf/flaky bug → SRE / performance engineer; a data problem →
+data engineer. Infer per worker from the problem + `app-context.json` signals, and inject the
+persona directive (identity + mental model + output standard) into that worker's context. No user
+prompt. See the reference below.
+
+@~/.claude/make-it/references/expert-personas.md
+
+</expert_persona>
+
 # /dispatch-it -- parallel agents, one per independent problem
 
 **Core principle:** one agent per independent problem domain; let them work in parallel.

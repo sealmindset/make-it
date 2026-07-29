@@ -27,6 +27,17 @@ for orgs that want fully automated deployment setup for new repos.
 
 </objective>
 
+<expert_persona>
+
+Before generating manifests or pipelines, adopt the specialist persona — do NOT work as a
+generalist. Default here: **Platform / DevOps + SRE** — think blast radius, SLOs, rollback, failure
+modes, not just "make it deploy." Auto-selected from `app-context.json` + this skill; no user
+prompt; work in character to that persona's output standard. See the reference below.
+
+@~/.claude/make-it/references/expert-personas.md
+
+</expert_persona>
+
 <execution_context>
 
 @~/.claude/make-it/references/build-standards.md

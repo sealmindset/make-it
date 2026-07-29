@@ -24,6 +24,18 @@ Full doctrine: `~/.claude/make-it/references/subagent-driven-development.md`.
 
 </objective>
 
+<expert_persona>
+
+When constructing each task's implementer brief (and its reviewer brief), assign the **specialist
+persona matching that task's domain** — do NOT dispatch generalists. Infer per task from the task
+text + `app-context.json` signals, and inject the persona directive (identity + mental model +
+output standard) into that subagent's context so it implements/reviews to the expert's standard.
+No user prompt. See the reference below.
+
+@~/.claude/make-it/references/expert-personas.md
+
+</expert_persona>
+
 # /subagent-it -- Subagent-Driven Development
 
 **Core principle:** fresh subagent per task + task review (spec + quality) + broad final review.
