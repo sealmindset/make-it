@@ -1,0 +1,64 @@
+name: Content Manifest
+
+# WHY THIS EXISTS
+#   /make-it update detects whether an install is current by comparing installed
+#   files against the published CONTENT_MANIFEST. If a commit changes .claude/
+#   content but leaves the manifest stale, the manifest describes the PREVIOUS
+#   release -- and every update check then reports phantom drift it cannot
+#   distinguish from a real change. That is noise, and noise trains people to
+#   ignore the signal.
+#
+#   v1.22.0 shipped exactly that way: commands/make-it.md,
+#   references/guardrails.md and templates/app-context.md changed without the
+#   manifest being regenerated, so `main` failed to verify against its own
+#   manifest. The pre-commit hook (scripts/hooks/pre-commit) prevents this, but
+#   it is per-clone and has to be installed -- so it gets missed. CI is the only
+#   place this cannot be forgotten.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  manifest:
+    name: CONTENT_MANIFEST is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate the manifest from this tree
+        run: bash .claude/make-it/scripts/content-manifest.sh generate . > /tmp/expected-manifest
+
+      - name: Compare against the committed manifest
+        run: |
+          if diff -u CONTENT_MANIFEST /tmp/expected-manifest; then
+            echo "CONTENT_MANIFEST matches the tree ($(wc -l < CONTENT_MANIFEST | tr -d ' ') files)."
+            exit 0
+          fi
+          echo ""
+          echo "::error title=CONTENT_MANIFEST is stale::The manifest does not describe this tree. Regenerate and commit it."
+          cat >&2 <<'EOF'
+
+          The unified diff above shows which entries are wrong:
+            "-" lines = the stale hash currently committed
+            "+" lines = the correct hash for the file as it is now
+
+          Fix:
+            .claude/make-it/scripts/content-manifest.sh generate . > CONTENT_MANIFEST
+            git add CONTENT_MANIFEST && git commit --amend --no-edit
+
+          To stop this recurring, install the hook once per clone:
+            ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit
+
+          Why it matters: /make-it update compares installed files against the
+          published manifest. A stale manifest makes every update check report
+          drift that is not real, which is indistinguishable from a genuine
+          content change.
+          EOF
+          exit 1
+
+      - name: Verify the tree against its own manifest
+        # Belt and braces: `generate` and `verify` are separate code paths, so a
+        # bug in one is caught by the other disagreeing.
+        run: bash .claude/make-it/scripts/content-manifest.sh verify CONTENT_MANIFEST .claude
