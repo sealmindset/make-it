@@ -89,25 +89,44 @@ If the user typed `/make-it update`:
 
 1. Tell the user: "Checking for updates..."
 
-2. Check the currently installed version:
+2. Run the check. Do NOT hand-roll a version comparison here -- `install.sh check`
+   is the single source of truth, and it compares **file content** (via the published
+   `CONTENT_MANIFEST`) in addition to the VERSION string:
+
 ```bash
-cat ~/.claude/make-it/VERSION 2>/dev/null || echo "none"
+cd /tmp && curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash -s -- check; echo "check_exit=$?"
 ```
 
-3. Check the latest remote version:
-```bash
-curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/VERSION 2>/dev/null | tr -d '[:space:]'
-```
+   Why `cd /tmp`: the installer must not be run from a directory that contains a
+   `.claude/commands` + `.claude/make-it` pair (e.g. `$HOME`) -- see the source-detection
+   guard in install.sh. `bash -s -- check` only checks; it installs nothing.
 
-4. Compare versions:
-   - **If same version:** Tell the user "You're already on the latest version (vX.Y.Z). No update needed."
-   - **If different (or installed version is "none"):** Tell the user "Update available: vX.Y.Z -> vA.B.C. Downloading and installing now..." then run:
+   Why content and not just VERSION: a release can change content **without** bumping
+   VERSION, and installed files can be edited locally. A version-string match alone is
+   not evidence of being current -- that false negative is exactly what this replaced.
+
+3. Act on the exit code:
+   - **`check_exit=0`** -- already current. Report the message it printed verbatim
+     (it distinguishes "content verified" from a version-only check when the manifest
+     could not be fetched). Then STOP.
+   - **`check_exit=2`** -- an update is available (newer version, OR same version with
+     differing content -- the output says which, and lists the differing files). Tell the
+     user what changed, then install:
      ```bash
-     curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
+     cd /tmp && curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash
      ```
-   - **If remote check fails:** Tell the user "Couldn't check for updates. Please verify your internet connection and try again."
+   - **`check_exit=1`** -- the check itself failed (no network). Tell the user:
+     "Couldn't check for updates. Please verify your internet connection and try again."
 
-5. After a successful update, tell the user:
+4. After a successful install, confirm what actually landed rather than assuming:
+```bash
+cat ~/.claude/make-it/VERSION
+cd /tmp && curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash -s -- check
+```
+   The re-check should now report content verified. If it still reports drift, say so --
+   do not claim success.
+
+5. Then tell the user:
    "Update complete! Please restart Claude Code for the changes to take effect. Just type `exit` and reopen Claude Code."
 
 6. **STOP here. Do NOT continue to Preflight or any other phase.** The update flow is complete.

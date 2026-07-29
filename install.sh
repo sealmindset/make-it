@@ -22,6 +22,8 @@ CLAUDE_DIR="${HOME}/.claude"
 COMMANDS_DIR="${CLAUDE_DIR}/commands"
 MAKEIT_DIR="${CLAUDE_DIR}/make-it"
 VERSION_FILE="${MAKEIT_DIR}/VERSION"
+MANIFEST_FILE="${MAKEIT_DIR}/CONTENT_MANIFEST"
+CONTENT_SCRIPT="${MAKEIT_DIR}/scripts/content-manifest.sh"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -57,6 +59,31 @@ installed_version() {
 
 remote_version() {
   curl -fsSL "${GITHUB_RAW}/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown"
+}
+
+# Download the published content manifest to $1. Returns non-zero if unavailable.
+fetch_remote_manifest() {
+  curl -fsSL "${GITHUB_RAW}/CONTENT_MANIFEST" -o "$1" 2>/dev/null && [ -s "$1" ]
+}
+
+# Compare the INSTALLED files against a manifest.
+#   0 = content matches      1 = drift detected      2 = cannot determine
+# On drift, the per-file detail from the verifier is echoed to stdout.
+CONTENT_DETAIL=""
+content_status() {
+  local manifest="$1" rc=0
+  [ -f "$manifest" ] || return 2
+  [ -f "$CONTENT_SCRIPT" ] || return 2
+  [ -d "$CLAUDE_DIR" ] || return 2
+
+  CONTENT_DETAIL="$(bash "$CONTENT_SCRIPT" verify "$manifest" "$CLAUDE_DIR" 2>&1)" || rc=$?
+  # The verifier exits 2 only when it cannot run at all (bad args / missing paths);
+  # 1 means it ran and found drift. Keep those outcomes distinct.
+  case "$rc" in
+    0) return 0 ;;
+    2) return 2 ;;
+    *) return 1 ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -184,6 +211,28 @@ install_skills() {
   else
     echo "0.0.0" > "$VERSION_FILE"
   fi
+
+  # Install the content manifest so `check_update` can detect drift later, and
+  # confirm the COMMITTED manifest actually describes the tree we just installed.
+  # A stale manifest is exactly how a content-only release goes unnoticed, so say
+  # so loudly rather than shipping a manifest that lies.
+  if [ -f "$REPO_DIR/CONTENT_MANIFEST" ]; then
+    cp "$REPO_DIR/CONTENT_MANIFEST" "$MANIFEST_FILE"
+    if [ -f "$CONTENT_SCRIPT" ]; then
+      local fresh
+      fresh="$(mktemp)"
+      if bash "$CONTENT_SCRIPT" generate "$REPO_DIR" >"$fresh" 2>/dev/null; then
+        if ! diff -q "$REPO_DIR/CONTENT_MANIFEST" "$fresh" >/dev/null 2>&1; then
+          warn "CONTENT_MANIFEST is out of date for this source tree."
+          warn "Regenerate and commit it:"
+          warn "  .claude/make-it/scripts/content-manifest.sh generate . > CONTENT_MANIFEST"
+        fi
+      fi
+      rm -f "$fresh"
+    fi
+  else
+    warn "No CONTENT_MANIFEST in source -- update checks will be version-only."
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -249,7 +298,7 @@ report() {
 # ---------------------------------------------------------------------------
 
 check_update() {
-  local current remote
+  local current remote tmp_manifest cstat
   current="$(installed_version)"
   remote="$(remote_version)"
 
@@ -258,13 +307,46 @@ check_update() {
     return 1
   fi
 
-  if [ "$current" = "$remote" ]; then
-    echo "You're already on the latest version (v${current})."
+  # A version difference is decisive on its own.
+  if [ "$current" != "$remote" ]; then
+    echo "Update available: v${current} -> v${remote}"
+    return 2
+  fi
+
+  # Same version string. That is NOT proof of being current: a release can ship
+  # changed content without bumping VERSION, and local files can be edited after
+  # install. Compare actual file content against the published manifest.
+  tmp_manifest="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap "rm -f '$tmp_manifest'" RETURN
+
+  if ! fetch_remote_manifest "$tmp_manifest"; then
+    echo "You're on v${current} (matching the latest published version)."
+    echo "Note: could not fetch the content manifest, so this is a version-only"
+    echo "check -- content changes shipped without a version bump would be missed."
     return 0
   fi
 
-  echo "Update available: v${current} -> v${remote}"
-  return 2
+  cstat=0
+  content_status "$tmp_manifest" || cstat=$?
+  case "$cstat" in
+    0)
+      echo "You're already on the latest version (v${current}), and all content matches."
+      return 0
+      ;;
+    1)
+      echo "Update available: content differs from the published v${remote} release."
+      echo "(Version strings match at v${current} -- this was found by content hash.)"
+      [ -n "$CONTENT_DETAIL" ] && printf '%s\n' "$CONTENT_DETAIL"
+      return 2
+      ;;
+    *)
+      echo "You're on v${current} (matching the latest published version)."
+      echo "Note: could not verify file content (verifier unavailable) -- this is a"
+      echo "version-only check. Re-running the installer will refresh it."
+      return 0
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------

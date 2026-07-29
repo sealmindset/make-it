@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# pre-commit -- keep CONTENT_MANIFEST in sync with the installed surface.
+#
+# Install once per clone:
+#   ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit
+#
+# WHY: `/make-it update` detects drift by comparing installed files against the
+# published CONTENT_MANIFEST. If a commit changes .claude/ content but leaves the
+# manifest stale, the manifest describes the previous release and update checks go
+# back to being version-string guesses. This hook regenerates and stages it so
+# that cannot happen by omission.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+gen="$repo_root/.claude/make-it/scripts/content-manifest.sh"
+[ -f "$gen" ] || exit 0   # nothing to do in a tree without the generator
+
+# Only act when the installed surface is part of this commit.
+if ! git diff --cached --name-only | grep -qE '^\.claude/(commands/|make-it/)'; then
+  exit 0
+fi
+
+fresh="$(mktemp)"
+trap 'rm -f "$fresh"' EXIT
+bash "$gen" generate "$repo_root" >"$fresh"
+
+if ! diff -q CONTENT_MANIFEST "$fresh" >/dev/null 2>&1; then
+  cp "$fresh" CONTENT_MANIFEST
+  git add CONTENT_MANIFEST
+  echo "pre-commit: regenerated CONTENT_MANIFEST and staged it"
+fi
