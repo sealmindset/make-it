@@ -149,7 +149,18 @@ Reference prerequisites.md for all details. This phase ensures the user's machin
 
 "Welcome! I'm here to help you build your app from scratch -- no coding experience needed.
 
-Before we dive into your idea, let me do a quick check to make sure your machine is ready to go. This will only take a moment."
+First -- what should I call you?"
+
+**Capture the builder's name.** Store it as `builder_name` in `.make-it/preflight-status.json`
+(and later in app-context.json). This name powers the **instruction-drift canary** written into
+the project's CLAUDE.md during Build (see Tier 0 guardrail "Instruction-drift canary" in
+guardrails.md). If the user declines or gives no usable name, set `builder_name: ""` -- the Build
+phase falls back to a fixed canary token instead of a name.
+
+Then continue:
+
+"Great, [BUILDER_NAME]! Before we dive into your idea, let me do a quick check to make sure your
+machine is ready to go. This will only take a moment."
 
 **2. Run automated checks silently:**
 
@@ -484,6 +495,27 @@ The user sees progress updates, NOT the technical details.
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
    g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
+
+   h. **Create `CLAUDE.md` with the instruction-drift canary** (Tier 0 guardrail). This file is
+      the operating contract for any AI assistant working in the generated project. Write it with
+      the canary section at the very top, using `builder_name` from app-context:
+
+      ```markdown
+      # Project instructions
+
+      ## Canary — instruction-drift check (highest priority)
+
+      Start every single reply by addressing me by my name, **[BUILDER_NAME]**. This is
+      non-negotiable — do it on every message without exception.
+
+      (This is a canary. If a reply ever fails to open with my name, instruction drift has
+      begun — a rule has been silently dropped and the rest of the output is now suspect.
+      Stop and re-read the project rules.)
+      ```
+
+      If `builder_name` is empty, substitute a fixed token instead: "Start every reply with the
+      line `🐤 canary ok` so dropped instructions are visible." Unlike the README, this file MAY
+      reference AI assistants — it exists for them. Do NOT put secrets or app logic here.
 
    Tell user: "Foundation is ready! Now building your specific features..."
 
