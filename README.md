@@ -941,6 +941,15 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 
 ## Version History
 
+### v1.22.0 -- Instruction-Drift Canary
+
+Every generated project now ships a root `CLAUDE.md` whose first section is an instruction-drift canary. Models don't fail loudly -- they drift: silently dropping a rule, then making assumptions, then being confidently wrong. The canary forces any AI assistant to open every reply by addressing the builder by name; a reply that doesn't is the first visible sign a rule was dropped, so the rest of that output is suspect.
+
+- Added Tier 0 guardrail "Instruction-drift canary in `CLAUDE.md`" (`references/guardrails.md`)
+- `/make-it` preflight now asks "What should I call you?" and stores `builder_name`
+- Build Phase A writes the project `CLAUDE.md` canary using `builder_name`, with a fixed `🐤 canary ok` token fallback when no name is given
+- Added `builder_name` field to `templates/app-context.md`
+
 ### v1.20.0 -- Expert-Persona Layer
 
 Before high-stakes work, skills now adopt a specialist persona instead of working as a generalist -- a role-prompting quality lever. The persona is auto-inferred from `app-context.json` signals x the active skill: no user prompt, never gates, and stays a generalist below threshold.

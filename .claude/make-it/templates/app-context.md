@@ -5,6 +5,7 @@ This template is populated by /make-it as the user answers questions. It becomes
 ```json
 {
   "project_name": "",
+  "builder_name": "",
   "purpose": "",
   "project_type": "",
   "active_tiers": [0],
@@ -182,6 +183,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | Field | Gathered During | Question Theme |
 |-------|----------------|---------------|
 | project_name | Ideation | "What do you want to call your app?" |
+| builder_name | Preflight | "What should I call you?" -- powers the instruction-drift canary written into the project's `CLAUDE.md` (Tier 0). Empty -> fixed canary token fallback. |
 | purpose | Ideation | "What problem does it solve?" |
 | project_type | Design | Auto-classified from ideation answers (user never sees this) |
 | active_tiers | Design | Auto-set from project_type |

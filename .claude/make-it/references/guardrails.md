@@ -105,6 +105,16 @@ These apply to every project /make-it builds, no exceptions.
 
 15. **README.md from day one** -- Every project MUST have a README.md in the root directory. This is the front door for anyone visiting the repo. It must include at minimum: project name and description, tech stack, quick start instructions (how to install, configure, and run), project structure overview, and any role/login information needed to use the app. Created during project setup, updated when features are added. CHANGELOG.md documents what changed; README.md documents what the project IS and how to use it.
 
+16. **Instruction-drift canary in `CLAUDE.md`** -- Every project MUST have a root `CLAUDE.md`
+    whose FIRST section is a canary that forces any AI assistant to open every reply by addressing
+    the builder by name (`builder_name`, captured in preflight). The rationale is written into the
+    file: models don't fail loudly, they *drift* -- silently dropping one rule, then making
+    assumptions, then being confidently wrong. A reply that doesn't start with the name is the
+    first visible sign a rule was dropped, so the rest of that output is suspect. If `builder_name`
+    is empty, use a fixed canary token (`🐤 canary ok`) at the top of each reply instead. This is
+    the ONE project file that may reference AI assistants (it exists for them); it must never hold
+    secrets or app logic. Created during project setup (Build Phase A), same as README/CHANGELOG/TODO.
+
 ### Quality
 
 17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.
