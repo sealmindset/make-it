@@ -23,6 +23,7 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 | `/make-it` | Build a new app from an idea |
 | `/resume-it` | Continue work on an existing app (features, bugs, testing) |
 | `/clear-it` | Checkpoint the session into `handoff.md` (goal, state, active files, changes, failed approaches, next steps) so context can be cleared without losing the thread -- works in any project, not just /make-it apps |
+| `/session-it` | The same six-section checkpoint, but written to a per-session lane (`.handoffs/handoff-<id>.md`) for folders running more than one Claude session at once -- parallel sessions never overwrite or contaminate each other |
 | `/try-it` | Demo the app with mock services and guided walkthrough |
 | `/ship-it` | Deploy -- creates PR with security checks, attestation, review |
 | `/nemo-it` | Security attestation scan (OWASP + NeMo Guardrails AI safety) |

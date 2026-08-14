@@ -941,6 +941,20 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 
 ## Version History
 
+### v1.23.0 -- /session-it, Per-Session Handoff Lanes
+
+`/clear-it` writes one `handoff.md` per project. With two Claude sessions open on the same folder, the second checkpoint silently overwrites the first, and the next session reads a handoff describing work it never did. Worse than lost notes: a dead end that was fatal in session A can be the correct approach in session B, and a merged handoff gets trusted.
+
+`/session-it` writes the same six sections to a lane owned by the calling session.
+
+- New skill `/session-it` (`commands/session-it.md`) -- checkpoint, `list`, and `resume <key>` modes
+- Lanes live in `.handoffs/handoff-<id>.md` with per-lane archives `history-<id>.md`; `.handoffs/` is added to `.gitignore` automatically
+- Session identity is recovered exactly, by planting a token in the conversation and locating the transcript in `~/.claude/projects/` that contains it -- there is no `CLAUDE_SESSION_ID` to read
+- Lane ownership is carried in a `Session chain` line, so a lane survives `/clear` (which starts a new session UUID) via `/session-it resume <key>`
+- Hard anti-contamination rules: never write another lane, never read another lane's body, never merge lanes, and state plainly when session identity was inferred rather than confirmed
+- Fully independent of `/clear-it` -- never touches `handoff.md` or `.handoff-history.md`; both skills may be used in the same repository
+- Confluence doc `confluence-docs/16-session-it.md`
+
 ### v1.22.0 -- Instruction-Drift Canary
 
 Every generated project now ships a root `CLAUDE.md` whose first section is an instruction-drift canary. Models don't fail loudly -- they drift: silently dropping a rule, then making assumptions, then being confidently wrong. The canary forces any AI assistant to open every reply by addressing the builder by name; a reply that doesn't is the first visible sign a rule was dropped, so the rest of that output is suspect.

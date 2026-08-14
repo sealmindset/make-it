@@ -57,6 +57,7 @@ The skills fall into natural groups. Each has its own detailed page in this spac
 | [`/debug-it`](10-debug-it.md) | Find the *real* cause of a bug before changing anything. |
 | [`/git-it`](11-git-it.md) | Keep your saved work clean, safe, and reversible. |
 | [`/clear-it`](12-clear-it.md) | Save a checkpoint mid-session so Claude can reset and stay sharp. |
+| [`/session-it`](16-session-it.md) | The same checkpoint, kept separate per session, when several Claude sessions share one folder. |
 | [`/wrap-it`](13-wrap-it.md) | End your work session cleanly and save everything. |
 
 ### Power tools (advanced)
