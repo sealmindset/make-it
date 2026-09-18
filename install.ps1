@@ -152,12 +152,81 @@ function Test-CommandExists($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+function Get-ContainerRuntime {
+    # Returns @{ Found; Name; Cli; How } describing an already-installed Docker
+    # Desktop or Rancher Desktop.
+    #
+    # Why this is more than `Get-Command docker`: a machine can have either
+    # product fully installed while `docker` does not resolve in this session --
+    # Rancher Desktop only populates ~\.rd\bin on first run, Docker Desktop's
+    # PATH entry may post-date this shell, and a machine-wide install done by IT
+    # can leave the user's PATH untouched until sign-out. Reading that as
+    # "missing" reinstalls a runtime the user already has AND forces a restart
+    # they do not need -- the single step of this installer people resent.
+    #
+    # Checked cheapest-first: PATH, then the two known CLI paths, then the
+    # uninstall registry (authoritative, but slower and Windows-only).
+    $result = [ordered]@{ Found = $false; Name = ""; Cli = $null; How = "" }
+
+    if (Test-CommandExists "docker") {
+        $result.Found = $true
+        $result.Name  = "docker CLI"
+        $result.Cli   = (Get-Command docker -ErrorAction SilentlyContinue).Source
+        $result.How   = "on PATH"
+        return [PSCustomObject]$result
+    }
+
+    $candidates = @()
+    if ($env:USERPROFILE)          { $candidates += @{ Name = "Rancher Desktop"; Path = (Join-Path $env:USERPROFILE ".rd\bin\docker.exe") } }
+    if (${env:ProgramFiles})       { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path ${env:ProgramFiles} "Docker\Docker\resources\bin\docker.exe") } }
+    if (${env:ProgramFiles(x86)})  { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path ${env:ProgramFiles(x86)} "Docker\Docker\resources\bin\docker.exe") } }
+    if (${env:LOCALAPPDATA})       { $candidates += @{ Name = "Rancher Desktop"; Path = (Join-Path ${env:LOCALAPPDATA} "Programs\Rancher Desktop\resources\resources\win32\bin\docker.exe") } }
+
+    foreach ($c in $candidates) {
+        if (Test-Path -LiteralPath $c.Path) {
+            # Put it on this session's PATH: every later step, and Verify-Setup,
+            # asks for `docker` by name. Finding it and then not exposing it
+            # would report a runtime the rest of the run cannot use.
+            $binDir = Split-Path -Parent $c.Path
+            if ($env:Path -notlike "*$binDir*") { $env:Path = "$binDir;$env:Path" }
+            $result.Found = $true
+            $result.Name  = $c.Name
+            $result.Cli   = $c.Path
+            $result.How   = "found at $($c.Path)"
+            return [PSCustomObject]$result
+        }
+    }
+
+    # Registry: catches an install whose CLI lives somewhere non-default, and an
+    # install that has never been launched.
+    $uninstallKeys = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($key in $uninstallKeys) {
+        try {
+            $hit = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue |
+                   Where-Object { $_.DisplayName -match 'Rancher Desktop|Docker Desktop' } |
+                   Select-Object -First 1
+        } catch { $hit = $null }
+        if ($hit) {
+            $result.Found = $true
+            $result.Name  = $hit.DisplayName
+            $result.How   = "registered as installed (CLI not on PATH yet)"
+            return [PSCustomObject]$result
+        }
+    }
+
+    return [PSCustomObject]$result
+}
+
 function Test-AllPrerequisites {
     $missing = @()
     if (-not (Test-CommandExists "node"))   { $missing += "nodejs" }
     if (-not (Test-CommandExists "git"))    { $missing += "git" }
     if (-not (Test-CommandExists "az"))     { $missing += "azure-cli" }
-    if (-not (Test-CommandExists "docker")) { $missing += "docker" }
+    if (-not (Get-ContainerRuntime).Found) { $missing += "docker" }
     if (-not (Test-CommandExists "claude")) { $missing += "claude-code" }
 
     # Check for git-bash path
@@ -230,6 +299,35 @@ function Install-Software($state) {
 
     $needReboot = $false
 
+    # winget is this script's only installer. Windows 11 ships it; Windows 10
+    # does not always, and a machine managed by IT can have it stripped. Every
+    # `winget ...` call below is a bare command under $ErrorActionPreference =
+    # "Stop", so on a machine without it the run died on the first winget line
+    # with "The term 'winget' is not recognized" -- before installing anything,
+    # and with no hint of what to do. Establish it once, and only demand it if
+    # something actually needs installing: a fully provisioned machine has no
+    # use for winget and must not be blocked over it.
+    $hasWinget = Test-CommandExists "winget"
+    $needsInstall = @()
+    if (-not (Test-CommandExists "node"))   { $needsInstall += "Node.js" }
+    if (-not (Test-CommandExists "git"))    { $needsInstall += "Git for Windows" }
+    if (-not (Test-CommandExists "az"))     { $needsInstall += "Azure CLI" }
+    if (-not (Get-ContainerRuntime).Found)  { $needsInstall += "a container runtime" }
+
+    if ($needsInstall.Count -gt 0 -and -not $hasWinget) {
+        Warn "winget (the Windows package installer) is not available on this machine."
+        Info ""
+        Info "Still needed: $($needsInstall -join ', ')"
+        Info ""
+        Info "Install winget by installing 'App Installer' from the Microsoft Store,"
+        Info "then run this script again. Or install these by hand:"
+        Info "  Node.js LTS       https://nodejs.org"
+        Info "  Git for Windows   https://git-scm.com/downloads/win"
+        Info "  Azure CLI         https://aka.ms/installazurecliwindows"
+        Info "  Rancher Desktop   https://rancherdesktop.io/"
+        Fail "winget not available and software is still missing."
+    }
+
     # --- SSL-inspecting proxy check (Zscaler, Netskope, etc.) ---
     # These tools break winget source updates and Docker image pulls.
     $proxyRunning = $false
@@ -254,10 +352,18 @@ function Install-Software($state) {
         Info "  - Re-enable it when the script finishes"
         Info ""
 
-        # Try to fix winget source index (often corrupted by SSL inspection)
-        Step "Resetting winget package index (sometimes needed with security tools)..."
-        winget source reset --force 2>$null
-        winget source update 2>$null
+        # Try to fix winget source index (often corrupted by SSL inspection).
+        # Guarded and swallowed: this is opportunistic repair, and an error here
+        # used to abort a run that had not yet installed anything.
+        if ($hasWinget) {
+            Step "Resetting winget package index (sometimes needed with security tools)..."
+            try {
+                winget source reset --force 2>$null | Out-Null
+                winget source update 2>$null | Out-Null
+            } catch {
+                Warn "Could not refresh the winget index -- continuing anyway."
+            }
+        }
     }
 
     # --- Node.js ---
@@ -323,11 +429,30 @@ function Install-Software($state) {
     # --- Container Runtime (Rancher Desktop or Docker Desktop) ---
     if (Is-StepDone $state "docker") {
         Ok "Container runtime -- already done"
-    } elseif (Test-CommandExists "docker") {
-        # Docker CLI exists -- could be Docker Desktop or Rancher Desktop, either works
-        Ok "Container runtime -- already installed (docker CLI found)"
-        $state = Mark-StepDone $state "docker"
     } else {
+        $runtime = Get-ContainerRuntime
+        if ($runtime.Found) {
+            # Either product works -- /make-it only needs a Docker-compatible CLI.
+            # Do NOT install and do NOT set $needReboot: this is the whole point
+            # of the check. A user who already runs Docker Desktop gets nothing
+            # installed over the top of it and no restart.
+            Ok "Container runtime -- already installed: $($runtime.Name) ($($runtime.How))"
+            if ($runtime.Cli) {
+                $dockerVer = & $runtime.Cli --version 2>$null
+                if ($LASTEXITCODE -eq 0 -and $dockerVer) {
+                    Ok "  $dockerVer"
+                } else {
+                    # Installed but not serving: normal when the desktop app has
+                    # not been started. Claude Code is unaffected; only container
+                    # builds are, so say so and carry on.
+                    Warn "  $($runtime.Name) is installed but not responding yet."
+                    Info "  Start it from the Start menu before running a /make-it build."
+                }
+            }
+            $state = Mark-StepDone $state "docker"
+        }
+    }
+    if (-not (Is-StepDone $state "docker")) {
         Step "Installing Rancher Desktop (runs your apps in containers)..."
         Info "This may take a few minutes..."
 
@@ -919,9 +1044,12 @@ function Verify-Setup($state) {
         Info "  Azure CLI: not installed (only needed for an enterprise gateway)"
     }
 
-    # Docker
-    if (Test-CommandExists "docker") {
-        Ok "Docker: $(docker --version 2>$null)"
+    # Docker / Rancher -- same detector as Step 1, so the two cannot disagree.
+    $runtime = Get-ContainerRuntime
+    if ($runtime.Found) {
+        $verText = if ($runtime.Cli) { (& $runtime.Cli --version 2>$null) } else { $null }
+        if ($verText) { Ok "Container runtime: $verText" }
+        else { Ok "Container runtime: $($runtime.Name) installed ($($runtime.How)) -- start it before a /make-it build" }
     } else {
         Warn "Docker CLI: NOT FOUND (you can still use Claude Code, but /make-it builds need a container runtime)"
         # Don't fail -- Docker is only needed for /make-it builds, not Claude Code itself
