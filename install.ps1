@@ -177,9 +177,11 @@ function Get-ContainerRuntime {
     }
 
     $candidates = @()
-    if ($env:USERPROFILE)          { $candidates += @{ Name = "Rancher Desktop"; Path = (Join-Path $env:USERPROFILE ".rd\bin\docker.exe") } }
     if (${env:ProgramFiles})       { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path ${env:ProgramFiles} "Docker\Docker\resources\bin\docker.exe") } }
     if (${env:ProgramFiles(x86)})  { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path ${env:ProgramFiles(x86)} "Docker\Docker\resources\bin\docker.exe") } }
+    if ($env:ProgramData)          { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path $env:ProgramData "DockerDesktop\version-bin\docker.exe") } }
+    if (${env:LOCALAPPDATA})       { $candidates += @{ Name = "Docker Desktop";  Path = (Join-Path ${env:LOCALAPPDATA} "Docker\cli-bin\docker.exe") } }
+    if ($env:USERPROFILE)          { $candidates += @{ Name = "Rancher Desktop"; Path = (Join-Path $env:USERPROFILE ".rd\bin\docker.exe") } }
     if (${env:LOCALAPPDATA})       { $candidates += @{ Name = "Rancher Desktop"; Path = (Join-Path ${env:LOCALAPPDATA} "Programs\Rancher Desktop\resources\resources\win32\bin\docker.exe") } }
 
     foreach ($c in $candidates) {
@@ -214,6 +216,30 @@ function Get-ContainerRuntime {
             $result.Found = $true
             $result.Name  = $hit.DisplayName
             $result.How   = "registered as installed (CLI not on PATH yet)"
+            return [PSCustomObject]$result
+        }
+    }
+
+    # Service and process evidence. An MSI-less or per-machine Docker Desktop
+    # install can miss the per-user uninstall hive this account can read, but the
+    # service and the running app are unmissable.
+    try {
+        if (Get-Service -Name "com.docker.service" -ErrorAction SilentlyContinue) {
+            $result.Found = $true
+            $result.Name  = "Docker Desktop"
+            $result.How   = "com.docker.service present"
+            return [PSCustomObject]$result
+        }
+    } catch {}
+    foreach ($proc in @(
+        @{ Name = "Docker Desktop";  Process = "Docker Desktop" },
+        @{ Name = "Docker Desktop";  Process = "com.docker.backend" },
+        @{ Name = "Rancher Desktop"; Process = "Rancher Desktop" }
+    )) {
+        if (Get-Process -Name $proc.Process -ErrorAction SilentlyContinue) {
+            $result.Found = $true
+            $result.Name  = $proc.Name
+            $result.How   = "$($proc.Process) is running"
             return [PSCustomObject]$result
         }
     }
@@ -437,6 +463,8 @@ function Install-Software($state) {
             # of the check. A user who already runs Docker Desktop gets nothing
             # installed over the top of it and no restart.
             Ok "Container runtime -- already installed: $($runtime.Name) ($($runtime.How))"
+            $other = if ($runtime.Name -match "Rancher") { "Docker Desktop" } else { "Rancher Desktop" }
+            Info "  Either runtime satisfies /make-it -- $other is NOT required and will not be installed."
             if ($runtime.Cli) {
                 $dockerVer = & $runtime.Cli --version 2>$null
                 if ($LASTEXITCODE -eq 0 -and $dockerVer) {
