@@ -1,0 +1,19 @@
+# Hashes in CONTENT_MANIFEST are over bytes, and Git for Windows ships with
+# core.autocrlf=true by default. Without this file a Windows clone rewrites every
+# text file to CRLF, so content-manifest verification reports all 256 tracked
+# files as DIFFERS -- and entrypoint.sh, copied into Linux containers, fails with
+# "bad interpreter: /bin/sh^M". Pin LF and neither happens.
+* text=auto eol=lf
+
+# Binary: never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+
+# PowerShell is CRLF-tolerant, so these stay LF with everything else for hashing.

@@ -13,6 +13,23 @@
 # Update skills only (already set up):
 #   irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 #   -- or from inside Claude Code: /make-it update
+#
+# Check for updates without installing:
+#   $env:MAKEIT_ACTION = "check"
+#   irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+#   -- from a clone: .\install.ps1 check
+#
+#   An environment variable is needed because $args is EMPTY under
+#   `irm ... | iex` -- the pipeline passes no arguments, so `| iex check` is not
+#   a thing. Without this, the documented one-liner could only ever run a full
+#   install, never a check.
+#
+# Optional enterprise gateway (Azure AI Foundry / any Anthropic-compatible proxy):
+#   $env:MAKEIT_FOUNDRY_BASE_URL = "https://your-gateway.example.com/anthropic"
+#   Set it before running, and step 4 wires up token auth for that gateway.
+#   Left unset, the installer does not touch your auth config at all and Claude
+#   Code signs in normally. Model deployment names can be overridden with
+#   MAKEIT_OPUS_MODEL / MAKEIT_SONNET_MODEL / MAKEIT_HAIKU_MODEL.
 
 $ErrorActionPreference = "Stop"
 
@@ -27,7 +44,17 @@ $CLAUDE_DIR = Join-Path $env:USERPROFILE ".claude"
 $COMMANDS_DIR = Join-Path $CLAUDE_DIR "commands"
 $MAKEIT_DIR = Join-Path $CLAUDE_DIR "make-it"
 $VERSION_FILE = Join-Path $MAKEIT_DIR "VERSION"
+$MANIFEST_FILE = Join-Path $MAKEIT_DIR "CONTENT_MANIFEST"
+$CONTENT_VERIFIER = Join-Path (Join-Path $MAKEIT_DIR "scripts") "content-manifest.ps1"
 $STATE_FILE = Join-Path $CLAUDE_DIR ".setup-state.json"
+
+# Optional enterprise gateway. Unset by default: this installer must not point a
+# stranger's Claude Code at somebody else's endpoint, and install.sh never
+# touches auth config at all.
+$FOUNDRY_BASE_URL = $env:MAKEIT_FOUNDRY_BASE_URL
+$OPUS_MODEL   = if ($env:MAKEIT_OPUS_MODEL)   { $env:MAKEIT_OPUS_MODEL }   else { "claude-opus-5" }
+$SONNET_MODEL = if ($env:MAKEIT_SONNET_MODEL) { $env:MAKEIT_SONNET_MODEL } else { "claude-sonnet-5" }
+$HAIKU_MODEL  = if ($env:MAKEIT_HAIKU_MODEL)  { $env:MAKEIT_HAIKU_MODEL }  else { "claude-haiku-4-5" }
 
 # ===========================================================================
 # Display helpers
@@ -42,7 +69,11 @@ function Fail($msg)    {
     Write-Host ""
     Write-Host "  ERROR: $msg" -ForegroundColor Red
     Write-Host ""
-    exit 1
+    # throw, not exit. Under the documented `irm ... | iex` one-liner there is no
+    # child scope: `exit` terminates the USER'S PowerShell session, closing the
+    # window and taking the error message above with it. A throw stops the
+    # script and leaves the session -- and the message -- alive.
+    throw $msg
 }
 
 function Ask($prompt) {
@@ -135,13 +166,56 @@ function Test-AllPrerequisites {
         $missing += "git-bash-path"
     }
 
-    # Check for config files
-    $tokenScript = Join-Path $CLAUDE_DIR "get-claude-token.ps1"
-    $settingsFile = Join-Path $CLAUDE_DIR "settings.json"
-    if (-not (Test-Path $tokenScript))  { $missing += "token-script" }
-    if (-not (Test-Path $settingsFile)) { $missing += "settings-json" }
+    # Auth config counts as a prerequisite only when an enterprise gateway was
+    # asked for. Without one there is nothing to configure, and treating its
+    # absence as "missing" would drag every default install into the full setup
+    # flow forever -- including plain skill updates.
+    if ($FOUNDRY_BASE_URL) {
+        $tokenScript = Join-Path $CLAUDE_DIR "get-claude-token.ps1"
+        $settingsFile = Join-Path $CLAUDE_DIR "settings.json"
+        if (-not (Test-Path $tokenScript))  { $missing += "token-script" }
+        if (-not (Test-Path $settingsFile)) { $missing += "settings-json" }
+    }
 
     return $missing
+}
+
+# ===========================================================================
+# Content verification -- hash the INSTALLED files against a manifest
+# ===========================================================================
+
+# Runs the verifier in a CHILD process, deliberately. content-manifest.ps1 ends
+# in `exit`, and calling it in-process under `irm ... | iex` would close the
+# user's session. A child process also isolates its $ErrorActionPreference.
+#
+# Returns: 0 content matches, 1 drift (detail printed), 2 cannot determine.
+function Invoke-ContentVerifier($verifier, $manifest, $claudeDir) {
+    if (-not $verifier -or -not (Test-Path -LiteralPath $verifier)) { return 2 }
+    if (-not (Test-Path -LiteralPath $manifest)) { return 2 }
+    if (-not (Test-Path -LiteralPath $claudeDir)) { return 2 }
+
+    $hostExe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $psArgs = @("-NoProfile")
+    # -ExecutionPolicy is a Windows-only switch; including it on other platforms
+    # makes pwsh refuse to start, which would turn "verified" into "unavailable".
+    if ($env:OS -eq "Windows_NT") { $psArgs += @("-ExecutionPolicy", "Bypass") }
+    $psArgs += @("-File", $verifier, "verify", $manifest, $claudeDir)
+
+    # Write-Host, not bare output: in PowerShell every uncaptured value a function
+    # emits becomes part of its return value, so letting the child's stdout flow
+    # through would return @("content matches manifest (256 files)", 0) and break
+    # every `-eq 0` test at the call sites. The lines are still shown -- they name
+    # the drifting files, which is the point of running this.
+    $childOutput = & $hostExe @psArgs 2>&1
+    foreach ($line in $childOutput) { Write-Host $line }
+    if ($null -eq $LASTEXITCODE) { return 2 }
+    if ($LASTEXITCODE -eq 0) { return 0 }
+    if ($LASTEXITCODE -eq 1) { return 1 }
+    return 2
+}
+
+function Test-InstalledContent($manifest) {
+    return (Invoke-ContentVerifier $CONTENT_VERIFIER $manifest $CLAUDE_DIR)
 }
 
 # ===========================================================================
@@ -200,7 +274,7 @@ function Install-Software($state) {
             Warn "winget install failed. Trying alternative method..."
             Info "Please install Node.js LTS manually from https://nodejs.org"
             Info "After installing, run this script again."
-            exit 1
+            throw "Node.js install failed"
         }
         Refresh-Path
         Ok "Node.js installed"
@@ -220,7 +294,7 @@ function Install-Software($state) {
         if ($LASTEXITCODE -ne 0) {
             Warn "winget install failed. Please install Git from https://git-scm.com/downloads/win"
             Info "After installing, run this script again."
-            exit 1
+            throw "Git for Windows install failed"
         }
         Refresh-Path
         Ok "Git for Windows installed"
@@ -239,7 +313,7 @@ function Install-Software($state) {
         if ($LASTEXITCODE -ne 0) {
             Warn "winget install failed. Please install Azure CLI from https://aka.ms/installazurecliwindows"
             Info "After installing, run this script again."
-            exit 1
+            throw "Azure CLI install failed"
         }
         Refresh-Path
         Ok "Azure CLI installed"
@@ -281,7 +355,7 @@ function Install-Software($state) {
         if ($LASTEXITCODE -ne 0) {
             Warn "winget install failed. Please install Rancher Desktop from https://rancherdesktop.io/"
             Info "After installing, restart your computer and run this script again."
-            exit 1
+            throw "Rancher Desktop install failed"
         }
 
         # Configure Rancher Desktop: use dockerd (moby) engine, disable Kubernetes
@@ -353,7 +427,9 @@ function Install-Software($state) {
         }
 
         Write-Host ""
-        exit 0
+        # Stop the run without `exit`, which would close the session under iex.
+        $script:RebootPending = $true
+        return $state
     }
 
     return $state
@@ -476,10 +552,27 @@ function Install-ClaudeCode($state) {
 # ===========================================================================
 
 function Configure-AzureAuth($state) {
-    Banner "Step 4 of 6: Configuring Azure AI Foundry authentication"
+    # Opt-in, by design. install.sh configures no auth at all; this installer
+    # used to hardcode one organization's staging gateway and its private model
+    # deployment names, then write them over the settings.json of anybody who ran
+    # the public one-liner. Unless a gateway is named, leave auth alone and let
+    # Claude Code sign in the way it normally does.
+    if (-not $FOUNDRY_BASE_URL) {
+        Banner "Step 4 of 6: Authentication"
+        Info "No enterprise gateway configured -- skipping auth setup."
+        Info "Claude Code will sign you in on first run."
+        Info ""
+        Info "If your organization puts Claude behind an Azure AI Foundry gateway,"
+        Info "re-run with the gateway set, e.g.:"
+        Info "  \$env:MAKEIT_FOUNDRY_BASE_URL = \"https://gateway.example.com/anthropic\""
+        Info "  irm $GITHUB_RAW/install.ps1 | iex"
+        return $state
+    }
+
+    Banner "Step 4 of 6: Configuring gateway authentication"
+    Info "Gateway: $FOUNDRY_BASE_URL"
 
     New-Item -ItemType Directory -Path $CLAUDE_DIR -Force | Out-Null
-    $username = $env:USERNAME
     $tokenScriptPath = Join-Path $CLAUDE_DIR "get-claude-token.ps1"
     $settingsPath = Join-Path $CLAUDE_DIR "settings.json"
 
@@ -492,8 +585,9 @@ function Configure-AzureAuth($state) {
         Info "connect to your organization's AI service."
 
         $tokenContent = @'
-# get-claude-token.ps1 -- Fetches Azure AI Foundry token for Claude Code
-# Run "az login" in PowerShell BEFORE starting Claude Code if the token has expired.
+# get-claude-token.ps1 -- Fetches an Azure AI Foundry token for Claude Code.
+# Claude Code sends whatever this prints as: Authorization: Bearer <stdout>
+# Run "az login" in PowerShell first if the token has expired.
 
 $ErrorActionPreference = "Stop"
 try {
@@ -510,39 +604,59 @@ try {
         $state = Mark-StepDone $state "token-script"
     }
 
-    # --- Settings file ---
+    # --- Settings file: MERGE, never replace ---
     if (Is-StepDone $state "settings-json") {
         Ok "Settings file -- already done"
     } else {
-        # Check if settings.json already exists (user may have custom settings)
+        # The previous version wrote a fresh settings.json with Set-Content
+        # whenever the existing one lacked an apiKeyHelper key -- silently
+        # destroying that user's model choice, env, hooks, permissions and
+        # plugins. Read, add only what is missing, write back, and keep a backup.
+        $desiredEnv = [ordered]@{
+            CLAUDE_CODE_USE_FOUNDRY         = "1"
+            ANTHROPIC_FOUNDRY_BASE_URL      = $FOUNDRY_BASE_URL
+            ANTHROPIC_DEFAULT_OPUS_MODEL    = $OPUS_MODEL
+            ANTHROPIC_DEFAULT_SONNET_MODEL  = $SONNET_MODEL
+            ANTHROPIC_DEFAULT_HAIKU_MODEL   = $HAIKU_MODEL
+        }
+        $helperCmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$tokenScriptPath`""
+
+        $settings = $null
         if (Test-Path $settingsPath) {
-            $existing = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-            if ($existing -and $existing.apiKeyHelper) {
-                Ok "Settings file already exists with apiKeyHelper configured"
-                $state = Mark-StepDone $state "settings-json"
-                return $state
+            try {
+                $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            } catch {
+                Fail "$settingsPath is not valid JSON. Fix or move it, then re-run -- refusing to overwrite a file I cannot parse."
+            }
+            $backup = "$settingsPath.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
+            Copy-Item -LiteralPath $settingsPath -Destination $backup -Force
+            Info "Backed up existing settings to $(Split-Path $backup -Leaf)"
+        }
+        if (-not $settings) { $settings = [PSCustomObject]@{} }
+
+        Step "Updating settings file (preserving your existing settings)..."
+
+        if ($settings.PSObject.Properties.Name -contains "apiKeyHelper") {
+            Info "apiKeyHelper already set -- left untouched: $($settings.apiKeyHelper)"
+        } else {
+            $settings | Add-Member -NotePropertyName "apiKeyHelper" -NotePropertyValue $helperCmd -Force
+            Ok "apiKeyHelper set"
+        }
+
+        if (-not ($settings.PSObject.Properties.Name -contains "env") -or $null -eq $settings.env) {
+            $settings | Add-Member -NotePropertyName "env" -NotePropertyValue ([PSCustomObject]@{}) -Force
+        }
+        foreach ($key in $desiredEnv.Keys) {
+            if ($settings.env.PSObject.Properties.Name -contains $key) {
+                Info "env.$key already set -- left untouched"
+            } else {
+                $settings.env | Add-Member -NotePropertyName $key -NotePropertyValue $desiredEnv[$key] -Force
+                Ok "env.$key = $($desiredEnv[$key])"
             }
         }
 
-        Step "Creating settings file..."
-        Info "This tells Claude Code how to authenticate with Azure AI Foundry."
-        Info "Using your Windows username: $username"
-
-        $escapedPath = "C:\\Users\\$username\\.claude\\get-claude-token.ps1"
-        $settingsContent = @"
-{
-  "apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File $escapedPath",
-  "env": {
-    "CLAUDE_CODE_USE_FOUNDRY": "1",
-    "ANTHROPIC_FOUNDRY_BASE_URL": "https://snapistg-scus.azure.sleepnumber.com/anthropic",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "cogdep-aifoundry-dev-eus2-claude-sonnet-4-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "cogdep-aifoundry-dev-eus2-claude-haiku-4-5",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "cogdep-aifoundry-dev-eus2-claude-opus-4-6"
-  }
-}
-"@
-        Set-Content -Path $settingsPath -Value $settingsContent -Force
-        Ok "Settings file created at: $settingsPath"
+        $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsPath -Force
+        Ok "Settings merged into: $settingsPath"
         $state = Mark-StepDone $state "settings-json"
     }
 
@@ -598,14 +712,43 @@ function Install-MakeItSkills($state) {
     New-Item -ItemType Directory -Path $COMMANDS_DIR -Force | Out-Null
     New-Item -ItemType Directory -Path $MAKEIT_DIR -Force | Out-Null
 
-    # Determine source: local repo or download from GitHub
+    # Determine source: local repo or download from GitHub.
+    #
+    # $PSScriptRoot is only populated when this script is a real FILE on disk.
+    # Under `irm ... | iex` -- the install method this repo documents -- it is
+    # empty, and the old fallback to Get-Location silently took the CALLER'S cwd
+    # as the source repo. A new PowerShell window opens in %USERPROFILE%, which
+    # after any previous install contains the .claude\commands + .claude\make-it
+    # pair this check looks for. The installer then treated its own TARGET as its
+    # SOURCE: Copy-Item refused the self-overwrite and the update died with
+    # "Cannot overwrite the item ... with itself", installing nothing. Five lines
+    # further down sits `Remove-Item $MAKEIT_DIR -Recurse -Force`, so the only
+    # thing standing between that error and a deleted installation was the order
+    # of two statements.
+    #
+    # So: trust $PSScriptRoot only, and never accept the profile or .claude dir.
+    # This mirrors detect_source() in install.sh, which carries the same warning.
     $repoDir = $null
     $tmpDir = $null
-    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
-    $commandsPath = Join-Path (Join-Path $scriptDir ".claude") "commands"
-    $makeitPath = Join-Path (Join-Path $scriptDir ".claude") "make-it"
+    $scriptDir = $null
+    if ($PSScriptRoot) {
+        $candidate = (Resolve-Path -LiteralPath $PSScriptRoot).Path.TrimEnd('\', '/')
+        $profileDir = (Resolve-Path -LiteralPath $env:USERPROFILE).Path.TrimEnd('\', '/')
+        $claudeResolved = if (Test-Path -LiteralPath $CLAUDE_DIR) {
+            (Resolve-Path -LiteralPath $CLAUDE_DIR).Path.TrimEnd('\', '/')
+        } else { $CLAUDE_DIR.TrimEnd('\', '/') }
 
-    if ((Test-Path $commandsPath) -and (Test-Path $makeitPath)) {
+        if ($candidate -ieq $profileDir -or $candidate -ieq $claudeResolved) {
+            Warn "Ignoring $candidate as a source tree -- that is the install target."
+        } else {
+            $scriptDir = $candidate
+        }
+    }
+
+    $commandsPath = if ($scriptDir) { Join-Path (Join-Path $scriptDir ".claude") "commands" } else { $null }
+    $makeitPath   = if ($scriptDir) { Join-Path (Join-Path $scriptDir ".claude") "make-it" } else { $null }
+
+    if ($scriptDir -and (Test-Path $commandsPath) -and (Test-Path $makeitPath)) {
         Info "Installing from local repository..."
         $repoDir = $scriptDir
     } else {
@@ -617,7 +760,14 @@ function Install-MakeItSkills($state) {
         $hasGit = Test-CommandExists "git"
         if ($hasGit) {
             $cloneDest = Join-Path $tmpDir "make-it"
-            git clone --depth 1 --branch $GITHUB_BRANCH "https://github.com/$GITHUB_REPO.git" $cloneDest 2>$null
+            # core.autocrlf=false / core.eol=lf: Git for Windows defaults to
+            # autocrlf=true, which rewrites every text file to CRLF on checkout.
+            # That changes their bytes, so (a) every CONTENT_MANIFEST hash would
+            # mismatch and report phantom drift forever, and (b) the scaffolds'
+            # entrypoint.sh would carry \r into a Linux container and fail to
+            # execute. The published content is LF; keep it that way.
+            git -c core.autocrlf=false -c core.eol=lf clone --depth 1 --branch $GITHUB_BRANCH `
+                "https://github.com/$GITHUB_REPO.git" $cloneDest 2>$null
             if ($LASTEXITCODE -ne 0) {
                 Fail "Could not download from GitHub. Check your internet connection."
             }
@@ -645,12 +795,32 @@ function Install-MakeItSkills($state) {
         if (-not (Test-Path $dlMakeit))   { Fail "Download incomplete -- .claude/make-it not found." }
     }
 
+    # Last-resort guard. Source detection above should make this unreachable, but
+    # the failure it prevents is destructive (Remove-Item -Recurse on the source),
+    # so assert it rather than trust it. Same check as install_skills() in install.sh.
+    $srcCommands = Join-Path (Join-Path $repoDir ".claude") "commands"
+    $srcMakeit   = Join-Path (Join-Path $repoDir ".claude") "make-it"
+    foreach ($pair in @(@($srcCommands, $COMMANDS_DIR), @($srcMakeit, $MAKEIT_DIR))) {
+        $a = $pair[0]; $b = $pair[1]
+        if ((Test-Path -LiteralPath $a) -and (Test-Path -LiteralPath $b)) {
+            $ra = (Resolve-Path -LiteralPath $a).Path.TrimEnd('\', '/')
+            $rb = (Resolve-Path -LiteralPath $b).Path.TrimEnd('\', '/')
+            if ($ra -ieq $rb) {
+                Fail "Refusing to install: source and destination are the same directory.
+    source: $repoDir
+    target: $CLAUDE_DIR
+  The installer could not tell where it was run from. Re-run from a real clone
+  (.\install.ps1), or: cd C:\ ; irm $GITHUB_RAW/install.ps1 | iex"
+            }
+        }
+    }
+
     # Copy skill files
     Step "Copying skill commands..."
     $skillCount = 0
     $cmdFiles = Get-ChildItem -Path (Join-Path (Join-Path $repoDir ".claude") "commands") -Filter "*.md" -File
     foreach ($cmdFile in $cmdFiles) {
-        Copy-Item -Path $cmdFile.FullName -Destination $COMMANDS_DIR -Force
+        Copy-Item -LiteralPath $cmdFile.FullName -Destination $COMMANDS_DIR -Force
         Ok $cmdFile.Name
         $skillCount++
     }
@@ -681,9 +851,27 @@ function Install-MakeItSkills($state) {
     # Write version file
     $repoVersionFile = Join-Path $repoDir "VERSION"
     if (Test-Path $repoVersionFile) {
-        Copy-Item -Path $repoVersionFile -Destination $VERSION_FILE -Force
+        Copy-Item -LiteralPath $repoVersionFile -Destination $VERSION_FILE -Force
     } else {
         Set-Content -Path $VERSION_FILE -Value "0.0.0"
+    }
+
+    # Install the content manifest, so Check-Update can detect drift by hash
+    # instead of trusting the VERSION string. install.sh has done this since the
+    # manifest landed; this installer did not, which left every Windows user on
+    # version-only update checks -- silently blind to any release that changed
+    # content without bumping VERSION.
+    $repoManifest = Join-Path $repoDir "CONTENT_MANIFEST"
+    if (Test-Path $repoManifest) {
+        Copy-Item -LiteralPath $repoManifest -Destination $MANIFEST_FILE -Force
+        $verified = Test-InstalledContent $MANIFEST_FILE
+        switch ($verified) {
+            0 { Ok "Content verified against manifest" }
+            1 { Warn "Installed content does not match the manifest it shipped with (see above)." }
+            default { Warn "Could not verify installed content (verifier unavailable)." }
+        }
+    } else {
+        Warn "No CONTENT_MANIFEST in source -- update checks will be version-only."
     }
 
     # Clean up temp directory
@@ -721,12 +909,14 @@ function Verify-Setup($state) {
         $allGood = $false
     }
 
-    # Azure CLI
+    # Azure CLI -- required only for the enterprise gateway path.
     if (Test-CommandExists "az") {
         Ok "Azure CLI: installed"
-    } else {
-        Warn "Azure CLI: NOT FOUND"
+    } elseif ($FOUNDRY_BASE_URL) {
+        Warn "Azure CLI: NOT FOUND (required for the configured gateway)"
         $allGood = $false
+    } else {
+        Info "  Azure CLI: not installed (only needed for an enterprise gateway)"
     }
 
     # Docker
@@ -754,29 +944,35 @@ function Verify-Setup($state) {
         $allGood = $false
     }
 
-    # Token script
-    $tokenScript = Join-Path $CLAUDE_DIR "get-claude-token.ps1"
-    if (Test-Path $tokenScript) {
-        Ok "Token script: $tokenScript"
-    } else {
-        Warn "Token script: NOT FOUND"
-        $allGood = $false
-    }
-
-    # Settings file
-    $settingsFile = Join-Path $CLAUDE_DIR "settings.json"
-    if (Test-Path $settingsFile) {
-        # Verify username is not placeholder
-        $content = Get-Content $settingsFile -Raw
-        if ($content -match "YourName") {
-            Warn "Settings file: contains 'YourName' placeholder -- needs your real username"
-            $allGood = $false
+    # Gateway auth -- only a requirement when a gateway was requested. A default
+    # install talks to Anthropic directly and has neither file, which is correct,
+    # not "misconfigured". Reporting it as a failure sends every default user to
+    # the "Setup Incomplete" path over something they never asked for.
+    if ($FOUNDRY_BASE_URL) {
+        $tokenScript = Join-Path $CLAUDE_DIR "get-claude-token.ps1"
+        if (Test-Path $tokenScript) {
+            Ok "Token script: $tokenScript"
         } else {
-            Ok "Settings file: $settingsFile"
+            Warn "Token script: NOT FOUND"
+            $allGood = $false
+        }
+
+        $settingsFile = Join-Path $CLAUDE_DIR "settings.json"
+        if (Test-Path $settingsFile) {
+            # Verify username is not placeholder
+            $content = Get-Content $settingsFile -Raw
+            if ($content -match "YourName") {
+                Warn "Settings file: contains 'YourName' placeholder -- needs your real username"
+                $allGood = $false
+            } else {
+                Ok "Settings file: $settingsFile"
+            }
+        } else {
+            Warn "Settings file: NOT FOUND"
+            $allGood = $false
         }
     } else {
-        Warn "Settings file: NOT FOUND"
-        $allGood = $false
+        Info "  Gateway auth: not configured (direct Anthropic access -- set MAKEIT_FOUNDRY_BASE_URL to change)"
     }
 
     # Skills
@@ -824,11 +1020,17 @@ function Show-FinalReport($allGood) {
         Info ""
         Info "  1. Open PowerShell"
         Info "  2. Run:  Set-ExecutionPolicy -Scope Process Bypass"
-        Info "  3. Run:  az login"
-        Info "  4. Sign in with your corporate account in the browser"
-        Info "  5. Run:  cd ~\Documents\GitHub"
-        Info "  6. Run:  claude"
-        Info "  7. Type: /make-it"
+        if ($FOUNDRY_BASE_URL) {
+            Info "  3. Run:  az login"
+            Info "  4. Sign in with your corporate account in the browser"
+            Info "  5. Run:  cd ~\Documents\GitHub"
+            Info "  6. Run:  claude"
+            Info "  7. Type: /make-it"
+        } else {
+            Info "  3. Run:  cd ~\Documents\GitHub"
+            Info "  4. Run:  claude"
+            Info "  5. Type: /make-it"
+        }
         Info ""
         Info "That's it! Describe your app idea and /make-it builds it for you."
         Info ""
@@ -836,14 +1038,16 @@ function Show-FinalReport($allGood) {
         Info "  YOUR DAILY WORKFLOW (every time you use Claude Code):"
         Info ""
         Info "    Set-ExecutionPolicy -Scope Process Bypass"
-        Info "    az login"
+        if ($FOUNDRY_BASE_URL) { Info "    az login" }
         Info "    cd ~\Documents\GitHub"
         Info "    claude"
         Info "---------------------------------------------------------------"
         Info ""
-        Info "  Azure tokens expire after ~1-2 hours. If Claude Code stops"
-        Info "  working, close it, run 'az login' again, and restart 'claude'."
-        Info ""
+        if ($FOUNDRY_BASE_URL) {
+            Info "  Azure tokens expire after ~1-2 hours. If Claude Code stops"
+            Info "  working, close it, run 'az login' again, and restart 'claude'."
+            Info ""
+        }
         Info "  To update skills later:"
         Info "    /make-it update    (from inside Claude Code)"
         Info "    -- or --"
@@ -869,6 +1073,13 @@ function Show-FinalReport($allGood) {
 # Check-for-updates mode (called by /make-it update)
 # ===========================================================================
 
+# Mirrors check_update() in install.sh, including its reasoning: a matching
+# VERSION string is NOT evidence of being current, because a release can change
+# content without bumping VERSION and installed files can be edited locally. So
+# after the version comparison, compare file hashes against the published
+# manifest. This function returns the exit code rather than calling `exit`,
+# which would close the session under `irm ... | iex`.
+#   0 = current   1 = check failed   2 = update available
 function Check-Update {
     $current = "none"
     if (Test-Path $VERSION_FILE) {
@@ -877,21 +1088,65 @@ function Check-Update {
 
     $remote = "unknown"
     try {
-        $remote = (Invoke-RestMethod -Uri "$GITHUB_RAW/VERSION" -UseBasicParsing).Trim()
+        $remote = (Invoke-RestMethod -Uri "$GITHUB_RAW/VERSION" -UseBasicParsing).ToString().Trim()
     } catch {}
 
     if ($remote -eq "unknown") {
         Write-Host "Could not check for updates. Verify your internet connection."
-        exit 1
+        return 1
     }
 
-    if ($current -eq $remote) {
-        Write-Host "You're already on the latest version (v$current)."
-        exit 0
+    # A version difference is decisive on its own.
+    if ($current -ne $remote) {
+        Write-Host "Update available: v$current -> v$remote"
+        return 2
     }
 
-    Write-Host "Update available: v$current -> v$remote"
-    exit 2
+    # Same version string -- now check content.
+    $tmpManifest = Join-Path ([System.IO.Path]::GetTempPath()) "make-it-manifest-$(Get-Random)"
+    $tmpVerifier = Join-Path ([System.IO.Path]::GetTempPath()) "make-it-verifier-$(Get-Random).ps1"
+    try {
+        try {
+            Invoke-WebRequest -Uri "$GITHUB_RAW/CONTENT_MANIFEST" -OutFile $tmpManifest -UseBasicParsing
+        } catch {
+            Write-Host "You're on v$current (matching the latest published version)."
+            Write-Host "Note: could not fetch the content manifest, so this is a version-only"
+            Write-Host "check -- content changes shipped without a version bump would be missed."
+            return 0
+        }
+
+        # Fetch the verifier rather than trusting the installed copy: an install
+        # that predates this feature has no verifier, and that is exactly the
+        # install most likely to be stale. Fall back to the local one if offline.
+        $verifier = $CONTENT_VERIFIER
+        try {
+            Invoke-WebRequest -Uri "$GITHUB_RAW/.claude/make-it/scripts/content-manifest.ps1" `
+                -OutFile $tmpVerifier -UseBasicParsing
+            if ((Test-Path $tmpVerifier) -and (Get-Item $tmpVerifier).Length -gt 0) { $verifier = $tmpVerifier }
+        } catch {}
+
+        $cstat = Invoke-ContentVerifier $verifier $tmpManifest $CLAUDE_DIR
+        switch ($cstat) {
+            0 {
+                Write-Host "You're already on the latest version (v$current), and all content matches."
+                return 0
+            }
+            1 {
+                Write-Host "Update available: content differs from the published v$remote release."
+                Write-Host "(Version strings match at v$current -- this was found by content hash.)"
+                return 2
+            }
+            default {
+                Write-Host "You're on v$current (matching the latest published version)."
+                Write-Host "Note: could not verify file content (verifier unavailable) -- this is a"
+                Write-Host "version-only check. Re-running the installer will refresh it."
+                return 0
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $tmpManifest -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tmpVerifier -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ===========================================================================
@@ -937,9 +1192,16 @@ function Update-SkillsOnly {
 # Main
 # ===========================================================================
 
-# Handle "check" argument (used by /make-it update internally)
-if ($args.Count -gt 0 -and $args[0] -eq "check") {
-    Check-Update
+# Handle check mode. Two triggers, because `irm ... | iex` passes no arguments:
+#   .\install.ps1 check                      (file invocation)
+#   $env:MAKEIT_ACTION = "check"; irm ... | iex   (one-liner)
+$requestedAction = if ($args.Count -gt 0) { $args[0] } else { $env:MAKEIT_ACTION }
+if ($requestedAction -eq "check") {
+    $rc = Check-Update
+    # Surface the result without `exit`, which would close the caller's session.
+    $global:LASTEXITCODE = $rc
+    $script:MakeItCheckExit = $rc
+    Write-Host "check_exit=$rc"
     return
 }
 
@@ -992,23 +1254,44 @@ if (-not $existingState) {
     PressEnter "Ready to begin?"
 }
 
-# Step 1: Install all software (batched, one reboot at most)
-$state = Install-Software $state
+# Fail() throws rather than calling exit, because under `irm ... | iex` an exit
+# closes the user's PowerShell window -- taking the error message with it. This
+# catch is the other half of that: it prints the failure and where progress was
+# saved, then ends the script normally so the window survives to be read.
+try {
+    # Step 1: Install all software (batched, one reboot at most)
+    $script:RebootPending = $false
+    $state = Install-Software $state
+    if ($script:RebootPending) {
+        # Progress is saved; the reboot message was already printed.
+        return
+    }
 
-# Step 2: Configure git-bash path
-$state = Configure-GitBash $state
+    # Step 2: Configure git-bash path
+    $state = Configure-GitBash $state
 
-# Step 3: Install Claude Code
-$state = Install-ClaudeCode $state
+    # Step 3: Install Claude Code
+    $state = Install-ClaudeCode $state
 
-# Step 4: Configure Azure auth (token script + settings.json + az login)
-$state = Configure-AzureAuth $state
+    # Step 4: Configure Azure auth (token script + settings.json + az login)
+    $state = Configure-AzureAuth $state
 
-# Step 5: Install /make-it skills
-$state = Install-MakeItSkills $state
+    # Step 5: Install /make-it skills
+    $state = Install-MakeItSkills $state
 
-# Step 6: Verify everything
-$allGood = Verify-Setup $state
+    # Step 6: Verify everything
+    $allGood = Verify-Setup $state
 
-# Final report
-Show-FinalReport $allGood
+    # Final report
+    Show-FinalReport $allGood
+}
+catch {
+    Write-Host ""
+    Write-Host "  [X] Setup stopped: $($_.Exception.Message)" -ForegroundColor Red
+    if (Test-Path $STATE_FILE) {
+        Write-Host "      Completed steps are saved in $STATE_FILE -- re-running"
+        Write-Host "      this script resumes instead of starting over."
+    }
+    Write-Host ""
+    $global:LASTEXITCODE = 1
+}
