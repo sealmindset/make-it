@@ -6,7 +6,9 @@ This guide gets Claude Code and /make-it skills running on your Windows computer
 
 ## Automated Setup (Recommended)
 
-The install script handles everything: Node.js, Git, Azure CLI, Rancher Desktop, Claude Code, and all configuration. If it needs to restart your computer (for Rancher Desktop), it saves progress and picks up where it left off.
+The install script handles everything: Node.js, Git, Azure CLI, a container runtime, Claude Code, and all configuration.
+
+**If you already have Docker Desktop, you are done with containers** -- the script detects it, installs nothing over it, and does not ask you to restart. Rancher Desktop is only installed when *neither* runtime is present; either one satisfies /make-it. If Rancher Desktop does get installed, the script needs one restart, saves progress, and picks up where it left off.
 
 ### First Run
 
@@ -76,9 +78,9 @@ If you prefer to install each piece yourself instead of using the automated scri
 
 ### Before You Start
 
-- You will need **administrator access** on your computer for Rancher Desktop and WSL
+- You will need **administrator access** on your computer *only if* a container runtime has to be installed (Rancher Desktop and WSL). Already have Docker Desktop? Not needed.
 - The entire setup takes about 20-30 minutes
-- **You must restart your computer once** (after Rancher Desktop in Step 1)
+- **You must restart your computer once** -- but only if Rancher Desktop gets installed in Step 1. With Docker Desktop already present, no restart happens.
 - Every time you open a new PowerShell window, **run this command first**:
 
 ```powershell
@@ -97,7 +99,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 ### Step 1 of 6: Install Required Software
 
-Install all software first, then restart once for Rancher Desktop.
+Install all software first, then restart once for Rancher Desktop. **Skip the Rancher Desktop command and the restart entirely if you already have Docker Desktop** -- either runtime works, and installing both gains you nothing.
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -111,6 +113,7 @@ winget install Git.Git
 # Azure CLI (connects to your organization's AI service)
 winget install Microsoft.AzureCLI
 
+# Container runtime -- SKIP THIS if Docker Desktop is already installed.
 # Rancher Desktop (runs your apps in containers -- no paid license required)
 winget install suse.RancherDesktop
 
@@ -120,7 +123,7 @@ winget install GitHub.cli
 
 > **If `winget` is not available** (older Windows 10): Install each tool manually from its website -- Node.js from https://nodejs.org, Git from https://git-scm.com, Azure CLI from https://aka.ms/installazurecliwindows, Rancher Desktop from https://rancherdesktop.io/
 
-**Restart your computer** (required for Rancher Desktop).
+**Restart your computer** (required for Rancher Desktop -- skip if you already had Docker Desktop and did not install Rancher).
 
 After restarting:
 
