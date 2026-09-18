@@ -87,7 +87,21 @@ Set-ExecutionPolicy -Scope Process Bypass
 irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 ```
 
-See the complete **[Windows Setup Guide](WINDOWS-SETUP.md)** for manual steps, daily workflow, and troubleshooting.
+To check for updates without installing, set `MAKEIT_ACTION` first -- `irm ... | iex`
+cannot pass arguments to the script:
+
+```powershell
+$env:MAKEIT_ACTION = "check"
+irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+$env:MAKEIT_ACTION = $null
+```
+
+Running Claude Code through an enterprise Azure AI Foundry gateway is opt-in. Set
+`MAKEIT_FOUNDRY_BASE_URL` (and, if your deployment names differ from the defaults,
+`MAKEIT_OPUS_MODEL` / `MAKEIT_SONNET_MODEL` / `MAKEIT_HAIKU_MODEL`) before running the
+installer. Without it, nothing touches your Claude Code authentication.
+
+See the complete **[Windows Setup Guide](docs/WINDOWS-SETUP.md)** for manual steps, daily workflow, and troubleshooting.
 
 #### macOS / Linux
 

@@ -131,6 +131,29 @@ cd /tmp && curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main
 
 6. **STOP here. Do NOT continue to Preflight or any other phase.** The update flow is complete.
 
+**On Windows** (no bash available -- `curl | bash` is not a fallback there), use
+install.ps1 instead. The exit codes and their meanings are identical; only the
+transport differs. Note `$env:MAKEIT_ACTION`: `irm ... | iex` cannot pass arguments,
+so check mode is selected by environment variable, and the script prints
+`check_exit=<n>` because its return code does not survive the pipeline.
+
+```powershell
+cd $env:TEMP
+$env:MAKEIT_ACTION = "check"
+irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+$env:MAKEIT_ACTION = $null
+```
+
+   To install after `check_exit=2`:
+
+```powershell
+cd $env:TEMP
+irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+```
+
+   `cd $env:TEMP` for the same reason as `cd /tmp`: install.ps1 refuses to treat the
+   install target as a source tree, and running from `$env:USERPROFILE` trips that guard.
+
 If `$ARGUMENTS` is anything OTHER than "update" (or is empty), skip this step entirely and proceed to Preflight below.
 
 </step>

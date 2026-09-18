@@ -19,7 +19,7 @@ irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
 ```
 
 3. Follow the on-screen prompts
-4. When asked to log in to Azure, a browser opens -- **sign in with your corporate/work account** (the same one you use for email and Teams)
+4. If you configured an enterprise gateway (see Step 4 below), a browser opens for Azure sign-in -- **use your corporate/work account** (the same one you use for email and Teams). A default install never asks.
 
 ### If the Script Says "Restart Required"
 
@@ -49,10 +49,12 @@ Every time you want to use Claude Code, open PowerShell and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-az login
 cd ~\Documents\GitHub
 claude
 ```
+
+On an enterprise gateway, add `az login` before `cd` -- Azure tokens expire after
+roughly an hour or two, so this is a daily step for those installs only.
 
 Inside Claude Code:
 
@@ -185,9 +187,24 @@ Verify:
 claude --version
 ```
 
-### Step 4 of 6: Configure Azure AI Foundry Authentication
+### Step 4 of 6: Configure an Enterprise Gateway (optional)
 
-Claude Code needs two configuration files and an Azure login. First, find your Windows username:
+**Skip this step unless your organization runs Claude Code behind its own Azure
+AI Foundry gateway.** A normal install talks to Anthropic directly and needs
+neither of the files below. The installer skips this step too unless you set
+`MAKEIT_FOUNDRY_BASE_URL` before running it:
+
+```powershell
+$env:MAKEIT_FOUNDRY_BASE_URL = "https://your-gateway.example.com/anthropic"
+Set-ExecutionPolicy -Scope Process Bypass
+irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex
+```
+
+Your gateway operator gives you that URL and, if the deployment names differ
+from the defaults, the values for `MAKEIT_OPUS_MODEL`, `MAKEIT_SONNET_MODEL`
+and `MAKEIT_HAIKU_MODEL`.
+
+The rest of this step is the manual equivalent. First, find your Windows username:
 
 ```powershell
 $env:USERNAME
@@ -215,17 +232,20 @@ try {
 
 #### Create the settings file
 
-Create `C:\Users\YourName\.claude\settings.json` with this content (**replace `YourName` with your actual username**):
+If you already have a `settings.json`, **add these keys to it** -- do not replace
+the file, or you lose whatever else is in it. (The installer merges for this
+reason.) Replace `YourName` with your actual username, the gateway URL with your
+organization's, and the model values with your gateway's deployment names:
 
 ```json
 {
   "apiKeyHelper": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\YourName\\.claude\\get-claude-token.ps1",
   "env": {
     "CLAUDE_CODE_USE_FOUNDRY": "1",
-    "ANTHROPIC_FOUNDRY_BASE_URL": "https://snapistg-scus.azure.sleepnumber.com/anthropic",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "cogdep-aifoundry-dev-eus2-claude-sonnet-4-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "cogdep-aifoundry-dev-eus2-claude-haiku-4-5",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "cogdep-aifoundry-dev-eus2-claude-opus-4-6"
+    "ANTHROPIC_FOUNDRY_BASE_URL": "https://your-gateway.example.com/anthropic",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5"
   }
 }
 ```
