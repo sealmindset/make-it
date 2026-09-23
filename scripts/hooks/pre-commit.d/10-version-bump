@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# 10-version-bump -- auto-increment the patch field in VERSION on every commit.
+#
+# Bumps 1.6.0 -> 1.6.1 -> 1.6.2. To bump minor or major, edit VERSION manually
+# and stage it before committing; this part then leaves it alone.
+#
+# Recovered from an uncommitted .git/hooks/pre-commit that had been installed by
+# hand in at least one clone. It lived only in that clone's .git directory, so it
+# was invisible to everyone else and it occupied the filename the documented
+# CONTENT_MANIFEST hook needed. Committing it here makes the behaviour explicit
+# and lets both parts coexist -- see the dispatcher in ../pre-commit.
+
+set -uo pipefail
+
+VERSION_FILE="VERSION"
+
+# A staged manual bump takes priority over the automatic one.
+if git diff --cached --name-only | grep -q "^${VERSION_FILE}$"; then
+  exit 0
+fi
+
+[ -f "$VERSION_FILE" ] || exit 0
+
+# Rebase and merge commits would otherwise bump once per replayed commit.
+if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || [ -f ".git/MERGE_HEAD" ]; then
+  exit 0
+fi
+
+current="$(tr -d '[:space:]' < "$VERSION_FILE")"
+
+IFS='.' read -r major minor patch <<< "$current"
+case "$major$minor$patch" in
+  *[!0-9]*|"")
+    echo "10-version-bump: VERSION is '$current', not major.minor.patch -- leaving it alone" >&2
+    exit 0
+    ;;
+esac
+
+patch=$((patch + 1))
+echo "${major}.${minor}.${patch}" > "$VERSION_FILE"
+git add "$VERSION_FILE"
+echo "pre-commit: VERSION ${current} -> ${major}.${minor}.${patch}"
