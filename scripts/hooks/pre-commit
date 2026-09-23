@@ -1,34 +1,47 @@
 #!/usr/bin/env bash
-# pre-commit -- keep CONTENT_MANIFEST in sync with the installed surface.
+# pre-commit -- dispatcher. Runs every part in scripts/hooks/pre-commit.d/ in
+# lexical order, so a clone can hold more than one pre-commit behaviour at once.
 #
 # Install once per clone:
 #   ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit
 #
-# WHY: `/make-it update` detects drift by comparing installed files against the
-# published CONTENT_MANIFEST. If a commit changes .claude/ content but leaves the
-# manifest stale, the manifest describes the previous release and update checks go
-# back to being version-string guesses. This hook regenerates and stages it so
-# that cannot happen by omission.
+# WHY A DISPATCHER: git allows exactly one .git/hooks/pre-commit. This repo grew
+# two independent ones -- a VERSION patch bumper and a CONTENT_MANIFEST
+# regenerator -- and because both wanted the same filename, installing either
+# silently destroyed the other. That is what happened in practice: the documented
+# `ln -sf` above was never run in at least one clone, the bumper held the slot,
+# and the manifest guarantee was quietly absent while the repo's own CI comment
+# claimed the hook prevented stale manifests. A dispatcher removes the collision:
+# parts are additive, and installing a new one cannot uninstall an existing one.
+#
+# ADDING A PART: drop an executable file in scripts/hooks/pre-commit.d/ named
+# NN-name, where NN orders it. A part that exits non-zero aborts the commit.
+# Parts run from the repository root. Anything a part stages with `git add` is
+# included in the commit being made.
 
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-gen="$repo_root/.claude/make-it/scripts/content-manifest.sh"
-[ -f "$gen" ] || exit 0   # nothing to do in a tree without the generator
+parts_dir="$repo_root/scripts/hooks/pre-commit.d"
+[ -d "$parts_dir" ] || exit 0   # nothing installed; nothing to do
 
-# Only act when the installed surface is part of this commit.
-if ! git diff --cached --name-only | grep -qE '^\.claude/(commands/|make-it/)'; then
-  exit 0
-fi
+shopt -s nullglob
+for part in "$parts_dir"/*; do
+  [ -f "$part" ] || continue
+  case "$part" in
+    *.md|*.disabled|*~) continue ;;   # docs and parked parts are not hooks
+  esac
 
-fresh="$(mktemp)"
-trap 'rm -f "$fresh"' EXIT
-bash "$gen" generate "$repo_root" >"$fresh"
+  if [ ! -x "$part" ]; then
+    echo "pre-commit: skipping $(basename "$part") -- not executable" >&2
+    continue
+  fi
 
-if ! diff -q CONTENT_MANIFEST "$fresh" >/dev/null 2>&1; then
-  cp "$fresh" CONTENT_MANIFEST
-  git add CONTENT_MANIFEST
-  echo "pre-commit: regenerated CONTENT_MANIFEST and staged it"
-fi
+  if ! "$part"; then
+    status=$?
+    echo "pre-commit: $(basename "$part") failed (exit $status) -- commit aborted" >&2
+    exit "$status"
+  fi
+done
