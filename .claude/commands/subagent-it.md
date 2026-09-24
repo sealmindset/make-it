@@ -54,7 +54,10 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 
 ## Steps
 1. **Resume check** — `cat "$(git rev-parse --show-toplevel)/.make-it/sdd/progress.md"`. Tasks
-   marked complete are DONE; resume at the first unmarked one.
+   marked complete are DONE; resume at the first unmarked one. Arm the ledger: append
+   `RUN: plan=<path> tasks=<N>` (or `RUN: resume` if already armed). A Stop hook (`sdd-gate`)
+   then refuses to let the run end until you append `STATUS: DONE | BLOCKED <why> |
+   AWAITING_HUMAN <what>` — write AWAITING_HUMAN before asking the user anything.
 2. **Read the plan once** — note global constraints, create todos, ensure you're on a branch/worktree.
 3. **Pre-flight review (once)** — scan for tasks that contradict each other/the constraints or
    that mandate something the review rubric treats as a defect; present all findings as ONE

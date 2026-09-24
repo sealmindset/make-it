@@ -23,6 +23,8 @@ approved plan as input — it executes, it does not brainstorm.
   named file; prints the path.
 - `~/.claude/make-it/sdd/scripts/review-package BASE HEAD` — writes a single file with the
   commit list + diffstat + `git diff -U10` for the range; prints the path.
+- `~/.claude/make-it/sdd/scripts/sdd-gate` — Stop hook that keeps an open run going until its
+  gates pass (see Durable progress).
 - `~/.claude/make-it/sdd/implementer-prompt.md` — implementer dispatch template.
 - `~/.claude/make-it/sdd/task-reviewer-prompt.md` — task reviewer dispatch template.
 - Final whole-branch review: the **`/code-review`** skill.
@@ -150,9 +152,34 @@ re-dispatched entire completed sequences — the most expensive failure observed
 
 - At start: `cat "$(git rev-parse --show-toplevel)/.make-it/sdd/progress.md"`. Tasks marked
   complete there are DONE — resume at the first unmarked task; do not re-dispatch.
+- **Arm the run:** append `RUN: plan=<plan-path> tasks=<N>` before dispatching the first task.
+  (After a compaction/resume on an already-armed run, append `RUN: resume` instead.)
 - On a clean review, append `Task N: complete (commits <base7>..<head7>, review clean)`.
+- **Release the run** by appending exactly one of: `STATUS: DONE` (final review clean),
+  `STATUS: BLOCKED <why>` (cannot proceed), or `STATUS: AWAITING_HUMAN <what you need>` (a
+  question only the user can answer — write it BEFORE you ask). When the user has answered,
+  append `RUN: resume` to re-arm.
 - The ledger is the recovery map — trust it and `git log` over recollection after compaction.
 - `git clean -fdx` destroys the ledger (git-ignored scratch); recover from `git log`.
+
+### The gate (Stop hook)
+
+A rule in this document is advice the controller can forget mid-run. `sdd/scripts/sdd-gate` is a
+**Stop hook**: while the ledger holds an armed `RUN:` with no later `STATUS:`, any attempt to end
+the turn is refused (exit 2) with a reminder of the next checkpoint and the escape hatches above.
+It is a no-op in any repo without an armed ledger, so it is safe to leave installed globally.
+Circuit breaker: after 3 nudges with no new `Task N: complete`, the gate records that in the
+ledger and releases — a stuck controller is handed back to the human, never looped forever.
+
+Install once (user-level `~/.claude/settings.json`):
+
+```json
+"Stop": [
+  { "hooks": [ { "type": "command",
+                 "command": "python3 ~/.claude/make-it/sdd/scripts/sdd-gate",
+                 "timeout": 5 } ] }
+]
+```
 
 ---
 
