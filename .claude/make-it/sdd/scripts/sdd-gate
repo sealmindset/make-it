@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Stop hook: keep a Subagent-Driven Development run going until its gates pass.
+
+A rule in a prompt is advice the controller can forget mid-run; a Stop hook is a
+gate it cannot talk its way out of. When the main agent tries to end its turn
+while an SDD run is open, this exits 2 with a reminder on stderr, which Claude
+Code feeds back as the next instruction. It is a no-op outside an active run.
+
+Ledger: <repo>/.make-it/sdd/progress.md (append-only lines)
+  RUN: plan=<path> tasks=<N>     controller writes this when a run starts
+  Task N: complete (...)         controller writes after each clean review
+  STATUS: BLOCKED <why>          release: cannot proceed, human needed
+  STATUS: AWAITING_HUMAN <what>  release: a question only the user can answer
+  STATUS: DONE                   release: final whole-branch review clean
+  RUN: resume                    re-arm after a STATUS once the human answered
+  gate: nudged <time>            written by this hook (cap counter)
+
+Fail-open everywhere: a bug here must never trap or block a real session.
+"""
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+
+CAP = 3  # consecutive nudges with no task completed -> release to the human
+
+
+def main():
+    data = json.loads(sys.stdin.read() or "{}")
+    cwd = data.get("cwd") or os.getcwd()
+    try:
+        top = subprocess.check_output(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            stderr=subprocess.DEVNULL, text=True).strip()
+    except Exception:
+        return 0
+    ledger = os.path.join(top, ".make-it", "sdd", "progress.md")
+    if not os.path.isfile(ledger):
+        return 0
+    with open(ledger) as f:
+        lines = [l.rstrip("\n") for l in f]
+
+    run_i = start_i = None
+    total = 0
+    for i, l in enumerate(lines):
+        m = re.match(r"\s*RUN:.*\btasks=(\d+)", l)
+        if m:
+            run_i, start_i, total = i, i, int(m.group(1))
+        elif re.match(r"\s*RUN:\s*resume\b", l):
+            run_i = i
+    if run_i is None or total == 0:
+        return 0  # no armed run in this ledger
+    if any(re.match(r"\s*STATUS:", l) for l in lines[run_i + 1:]):
+        return 0  # released until a `RUN: resume`
+
+    done = set()
+    last_progress = run_i
+    for i, l in enumerate(lines[start_i + 1:], start_i + 1):
+        m = re.match(r"\s*Task\s+(\d+):\s*complete", l)
+        if m:
+            done.add(int(m.group(1)))
+            last_progress = max(last_progress, i)
+    nudges = sum(1 for l in lines[last_progress + 1:] if l.startswith("gate: nudged"))
+    if nudges >= CAP:
+        return 0  # cap already reached and recorded; stay released
+
+    pending = [n for n in range(1, total + 1) if n not in done]
+    stamp = datetime.datetime.now().isoformat(timespec="seconds")
+    with open(ledger, "a") as f:
+        f.write(f"gate: nudged {stamp}\n")
+        if nudges + 1 >= CAP:
+            f.write(f"gate: cap {CAP} reached with no progress, released to human {stamp}\n")
+
+    if pending:
+        todo = (f"{len(done)}/{total} checkpoints complete; next is Task {pending[0]}. "
+                "Continue the plan (subagent-driven-development.md): dispatch the next "
+                "implementer / reviewer / fix loop.")
+    else:
+        todo = (f"all {total} checkpoints complete but the run is still open. Run the final "
+                "whole-branch review, fix its findings, then append `STATUS: DONE`.")
+    sys.stderr.write(
+        f"SDD gate: {todo} Do not stop to ask whether to continue. "
+        "Escape hatches (append ONE line to .make-it/sdd/progress.md): "
+        "`STATUS: BLOCKED <why>` if you cannot proceed; `STATUS: AWAITING_HUMAN <what>` if only "
+        "the user can answer; `STATUS: DONE` when finished. After the user answers, append "
+        f"`RUN: resume` to re-arm the gate. Nudge {nudges + 1}/{CAP}; after nudge {CAP} the gate releases.")
+    return 2
+
+
+try:
+    sys.exit(main())
+except Exception:
+    sys.exit(0)
