@@ -247,6 +247,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
 fe758d3504d1ec1aac0498fa7f0b173da517ccfefd1fec181f8bdbf3b09947fb  make-it/sdd/implementer-prompt.md
 6495a6471a5c4e84842b451d4f38e893b379c1c37fb3a4f897bd564da65d0d02  make-it/sdd/scripts/review-package
+dbfce727ddda846addde0611911296a7ede543616f913ae69d9cd457d13eaa2e  make-it/sdd/scripts/sdd-gate
 88b979defceb0005dbdf7a985aa0603ae272ab67bb68ed1ed4260f015944d288  make-it/sdd/scripts/task-brief
 97a2706267ae270d02ee58b9ca2cba4b5f33edc4c4ed37b1ab92f0fc30b56150  make-it/sdd/task-reviewer-prompt.md
 35c1a44f1bf1f6ed64dda42238edd398ebce6a5f1071bba824db6e951536293f  make-it/templates/ai-safety-attestation.md
