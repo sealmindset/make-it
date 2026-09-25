@@ -100,7 +100,7 @@ fi
 if [ "$CHECK" = "1" ]; then
   errors=""
 
-  offenders="$(grep -rl '~/\.claude' "$DIST" 2>/dev/null || true)"
+  offenders="$(grep -rn '~/\.claude' "$DIST" 2>/dev/null || true)"
   if [ -n "$offenders" ]; then
     errors="$errors
 Lingering ~/.claude references remain in:
@@ -112,7 +112,8 @@ $offenders"
     refs_out="$out_dir/references"
     for f in "$out_dir/SKILL.md" "$refs_out"/*.md; do
       [ -f "$f" ] || continue
-      refs="$(grep -oE 'references/[A-Za-z0-9_.-]*[A-Za-z0-9_-]' "$f" 2>/dev/null | sort -u || true)"
+      refs="$(grep -oE '(^|[^/:A-Za-z0-9_.-])references/[A-Za-z0-9_.-]*[A-Za-z0-9_-]' "$f" 2>/dev/null \
+        | sed -E 's/^[^/:A-Za-z0-9_.-]?//' | sort -u || true)"
       for ref in $refs; do
         base="$(basename "$ref")"
         if [ ! -f "$refs_out/$base" ]; then
