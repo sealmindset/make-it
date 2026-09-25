@@ -32,14 +32,15 @@ entries, handoff bundles, attestations, and secret checks all use it.
 
 **The project's own `.env`.** The make-it workflow may create the project's `.env` from
 `.env.example`, add or set keys the workflow itself generates (for example `JWT_SECRET`), and
-check whether a key NAME is present (with a command that prints names only). It must never
-print, quote, upload, commit, or bundle a value.
+check whether a key NAME is present (with a command that prints names only). Set keys without
+opening the file (append, or an in-place shell edit such as `sed`), since opening it loads every
+value into context. It must never print, quote, upload, commit, or bundle a value.
 
 **Ignore patterns.** When `.gitignore` or `.dockerignore` must exclude secret files, use only the
 patterns that make sense inside a project folder: `.env*` with `!.env.example`, `*.pem`,
 `*.key`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `*.keychain*`, `.aws/credentials`,
 `.netrc`, `*credentials*.json`. Add `.npmrc` / `.pypirc` only after a names-only check shows a
-token key in them (for example `grep -lE '(_authToken|_auth|password)[[:space:]]*=' .npmrc
+token key in them (for example `grep -lsE '(_authToken|_auth|password)[[:space:]]*=' .npmrc
 .pypirc`, which prints file names only). `~/.ssh/`, password-manager exports, and browser
 profile or cookie stores are read rules, not ignore patterns.
 
