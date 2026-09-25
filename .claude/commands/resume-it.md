@@ -82,6 +82,11 @@ where nothing live could run. Before anything else:
   project's setup does (`cp .env.example .env`, then fill local dev values).
 - c. Run every item in its `## Deferred Checks` section as the FIRST work item, before
   suggesting anything else. Report each as PASSED or FAILED from what actually ran.
+- Plan-only bundle (app-context.json + handoff.md, no application code yet): treat
+  app-context.json as the completed Design phase. From `~/.claude/commands/make-it.md`, run
+  `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`
+  with it. Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or
+  `design-decisions`. Then continue normally.
 
 **1. Look for the make-it state breadcrumb:**
 

@@ -45,7 +45,7 @@ purpose and that Claude Code will set up a fresh `.env` from `.env.example`.
 | `archive` | As written, whenever a `handoff.md` is already in the project. |
 | `write`: title block | Put `Source: claude-desktop` on its own line directly under the `# Handoff -- <project name>` title, then the `_Written ..._` line with "by the handoff skill (Claude Desktop)" instead of "by /clear-it". |
 | `write`: 4. Changes Made | Nothing was committed here. Mark each change "not committed (made in Claude Desktop)". |
-| `write`: 6. Next Steps | Say what Claude Code does after the deferred checks. If nothing is built yet (the `make-it` plan route), step 1 is building the app from `.make-it/app-context.json`. If the user asked to ship or deploy, the last step is `/ship-it` (see `references/ship-it-guide.md` for what it needs). |
+| `write`: 6. Next Steps | Say what Claude Code does after the deferred checks. If nothing is built yet (the `make-it` plan route), write: "1. No app code yet. The plan in `.make-it/app-context.json` is the finished design. Check the computer is ready (make-it's preflight machine checks), then build and verify the app from it with make-it's `build-project` and `build-verify` steps. Do not repeat the design questions." The user still just types `/resume-it`. If the user asked to ship or deploy, the last step is `/ship-it` (see `references/ship-it-guide.md` for what it needs). |
 | `write`: after section 6 | Add a `## Deferred Checks` section (below). |
 | `handoff` step (the reset message) | Does not apply. Use "Tell the user" below. |
 | guardrail "NEVER commit, push, ... or modify code" | Still holds. The only extra thing this skill writes is the zip. |
