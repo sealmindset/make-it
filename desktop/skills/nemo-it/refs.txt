@@ -1,0 +1,6 @@
+.claude/commands/nemo-it.md
+# everything nemo-it.md @-imports (execution_context + persona)
+.claude/make-it/references/expert-personas.md
+.claude/nemo-it/references/owasp-testing-guide.md
+.claude/make-it/references/guardrails.md
+.claude/make-it/templates/nemo-it-attestation.md

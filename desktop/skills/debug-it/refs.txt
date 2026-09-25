@@ -1,0 +1,3 @@
+.claude/commands/debug-it.md
+# everything debug-it.md @-imports
+.claude/make-it/references/expert-personas.md
