@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Publishes the built make-it-desktop plugin into a local clone of the private
 # marketplace repo (sealmindset/make-it-desktop). Only ever writes inside that
-# clone -- it never runs git commit/push. Rob (or CI) pushes the clone by hand.
+# clone -- it never runs git commit/push.
 #
 # Usage: desktop/publish.sh <path-to-make-it-desktop-clone>
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 TARGET="${1:-}"
 if [ -z "$TARGET" ]; then
@@ -20,13 +20,34 @@ if [ ! -d "$TARGET" ]; then
   exit 1
 fi
 
-TARGET="$(cd "$TARGET" && pwd)"
+TARGET="$(cd "$TARGET" && pwd -P)"
+
+case "$TARGET" in
+  "$REPO_ROOT"|"$REPO_ROOT"/*)
+    echo "publish.sh: $TARGET is inside the make-it repo ($REPO_ROOT)." >&2
+    echo "publish.sh: pass the path to a separate local clone of the make-it-desktop marketplace repo." >&2
+    exit 1
+    ;;
+esac
 
 if [ -f "$TARGET/.claude/commands/make-it.md" ]; then
   echo "publish.sh: $TARGET looks like the make-it repo itself (has .claude/commands/make-it.md)." >&2
   echo "publish.sh: pass the path to a separate local clone of the make-it-desktop marketplace repo." >&2
   exit 1
 fi
+
+if ! git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "publish.sh: $TARGET is not a git work tree." >&2
+  echo "publish.sh: pass the path to a local clone of the make-it-desktop marketplace repo." >&2
+  exit 1
+fi
+
+for d in "$TARGET/plugins" "$TARGET/plugins/make-it-desktop" "$TARGET/.claude-plugin"; do
+  if [ -L "$d" ]; then
+    echo "publish.sh: $d is a symlink -- refusing to write through it." >&2
+    exit 1
+  fi
+done
 
 echo "== building the plugin =="
 bash "$SCRIPT_DIR/build.sh"
@@ -52,7 +73,8 @@ cat > "$TARGET/.claude-plugin/marketplace.json" <<EOF
     {
       "name": "make-it-desktop",
       "source": "./plugins/make-it-desktop",
-      "description": "make-it guardrails for Claude Desktop and Cowork"
+      "description": "make-it guardrails for Claude Desktop and Cowork",
+      "version": "$VERSION"
     }
   ]
 }

@@ -13,6 +13,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   desktop-plugin:
     name: Build and validate make-it-desktop
@@ -26,8 +29,12 @@ jobs:
       - name: Run build self-tests
         run: bash desktop/test-build.sh
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Install Claude Code CLI
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.282
 
       - name: Validate plugin
         run: HOME="$(mktemp -d)" claude plugin validate dist/make-it-desktop

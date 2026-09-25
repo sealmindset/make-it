@@ -957,7 +957,7 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
-### v1.25.0 -- Claude Desktop & Cowork Plugin
+### v1.25.0 -- Claude Desktop & Cowork plugin
 
 `/make-it`'s guardrails now follow you into Claude Desktop and Cowork, environments with no
 shell, no Docker, and no git. A generated plugin (`desktop/`, see [`desktop/README.md`](desktop/README.md))
@@ -969,9 +969,9 @@ silently skipped.
   `/make-it` uses -- never a hand-copied fork
 - `/resume-it` now detects a Desktop handoff (including a plan-only bundle with no code yet) and
   runs its deferred checks as the first work item
-- Added Tier 0 guardrail "Re-verify on every code change" (`references/guardrails.md`) and the
-  matching verify-step rule in `/debug-it`: a check from before the latest edit is stale and must
-  not be reported as passing; re-run what's runnable, defer the rest
+- Added Tier 0 guardrail 18a, "Re-verify on every code change" (`references/guardrails.md`), and
+  the matching verify-step rule in `/debug-it`: a check from before the latest edit is stale and
+  must not be reported as passing; re-run what's runnable, defer the rest
 
 ### v1.22.0 -- Instruction-Drift Canary
 

@@ -49,20 +49,40 @@ claude plugin validate dist/make-it-desktop
 
 ## Release steps (Rob)
 
-1. Merge the PR to `main`.
+1. Merge the make-it PR to `main` (bumps `VERSION`).
 2. `bash desktop/publish.sh <path-to-local-clone-of-sealmindset/make-it-desktop>` -- builds the
    plugin, syncs it into `<clone>/plugins/make-it-desktop/` (removing anything stale there), and
-   writes `<clone>/.claude-plugin/marketplace.json`. It only writes inside that local clone; it
-   never runs `git commit` or `git push`.
-3. In the clone: review the diff, commit, and push.
-4. The org's marketplace sync picks up the new version on the next sync (manual, or automatic on
-   merge to the clone's default branch). An org admin approves the new version before it reaches
-   everyone.
+   writes `<clone>/.claude-plugin/marketplace.json` (including the bumped version). It only
+   writes inside that local clone; it never runs `git commit` or `git push`.
+3. In the clone: commit on a branch, push the branch, and open a PR against the clone's default
+   branch. The version bump has to land in `plugins/make-it-desktop/.claude-plugin/plugin.json`
+   for the next step to matter.
+4. Merge that PR. **A merged PR that changes the plugin version is what triggers automatic sync**
+   (per the Claude help center) -- a direct push to the default branch does not trigger it. If
+   auto-sync isn't configured, or you want the update sooner, an org admin clicks **Update** on
+   the marketplace in Organization settings to sync manually.
+
+**Caution:** GitHub-synced plugin marketplaces have no separate approval gate. A sync replaces
+the marketplace's plugin list with whatever is in the repo at that moment -- once synced (auto or
+manual), the new version is what everyone installing or already running "installed by default"
+sees. There is no admin review step between sync and rollout; review happens at the PR stage
+above, before merge.
 
 ## One-time org admin setup
 
-1. Create a private (or internal) GitHub repo, `sealmindset/make-it-desktop`.
-2. In Organization Settings, add it as a plugin marketplace via GitHub sync.
-3. Install the Claude GitHub App on that repo so Claude Code can sync it.
+1. Confirm Cowork and Skills are enabled for the organization.
+2. Create the private (or internal) GitHub repo, `sealmindset/make-it-desktop`.
+3. Install the Claude GitHub App on that repo **first** -- sync reads the repo through the app,
+   not through Claude Code.
+4. In Organization settings > Plugins & skills > Marketplaces > Add, choose "Sync from GitHub"
+   and point it at the repo.
+5. Set the `make-it-desktop` plugin to "Available to install" or "Installed by default", per how
+   widely it should roll out.
+6. Optional: turn on auto-sync (requires GitHub admin rights on the repo; a GitHub org admin may
+   need to separately approve the app's webhook permission).
 
-Once set up, every future release is just step 2 above (`publish.sh` + commit + push).
+The marketplace reads `.claude-plugin/marketplace.json` at the repo root -- that path is inferred
+from the plugin reference, so confirm it on the first manual **Update** rather than assuming.
+
+Once set up, every future release is: `publish.sh` into a fresh branch of the clone -> commit,
+push, open a PR -> merge -> auto-sync (or admin clicks Update).
