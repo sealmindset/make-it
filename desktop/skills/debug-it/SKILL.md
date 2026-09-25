@@ -38,6 +38,7 @@ their database, their network services, or anything else on their machine.
 | Hard rule 10, "Fan out" (`/dispatch-it`, parallel agents) | Not available here. Take independent failures one at a time, each through the full method, and say that is what you are doing. |
 | Phase 4, "Implement" | Make the change in the Cowork folder or in the copy you hand back, after the user picks from the decision card. If there is no real tradeoff (Phase 3), proceed without waiting for a pick and say so. |
 | Phase 4, "Verify" | Say "verified" only if the failing test or reproduction ran again here and passed. If it could not run here, deliver the fix anyway (with the failing test, if one was written) and mark **Verification: DEFERRED** with the reason. Never call a fix verified, done, or working unless it ran here. |
+| Item 8, "Verify against the SAME reproduction" (re-verify on every code change) | Re-run whatever ran here after the final edit, not just before it. A check that can't run here at all stays DEFERRED, same as above. |
 | Phase 4, "Capture the lesson" | Write it into the project's notes if you can write to their folder. Otherwise put it in your reply. |
 | The note about a project shipping its own `/debug-it` | Does not apply here. |
 

@@ -92,6 +92,25 @@ verify: build + check + validate; `content-manifest.sh generate . | diff - CONTE
 verify: CI green on the PR; publish.sh into a temp dir produces marketplace.json + plugin that
 `claude plugin validate` accepts.
 
+### Task 6: "Re-verify on every code change" rule (added by Rob, 2026-09-25)
+- Add a Tier 0 rule to `.claude/make-it/references/guardrails.md` (Quality section, next to
+  "Verify the thing works"): **Re-verify on every code change.** After ANY change to code,
+  configuration, or dependencies — including fixes made during build-verify, a fix cycle, or
+  debugging — re-run the checks that cover the changed area (tests, lint/type-check, build, and
+  any affected live checks) before reporting status. A result from before the change is stale
+  and must not be reported as passing. If a covering check cannot be re-run in the current
+  environment, its status reverts to DEFERRED.
+- Add the same rule to the verify step of `.claude/commands/debug-it.md` (it does not import
+  guardrails.md): a fix counts as verified only after the same reproduction AND the covering
+  checks are re-run after the final edit.
+- Desktop wrappers `guardrails`, `make-it`, `debug-it`: one line each pointing to the rule and
+  saying what "re-run" means in the sandbox (re-run what is runnable here; the rest reverts to
+  DEFERRED in the handoff). No restating of the rule text (Global constraint #1).
+- `git add`, then regenerate CONTENT_MANIFEST (both source files are hashed). VERSION stays 1.25.0
+  (same unreleased version).
+verify: build + --check + test-build + validate; rule text present once in dist guardrails and
+debug-it references; manifest diff empty.
+
 ## Out of scope (explicit)
 - Creating/pushing the private `sealmindset/make-it-desktop` repo and connecting org sync —
   outward-facing; done after merge with Rob's confirmation.

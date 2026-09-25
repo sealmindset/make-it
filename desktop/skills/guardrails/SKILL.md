@@ -54,6 +54,10 @@ question). The steps below are for new projects.
    `build-standards.md` Live Verification Checks, `build-verify-security.md` Phase 2b and Phase 3
    rebuilds, and every Tier 1 container, auth-flow, and health-check item.
 
+**Re-verify on every code change** (`references/guardrails.md` Quality section, item 18a):
+after a fix, re-run whatever checks from step 4 can actually run here on the changed area;
+any check that still can't run here reverts to DEFERRED in the handoff, never a stale pass.
+
 Tell the user, in plain words, what was checked, what was fixed, and what is deferred. If
 anything is deferred and the user wants it fully verified, offer the `handoff` skill. It
 packages the project so Claude Code can finish those checks.

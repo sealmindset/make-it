@@ -44,6 +44,9 @@ static page or artifact with no backend, even when it looks like a web app.
   `CLAUDE.md` with the instruction-drift canary using `builder_name`.
 - For `build-verify`, apply the `guardrails` skill. Do Part A and the parts of Parts B and C
   the sandbox can actually run. List everything else as DEFERRED. Never report it as passed.
+  This includes the guardrails **Re-verify on every code change** rule (item 18a): after any
+  fix cycle, re-run whatever checks can actually run here; anything that still can't reverts
+  to DEFERRED.
 - **Part D: do not use the fixed text in make-it.md.** Skip the step 40 message ("built and
   verified", "Everything is working"). Instead, tell the user in plain words what was built,
   what was actually checked here, and what is deferred. Claim only what really ran.
