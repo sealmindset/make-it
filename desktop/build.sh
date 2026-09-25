@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="$REPO_ROOT/dist/make-it-desktop"
-SKILLS_SRC="$SCRIPT_DIR/skills"
+SKILLS_SRC="${MAKE_IT_DESKTOP_SKILLS_DIR:-$SCRIPT_DIR/skills}"
 SKILLS="guardrails make-it debug-it nemo-it handoff"
 
 CHECK=0
@@ -15,19 +15,13 @@ if [ "${1:-}" = "--check" ]; then
 fi
 
 # rewrite_file SRC DST BASENAMES
-# Rewrites @~/.claude/make-it/<...>/<file> and @~/.claude/commands/<file> to
-# references/<file> (dropping the @, Claude Code import syntax). Also rewrites
-# plain-text ~/.claude/make-it/<...>/<file> mentions to references/<file>, but
-# only when <file>'s basename is in the whitelist (i.e. actually copied into
-# this skill's references/ folder) -- otherwise left alone for --check to flag.
+# Rewrites any ~/.claude/<path>/<file> reference (imports carry a leading @,
+# Claude Code's import syntax; plain mentions don't). See rewrite.awk for the
+# exact rules -- gated on whether <file>'s basename is in the whitelist (i.e.
+# actually copied into this skill's references/ folder).
 rewrite_file() {
   local src="$1" dst="$2" basenames="$3"
-  MAKE_IT_DESKTOP_BASENAMES="$basenames" perl -pe '
-    BEGIN { %b = map { $_ => 1 } split(" ", $ENV{MAKE_IT_DESKTOP_BASENAMES}); }
-    s{\@~/\.claude/make-it/[^\s)]+/([^/\s)]+)}{references/$1}g;
-    s{\@~/\.claude/commands/([^/\s)]+)}{references/$1}g;
-    s{~/\.claude/make-it/[^\s)]+/([^/\s)]+)}{ $b{$1} ? "references/$1" : $& }ge;
-  ' "$src" > "$dst"
+  awk -v basenames="$basenames" -f "$SCRIPT_DIR/rewrite.awk" "$src" > "$dst"
 }
 
 rm -rf "$DIST"
@@ -76,6 +70,13 @@ $name: $line (not found at $src_path)"
     done < "$refs_file"
   fi
 
+  dupes="$(printf '%s\n' $basenames | sed '/^$/d' | sort | uniq -d)"
+  if [ -n "$dupes" ]; then
+    echo "build.sh: duplicate reference basenames in $name/refs.txt:" >&2
+    echo "$dupes" >&2
+    exit 1
+  fi
+
   if [ -f "$refs_file" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
@@ -111,7 +112,7 @@ $offenders"
     refs_out="$out_dir/references"
     for f in "$out_dir/SKILL.md" "$refs_out"/*.md; do
       [ -f "$f" ] || continue
-      refs="$(grep -oE 'references/[A-Za-z0-9_.-]+' "$f" 2>/dev/null | sort -u || true)"
+      refs="$(grep -oE 'references/[A-Za-z0-9_.-]*[A-Za-z0-9_-]' "$f" 2>/dev/null | sort -u || true)"
       for ref in $refs; do
         base="$(basename "$ref")"
         if [ ! -f "$refs_out/$base" ]; then
