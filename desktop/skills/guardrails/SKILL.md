@@ -21,10 +21,17 @@ Check what you can do; do not assume:
 - **Otherwise (Desktop chat sandbox):** build in the sandbox and give the user the result as
   downloadable files (a zip for anything with more than a few files) or an artifact.
 
+**Keep it proportional.** For a snippet or a single-file edit, apply the relevant rules
+inline and skip the project files (README, CHANGELOG, TODO, the `CLAUDE.md` canary, the name
+question). The steps below are for new projects.
+
 ## Steps
 
 1. **Classify** the project type with the table in `references/guardrails.md` (Project Type
-   Classification). Don't show the user the classification.
+   Classification). Don't show the user the classification. **Route:** if it is a `web-app` with
+   a backend, login, or database, or anything else that needs containers, don't build Tier 1 by
+   hand in the sandbox. Finish the plan (the `make-it` skill does this), then offer the `handoff`
+   skill. A static page or artifact with no backend is built here.
 2. **Apply the rules**: Tier 0 always, plus the matching tier, plus every AI rule marked `AI*` in
    the Tier Activation Matrix when the code calls an AI model. Tier 0 includes the
    **instruction-drift canary**: every generated project gets a root `CLAUDE.md` whose first
