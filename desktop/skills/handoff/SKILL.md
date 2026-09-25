@@ -24,8 +24,8 @@ Check what you can do; do not assume:
 
 ## What goes in the bundle
 
-- The project files. Leave out folders that get rebuilt anyway, like `node_modules/`, `.venv/`,
-  and build output.
+- The project files. Leave out `.git/` and folders that get rebuilt anyway, like
+  `node_modules/`, `.venv/`, and build output.
 - `.make-it/app-context.json`, if the project has one (see `references/app-context.md`).
 - `handoff.md` at the project root.
 - The root `CLAUDE.md` with the instruction-drift canary, if the project has one.
@@ -36,6 +36,11 @@ credentials JSON files). `.env.example` goes in, with placeholder values only. N
 secret value into `handoff.md`. Tell the user plainly that their secrets were left out on
 purpose and that Claude Code will set up a fresh `.env` from `.env.example`.
 
+Before bundling, check that `.env.example` holds placeholders only (no real-looking values such
+as an `sk-ant-` key or a filled-in `CLAUDE_CODE_OAUTH_TOKEN`), and that no secret value appears
+in `handoff.md`, `.handoff-history.md`, or `.make-it-state.md`. If you find one, replace it with
+a placeholder and tell the user in plain words what you removed and where (never the value).
+
 ## Overrides to clear-it.md
 
 | clear-it.md | In Desktop |
@@ -45,10 +50,10 @@ purpose and that Claude Code will set up a fresh `.env` from `.env.example`.
 | `archive` | As written, whenever a `handoff.md` is already in the project. |
 | `write`: title block | Put `Source: claude-desktop` on its own line directly under the `# Handoff -- <project name>` title, then the `_Written ..._` line with "by the handoff skill (Claude Desktop)" instead of "by /clear-it". |
 | `write`: 4. Changes Made | Nothing was committed here. Mark each change "not committed (made in Claude Desktop)". |
-| `write`: 6. Next Steps | Say what Claude Code does after the deferred checks. If nothing is built yet (the `make-it` plan route), write: "1. No app code yet. The plan in `.make-it/app-context.json` is the finished design. Check the computer is ready (make-it's preflight machine checks), then build and verify the app from it with make-it's `build-project` and `build-verify` steps. Do not repeat the design questions." The user still just types `/resume-it`. If the user asked to ship or deploy, the last step is `/ship-it` (see `references/ship-it-guide.md` for what it needs). |
+| `write`: 6. Next Steps | Say what Claude Code does after the deferred checks. If nothing is built yet (the `make-it` plan route), write: "1. There is no app code yet: build the app from the finished plan in `.make-it/app-context.json`, without asking the design questions again. First check the computer is ready (make-it `preflight` machine checks), then build it (`build-project`) and check it works (`build-verify`)." The user still just types `/resume-it`. If the user asked to ship or deploy, the last step is `/ship-it` (see `references/ship-it-guide.md` for what it needs). |
 | `write`: after section 6 | Add a `## Deferred Checks` section (below). |
 | `handoff` step (the reset message) | Does not apply. Use "Tell the user" below. |
-| guardrail "NEVER commit, push, ... or modify code" | Still holds. The only extra thing this skill writes is the zip. |
+| guardrail "NEVER commit, push, ... or modify code" | Still holds. Besides `handoff.md` and `.handoff-history.md`, this skill writes only the zip (Chat) or the bundle files into the user's folder (Cowork), plus placeholder fixes from the secrets check. |
 
 ## Deferred Checks
 

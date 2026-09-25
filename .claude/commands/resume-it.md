@@ -73,20 +73,30 @@ failed approaches, and next steps from the previous session. If it exists:
 - Default the session's starting point to its **Next Steps** section (confirm with the user)
 - `.handoff-history.md`, if present, holds older archived handoffs -- consult only if needed
 
-If `handoff.md` contains `Source: claude-desktop`, it was packaged in Claude Desktop/Cowork,
-where nothing live could run. Before anything else:
-- a. If the folder is not a git repo (`git rev-parse --git-dir` fails): `git init`, `git add`
-  the bundle (confirm `.gitignore` excludes `.env` first) and make the initial commit on the
-  default branch. All further work goes on a feature branch (WORKTREE FIRST, below).
-- b. If `.env` is missing and `.env.example` exists, create `.env` from it the way the
-  project's setup does (`cp .env.example .env`, then fill local dev values).
-- c. Run every item in its `## Deferred Checks` section as the FIRST work item, before
-  suggesting anything else. Report each as PASSED or FAILED from what actually ran.
-- Plan-only bundle (app-context.json + handoff.md, no application code yet): treat
-  app-context.json as the completed Design phase. From `~/.claude/commands/make-it.md`, run
-  `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`
-  with it. Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or
-  `design-decisions`. Then continue normally.
+If the line directly under `handoff.md`'s title is `Source: claude-desktop`, it was packaged in
+Claude Desktop/Cowork, where nothing live could run. Before anything else:
+- a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add `.env` to
+  `.gitignore` if it isn't excluded; `git add` the bundle and make the initial commit on the
+  default branch; only then `pre-commit install` if the project uses pre-commit. All further
+  work goes on a feature branch (WORKTREE FIRST, below). Plan-only bundle: skip this step --
+  make-it's `build-project` makes the initial commit.
+- b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
+  the project's setup does (`cp .env.example .env`, then fill local dev values).
+- c. Plan-only bundle (app-context.json + handoff.md, no application code yet): say in one plain
+  line that you'll now build their app from the plan, and wait for their go-ahead. Then read
+  `~/.claude/commands/make-it.md` AND every file in its `<execution_context>` (reading it does
+  not expand its @ imports). Treat app-context.json as the completed Design phase, with
+  PROJECT_DIR = this folder (build in place, no subfolder; `git init` here is harmless). Run
+  `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`.
+  Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or `design-decisions`.
+- d. Tell the user in one plain line you'll first run the checks that couldn't run in Desktop,
+  and wait for their go-ahead. Then run every item in its `## Deferred Checks` section as the
+  FIRST work item, before suggesting anything else. Report each as PASSED or FAILED from what
+  actually ran.
+- e. Retire the marker: archive `handoff.md` into `.handoff-history.md` per /clear-it's archive
+  rule, then remove it (its Next Steps stay this session's starting point). Add every FAILED
+  or not-yet-run check to TODO.md, so nothing is lost and later runs don't repeat them.
+  Then continue normally.
 
 **1. Look for the make-it state breadcrumb:**
 
