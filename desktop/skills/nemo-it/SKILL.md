@@ -18,7 +18,9 @@ The "What you NEVER do" list and the guardrails in `references/nemo-it.md` stand
 You never change the user's code, configuration, or dependencies, even if they ask. The only
 files you write are the attestation (plus JSON or JUnit if asked for). If the user wants the
 findings addressed, point them to their development team, or offer the `handoff` skill so
-Claude Code can take it from there (its `/fix-it` works from this attestation).
+Claude Code can take it from there (its `/fix-it` works from this attestation). This overrides
+important reminder 1 in `references/nemo-it.md`: to act on findings in Desktop, point them to the
+`make-it` skill (or `/resume-it` in Claude Code). This skill itself still changes nothing.
 
 Never use keys, tokens, or passwords found in the user's files for anything.
 
@@ -50,11 +52,11 @@ Say which mode you are running and what it leaves out before you start.
 | preflight 1 | Say you will read their files and not run their app, and that you will not change anything. |
 | preflight 2 | Take the mode and any `--format` from the user's words. No mode given means `full`. |
 | preflight 5 (running app) | Skip. Do not probe localhost, and do not offer to start the app. Dynamic analysis is NOT RUN. |
-| preflight 6 (production) | Check the project's `.env` files as written. Skip the `echo` lines: they show the sandbox's settings, not theirs. |
+| preflight 6 (production) | Look for production indicators in the project's `.env` files, but print only the file and the key name, never values. Skip the `echo` lines: they show the sandbox's settings, not theirs. Do not ask the "continue? passive scans only" question. Nothing live is scanned, so just note any production indicators in the report. |
 | preflight 7 (tools) | Tools go in the sandbox, not on the user's machine. The consent rule still holds. Never install ZAP, SQLMap, Playwright, NeMo Guardrails, or anything with `brew` or `docker pull`: they only serve checks that cannot run here. |
 | Phase 1.5 item 2 (pip-audit) | Always pass the requirements file. Plain `pip-audit` audits the sandbox's own packages, not the project's. |
 | Phase 2 (dynamic analysis) | NOT RUN, all of it. Record: "Dynamic analysis was not run: this is a static attestation made in a Claude Desktop sandbox. It needs a running app." You may still review the code for the same concern (for example, cookie flags set in code). Record a missing control as a finding with file and line. Record a present control as "present in code, not verified live". |
-| Phase 3 check 0 and important reminder 10 | Code-level mode only, whatever keys the `.env` holds. Replace the "PASS (code-level)" label with **CONTROLS PRESENT IN CODE (static; not behavior-tested)**, and replace its note with: "Behavioral testing was not run. It needs a live AI provider and a running app." |
+| Phase 3 check 0 and important reminder 10 | Code-level mode only, whatever keys the `.env` holds. Do not run the `grep` as written: it prints secret values. Check only whether each key name is present (for example `grep -oE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_URL)=' .env`, which prints the names only), and never print or quote a value. Replace the "PASS (code-level)" label with **CONTROLS PRESENT IN CODE (static; not behavior-tested)**, and replace its note with: "Behavioral testing was not run. It needs a live AI provider and a running app." |
 | Phase 3 test categories 1-6 and step 8 | Do not send any of the test prompts anywhere. Each category is NOT RUN (or N/A when no AI features were found). Do not use the "[X/10 passed]" update. |
 | Phase 4 item 3 (executive summary) | Label the posture rating "based on static review only". |
 | Phase 4 item 4 (OWASP Top 10 mapping) | Status is FAIL, NO FINDINGS (static only), or NOT RUN. Never PASS for a category that depends on live testing. |
@@ -84,12 +86,21 @@ Use Phase 5 and `references/nemo-it-attestation.md` as written, except:
 5. **Template header, Summary Dashboard, Test Environment Details:** Environment and Assessed By
    say "Claude Desktop sandbox (static)" and "nemo-it (make-it-desktop)". Add a "Categories not
    run" row to Key Metrics, and count only fully run categories as passed. Dashboard rows 1-6
-   (NeMo behavioral) and row 20 (Trivy container) are NOT RUN, or N/A if no AI features were
-   found. Target URL, Container Image, Image Digest, and CI Pipeline Run are "none (static
-   scan)".
-6. **Per-category blocks:** Tests Run and Tests Passed count only tests that ran here.
-7. **Appendix A and "Attestation Metadata":** mark tools that did not run as "not run". Add
-   "No live tests were run." after the safe-testing line.
-8. **Phase 5 step 4 summary to the user:** after the findings, list what was not run in plain
-   words. If the user wants those checks done, offer the `handoff` skill; its deferred checks
-   are the Not Run list.
+   (NeMo behavioral) are NOT RUN, or N/A if no AI features were found. Target URL, Container
+   Image, Image Digest, and CI Pipeline Run are "none (static scan)". "OS / Platform" and
+   "Runtime Version" describe the app's declared runtime from its manifests (for example
+   `engines`, `python_requires`, the Dockerfile `FROM` line). If you can't tell, write
+   "sandbox: <x>, not the app runtime".
+6. **DEP-TRIVY (row 20 and section 3.3):** put `trivy fs` / `trivy config` results here, marked
+   "filesystem only; image scan NOT RUN". If trivy did not run, the row is NOT RUN.
+7. **Per-category blocks:** Tests Run and Tests Passed count only tests that ran here.
+8. **Trend vs. Prior and Historical Comparison:** compare only with a prior static attestation.
+   If the prior one was a live or full scan, write "not comparable (prior was a live scan)".
+9. **Appendix A and "Attestation Metadata":** mark tools that did not run as "not run". Add
+   "No live tests were run." after the safe-testing line. Phase 5's "Auditor:" line reads
+   "nemo-it (make-it-desktop, static sandbox scan)".
+10. **Phase 5 step 4 summary to the user:** after the findings, list what was not run in plain
+    words, and say: "If your organization requires a nemo-it attestation for approval, this
+    static one doesn't replace the full scan. Treat every Not Run item as open until it's run
+    in Claude Code." If the user wants those checks done, offer the `handoff` skill; its
+    deferred checks are the Not Run list.
