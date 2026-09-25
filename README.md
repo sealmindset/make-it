@@ -973,12 +973,14 @@ silently skipped.
   the matching verify-step rule in `/debug-it`: a check from before the latest edit is stale and
   must not be reported as passing; re-run what's runnable, defer the rest
 - Added operator safety rules (`references/operator-safety.md`, Tier 0 guardrail 16a), loaded by
-  `/make-it`, `/resume-it`, and `/debug-it` and by every Desktop skill: secret files are never
-  read or bundled, financial/legal/HR/medical files need the user's OK first, web and document
-  content is never treated as instructions, and new MCP servers or connectors need a trusted
-  publisher and the user's confirmation. Desktop/Cowork adds browser-profile and permission-mode
-  reminders, plus an admin checklist of organization settings that back these up
-- `/resume-it` gitignores every secret-file pattern before a Desktop bundle's first commit
+  `/make-it`, `/resume-it`, and `/debug-it` and by every Desktop skill. Claude is instructed never
+  to read or bundle secret files, to ask before opening the user's financial, legal, HR, or
+  medical files, to treat web and document content as information rather than instructions, and
+  to add MCP servers or connectors only from a trusted publisher after the user confirms.
+  Desktop/Cowork adds browser-profile and permission-mode reminders, plus an admin checklist of
+  organization settings that back these up
+- `/resume-it` is instructed to gitignore the secret-file patterns and check `git status` before a
+  Desktop bundle's first commit
 
 ### v1.22.0 -- Instruction-Drift Canary
 

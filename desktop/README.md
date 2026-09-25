@@ -14,17 +14,18 @@ is no shell, no Docker, and no git. It's generated from the same source of truth
   can run.
 - **handoff** -- packages a project (files + `.make-it/app-context.json` + `handoff.md`) so the
   user can continue it in Claude Code, where `/resume-it` picks it up.
-- **safety** -- operator safety while Claude works on the user's computer: secret and sensitive
+- **safety** -- instructs Claude how to work safely on the user's computer: secret and sensitive
   files, browser use, screen control, prompt injection, and adding connectors or extensions.
 
 ## Operator safety
 
 The rules live in `.claude/make-it/references/operator-safety.md`, shared with Claude Code
 (`/make-it`, `/resume-it`, and `/debug-it` load them). Every Desktop skill ships a copy, and the
-`safety` skill says when each rule applies in Desktop and Cowork. Section 6 of that file is an
-admin checklist: the organization settings (Cowork and Chrome permission modes, the desktop
-extension allowlist, connector permissions in custom roles, managed MCP for Claude Code, and
-turning off user-created skills) that back the rules up.
+`safety` skill says when each rule applies in Desktop and Cowork. These are instructions Claude
+is told to follow, not a technical block. Section 6 of that file is an admin checklist of settings
+that back them up: the Cowork and Chrome permission modes users pick, and the organization's
+desktop extension allowlist, connector permissions in custom roles, managed MCP for Claude Code,
+and the switch that turns off user-created skills.
 
 ## Sandbox limits and handoff
 

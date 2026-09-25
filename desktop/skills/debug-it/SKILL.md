@@ -19,7 +19,6 @@ each rule comes up here.
 
 ## What you can run here
 
-
 Check what you can do; do not assume:
 - **You can write to a folder the user picked (Cowork):** read the project there and make the
   fix there. Files persist.

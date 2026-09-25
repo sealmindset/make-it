@@ -77,8 +77,8 @@ failed approaches, and next steps from the previous session. If it exists:
 If the line directly under `handoff.md`'s title is `Source: claude-desktop`, it was packaged in
 Claude Desktop/Cowork, where nothing live could run. Before anything else:
 - a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add to
-  `.gitignore` every secret-file pattern in operator-safety.md §1 that isn't already excluded,
-  plus `!.env.example`; run `git status` and check nothing secret-looking is about to be
+  `.gitignore` each pattern from operator-safety.md §1 "Ignore patterns" that isn't already
+  excluded (`.npmrc`/`.pypirc` only as that section says); run `git status` and check nothing secret-looking is about to be
   committed (never commit one; tell the user in plain words if you find one); `git add` the
   bundle and make the initial commit on the default branch; only then `pre-commit install` if
   the project uses pre-commit. All further
