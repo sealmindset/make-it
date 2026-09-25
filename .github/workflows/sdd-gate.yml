@@ -1,0 +1,21 @@
+name: SDD Gate
+
+# sdd-gate is a Stop hook: if it silently no-ops, an SDD run can end mid-plan and nobody
+# notices. scripts/test-sdd-gate.sh covers the cases that matter, including a session that
+# started outside the repo holding the ledger (the bug fixed in v1.25.3).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: sdd-gate regression test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-sdd-gate.sh

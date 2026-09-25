@@ -15,6 +15,13 @@ Ledger: <repo>/.make-it/sdd/progress.md (append-only lines)
   RUN: resume                    re-arm after a STATUS once the human answered
   gate: nudged <time>            written by this hook (cap counter)
 
+Which ledger: the one in the git repo of the session's cwd, plus any ledger
+registered with `sdd-gate register <abs-path-to-progress.md>` whose path appears in
+THIS session's transcript. Registration covers runs in a worktree or another repo
+than the one the session started in; the transcript match keeps one session's run
+from blocking another session. Registry: ~/.claude/sdd-runs (one path per line;
+entries whose ledger no longer exists are pruned).
+
 Fail-open everywhere: a bug here must never trap or block a real session.
 """
 import datetime
@@ -25,20 +32,67 @@ import subprocess
 import sys
 
 CAP = 3  # consecutive nudges with no task completed -> release to the human
+REGISTRY = os.environ.get("SDD_GATE_REGISTRY") or os.path.expanduser("~/.claude/sdd-runs")
 
 
-def main():
-    data = json.loads(sys.stdin.read() or "{}")
+def read_registry():
+    try:
+        with open(REGISTRY) as f:
+            return [l.strip() for l in f if l.strip()]
+    except OSError:
+        return []
+
+
+def write_registry(paths):
+    with open(REGISTRY, "w") as f:
+        f.write("".join(p + "\n" for p in paths))
+
+
+def register(path):
+    path = os.path.abspath(path)
+    paths = read_registry()
+    if path not in paths:
+        paths.append(path)
+        write_registry(paths)
+    print(f"sdd-gate: registered {path}")
+    return 0
+
+
+def candidate_ledgers(data):
+    found = []
     cwd = data.get("cwd") or os.getcwd()
     try:
         top = subprocess.check_output(
             ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
             stderr=subprocess.DEVNULL, text=True).strip()
+        found.append(os.path.join(top, ".make-it", "sdd", "progress.md"))
     except Exception:
-        return 0
-    ledger = os.path.join(top, ".make-it", "sdd", "progress.md")
-    if not os.path.isfile(ledger):
-        return 0
+        pass
+    paths = read_registry()
+    live = [p for p in paths if os.path.isfile(p)]
+    if live != paths:
+        write_registry(live)
+    transcript = data.get("transcript_path")
+    if live and transcript:
+        try:
+            with open(transcript, errors="replace") as f:
+                text = f.read()
+        except OSError:
+            text = ""
+        found += [p for p in live if p in text and p not in found]
+    return [p for p in found if os.path.isfile(p)]
+
+
+def main():
+    data = json.loads(sys.stdin.read() or "{}")
+    for ledger in candidate_ledgers(data):
+        rc = check(ledger)
+        if rc:
+            return rc
+    return 0
+
+
+def check(ledger):
     with open(ledger) as f:
         lines = [l.rstrip("\n") for l in f]
 
@@ -82,7 +136,7 @@ def main():
                 "whole-branch review, fix its findings, then append `STATUS: DONE`.")
     sys.stderr.write(
         f"SDD gate: {todo} Do not stop to ask whether to continue. "
-        "Escape hatches (append ONE line to .make-it/sdd/progress.md): "
+        f"Escape hatches (append ONE line to {ledger}): "
         "`STATUS: BLOCKED <why>` if you cannot proceed; `STATUS: AWAITING_HUMAN <what>` if only "
         "the user can answer; `STATUS: DONE` when finished. After the user answers, append "
         f"`RUN: resume` to re-arm the gate. Nudge {nudges + 1}/{CAP}; after nudge {CAP} the gate releases.")
@@ -90,6 +144,8 @@ def main():
 
 
 try:
+    if len(sys.argv) == 3 and sys.argv[1] == "register":
+        sys.exit(register(sys.argv[2]))
     sys.exit(main())
 except Exception:
     sys.exit(0)
