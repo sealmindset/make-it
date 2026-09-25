@@ -153,7 +153,11 @@ re-dispatched entire completed sequences — the most expensive failure observed
 - At start: `cat "$(git rev-parse --show-toplevel)/.make-it/sdd/progress.md"`. Tasks marked
   complete there are DONE — resume at the first unmarked task; do not re-dispatch.
 - **Arm the run:** append `RUN: plan=<plan-path> tasks=<N>` before dispatching the first task.
-  (After a compaction/resume on an already-armed run, append `RUN: resume` instead.)
+  (After a compaction/resume on an already-armed run, append `RUN: resume` instead.) Then
+  register the ledger so the gate finds it even when the session started in another folder
+  (a worktree, another repo): `python3 ~/.claude/make-it/sdd/scripts/sdd-gate register
+  "$(git rev-parse --show-toplevel)/.make-it/sdd/progress.md"`. Run it from the repo or
+  worktree that holds the ledger; registering twice is harmless.
 - On a clean review, append `Task N: complete (commits <base7>..<head7>, review clean)`.
 - **Release the run** by appending exactly one of: `STATUS: DONE` (final review clean),
   `STATUS: BLOCKED <why>` (cannot proceed), or `STATUS: AWAITING_HUMAN <what you need>` (a
@@ -167,7 +171,9 @@ re-dispatched entire completed sequences — the most expensive failure observed
 A rule in this document is advice the controller can forget mid-run. `sdd/scripts/sdd-gate` is a
 **Stop hook**: while the ledger holds an armed `RUN:` with no later `STATUS:`, any attempt to end
 the turn is refused (exit 2) with a reminder of the next checkpoint and the escape hatches above.
-It is a no-op in any repo without an armed ledger, so it is safe to leave installed globally.
+It checks the ledger in the session folder's repo plus any registered ledger whose path appears
+in this session's transcript (so another session's run never blocks you). It is a no-op with no
+armed ledger, so it is safe to leave installed globally.
 Circuit breaker: after 3 nudges with no new `Task N: complete`, the gate records that in the
 ledger and releases — a stuck controller is handed back to the human, never looped forever.
 
