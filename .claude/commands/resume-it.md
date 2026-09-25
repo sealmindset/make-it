@@ -76,9 +76,12 @@ failed approaches, and next steps from the previous session. If it exists:
 
 If the line directly under `handoff.md`'s title is `Source: claude-desktop`, it was packaged in
 Claude Desktop/Cowork, where nothing live could run. Before anything else:
-- a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add `.env` to
-  `.gitignore` if it isn't excluded; `git add` the bundle and make the initial commit on the
-  default branch; only then `pre-commit install` if the project uses pre-commit. All further
+- a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add to
+  `.gitignore` every secret-file pattern in operator-safety.md §1 that isn't already excluded,
+  plus `!.env.example`; run `git status` and check nothing secret-looking is about to be
+  committed (never commit one; tell the user in plain words if you find one); `git add` the
+  bundle and make the initial commit on the default branch; only then `pre-commit install` if
+  the project uses pre-commit. All further
   work goes on a feature branch (WORKTREE FIRST, below). Plan-only bundle: skip this step --
   step c makes the initial commit after the build.
 - b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
@@ -90,13 +93,14 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   PROJECT_DIR = this folder (build in place, no subfolder; `git init` here is harmless). Run
   `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`.
   Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or `design-decisions`.
-  After `build-verify`, `git add` the project and make the initial commit on the default branch
+  After `build-verify`, do step a's `.gitignore` and `git status` secret check, then `git add`
+  the project and make the initial commit on the default branch
   (make-it itself only commits at ship time) BEFORE any `pre-commit install`; feature work then
   goes on a branch. If they decline the build, stop here and leave `handoff.md` in place.
 - d. Tell the user in one plain line you'll first run the checks that couldn't run in Desktop,
   and wait for their go-ahead. Then run every item in its `## Deferred Checks` section as the
   FIRST work item, before suggesting anything else. Report each as PASSED or FAILED from what
-  actually ran.
+  actually ran, or NOT RUN with the reason if it couldn't run.
 - e. Retire the marker: archive `handoff.md` into `.handoff-history.md` per /clear-it's archive
   rule, then remove it (its Next Steps stay this session's starting point). Add every FAILED
   or not-yet-run check to TODO.md (create it if missing), so nothing is lost and later runs don't repeat them.

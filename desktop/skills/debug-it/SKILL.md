@@ -52,8 +52,8 @@ their database, their network services, or anything else on their machine.
 When you finish, add two lines under the decision card or the fix summary:
 
 ```
-Reproduced here: yes | DEFERRED -- <why>
-Verified here:   yes | DEFERRED -- <why>
+Reproduction: yes | DEFERRED -- <why>
+Verification: yes | DEFERRED -- <why>
 ```
 
 If anything is deferred and the user wants it reproduced or verified on the real system, offer

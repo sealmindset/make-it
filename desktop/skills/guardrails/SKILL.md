@@ -21,9 +21,9 @@ Check what you can do; do not assume:
 - **Otherwise (Desktop chat sandbox):** build in the sandbox and give the user the result as
   downloadable files (a zip for anything with more than a few files) or an artifact.
 
-**Keep it proportional.** For a snippet or a single-file edit, apply the relevant rules
-inline and skip the project files (README, CHANGELOG, TODO, the `CLAUDE.md` canary, the name
-question). The steps below are for new projects.
+**Keep it proportional.** For a snippet, a single-file script, or a single-file edit, apply
+the relevant rules inline and skip the project files (README, CHANGELOG, TODO, the `CLAUDE.md`
+canary, the name question). The steps below are for new projects.
 
 **Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
 folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when

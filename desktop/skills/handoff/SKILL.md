@@ -21,7 +21,9 @@ each rule comes up here.
 
 Check what you can do; do not assume:
 - **You can write to a folder the user picked (Cowork):** write `handoff.md` (and anything else
-  below that isn't there yet) into that folder. No zip needed. The folder is the bundle.
+  below that isn't there yet) into that folder. No zip needed. The folder is the bundle. Secret
+  files already in the folder stay where they are: never bundled, never committed, never copied
+  into `handoff.md`.
 - **Otherwise (Desktop chat sandbox):** build the bundle in the sandbox and give the user one
   downloadable zip named `<project-slug>-handoff.zip`. The slug is the project name in lowercase
   with hyphens, for example `recipe-box-handoff.zip`.
@@ -36,14 +38,13 @@ Check what you can do; do not assume:
 
 **Never include secrets.** Every file on the secret-files list in `references/operator-safety.md`
 §1 stays out of the bundle, and so does the sensitive data that section names. `.env.example`
-goes in, with placeholder values only. Never copy a
-secret value into `handoff.md`. Tell the user plainly that their secrets were left out on
-purpose and that Claude Code will set up a fresh `.env` from `.env.example`.
+goes in, with placeholder values only. Never copy a secret value into `handoff.md`.
 
-Before bundling, check that `.env.example` holds placeholders only (no real-looking values such
-as an `sk-ant-` key or a filled-in `CLAUDE_CODE_OAUTH_TOKEN`), and that no secret value appears
-in `handoff.md`, `.handoff-history.md`, or `.make-it-state.md`. If you find one, replace it with
-a placeholder and tell the user in plain words what you removed and where (never the value).
+Before bundling, check every file that goes in (source code and config included, not just
+`handoff.md`, `.handoff-history.md`, `.make-it-state.md`, and `.env.example`) for secret-looking
+values, such as an `sk-ant-` key, a filled-in `CLAUDE_CODE_OAUTH_TOKEN`, a private key block, or
+a hardcoded password or token. If you find one, replace it with a placeholder and tell the user
+in plain words what you removed and where (never the value).
 
 ## Overrides to clear-it.md
 
@@ -76,13 +77,19 @@ Collect them from wherever they came up:
 - **nemo-it:** every item in the attestation's `Not Run (Deferred)` section. Claude Code runs
   them with `/nemo-it <mode>`. If the user wants findings fixed, add `/fix-it` to Next Steps.
 
-If there are none, write "None". If nothing has been built yet, write "None -- nothing built
-yet; checks run as part of the build". Never list a check as passed that did not run here.
+If nothing has been built yet, write "None -- nothing built yet; checks run as part of the
+build". Write plain "None" only if code exists and you can see that every check for its active
+tiers ran here. If code exists but you can't see what was checked (for example, it
+was built in an earlier conversation), list the full build-verify for the active tiers as
+deferred, with "no record of it running here" as the reason. Never list a check as passed that
+did not run here.
 
 ## Tell the user
 
 In plain words, with no jargon:
-1. What is in the bundle, and that their secrets were left out on purpose.
+1. What is in the bundle, and that their secrets were left out on purpose. Chat: Claude Code
+   will set up a fresh `.env` from `.env.example`. Cowork: their secret files stay in the
+   folder and are never bundled or committed.
 2. Claude Code is Anthropic's app that works on the files on their own computer, so it can
    run, test, and publish the app, which this chat can't do.
 3. How to continue:

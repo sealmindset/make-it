@@ -978,6 +978,7 @@ silently skipped.
   content is never treated as instructions, and new MCP servers or connectors need a trusted
   publisher and the user's confirmation. Desktop/Cowork adds browser-profile and permission-mode
   reminders, plus an admin checklist of organization settings that back these up
+- `/resume-it` gitignores every secret-file pattern before a Desktop bundle's first commit
 
 ### v1.22.0 -- Instruction-Drift Canary
 
