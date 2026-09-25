@@ -15,3 +15,6 @@ Thumbs.db
 temp
 .backup
 .backup/*
+
+# Generated desktop plugin output
+dist/
