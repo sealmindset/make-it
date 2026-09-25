@@ -42,6 +42,12 @@ if ! git -C "$TARGET" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+# Any make-it checkout (not just this one) is never a publish target.
+if [ -f "$(git -C "$TARGET" rev-parse --show-toplevel)/.claude/commands/make-it.md" ]; then
+  echo "publish.sh: $TARGET is inside a make-it checkout, not the marketplace clone." >&2
+  exit 1
+fi
+
 for d in "$TARGET/plugins" "$TARGET/plugins/make-it-desktop" "$TARGET/.claude-plugin"; do
   if [ -L "$d" ]; then
     echo "publish.sh: $d is a symlink -- refusing to write through it." >&2
