@@ -79,7 +79,7 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   `.gitignore` if it isn't excluded; `git add` the bundle and make the initial commit on the
   default branch; only then `pre-commit install` if the project uses pre-commit. All further
   work goes on a feature branch (WORKTREE FIRST, below). Plan-only bundle: skip this step --
-  make-it's `build-project` makes the initial commit.
+  step c makes the initial commit after the build.
 - b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
   the project's setup does (`cp .env.example .env`, then fill local dev values).
 - c. Plan-only bundle (app-context.json + handoff.md, no application code yet): say in one plain
@@ -89,13 +89,16 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   PROJECT_DIR = this folder (build in place, no subfolder; `git init` here is harmless). Run
   `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`.
   Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or `design-decisions`.
+  After `build-verify`, `git add` the project and make the initial commit on the default branch
+  (make-it itself only commits at ship time) BEFORE any `pre-commit install`; feature work then
+  goes on a branch. If they decline the build, stop here and leave `handoff.md` in place.
 - d. Tell the user in one plain line you'll first run the checks that couldn't run in Desktop,
   and wait for their go-ahead. Then run every item in its `## Deferred Checks` section as the
   FIRST work item, before suggesting anything else. Report each as PASSED or FAILED from what
   actually ran.
 - e. Retire the marker: archive `handoff.md` into `.handoff-history.md` per /clear-it's archive
   rule, then remove it (its Next Steps stay this session's starting point). Add every FAILED
-  or not-yet-run check to TODO.md, so nothing is lost and later runs don't repeat them.
+  or not-yet-run check to TODO.md (create it if missing), so nothing is lost and later runs don't repeat them.
   Then continue normally.
 
 **1. Look for the make-it state breadcrumb:**
