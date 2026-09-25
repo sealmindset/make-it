@@ -1,0 +1,16 @@
+.claude/commands/make-it.md
+# everything make-it.md @-imports (execution_context)
+.claude/make-it/references/prerequisites.md
+.claude/make-it/references/design-blueprint.md
+.claude/make-it/references/prompt-templates.md
+.claude/make-it/references/ship-it-guide.md
+.claude/make-it/references/guardrails.md
+.claude/make-it/references/build-standards.md
+.claude/make-it/references/worktree-workflow.md
+.claude/make-it/references/parallel-dispatch.md
+.claude/make-it/references/subagent-driven-development.md
+.claude/make-it/references/git-operations.md
+.claude/make-it/templates/app-context.md
+.claude/make-it/scaffolds/fastapi-nextjs/README.md
+# referenced by name in design-decisions
+.claude/make-it/references/expert-personas.md

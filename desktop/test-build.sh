@@ -46,7 +46,7 @@ Imports:
 Plain mentions:
 See `~/.claude/make-it/references/guardrails.md`. for details.
 Check ~/.claude/make-it/VERSION for the installed version.
-Also see ~/.claude/make-it/references/build-standards.md for background.
+Also see ~/.claude/make-it/references/ship-it-guide.md for background.
 EOF
 
 MAKE_IT_DESKTOP_SKILLS_DIR="$TMPSKILLS/skills" bash "$BUILD"
@@ -60,7 +60,7 @@ if [ "$(grep -A1 -F 'Imports:' "$OUT" | tail -1)" != 'references/guardrails.md' 
 fi
 assert_line "$OUT" '`references/guardrails.md`.'
 assert_line "$OUT" 'claude-code:make-it/VERSION'
-assert_line "$OUT" 'claude-code:make-it/references/build-standards.md'
+assert_line "$OUT" 'claude-code:make-it/references/ship-it-guide.md'
 if grep -q '@references/guardrails\|@claude-code:' "$OUT"; then
   echo "FAIL: rewrite left a stray @ attached to the replacement in $OUT" >&2
   exit 1
@@ -68,7 +68,7 @@ fi
 echo "OK: import, backticked mention, and uncopied mentions all rewrote correctly"
 
 if ! MAKE_IT_DESKTOP_SKILLS_DIR="$TMPSKILLS/skills" bash "$BUILD" --check; then
-  echo "FAIL: --check should pass -- claude-code:make-it/references/build-standards.md is not a real references/ link" >&2
+  echo "FAIL: --check should pass -- claude-code:make-it/references/ship-it-guide.md is not a real references/ link" >&2
   exit 1
 fi
 echo "OK: --check does not false-flag the claude-code: fallback as a references/ link"

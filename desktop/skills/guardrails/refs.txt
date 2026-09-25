@@ -1,1 +1,5 @@
 .claude/make-it/references/guardrails.md
+.claude/make-it/references/build-standards.md
+.claude/make-it/references/build-verify-security.md
+.claude/make-it/references/fix-strategies.md
+.claude/make-it/references/expert-personas.md
