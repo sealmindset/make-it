@@ -73,6 +73,16 @@ failed approaches, and next steps from the previous session. If it exists:
 - Default the session's starting point to its **Next Steps** section (confirm with the user)
 - `.handoff-history.md`, if present, holds older archived handoffs -- consult only if needed
 
+If `handoff.md` contains `Source: claude-desktop`, it was packaged in Claude Desktop/Cowork,
+where nothing live could run. Before anything else:
+- a. If the folder is not a git repo (`git rev-parse --git-dir` fails): `git init`, `git add`
+  the bundle (confirm `.gitignore` excludes `.env` first) and make the initial commit on the
+  default branch. All further work goes on a feature branch (WORKTREE FIRST, below).
+- b. If `.env` is missing and `.env.example` exists, create `.env` from it the way the
+  project's setup does (`cp .env.example .env`, then fill local dev values).
+- c. Run every item in its `## Deferred Checks` section as the FIRST work item, before
+  suggesting anything else. Report each as PASSED or FAILED from what actually ran.
+
 **1. Look for the make-it state breadcrumb:**
 
 Check for `.make-it-state.md` in the project root. This file is left by /make-it and contains:
