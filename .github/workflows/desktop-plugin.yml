@@ -1,0 +1,33 @@
+name: Desktop Plugin
+
+# WHY THIS EXISTS
+#   desktop/build.sh assembles the make-it-desktop plugin (dist/, gitignored)
+#   from desktop/skills/* and copied reference files. This job proves that
+#   build still runs clean (--check: no lingering ~/.claude references, no
+#   broken references/ links, no disallowed bin/), that the build's own
+#   self-tests (determinism, rewrite rules) pass, and that the resulting
+#   plugin is a valid Claude Code plugin -- on every PR and on push to main.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  desktop-plugin:
+    name: Build and validate make-it-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build --check
+        run: bash desktop/build.sh --check
+
+      - name: Run build self-tests
+        run: bash desktop/test-build.sh
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate plugin
+        run: HOME="$(mktemp -d)" claude plugin validate dist/make-it-desktop
