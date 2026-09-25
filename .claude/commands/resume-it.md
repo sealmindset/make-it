@@ -26,6 +26,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/ship-it-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/operator-safety.md
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
@@ -72,6 +73,38 @@ failed approaches, and next steps from the previous session. If it exists:
 - Treat its **Failed Approaches** section as binding: do NOT retry approaches it rules out
 - Default the session's starting point to its **Next Steps** section (confirm with the user)
 - `.handoff-history.md`, if present, holds older archived handoffs -- consult only if needed
+
+If the line directly under `handoff.md`'s title is `Source: claude-desktop`, it was packaged in
+Claude Desktop/Cowork, where nothing live could run. Before anything else:
+- a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add to
+  `.gitignore` each pattern from operator-safety.md §1 "Ignore patterns" that isn't already
+  excluded (`.npmrc`/`.pypirc` only as that section says); run `git status` and check nothing secret-looking is about to be
+  committed (never commit one; tell the user in plain words if you find one); `git add` the
+  bundle and make the initial commit on the default branch; only then `pre-commit install` if
+  the project uses pre-commit. All further
+  work goes on a feature branch (WORKTREE FIRST, below). Plan-only bundle: skip this step --
+  step c makes the initial commit after the build.
+- b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
+  the project's setup does (`cp .env.example .env`, then fill local dev values).
+- c. Plan-only bundle (app-context.json + handoff.md, no application code yet): say in one plain
+  line that you'll now build their app from the plan, and wait for their go-ahead. Then read
+  `~/.claude/commands/make-it.md` AND every file in its `<execution_context>` (reading it does
+  not expand its @ imports). Treat app-context.json as the completed Design phase, with
+  PROJECT_DIR = this folder (build in place, no subfolder; `git init` here is harmless). Run
+  `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`.
+  Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or `design-decisions`.
+  After `build-verify`, do step a's `.gitignore` and `git status` secret check, then `git add`
+  the project and make the initial commit on the default branch
+  (make-it itself only commits at ship time) BEFORE any `pre-commit install`; feature work then
+  goes on a branch. If they decline the build, stop here and leave `handoff.md` in place.
+- d. Tell the user in one plain line you'll first run the checks that couldn't run in Desktop,
+  and wait for their go-ahead. Then run every item in its `## Deferred Checks` section as the
+  FIRST work item, before suggesting anything else. Report each as PASSED or FAILED from what
+  actually ran, or NOT RUN with the reason if it couldn't run.
+- e. Retire the marker: archive `handoff.md` into `.handoff-history.md` per /clear-it's archive
+  rule, then remove it (its Next Steps stay this session's starting point). Add every FAILED
+  or not-yet-run check to TODO.md (create it if missing), so nothing is lost and later runs don't repeat them.
+  Then continue normally.
 
 **1. Look for the make-it state breadcrumb:**
 

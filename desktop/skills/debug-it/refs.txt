@@ -1,0 +1,5 @@
+.claude/commands/debug-it.md
+# everything debug-it.md @-imports
+.claude/make-it/references/expert-personas.md
+# operator safety rules (all skills)
+.claude/make-it/references/operator-safety.md

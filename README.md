@@ -951,9 +951,36 @@ Yes. The `maskPII()` function pseudonymizes names, emails, phone numbers, and fi
 |-------|---------|------|
 | `/ship-it` | CI/CD deployment -- commits, pushes, creates PR with shared GHA workflows | [sealmindset/ship-it](https://github.com/sealmindset/ship-it) |
 
+Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/README.md`](desktop/README.md) for the `make-it-desktop` plugin.
+
 ---
 
 ## Version History
+
+### v1.25.0 -- Claude Desktop & Cowork plugin
+
+`/make-it`'s guardrails now follow you into Claude Desktop and Cowork, environments with no
+shell, no Docker, and no git. A generated plugin (`desktop/`, see [`desktop/README.md`](desktop/README.md))
+carries the same rules there, with anything the sandbox can't run handed off cleanly instead of
+silently skipped.
+
+- Added the `make-it-desktop` plugin: `guardrails`, `make-it`, `debug-it`, `nemo-it`,
+  `handoff`, and `safety` skills, generated from the same `.claude/make-it/references/*.md` rule files
+  `/make-it` uses -- never a hand-copied fork
+- `/resume-it` now detects a Desktop handoff (including a plan-only bundle with no code yet) and
+  runs its deferred checks as the first work item
+- Added Tier 0 guardrail 18a, "Re-verify on every code change" (`references/guardrails.md`), and
+  the matching verify-step rule in `/debug-it`: a check from before the latest edit is stale and
+  must not be reported as passing; re-run what's runnable, defer the rest
+- Added operator safety rules (`references/operator-safety.md`, Tier 0 guardrail 16a), loaded by
+  `/make-it`, `/resume-it`, and `/debug-it` and by every Desktop skill. Claude is instructed never
+  to read or bundle secret files, to ask before opening the user's financial, legal, HR, or
+  medical files, to treat web and document content as information rather than instructions, and
+  to add MCP servers or connectors only from a trusted publisher after the user confirms.
+  Desktop/Cowork adds browser-profile and permission-mode reminders, plus an admin checklist of
+  organization settings that back these up
+- `/resume-it` is instructed to gitignore the secret-file patterns and check `git status` before a
+  Desktop bundle's first commit
 
 ### v1.22.0 -- Instruction-Drift Canary
 

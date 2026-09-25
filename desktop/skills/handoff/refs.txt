@@ -1,0 +1,8 @@
+.claude/commands/clear-it.md
+# what ship-it will need once the project is in Claude Code
+.claude/make-it/references/ship-it-guide.md
+.claude/make-it/templates/app-context.md
+# referenced by app-context.md
+.claude/make-it/references/expert-personas.md
+# operator safety rules (all skills)
+.claude/make-it/references/operator-safety.md

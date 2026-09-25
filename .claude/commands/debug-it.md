@@ -29,6 +29,7 @@ performance engineer** — think races, GC, N+1, resource limits, not "add a ret
 no user prompt; work in character to that persona's output standard. See the reference below.
 
 @~/.claude/make-it/references/expert-personas.md
+@~/.claude/make-it/references/operator-safety.md
 
 </expert_persona>
 
@@ -74,7 +75,9 @@ hypotheses from BOTH families, every time.
 7. **Fix the root, smallest reversible change.** No symptom patches, no "while I'm here"
    refactors. A pragmatic workaround beats a redesign unless only the redesign prevents recurrence.
 8. **Verify against the SAME reproduction.** The failing test goes green, the full suite still
-   passes, and the original symptom is gone.
+   passes, and the original symptom is gone. A fix counts as verified only after the same
+   reproduction AND the covering checks are re-run after the final edit -- a result from before
+   the last edit is stale and must not be reported as passing.
 9. **Align before acting; say what you don't know.** Front-load clarifying questions to reach
    alignment before committing to a fix direction (ambiguous/underspecified/high-stakes); root every
    claim in a fact, not an assumption; "I don't understand X" beats pretending. Once aligned, execute
@@ -132,7 +135,8 @@ line to confirm you have the right bug.
 ### Phase 4 — Implementation & verification
 - Ensure a **failing test reproduces the bug** before fixing (TDD).
 - Implement **one** root-cause fix. No bundled changes.
-- **Verify** — the failing test goes green, the full suite still passes, the original repro is gone.
+- **Verify** — the failing test goes green, the full suite still passes, the original repro is gone,
+  re-run after the final edit.
 - **Defense in depth** — add validation at the layer(s) that *should* have caught it.
 - **Capture the lesson** (especially subtractive/over-engineering misses) to project memory/notes.
 
