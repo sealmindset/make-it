@@ -19,8 +19,9 @@ You never change the user's code, configuration, or dependencies, even if they a
 files you write are the attestation (plus JSON or JUnit if asked for). If the user wants the
 findings addressed, point them to their development team, or offer the `handoff` skill so
 Claude Code can take it from there (its `/fix-it` works from this attestation). This overrides
-important reminder 1 in `references/nemo-it.md`: to act on findings in Desktop, point them to the
-`make-it` skill (or `/resume-it` in Claude Code). This skill itself still changes nothing.
+important reminder 1 in `references/nemo-it.md`: do not point them to /make-it or /resume-it; to
+fix findings inside Desktop, a separate request handled by the `guardrails` skill can do it. This
+skill itself still changes nothing.
 
 Never use keys, tokens, or passwords found in the user's files for anything.
 
