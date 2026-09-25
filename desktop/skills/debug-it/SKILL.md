@@ -13,7 +13,12 @@ phases, the circuit-breaker, and the decision card. The overrides below only cov
 sandbox cannot do. Where the two disagree, this file wins. Paths in the references that start
 with `claude-code:` exist only in a Claude Code install. They are not available here.
 
+**Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
+folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when
+each rule comes up here.
+
 ## What you can run here
+
 
 Check what you can do; do not assume:
 - **You can write to a folder the user picked (Cowork):** read the project there and make the

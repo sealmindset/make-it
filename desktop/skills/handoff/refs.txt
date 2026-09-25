@@ -4,3 +4,5 @@
 .claude/make-it/templates/app-context.md
 # referenced by app-context.md
 .claude/make-it/references/expert-personas.md
+# operator safety rules (all skills)
+.claude/make-it/references/operator-safety.md

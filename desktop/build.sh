@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="$REPO_ROOT/dist/make-it-desktop"
 SKILLS_SRC="${MAKE_IT_DESKTOP_SKILLS_DIR:-$SCRIPT_DIR/skills}"
-SKILLS="guardrails make-it debug-it nemo-it handoff"
+SKILLS="guardrails make-it debug-it nemo-it handoff safety"
 
 CHECK=0
 if [ "${1:-}" = "--check" ]; then

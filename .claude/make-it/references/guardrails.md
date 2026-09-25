@@ -93,6 +93,7 @@ These apply to every project /make-it builds, no exceptions.
     ```
     Build-verify and /ship-it grep for `override=True` and `override: true` in dotenv calls.
     Any match is a BLOCK finding.
+16a. **Operator safety** -- Follow `~/.claude/make-it/references/operator-safety.md` (secret and sensitive files, browser isolation, permission mode, prompt injection, vetted MCP servers).
 
 ### Architecture
 

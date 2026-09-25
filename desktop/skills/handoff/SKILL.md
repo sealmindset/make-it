@@ -13,6 +13,10 @@ The `handoff.md` format and its rules are `/clear-it`'s, in `references/clear-it
 file wins. Paths in the references that start with `claude-code:` exist only in a Claude Code
 install. They are not available here.
 
+**Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
+folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when
+each rule comes up here.
+
 ## Where the bundle goes
 
 Check what you can do; do not assume:
@@ -30,9 +34,9 @@ Check what you can do; do not assume:
 - `handoff.md` at the project root.
 - The root `CLAUDE.md` with the instruction-drift canary, if the project has one.
 
-**Never include secrets.** Leave out `.env` and every other file holding real keys, tokens,
-passwords, or certificates (for example `.env.local`, `.env.production`, `*.pem`, `*.key`,
-credentials JSON files). `.env.example` goes in, with placeholder values only. Never copy a
+**Never include secrets.** Every file on the secret-files list in `references/operator-safety.md`
+§1 stays out of the bundle, and so does the sensitive data that section names. `.env.example`
+goes in, with placeholder values only. Never copy a
 secret value into `handoff.md`. Tell the user plainly that their secrets were left out on
 purpose and that Claude Code will set up a fresh `.env` from `.env.example`.
 

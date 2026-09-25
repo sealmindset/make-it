@@ -25,6 +25,10 @@ skill itself still changes nothing.
 
 Never use keys, tokens, or passwords found in the user's files for anything.
 
+**Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
+folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when
+each rule comes up here.
+
 ## Where the files are
 
 Check what you can do; do not assume:

@@ -29,6 +29,7 @@ performance engineer** — think races, GC, N+1, resource limits, not "add a ret
 no user prompt; work in character to that persona's output standard. See the reference below.
 
 @~/.claude/make-it/references/expert-personas.md
+@~/.claude/make-it/references/operator-safety.md
 
 </expert_persona>
 

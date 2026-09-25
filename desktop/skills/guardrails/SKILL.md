@@ -25,6 +25,10 @@ Check what you can do; do not assume:
 inline and skip the project files (README, CHANGELOG, TODO, the `CLAUDE.md` canary, the name
 question). The steps below are for new projects.
 
+**Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
+folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when
+each rule comes up here.
+
 ## Steps
 
 1. **Classify** the project type with the table in `references/guardrails.md` (Project Type

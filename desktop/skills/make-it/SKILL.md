@@ -16,6 +16,10 @@ a Claude Code install. They are not available here, and needing them is why the 
 there. Otherwise build in the sandbox and deliver downloadable files (a zip for multi-file
 projects).
 
+**Operator safety:** `references/operator-safety.md` applies throughout (secret files, sensitive
+folders, browser, screen control, prompt injection, new connectors). The `safety` skill says when
+each rule comes up here.
+
 ## Step by step
 
 | make-it.md step | In Desktop |
