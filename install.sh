@@ -281,6 +281,7 @@ report() {
         nemo-it)     desc="Security attestation (scan any app)" ;;
         fix-it)      desc="Auto-fix security findings from /nemo-it" ;;
         demo-it)     desc="Demo tenant lifecycle for prospect onboarding" ;;
+        backlog-it)  desc="Project board: work items, bug queue, parallel fixes" ;;
         *)           desc="Custom skill" ;;
       esac
       printf "    /%-14s -- %s\n" "$cmd_name" "$desc"

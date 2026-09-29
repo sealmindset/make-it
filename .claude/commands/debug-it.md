@@ -102,7 +102,8 @@ A loop stuck in one family almost always has its answer in the other.
 
 ### Phase 0 — Intake
 Get the failure from the message, scrollback, or the logs pointed at. Restate the symptom in one
-line to confirm you have the right bug.
+line to confirm you have the right bug. If the project has a board (`/backlog-it`) and this bug has
+no card, file one first (`stage: Reported`); move it to `Cause found` when Phase 3 confirms the cause.
 
 ### Phase 1 — Root-cause investigation (NO fixes yet — the Iron Law)
 - **Read the error completely** — stack trace, line/file, codes. Don't skip warnings.

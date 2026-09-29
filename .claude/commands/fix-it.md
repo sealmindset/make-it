@@ -510,6 +510,7 @@ The new attestation will be saved with an incremented version number
 
 [If manual items exist:]
 These remaining items have been added to `TODO.md` under a '## Security Fixes (Manual)' section.
+[If the project has a board (`/backlog-it`), also file each as a `breakfix` card, `stage: Reported`.]
 
 ## Attestation files:
 - **Original:** `[original attestation path]`

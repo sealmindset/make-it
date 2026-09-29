@@ -106,6 +106,14 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   or not-yet-run check to TODO.md (create it if missing), so nothing is lost and later runs don't repeat them.
   Then continue normally.
 
+**0b. Look for a project board (`/backlog-it`):**
+
+If `.claude/backlog-it.json` or `.claude/backlog/BOARD.md` exists, read the board's status line.
+Default the session's starting point to its **Now fixing** lanes, then **Next up** (after any
+handoff Next Steps). First catch up: a `Fix ready` card whose PR has merged moves to `Live`.
+Cards at **Live, to check** get their live check first. See
+`backlog-board.md`.
+
 **1. Look for the make-it state breadcrumb:**
 
 Check for `.make-it-state.md` in the project root. This file is left by /make-it and contains:
@@ -441,6 +449,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 |---------------|-----------------|
 | Security scanner findings (critical/high) | (Do NOT suggest -- auto-fix silently before presenting suggestions) |
 | Security scanner findings (medium) | (Do NOT suggest -- interleave fixes with user work, invisibly) |
+| Board has Now fixing / Next up | "You were fixing [card] -- want to carry on? Next in line is [card]." |
 | TODO.md has items | "I found [N] items in your to-do list -- want to tackle one?" |
 | Tests don't exist yet | "Your app doesn't have automated tests yet -- want me to set that up?" |
 | Tests exist but some fail | "Some tests are failing -- want me to look into that?" |

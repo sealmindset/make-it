@@ -64,6 +64,11 @@ If unsure the problems are independent, they probably aren't — investigate bef
 Group the failures by what's broken (e.g. file A = tool-approval flow, file B = batch
 completion, file C = abort logic). Confirm fixing one does not affect another.
 
+**Project has a board (`/backlog-it`)?** Take the domains from it: the top of the bug line, no
+shared files or data between lanes, at most `lane_cap` lanes (default 3), one lane per `serial`
+category, never a `stakes: critical` card. Each agent moves its own card's `stage:`. See
+`backlog-board.md` → Parallel lanes.
+
 ## Step 3 -- Decide isolation (the safety gate)
 
 - **Read-only** (diagnose/locate/propose) → agents can share the checkout.

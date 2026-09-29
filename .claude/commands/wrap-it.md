@@ -138,6 +138,13 @@ If work was done this session that isn't already in CHANGELOG.md:
 - Use plain language, not commit hashes
 - Group by type (Added, Changed, Fixed)
 
+**4b. Update the board (if the project has one -- `/backlog-it`):**
+
+Bump each card touched this session (status, `stage:`, a one-line note; a `Fix ready` card
+whose PR has merged moves to `Live`), then regenerate
+`BOARD.md` so its status line (Now fixing / Shipping / Live, to check / Next up) matches
+`handoff.md` and `.make-it-state.md`. Sync per `backlog-board.md`.
+
 **5. Update .make-it-state.md:**
 
 Write or update the state breadcrumb:

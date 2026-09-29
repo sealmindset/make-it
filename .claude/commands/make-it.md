@@ -1356,6 +1356,9 @@ If you want to save your progress first without deploying, type: **/ship-it save
 
 That's it -- you just built your first app!"
 
+**Project board (optional, agent-side):** `/backlog-it` keeps the project's work and bugs as
+cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-it-guide.md`).
+
 </step>
 
 </process>
