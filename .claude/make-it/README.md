@@ -27,6 +27,7 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 | `/ship-it` | Deploy -- creates PR with security checks, attestation, review |
 | `/nemo-it` | Security attestation scan (OWASP + NeMo Guardrails AI safety) |
 | `/retrofit-it` | Add production foundations (auth, RBAC, Docker, security) to an existing app |
+| `/backlog-it` | Project board: Epic → Story → Task cards, bug queue, parallel fix lanes (see `references/backlog-board.md`) |
 
 ## Directory Structure
 

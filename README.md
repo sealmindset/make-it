@@ -190,6 +190,7 @@ bash install.sh
 | `/retrofit-it` | Upgrades an existing app with production foundations (auth, RBAC, Docker, security) | You have an app that works but needs enterprise-grade infrastructure |
 | `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
 | `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
+| `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
 
 ---
 
@@ -956,6 +957,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.26.0 -- /backlog-it project board
+
+A file-based Epic → Story → Task board that lives next to the code, so every session and agent
+works from the same list of what's next and what's broken.
+
+- Added `/backlog-it` and `references/backlog-board.md`: cards with frontmatter, a rendered
+  `BOARD.md`, capture (card first, then batched questions), `start <id>` to recall a card as an
+  editable prompt, plus `groom`, `reconcile`, and `dispatch`
+- Bug queue with stages Reported → Cause found → Fix ready → Live → Checked, and up to
+  `lane_cap` (default 3) parallel fix lanes that never share files or data; `serial` categories
+  and the ship queue stay one at a time
+- Per-project settings in `.claude/backlog-it.json` (board location, project name, lane cap,
+  serial categories); optional Slack notifications that do nothing without a webhook
+- Helpers `backlog/bin/regen-board.py` and `backlog/bin/slack-notify.sh`, with no hardcoded paths
+- Wired in: `/resume-it` starts from Now fixing / Next up, `/dispatch-it` takes its lanes from
+  the board, ship moves cards to Live and Checked, `/wrap-it` updates cards with the handoff,
+  `/debug-it` and `/fix-it` file a card for a new bug first
 
 ### v1.25.0 -- Claude Desktop & Cowork plugin
 

@@ -1144,6 +1144,7 @@ function Verify-Setup($state) {
                 "retrofit-it" { "Upgrade an existing app with production foundations" }
                 "nemo-it"     { "Security attestation (scan any app)" }
                 "fix-it"      { "Auto-fix security findings from /nemo-it" }
+                "backlog-it"  { "Project board: work items, bug queue, parallel fixes" }
                 default       { "Custom skill" }
             }
             Info ("    /{0,-14} -- {1}" -f $cmdName, $desc)
