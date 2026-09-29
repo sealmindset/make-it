@@ -52,6 +52,7 @@ It will:
 
 - ✅ You have an **approved multi-step plan** with mostly independent tasks.
 - ✅ You want continuous, reviewed execution without micromanaging.
+- ✅ In **any project** — you don't need to be building an app, or to have used `/make-it`.
 
 **When *not* to use it:**
 - ❌ You have several **independent, unordered** problems → use [`/dispatch-it`](14-dispatch-it.md) (parallel).

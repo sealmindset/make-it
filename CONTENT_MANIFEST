@@ -13,8 +13,8 @@ db19bd9ca8d7013ba22806015461900df4838ba3c64681587e301ebe12153055  commands/retro
 4964cef40de5b885692d2e7d93b1f26bd0f09ff6a217899e4546abf101f4e65e  commands/try-it.md
 74e2ec5158c1a88e9befafcda2e14c80799be38e6fc4fd0f29e7d6b793f9860b  commands/wrap-it.md
 af6728cd188e36712c42d1f96dc8391e15044dcb0f31e64b9fe8e459c5505560  make-it/README.md
-bebc242a0ffbef672fc4b392a088afa2925c73d393cdf7800f188c10ccc523b2  make-it/confluence-docs/00-make-it-framework-overview.md
-ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/confluence-docs/01-make-it.md
+eab70424c564058b1b5dd7887d1a99ff03047f92501c56f4ec24b13668b85a4d  make-it/confluence-docs/00-make-it-framework-overview.md
+677b73d4a8c8b98a1cd2fee679b7770ede97b82a43547cd495fdc9f06d6eb80e  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md
 9a3a65b178334744f682028386be4b86457ad8bd1609ec165cccbada140244a3  make-it/confluence-docs/03-retrofit-it.md
 78e4c0517484655f6e9aad625236a404bf5e08ae0234ad92e0d8e4631826c114  make-it/confluence-docs/04-try-it.md
@@ -23,12 +23,12 @@ ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/conflu
 94b377651dc65fde625f95b2249fa3b7f901b500bbb25d82af8fcc9fa00c3c00  make-it/confluence-docs/07-argo-it.md
 b133b7b7c9b90c981c3359a75e3d2679ab11c6e524fb13b177d0aa7d73061a91  make-it/confluence-docs/08-nemo-it.md
 191bf21979110e3356b14fdd010348ccfa6da29f362335f49b5d1ad142928b94  make-it/confluence-docs/09-fix-it.md
-06fdbcf420b32c2fa26365eebbd7d1d55b29cf07f83413e85fe46d2c091543cd  make-it/confluence-docs/10-debug-it.md
-4265fdea159045ed50e7a4f4b1c64c75140fdff6bde7012d54570054938ab0dd  make-it/confluence-docs/11-git-it.md
+6294cb9f46fc80238ada5f72e0e266c05a157ad5441ef86a4031a10e04144ce0  make-it/confluence-docs/10-debug-it.md
+4baa0b8c3e8bc0dd9e3c818a63ee69ebfbb6e8136f4c253218499c14b89021f2  make-it/confluence-docs/11-git-it.md
 9d90f326a41435afae83a7bc04474b7dec3ccaf012ba0003450f24f6bcded787  make-it/confluence-docs/12-clear-it.md
 22f8dddf2f6f401bc89463b7af91e0153fe760f7c3a5617388b50866e67c6e35  make-it/confluence-docs/13-wrap-it.md
-8dd8411f4de8479a267aff0b1f3f8b978b99d6679a1c0ef9ce1cdeb979c634b1  make-it/confluence-docs/14-dispatch-it.md
-7c73e322b1e05ce3bb5af4f70c8ba0de12d42b1a6abd53b7b56c240986246fa0  make-it/confluence-docs/15-subagent-it.md
+defe893feeacf0497db419d2dc2b189f2f45e708ad3298569474b0f8742e56b5  make-it/confluence-docs/14-dispatch-it.md
+fac3e631771c05ae826714e1af682d2a46b9b572f1ea826a32f8b7cf174da96d  make-it/confluence-docs/15-subagent-it.md
 67ced3991c07766d3ab1616e9469ffacaeb3958163edc76588d24bc25a8968c7  make-it/references/build-standards.md
 6327bee67234e812fce9c1c240c967b75b3d14b62995f015b8107de202ea6aa0  make-it/references/build-verify-security.md
 a285b7ce6162b806a612e5d3be76a0fde8addabd4b69fdd8f610bc095b3cf6eb  make-it/references/deployment-profile-architecture.md

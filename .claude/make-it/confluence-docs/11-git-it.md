@@ -57,6 +57,7 @@ Then tell it what you want — "save my work," "clean up old branches," "merge t
 - ✅ When you want to save or organize your work properly.
 - ✅ When branches and open requests have piled up and need cleaning.
 - ✅ When you're unsure what's safe to merge or delete.
+- ✅ In **any project** — you don't need to be building an app, or to have used `/make-it`.
 
 ---
 

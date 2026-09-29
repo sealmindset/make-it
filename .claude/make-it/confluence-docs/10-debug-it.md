@@ -56,6 +56,7 @@ Describe (or point it at) the problem. It reads the actual error, reproduces the
 - ✅ Any time something breaks or behaves unexpectedly.
 - ✅ **Especially** after a first fix attempt didn't work.
 - ✅ Before proposing fixes, when you want to avoid thrashing.
+- ✅ In **any project** — you don't need to be building an app, or to have used `/make-it`.
 
 ---
 

@@ -48,6 +48,7 @@ It first confirms the problems really are independent, groups them into domains,
 
 - ✅ You have **3+ unrelated failures** with different root causes.
 - ✅ The problems are in independent areas with no shared state.
+- ✅ In **any project** — you don't need to be building an app, or to have used `/make-it`.
 
 **When *not* to use it:**
 - ❌ The failures are **related** (fixing one might fix others) → find the shared cause with [`/debug-it`](10-debug-it.md) first.
