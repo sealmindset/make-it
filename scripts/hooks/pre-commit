@@ -13,6 +13,7 @@
 # and the manifest guarantee was quietly absent while the repo's own CI comment
 # claimed the hook prevented stale manifests. A dispatcher removes the collision:
 # parts are additive, and installing a new one cannot uninstall an existing one.
+# The bumper is kept but parked (10-version-bump.disabled); its header says why.
 #
 # ADDING A PART: drop an executable file in scripts/hooks/pre-commit.d/ named
 # NN-name, where NN orders it. A part that exits non-zero aborts the commit.

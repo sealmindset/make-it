@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# PARKED (.disabled -- the dispatcher skips it). Two reasons:
+#   1. Every commit on every branch edits VERSION, so parallel branches all conflict on
+#      rebase; releases here are bumped by hand per PR.
+#   2. The rebase/merge guard below tests .git/rebase-merge etc., but in a worktree .git
+#      is a file, so it never fires. If re-enabled, test the paths from
+#      `git rev-parse --git-path rebase-merge` (and rebase-apply, MERGE_HEAD) instead.
+#
 # 10-version-bump -- auto-increment the patch field in VERSION on every commit.
 #
 # Bumps 1.6.0 -> 1.6.1 -> 1.6.2. To bump minor or major, edit VERSION manually
