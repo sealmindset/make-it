@@ -25,6 +25,7 @@ The user just types /wrap-it when they're done. Everything else is automatic.
 
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/git-operations.md
+@~/.claude/make-it/references/learnings.md
 
 </execution_context>
 
@@ -110,6 +111,9 @@ into the state files you update below -- do not delete it; /resume-it reads it f
 **1. Greet briefly:**
 
 "Wrapping up **[PROJECT_NAME]** -- let me save your progress..."
+
+**1b. Offer learnings still queued this session** (`learnings.md`): one message, one plain
+yes/no per lesson. Write the yes answers to `LEARNINGS.md` now so step 2 saves them.
 
 **2. If there are uncommitted changes, ask:**
 

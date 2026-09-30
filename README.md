@@ -958,6 +958,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.27.0 -- Project learnings (LEARNINGS.md)
+
+A correction made once stays made. Every generated project keeps a `LEARNINGS.md` that its
+`CLAUDE.md` imports, so every assistant and subagent working in the project reads it each turn.
+
+- Added `references/learnings.md`: what counts as a learning (the user's corrections after
+  checking a result, plus lessons the agent learned the hard way), one plain yes/no before
+  anything is saved, one line per rule, and a new rule replaces one it repeats or contradicts
+- Build Phase A creates `LEARNINGS.md` and the `@LEARNINGS.md` import; new check **S10** lets the
+  `/resume-it` catch-up add both to older projects
+- `/try-it`, `/resume-it`, `/subagent-it` and `/wrap-it` offer learnings at their checkpoints
+- `/dispatch-it` and `/git-it` now always load their full doctrine (`@` includes)
+
 ### v1.26.0 -- /backlog-it project board
 
 A file-based Epic → Story → Task board that lives next to the code, so every session and agent

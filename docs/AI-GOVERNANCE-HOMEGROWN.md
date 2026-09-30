@@ -500,7 +500,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 
 | Category | Check ID Range | Count | Tier |
 |----------|---------------|-------|------|
-| Structure & Configuration | S01-S09 | 9 | 0 (Universal) |
+| Structure & Configuration | S01-S10 | 10 | 0 (Universal) |
 | Authentication & OIDC | A01-A10 | 10 | 1 (Web App) |
 | RBAC & Permissions | R01-R07 (incl. R01a, R04a) | 9 | 1 (Web App) |
 | UI & Frontend | U01-U09 | 9 | 1 (Web App) |
@@ -517,7 +517,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Live Verification | V01-V15 | 15 | 0-1 |
 | AI Features | AI01-AI15 | 15 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~153** | |
+| **Total** | | **~154** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)

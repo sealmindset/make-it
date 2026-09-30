@@ -71,7 +71,10 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.
 5. **Final review** — `/code-review` on the most capable model with `review-package MERGE_BASE HEAD`
    (`git merge-base main HEAD`); fix findings with ONE fix subagent carrying the full list.
-6. **Finish** — ship-it / wrap-it.
+6. **Finish** — after `STATUS: DONE`, offer learnings (`~/.claude/make-it/references/learnings.md`):
+   queued agent lessons (e.g. reviewer findings that recurred across tasks), plus corrections the
+   user made at acceptance —
+   one message, one plain yes/no each. Then ship-it / wrap-it.
 
 ## Hard rules (see reference for the full list)
 - Never pre-judge findings or tell a reviewer what not to flag.

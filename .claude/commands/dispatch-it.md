@@ -20,7 +20,9 @@ domain, concurrently. You construct exactly the context each agent needs — the
 your session history — which keeps them focused and preserves your context for coordinating
 and integrating their results.
 
-Full doctrine: `~/.claude/make-it/references/parallel-dispatch.md`.
+Full doctrine (always loaded):
+
+@~/.claude/make-it/references/parallel-dispatch.md
 
 </objective>
 

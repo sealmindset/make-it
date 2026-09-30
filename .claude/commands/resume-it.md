@@ -32,6 +32,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
 @~/.claude/make-it/references/git-operations.md
+@~/.claude/make-it/references/learnings.md
 
 </execution_context>
 
@@ -370,7 +371,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    build-verify -- it's a lightweight file-existence and pattern check:
 
    For each check category, do a targeted scan:
-   - **Structure (S01-S08):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore
+   - **Structure (S01-S10):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
    - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
@@ -566,7 +567,10 @@ unless they ask. Full spec: `worktree-workflow.md`.
 **After ANY work is completed:**
 1. Run all existing tests silently
 2. Report results in plain language
-3. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
+3. Offer learnings (`learnings.md`): a correction the user made that is a reusable rule, plus any
+   agent lessons queued during the work -- one plain yes/no each, in one message. Skip if nothing
+   is queued; otherwise wait for the answer before the next question.
+4. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
 
 </step>
 

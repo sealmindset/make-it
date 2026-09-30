@@ -19,7 +19,9 @@ Make routine git work clean, clear, conflict-free, and safe — so nothing ever 
 or negatively impacts the app. One prescribed workflow, the drop/refine/safe triage for the PR &
 branch backlog, and reversible-by-default safety rails.
 
-Full doctrine: `~/.claude/make-it/references/git-operations.md`.
+Full doctrine (always loaded):
+
+@~/.claude/make-it/references/git-operations.md
 
 </objective>
 
