@@ -16,3 +16,5 @@
 .claude/make-it/references/expert-personas.md
 # operator safety rules (all skills)
 .claude/make-it/references/operator-safety.md
+# named in Build Phase A step h (LEARNINGS.md header)
+.claude/make-it/references/learnings.md

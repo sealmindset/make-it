@@ -535,11 +535,19 @@ The user sees progress updates, NOT the technical details.
       (This is a canary. If a reply ever fails to open with my name, instruction drift has
       begun — a rule has been silently dropped and the rest of the output is now suspect.
       Stop and re-read the project rules.)
+
+      ## Learnings
+
+      @LEARNINGS.md
       ```
 
       If `builder_name` is empty, substitute a fixed token instead: "Start every reply with the
       line `🐤 canary ok` so dropped instructions are visible." Unlike the README, this file MAY
       reference AI assistants — it exists for them. Do NOT put secrets or app logic here.
+
+      Also create `LEARNINGS.md` with the header block from
+      `~/.claude/make-it/references/learnings.md` ("Format") and no entries. Later sessions add
+      learnings there, one user-approved line at a time.
 
    Tell user: "Foundation is ready! Now building your specific features..."
 
@@ -1004,7 +1012,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S09**: Structure & configuration (project files, .env, stubs, secrets, README)
+- **S01-S10**: Structure & configuration (project files, .env, stubs, secrets, README, learnings)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)

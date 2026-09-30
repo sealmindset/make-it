@@ -40,6 +40,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **S09** [Tier 0] [BLOCK] **Project README describes the app** -- README.md must describe the application (not the tool that built it). Must include: app name and purpose, features, tech stack, prerequisites, getting started steps, test users (if applicable), architecture overview, deployment instructions, and environment variables. Must NOT mention /make-it, /ship-it, /resume-it, or Claude Code. **Red flag**: if README contains "scaffold", "placeholder", or "How Claude Uses This", it is the scaffold README and must be replaced.
 
+**S10** [Tier 0] [FIX] **Learnings file wired in** -- `LEARNINGS.md` exists in the project root and `CLAUDE.md` imports it with an `@LEARNINGS.md` line. Fix: create the header-only file and the import per `learnings.md`. Never add entries during a fix -- each entry needs the user's yes.
+
 ---
 
 ## Version Control & Worktrees
