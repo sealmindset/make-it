@@ -88,7 +88,8 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   step c makes the initial commit after the build.
 - b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
   the project's setup does (`cp .env.example .env`, then fill local dev values).
-- c. Plan-only bundle (app-context.json + handoff.md, no application code yet): say in one plain
+- c. Plan-only bundle (app-context.json + handoff.md, plus `.make-it/design.md` and the preview for
+  web apps; no application code yet): say in one plain
   line that you'll now build their app from the plan, and wait for their go-ahead. Then read
   `~/.claude/commands/make-it.md` AND every file in its `<execution_context>` (reading it does
   not expand its @ imports). Treat app-context.json as the completed Design phase, with
@@ -572,6 +573,8 @@ unless they ask. Full spec: `worktree-workflow.md`.
 **After ANY work is completed:**
 1. Run all existing tests silently
 2. Report results in plain language
+2b. Screens added or changed? UI gate Part 2 (`ui-gate.md`): built screens next to the approved
+   preview -- wait for the yes before step 3 (its learnings go through step 3)
 3. Offer learnings (`learnings.md`): a correction the user made that is a reusable rule, plus any
    agent lessons queued during the work -- one plain yes/no each, in one message. Skip if nothing
    is queued; otherwise wait for the answer before the next question.

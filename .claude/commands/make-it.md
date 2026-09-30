@@ -445,12 +445,11 @@ reviewed, and hardened behind the scenes.
 
 Ready for me to start building? This will take a few minutes."
 
-**Wait for their go-ahead.**
+**Web apps -- UI gate, Part 1 (`ui-gate.md`):** end the summary with "First, I'll show you a
+clickable preview of your app." instead of "Ready for me to start building?...". Then write
+`.make-it/design.md` and the preview, open it, and repeat until they approve it.
 
-**Web apps -- UI gate, Part 1 (`ui-gate.md`):** instead of "Ready for me to start building?",
-end the summary with "First, I'll show you a clickable preview of your app." Then write
-`.make-it/design.md` and the preview, open it, and repeat until they approve it. Their approval of
-the preview IS the go-ahead.
+**Wait for their go-ahead** (web apps: their yes to the preview).
 
 </step>
 
