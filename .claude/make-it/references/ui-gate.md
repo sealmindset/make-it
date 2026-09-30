@@ -67,24 +67,32 @@ SDD: every UI task's brief names the preview file and its screen ids.
 1. After build-verify (/make-it) or once the feature's tests pass (/resume-it). Make sure
    `.make-it/ui-review/` is in `.gitignore` (add it if missing). Start the app the way /try-it does
    if it isn't running.
-2. **Take the screenshots** at 1280x800 (`variant: mobile`: also 375x812), with Playwright the way
-   /try-it gets it (`npx playwright install chromium` if missing; run from `e2e/` if the project has
-   it, else from `.make-it/ui-review/` after `npm i playwright` there):
-   - each preview screen: `npx playwright screenshot --viewport-size=1280,800
-     "file://<project>/.make-it/prototypes/<file>.html#<screen-id>" <screen-id>-preview.png`
-   - each built screen, signed in: a small script in `.make-it/ui-review/`, one browser context per
-     role, that signs in through the mock sign-in page and visits each screen's route:
-     ```js
-     await page.goto(`${FRONTEND_URL}/api/auth/login`);
-     await page.click(`button[name="sub"][value="${mockUser}"]`); // mock-oidc user for that role
-     await page.waitForURL(u => u.href.startsWith(FRONTEND_URL) && !u.pathname.startsWith('/api/'));
-     for (const s of screens) {
-       await page.goto(FRONTEND_URL + s.route);
-       await page.waitForLoadState('networkidle');
-       await page.screenshot({ path: `${s.id}-built.png` });
+2. **Take the screenshots** with one script, `.make-it/ui-review/shots.mjs`, and Playwright
+   installed only there -- never into the app's own `package.json`:
+   `npm i --prefix .make-it/ui-review playwright && npx --prefix .make-it/ui-review playwright install chromium`,
+   then `cd .make-it/ui-review && node shots.mjs` (so the images land next to `review.html`). Each screen is shot once, as the first role design.md
+   lists for it, signed in through the mock sign-in page (same role -> mock user mapping as /try-it's
+   smoke test; no saved sign-in state):
+   ```js
+   import { chromium } from 'playwright';
+   const browser = await chromium.launch();
+   for (const { w, h, tag } of sizes) {            // [{w:1280,h:800,tag:''}] (+ {375,812,'-375'} for mobile)
+     for (const [mockUser, roleScreens] of byRole) {  // screens grouped by the role that shoots them
+       const page = await (await browser.newContext({ viewport: { width: w, height: h } })).newPage();
+       await page.goto(`${FRONTEND_URL}/api/auth/login`);
+       await page.click(`button[name="sub"][value="${mockUser}"]`);
+       await page.waitForURL(u => u.href.startsWith(FRONTEND_URL) && !u.pathname.startsWith('/api/'));
+       for (const s of roleScreens) {
+         await page.goto(PREVIEW_FILE_URL + '#' + s.id);          // file://.../prototypes/<file>.html
+         await page.screenshot({ path: `${s.id}${tag}-preview.png` });
+         await page.goto(FRONTEND_URL + s.route);
+         await page.waitForLoadState('networkidle');
+         await page.screenshot({ path: `${s.id}${tag}-built.png` });
+       }
      }
-     ```
-     Use the same role -> mock user mapping as /try-it's smoke test. Keep no saved sign-in state.
+   }
+   await browser.close();
+   ```
 3. If a built screen is visibly missing something its preview has, fix it and retake before showing
    anything -- the user never sees a broken screen.
 4. Write `.make-it/ui-review/review.html`: one row per screen, captioned with the screen name, two
@@ -100,6 +108,8 @@ SDD: every UI task's brief names the preview file and its screen ids.
 Web apps take the handoff route there, so Part 1 runs in Desktop (write design.md and the preview,
 present the file, repeat until approved) and the bundle carries both. Part 2 runs in Claude Code
 during build-verify.
+Learnings queued during the preview rounds go under the handoff's Next Steps, so Claude Code
+offers them after the Part 2 yes.
 
 **Plan-only bundle without an approved preview** (made before the UI gate existed): run Part 1
 before building. Projects built before the UI gate are not retro-fitted; the gate applies to their
