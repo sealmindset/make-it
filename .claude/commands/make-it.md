@@ -51,6 +51,7 @@ This skill has 5 phases:
 @~/.claude/make-it/references/git-operations.md
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
+@~/.claude/make-it/references/ui-gate.md
 
 </execution_context>
 
@@ -444,7 +445,11 @@ reviewed, and hardened behind the scenes.
 
 Ready for me to start building? This will take a few minutes."
 
-**Wait for their go-ahead.**
+**Web apps -- UI gate, Part 1 (`ui-gate.md`):** end the summary with "First, I'll show you a
+clickable preview of your app." instead of "Ready for me to start building?...". Then write
+`.make-it/design.md` and the preview, open it, and repeat until they approve it.
+
+**Wait for their go-ahead** (web apps: their yes to the preview).
 
 </step>
 
@@ -588,6 +593,9 @@ whole-branch review, keeping your own context for coordination. Stay sequential 
    - Read the scaffold's admin pages (`users/page.tsx`, `roles/page.tsx`) and the
      DataTable component to understand the pattern (apiGet, useAuth, DataTable, column defs)
    - Create new page files in `frontend/app/(auth)/[page-name]/page.tsx`
+   - Build every page (and the dashboard, step 5) to match the approved preview
+     (`.make-it/prototypes/app.html` + `.make-it/design.md`): same fields, columns, actions, labels,
+     and navigation order (`ui-gate.md`, "Build to the preview")
 
    **DataTable is MANDATORY for every page that displays tabular data (U06, U08):**
    - Import `DataTable` from `@/components/data-table` and `DataTableColumnHeader` from
@@ -1311,6 +1319,9 @@ permissions, pages, API, seed data, mock services, and logout all verified.
 - Run /ship-it to deploy
 - Run /resume-it to continue development
 ```
+
+41b. **Web apps -- UI gate, Part 2 (`ui-gate.md`):** show the built screens next to the preview
+    they approved and get their yes (fix and re-show on changes) before moving on.
 
 42. **Automatically invoke /try-it** to present the app to the user. The app is already
 running and verified -- /try-it just needs to present the demo, take screenshots, and

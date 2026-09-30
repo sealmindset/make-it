@@ -55,7 +55,8 @@ approved plan as input — it executes, it does not brainstorm.
    a. `task-brief PLAN_FILE N` → dispatch a fresh **implementer** subagent (template) with: one
       line on where the task fits, the brief path ("read this first — your requirements, exact
       values verbatim"), interfaces/decisions from earlier tasks the brief can't know, your
-      resolution of any ambiguity, and the report-file path + report contract.
+      resolution of any ambiguity, and the report-file path + report contract. UI task: also the
+      approved preview file + its screen ids (`ui-gate.md`).
    b. Answer the implementer's questions before it proceeds.
    c. Implementer implements (TDD), tests, commits, self-reviews, writes its report file,
       returns only status + commits + one-line test summary + concerns.

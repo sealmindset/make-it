@@ -74,6 +74,8 @@ npm-debug.log*
 
 # ---------------------------------------------------------------------------
 # Subagent-Driven Development scratch + ledger (.make-it/sdd/) -- recoverable from git log
-# (note: .make-it/app-context.json IS committed; only the sdd/ subdir is ignored)
+# plus UI-review screenshots (.make-it/ui-review/) -- regenerable
+# (note: .make-it/app-context.json, design.md and prototypes/ ARE committed)
 # ---------------------------------------------------------------------------
 .make-it/sdd/
+.make-it/ui-review/

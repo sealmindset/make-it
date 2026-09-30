@@ -27,7 +27,7 @@ each rule comes up here.
 | `update-interceptor` | Does not apply. Skip it. |
 | `preflight` | Ask only the name question from item 1 and capture `builder_name` as written. Do not say the "let me do a quick check to make sure your machine is ready" sentence. Skip items 2-6 (machine checks, GREEN/YELLOW/RED, access requests). Record `builder_name` in `.make-it/app-context.json` at Design. |
 | `welcome`, `ideation-deep-dive` | As written. Keep the plain-language persona. |
-| `design-decisions` | As written: classify the project, pick the expert persona, apply smart defaults from `references/design-blueprint.md`, and write `.make-it/app-context.json` per `references/app-context.md`. **Choose the route below before the plain-English summary.** On the handoff route, end the summary with the handoff line below instead of "Ready for me to start building? This will take a few minutes." |
+| `design-decisions` | As written: classify the project, pick the expert persona, apply smart defaults from `references/design-blueprint.md`, and write `.make-it/app-context.json` per `references/app-context.md`. **Choose the route below before the plain-English summary.** On the handoff route, a `web-app` first gets its clickable preview (`references/ui-gate.md` Part 1: write `.make-it/design.md` and the preview, present it, repeat until approved); then end with the handoff line below instead of "Ready for me to start building? This will take a few minutes." |
 | `build-project`, `build-verify` | Depends on the route below. |
 | `ship-handoff`, and the automatic `/try-it` at the end of Part D | Do not apply. Nothing is deployed from Desktop. |
 
