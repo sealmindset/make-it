@@ -1,6 +1,6 @@
 # Appendix — AI-Native SDLC Gap Assessment: Source Data
 
-**Generated** 2026-09-23 from commit `5399071` by `docs/scripts/gen-sdlc-gap-appendix.sh`.
+**Generated** 2026-09-30 from commit `f7b574f` by `docs/scripts/gen-sdlc-gap-appendix.sh`.
 **Do not hand-edit.** Re-run the script to refresh.
 
 Companion documents:
@@ -21,11 +21,12 @@ documents. It covers **only this repository** (`make-it`). It deliberately omits
 
 ## A. Skill surface — `.claude/commands`
 
-**Count: 14 skill definition files.**
+**Count: 15 skill definition files.**
 
 | File | Size (KB) |
 |---|---:|
 | `.claude/commands/argo-it.md` | 84 |
+| `.claude/commands/backlog-it.md` | 5 |
 | `.claude/commands/clear-it.md` | 7 |
 | `.claude/commands/debug-it.md` | 12 |
 | `.claude/commands/demo-it.md` | 9 |
@@ -34,18 +35,19 @@ documents. It covers **only this repository** (`make-it`). It deliberately omits
 | `.claude/commands/git-it.md` | 4 |
 | `.claude/commands/make-it.md` | 75 |
 | `.claude/commands/nemo-it.md` | 56 |
-| `.claude/commands/resume-it.md` | 60 |
+| `.claude/commands/resume-it.md` | 63 |
 | `.claude/commands/retrofit-it.md` | 55 |
 | `.claude/commands/subagent-it.md` | 5 |
 | `.claude/commands/try-it.md` | 30 |
-| `.claude/commands/wrap-it.md` | 10 |
+| `.claude/commands/wrap-it.md` | 11 |
 
 ## B. Shared reference corpus — `.claude/make-it/references`
 
-**Count: 15 reference files, 599 KB total.**
+**Count: 17 reference files, 622 KB total.**
 
 | File | Size (KB) |
 |---|---:|
+| `.claude/make-it/references/backlog-board.md` | 12 |
 | `.claude/make-it/references/build-standards.md` | 101 |
 | `.claude/make-it/references/build-verify-security.md` | 12 |
 | `.claude/make-it/references/deployment-profile-architecture.md` | 29 |
@@ -54,12 +56,13 @@ documents. It covers **only this repository** (`make-it`). It deliberately omits
 | `.claude/make-it/references/expert-personas.md` | 5 |
 | `.claude/make-it/references/fix-strategies.md` | 15 |
 | `.claude/make-it/references/git-operations.md` | 7 |
-| `.claude/make-it/references/guardrails.md` | 61 |
+| `.claude/make-it/references/guardrails.md` | 62 |
+| `.claude/make-it/references/operator-safety.md` | 9 |
 | `.claude/make-it/references/parallel-dispatch.md` | 7 |
 | `.claude/make-it/references/prerequisites.md` | 11 |
 | `.claude/make-it/references/prompt-templates.md` | 123 |
 | `.claude/make-it/references/ship-it-guide.md` | 28 |
-| `.claude/make-it/references/subagent-driven-development.md` | 11 |
+| `.claude/make-it/references/subagent-driven-development.md` | 12 |
 | `.claude/make-it/references/worktree-workflow.md` | 6 |
 
 ## C. Scaffold inventory — `.claude/make-it/scaffolds`
@@ -99,13 +102,15 @@ documents. It covers **only this repository** (`make-it`). It deliberately omits
 | Managed-settings keys (`allowManagedHooksOnly`, `disableSideloadFlags`, `permissions.deny`, `sandbox`, `credentials`) in committed settings | 0 |
 
 Committed settings files actually present:
-  - `.claude/settings.local.json`
+  - *(none)*
 
 ## G. Continuous integration
 
-**Count: 1 workflow file(s).**
+**Count: 3 workflow file(s).**
 
+  - `.github/workflows/desktop-plugin.yml`
   - `.github/workflows/manifest-check.yml`
+  - `.github/workflows/sdd-gate.yml`
 
 ## H. Policy statements carrying enforcement severity
 

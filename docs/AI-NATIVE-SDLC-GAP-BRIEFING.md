@@ -1,6 +1,6 @@
 # How our build framework compares to Anthropic's published playbook
 
-**Leadership briefing — 23 September 2026**
+**Leadership briefing — 23 September 2026** (figures refreshed 30 September 2026)
 
 Technical companion: **`docs/AI-NATIVE-SDLC-GAP-COMPANION.md`**
 Source data appendix (machine-generated): **`docs/AI-NATIVE-SDLC-GAP-APPENDIX.md`**
@@ -54,7 +54,7 @@ job?* — and recorded one of three answers:
 We have deliberately not used words like "weak" or "mature." They are opinions.
 The three verdicts above are tests anyone can re-run.
 
-**Result across the 12 plays: 4 Present, 3 Partial, 5 Absent.**
+**Result across the 12 plays: 4 Present, 4 Partial, 4 Absent.**
 
 ---
 
@@ -72,10 +72,11 @@ AI copies rather than re-creates, so the same bugs cannot come back. The playboo
 has no equivalent idea. We also run multiple AI workers in parallel and we have
 an automatic build-and-check-and-repair cycle. All of that is real and it works.
 
-### Where the problem sits (the 5 Absent)
+### Where the problem sits
 
-Five plays have no counterpart in our framework at all. Four of them share a
-single root cause, which is worth stating plainly:
+Four plays have no counterpart in our framework at all, and the play about locks
+on our rules has a single lock that guards none of our mandatory rules. Four of
+these gaps share a single root cause, which is worth stating plainly:
 
 > **Our rules are written down, but nothing physically stops the AI from
 > breaking them.**
@@ -91,7 +92,9 @@ blocks the action."* A "hook" here is a small piece of software that sits in
 front of the AI and physically refuses an action — it is a lock, as opposed to a
 sign saying *please do not enter*.
 
-**We have zero hooks.** Not a small number. Zero. Searched and confirmed.
+**We have one hook, and it guards none of the 203.** It keeps the AI from
+walking away from one multi-step build workflow before its checkpoints pass. It
+does not touch any of the mandatory rules above. Searched and confirmed.
 
 So all 203 mandatory rules are signs, not locks. They work as long as the AI
 reads them and complies, which it usually does. There is no mechanism that
@@ -99,12 +102,14 @@ catches the time it does not.
 
 The three related absences follow from the same shape:
 
-- **No regression testing of the framework itself.** Our framework is 599
-  kilobytes of instructions across 15 files, plus 14 skills. When somebody edits
+- **No regression testing of the framework itself.** Our framework is 622
+  kilobytes of instructions across 17 files, plus 15 skills. When somebody edits
   those instructions — which we do regularly — nothing verifies that applications
   still build correctly afterwards. The playbook calls for a standing test suite
-  of 20 to 50 real tasks that re-runs on every instruction change. We have **one**
-  automated check in total, and it checks a file inventory, not behaviour.
+  of 20 to 50 real tasks that re-runs on every instruction change. We have
+  **three** automated checks in total: one checks a file inventory, one tests the
+  single hook above, and one checks that a packaged copy of the framework builds
+  and is well-formed. None of them checks what the AI builds.
 - **No AI review of proposed changes.** We do run six automated checks before
   code is pushed, which is real and valuable. But nothing reviews the finished
   change against our written policy the way a reviewer would.
@@ -223,7 +228,7 @@ background. Where the two disagree, the playbook is not automatically right, and
 in at least one area — the 199 pre-built application files — our approach solves
 a problem the playbook does not address at all.
 
-**"Absent" means absent from this repository, and nothing more.** Five plays
+**"Absent" means absent from this repository, and nothing more.** Four plays
 scored Absent. That verdict is based on searching the `/make-it` repository. Some
 of the missing controls — in particular the enterprise-wide governance settings —
 can only exist at the organisation level, and confirming their status requires

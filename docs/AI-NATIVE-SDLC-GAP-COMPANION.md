@@ -1,6 +1,7 @@
 # `/make-it` vs. the AI-Native SDLC Playbook — Technical Companion
 
-**23 September 2026** · repository `make-it` @ `5399071` (branch `main`, clean tree)
+**23 September 2026**, figures refreshed 30 September 2026 · repository `make-it` @ `f7b574f`
+(branch `docs/ai-native-sdlc-gap-assessment` on `main` @ `b23da4d`, clean tree)
 
 Leadership briefing: **`docs/AI-NATIVE-SDLC-GAP-BRIEFING.md`**
 Generated source data: **`docs/AI-NATIVE-SDLC-GAP-APPENDIX.md`**
@@ -34,8 +35,8 @@ Each play receives exactly one verdict. The verdict is a test, not a judgement.
 | Verdict | Test | Required evidence | Count |
 |---|---|---|---:|
 | **Present** | A counterpart exists in the repository and performs the play's function | Path (and line, where applicable) of the implementing file | 4 |
-| **Partial** | A counterpart exists but lacks one *named* defining property of the play | Implementing path **plus** the named absent property | 3 |
-| **Absent** | No counterpart | A reproducible search over `.claude/commands/` and `.claude/make-it/references/` returning zero matches | 5 |
+| **Partial** | A counterpart exists but lacks one *named* defining property of the play | Implementing path **plus** the named absent property | 4 |
+| **Absent** | No counterpart | A reproducible search over `.claude/commands/` and `.claude/make-it/references/` returning zero matches | 4 |
 | | | **Total** | **12** |
 
 Adjectives such as "weak", "immature" or "poor" are not used. They are not
@@ -79,17 +80,17 @@ Where a control could only exist out of scope, the finding is marked
 | 1 | Plan | `capture-intent` | **Absent** | — | `G01` |
 | 2 | Design | `requirements-and-design` | **Partial** | `.claude/make-it/templates/app-context.md` → `app-context.json` | `G02` |
 | 3 | Build | `plan-mode` | **Absent** | — | `G03` |
-| 4 | Build | `claude-md` | **Present** | `.claude/commands/make-it.md:522` creates project `CLAUDE.md` | — |
-| 5 | Build | `skills-as-institutional-knowledge` | **Partial** | 14 files in `.claude/commands/`; 599 KB in `.claude/make-it/references/` | `G04` |
+| 4 | Build | `claude-md` | **Present** | `.claude/commands/make-it.md:523` creates project `CLAUDE.md` | — |
+| 5 | Build | `skills-as-institutional-knowledge` | **Partial** | 15 files in `.claude/commands/`; 622 KB in `.claude/make-it/references/` | `G04` |
 | 6 | Build | `parallel-sessions-and-subagents` | **Present** | `dispatch-it.md`, `subagent-it.md`, `parallel-dispatch.md`, `subagent-driven-development.md`, `worktree-workflow.md` | — |
 | 7 | Test | `give-claude-a-feedback-loop` | **Present** | build-verify Parts A–D; `build-verify-security.md` self-healing loop (≤3 cycles); `try-it.md` smoke test | — |
 | 8 | Test | `continuous-evals-in-ci` | **Absent** | — | `G05` |
-| 9 | Deploy | `ai-in-the-pr-review-loop` | **Partial** | `ship-it-guide.md:81` Pre-Push Self-Review (6 checks) | `G06` |
-| 10 | Deploy | `hooks-as-approval-gates` | **Absent** | — | `G07`, `G08` |
-| 11 | Deploy | `ci-cd-integration-and-deployment` | **Present** | `ship-it.yml`, `ship-it-aws.yml`, `ship-it-azure.yml`, `ship-it-azure-aca.yml`; `argo-it.md` (84 KB); `ship-it-guide.md:102` post-push CI monitoring | — |
+| 9 | Deploy | `ai-in-the-pr-review-loop` | **Partial** | `ship-it-guide.md:83` Pre-Push Self-Review (6 checks) | `G06` |
+| 10 | Deploy | `hooks-as-approval-gates` | **Partial** | `.claude/make-it/sdd/scripts/sdd-gate` — one `Stop` hook, one workflow | `G07`, `G08` |
+| 11 | Deploy | `ci-cd-integration-and-deployment` | **Present** | `ship-it.yml`, `ship-it-aws.yml`, `ship-it-azure.yml`, `ship-it-azure-aca.yml`; `argo-it.md` (84 KB); `ship-it-guide.md:104` post-push CI monitoring | — |
 | 12 | Maintain | `closing-the-loop-on-metrics` | **Absent** | — | `G09` |
 
-**4 Present · 3 Partial · 5 Absent · 9 findings.**
+**4 Present · 4 Partial · 4 Absent · 9 findings.**
 
 ---
 
@@ -171,7 +172,7 @@ missing, and the second is the material one:
 |---|---|
 | `.claude/make-it/templates/app-context.md` | Template for the decision record; no narrative spec, no approval field |
 | `.claude/commands/make-it.md` — Phase 2 (Design) | Explicitly non-interactive |
-| `/Volumes/PRO-BLADE/make-it/CLAUDE.md` — "How It Works", step 2 | `"Design -- AI-driven technical decisions (invisible to user)"` |
+| `CLAUDE.md` (repository root) — "How It Works", step 2 | `"Design -- AI-driven technical decisions (invisible to user)"` |
 | `.claude/make-it/references/design-blueprint.md` (157 KB) | The policy corpus the spec would be checked against — exists, but nothing emits a conformance statement |
 
 **How to address it.**
@@ -233,10 +234,10 @@ when the described situation arises. Its example — `secure-api-review`, firing
 endpoint creation — is the whole point: the engineer does not have to know the
 policy exists.
 
-`/make-it` has the knowledge. It has a great deal of it: 14 command files and
-599 KB across 15 reference files, with `build-standards.md` (101 KB) explicitly
+`/make-it` has the knowledge. It has a great deal of it: 15 command files and
+622 KB across 17 reference files, with `build-standards.md` (101 KB) explicitly
 designated single source of truth and consumed by three skills. What it lacks is
-automatic activation. Every one of the 14 is invoked by a human typing `/name`.
+automatic activation. Every one of the 15 is invoked by a human typing `/name`.
 The reference corpus loads only when an invoked command reads it.
 
 Consequence: policy in `guardrails.md` and `build-standards.md` is unreachable
@@ -247,9 +248,9 @@ ordinary Claude Code sessions in a `/make-it`-generated project.
 
 | Location | Observation |
 |---|---|
-| `.claude/commands/` (14 files — full list in Appendix §A) | Slash-command form; user-invoked |
+| `.claude/commands/` (15 files — full list in Appendix §A) | Slash-command form; user-invoked |
 | `.claude/skills/` | Does not exist |
-| `.claude/make-it/references/guardrails.md` (61 KB) | Read only via an invoking command |
+| `.claude/make-it/references/guardrails.md` (62 KB) | Read only via an invoking command |
 | `.claude/make-it/references/build-standards.md` (101 KB) | Same |
 
 **How to address it.**
@@ -257,7 +258,7 @@ ordinary Claude Code sessions in a `/make-it`-generated project.
    into `.claude/skills/<name>/SKILL.md` with frontmatter triggers. Candidate
    first cut: the Tier 0 universal checks and the Tier 1 auth/RBAC checks, since
    those apply regardless of which command is running.
-2. Leave the 14 commands as-is. They are workflows, not policies; the slash-command
+2. Leave the 15 commands as-is. They are workflows, not policies; the slash-command
    form is correct for them.
 3. Note the playbook's own caveat, which applies directly here: *"Skills make
    policy compliance likely… A policy that must always hold needs something
@@ -278,7 +279,7 @@ on pass-rate regression, and every production incident converted into a permanen
 eval.
 
 That trigger condition is exactly this repository's change pattern. `/make-it`
-ships agent configuration as its product: 14 skills, 599 KB of references, 199
+ships agent configuration as its product: 15 skills, 622 KB of references, 199
 scaffold files. Editing `guardrails.md` or `build-standards.md` alters the
 behaviour of every future build, and nothing verifies the alteration.
 
@@ -288,13 +289,20 @@ scaffolding. That is application testing. It runs inside a build, after the
 framework change has already taken effect. It cannot catch a framework regression
 before merge, because it does not run at merge.
 
+The two workflows added since 23 September do not change the verdict.
+`scripts/test-sdd-gate.sh` checks one deterministic script's exit codes;
+`desktop-plugin.yml` checks that a package builds and is well-formed. Both are
+conventional tests of tooling. The play's unit is a task run through the agent
+against acceptance criteria, and no workflow runs one, so no counterpart performs
+the play's function.
+
 **Where the problem is.**
 
 | Location | Observation |
 |---|---|
 | Search for `evals`/`eval`/`*.eval.json` files or directories | **0 found** (Appendix §E) |
 | Prose occurrences of `eval`/`evals`/`evaluation` in commands + references | **9 lines** — English usage, not a suite (Appendix §D) |
-| `.github/workflows/` | **1 workflow**: `manifest-check.yml` — validates the content manifest, asserts nothing about build behaviour (Appendix §G) |
+| `.github/workflows/` | **3 workflows** (Appendix §G): `manifest-check.yml` validates the content manifest; `sdd-gate.yml` runs `scripts/test-sdd-gate.sh`, an 11-case regression test of one hook script; `desktop-plugin.yml` builds the desktop plugin package and validates its structure. None runs a task through Claude or asserts anything about build behaviour |
 | `.claude/make-it/scaffolds/` | **199 files** (122 `fastapi-nextjs`, 67 `nextjs-fullstack`, 10 `overlays`) with no build regression test |
 
 **How to address it.**
@@ -345,8 +353,8 @@ properties differ:
 
 | Location | Observation |
 |---|---|
-| `.claude/make-it/references/ship-it-guide.md:81` | Pre-Push Self-Review — 6 mechanical checks, local, pre-push |
-| `.claude/make-it/references/ship-it-guide.md:102` | Post-Push CI Monitoring — watches and auto-fixes CI failures; does not review content |
+| `.claude/make-it/references/ship-it-guide.md:83` | Pre-Push Self-Review — 6 mechanical checks, local, pre-push |
+| `.claude/make-it/references/ship-it-guide.md:104` | Post-Push CI Monitoring — watches and auto-fixes CI failures; does not review content |
 | Search: `claude-code-action\|REVIEW\.md` over `.github/` + commands + references | **0 matching lines** (Appendix §D) |
 | `/Users/<user>/.claude/ship-it/templates/` | 7 templates (`ship-it.yml`, `ship-it-aws.yml`, `ship-it-azure.yml`, `ship-it-azure-aca.yml`, `workflow.yml`, `pr-description.md`, `checklist-prod.md`) — none invokes a review action |
 
@@ -369,7 +377,10 @@ properties differ:
 
 ### `G07` — 203 enforcement-tagged rules with no deterministic enforcer
 
-**Verdict:** Absent · **Stage:** Deploy (applies framework-wide) · **Severity:** High
+**Verdict:** Partial · **Stage:** Deploy (applies framework-wide) · **Severity:** High
+
+**Named absent property:** *a deterministic enforcer for the rules the framework
+marks mandatory — no hook gates a tool action.*
 
 **This is the highest-value finding in the assessment.**
 
@@ -390,6 +401,16 @@ closed.
 `[WARN]` is excluded from the 203; it is advisory by design and correctly
 implemented as prose.
 
+The framework does now ship one hook, which is why the play scores Partial rather
+than Absent. `.claude/make-it/sdd/scripts/sdd-gate` is a `Stop` hook: while a
+Subagent-Driven Development run is open it refuses to let the controller end its
+turn (exit 2), and `sdd-gate.yml` regression-tests it in CI. It is the playbook's
+principle applied to one rule. It does not reduce the 203: it gates no tool
+action, it enforces none of the tagged rules, and it is registered by hand in
+user-level `~/.claude/settings.json`
+(`.claude/make-it/references/subagent-driven-development.md:180`), not in
+committed settings.
+
 **Where the problem is.**
 
 | Location | Observation |
@@ -400,7 +421,9 @@ implemented as prose.
 | `.claude/make-it/references/*.md` — `[WARN]` | 7 occurrences — correctly advisory, excluded |
 | `.claude/settings.json` | **Does not exist** (Appendix §F) |
 | `.claude/hooks/` | **Does not exist** (Appendix §F) |
-| `.claude/settings.local.json` | Present — permissions only; **0** hook event keys (Appendix §F) |
+| Committed settings files | **None** — `.claude/settings.local.json` is git-ignored (`.gitignore:12`); **0** hook event keys (Appendix §F) |
+| `.claude/make-it/sdd/scripts/sdd-gate` | The one hook: `Stop` event, one workflow, none of the 203 |
+| Search: `PreToolUse\|PostToolUse\|UserPromptSubmit\|PermissionRequest` over commands + references | **0 matching lines** — no tool-action gate is documented in either |
 
 Note on interpretation, carried identically in the briefing: 203 counts
 *assertions in text*, not 203 distinct controls. Several are the same control
@@ -412,7 +435,7 @@ the fix, not a correction to the count.
    represent. Expect materially fewer than 75.
 2. Rank by what is (a) mechanically checkable and (b) expensive if violated. The
    secret-leak check is the obvious first — it already exists as prose at
-   `ship-it-guide.md:81` check 5, including the `sk-ant-oat` / `CLAUDE_CODE_OAUTH_TOKEN`
+   `ship-it-guide.md:83` check 5, including the `sk-ant-oat` / `CLAUDE_CODE_OAUTH_TOKEN`
    subscription-token case, and moving it from prose to a hook converts the
    single highest-consequence rule in the framework from a sign to a lock.
 3. Create `.claude/settings.json` with a `PreToolUse` matcher on `Bash` (and
@@ -530,7 +553,7 @@ which is the change that makes every remaining finding cheaper.
 ## 4. Reproducing every figure
 
 ```bash
-git rev-parse --short HEAD                      # 5399071
+git rev-parse --short HEAD                      # f7b574f
 ./docs/scripts/gen-sdlc-gap-appendix.sh         # regenerates the appendix
 ```
 
@@ -551,7 +574,11 @@ grep -rIoh -E '\[FIX\]'   .claude/make-it/references | wc -l
 # G07 — enforcers: expect both to be absent
 ls .claude/settings.json .claude/hooks 2>&1
 
-# G05 — CI surface: expect 1 file
+# G07 — the one hook: expect its Stop registration, and 0 tool-event keys
+grep -n '"Stop"' .claude/make-it/references/subagent-driven-development.md
+grep -rIoh -E 'PreToolUse|PostToolUse|UserPromptSubmit|PermissionRequest' .claude/commands .claude/make-it/references | wc -l
+
+# G05 — CI surface: expect 3 files
 find .github/workflows -type f
 ```
 
@@ -566,7 +593,7 @@ misrepresent the framework.
 | Capability | Location | Why the playbook has no equivalent |
 |---|---|---|
 | **Pre-built scaffolds** — 199 files of already-debugged auth, RBAC, Docker, UI | `.claude/make-it/scaffolds/` (122 + 67 + 10) | The playbook assumes generation from policy each time. A scaffold makes a whole class of regression structurally impossible rather than merely detectable. |
-| **Tiered guardrails (0–5) by project type** | `.claude/make-it/references/guardrails.md` (61 KB) | The playbook treats policy as flat. Tiering is how a web app, a CLI tool and a library get proportionate rules from one corpus. |
+| **Tiered guardrails (0–5) by project type** | `.claude/make-it/references/guardrails.md` (62 KB) | The playbook treats policy as flat. Tiering is how a web app, a CLI tool and a library get proportionate rules from one corpus. |
 | **Single-source standards + drift catch-up** | `build-standards.md` (101 KB), consumed by `/make-it`, `/retrofit-it`, `/resume-it`; `/resume-it` re-scans existing projects against the current version | The playbook identifies configuration drift as a risk but proposes no mechanism for retro-applying updated standards to already-generated work. |
 | **Security scan with self-healing loop** | build-verify Part D; `build-verify-security.md`, `fix-strategies.md` (12 strategies, AUTO/SEMI-AUTO/MANUAL) | The playbook covers security through review and hooks. Neither auto-remediates before a human sees the output. |
 | **Brownfield onboarding with risk scoring** | `.claude/commands/retrofit-it.md` (55 KB); weighted change types Add(1)…Rewrite(8); banded strategy at 15/35/60 | The playbook is greenfield throughout. `/retrofit-it` also already implements the plan-approval gate that `G03` proposes generalising. |
@@ -578,7 +605,7 @@ misrepresent the framework.
 
 Stated in the briefing in non-technical terms; restated here precisely.
 
-1. **Repository-only.** Verdicts describe `make-it` @ `5399071`. No generated
+1. **Repository-only.** Verdicts describe `make-it` @ `f7b574f`. No generated
    application was opened. "No evidence that a rule was violated" is not the
    claim "no rule was violated" — establishing the latter requires reading the
    generated repositories.
