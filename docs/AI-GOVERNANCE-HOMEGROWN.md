@@ -517,7 +517,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Live Verification | V01-V15 | 15 | 0-1 |
 | AI Features | AI01-AI15 | 15 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~153** | |
+| **Total** | | **~154** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)

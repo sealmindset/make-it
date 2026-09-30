@@ -5,3 +5,5 @@
 .claude/make-it/references/expert-personas.md
 # operator safety rules (all skills)
 .claude/make-it/references/operator-safety.md
+# named by build-standards S10
+.claude/make-it/references/learnings.md

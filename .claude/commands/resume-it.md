@@ -568,7 +568,8 @@ unless they ask. Full spec: `worktree-workflow.md`.
 1. Run all existing tests silently
 2. Report results in plain language
 3. Offer learnings (`learnings.md`): a correction the user made that is a reusable rule, plus any
-   agent lessons queued during the work -- one plain yes/no each, in one message
+   agent lessons queued during the work -- one plain yes/no each, in one message. Skip if nothing
+   is queued; otherwise wait for the answer before the next question.
 4. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
 
 </step>

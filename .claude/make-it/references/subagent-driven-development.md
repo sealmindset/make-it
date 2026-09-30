@@ -70,8 +70,9 @@ approved plan as input — it executes, it does not brainstorm.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
    Fix findings with ONE fix subagent carrying the complete list (not one fixer per finding).
-5. **Offer learnings** (`learnings.md`): reviewer findings that recurred across tasks and any
-   correction the user made at acceptance, one yes/no each. Then **finish the branch** via
+5. **After `STATUS: DONE`, offer learnings** (`learnings.md`): queued agent lessons (e.g. reviewer
+   findings that recurred across tasks) and any correction the user made at acceptance, one
+   yes/no each. Then **finish the branch** via
    ship-it / wrap-it.
 
 ---

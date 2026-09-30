@@ -671,8 +671,8 @@ or 'I can't click the save button.' I'll figure out what's wrong and fix it.
 
 **Stay available while the user explores. React to their messages:**
 
-**After any fix the user asked for:** if their correction is a rule that applies beyond this one
-fix, offer to remember it (`learnings.md`): "Want me to remember this for next time? ..."
+**After any fix the user asked for, once the re-test passes:** if their correction is a rule that
+applies beyond this one fix, offer to remember it (`learnings.md`): "Want me to remember this for next time? ..."
 
 **If user reports a visual/UX issue:**
 - "The header looks weird" / "The colors are wrong" / "Can you make the font bigger?"
@@ -709,7 +709,8 @@ fix, offer to remember it (`learnings.md`): "Want me to remember this for next t
 
 **If user says they're happy / done:**
 - Celebrate! "Awesome! Your app is working just how you wanted it."
-- Offer any queued agent lessons (`learnings.md`): one message, one yes/no each
+- Offer any queued agent lessons (`learnings.md`): one message, one yes/no each; wait for the
+  answer before showing next steps (skip if nothing is queued)
 - Route to next steps:
   "Here's what you can do next:
   - **/ship-it** -- Deploy your app so others can use it

@@ -545,8 +545,8 @@ The user sees progress updates, NOT the technical details.
       line `🐤 canary ok` so dropped instructions are visible." Unlike the README, this file MAY
       reference AI assistants — it exists for them. Do NOT put secrets or app logic here.
 
-      Also create `LEARNINGS.md` with the header block from
-      `~/.claude/make-it/references/learnings.md` ("Format") and no entries. Later sessions add
+      Also create `LEARNINGS.md` containing only the "Header -- copy exactly" block from
+      `~/.claude/make-it/references/learnings.md` -- never its example lines. Later sessions add
       learnings there, one user-approved line at a time.
 
    Tell user: "Foundation is ready! Now building your specific features..."
