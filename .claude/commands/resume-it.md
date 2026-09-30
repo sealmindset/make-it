@@ -33,6 +33,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/subagent-driven-development.md
 @~/.claude/make-it/references/git-operations.md
 @~/.claude/make-it/references/learnings.md
+@~/.claude/make-it/references/ui-gate.md
 
 </execution_context>
 
@@ -532,6 +533,8 @@ unless they ask. Full spec: `worktree-workflow.md`.
 
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)
+- Adds or changes screens (web app)? Run the UI gate (`ui-gate.md`): the user approves a preview
+  before you implement, and the built screens (next to that preview) once tests pass
 - Reference design-blueprint.md for architectural consistency
 - For a multi-task feature or an approved plan, execute it via Subagent-Driven Development
   (`/subagent-it`, see `subagent-driven-development.md`): a fresh implementer subagent per task +
@@ -561,6 +564,8 @@ unless they ask. Full spec: `worktree-workflow.md`.
 
 **E. Something new the user describes:**
 - Treat it like a mini-ideation: ask enough questions to understand
+- Adds or changes screens (web app)? Run the UI gate (`ui-gate.md`): the user approves a preview
+  before you implement, and the built screens (next to that preview) once tests pass
 - Assess impact on existing code
 - Implement, test, document
 

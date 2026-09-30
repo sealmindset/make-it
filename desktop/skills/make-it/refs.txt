@@ -12,6 +12,7 @@
 .claude/make-it/references/git-operations.md
 .claude/make-it/templates/app-context.md
 .claude/make-it/scaffolds/fastapi-nextjs/README.md
+.claude/make-it/references/ui-gate.md
 # referenced by name in design-decisions
 .claude/make-it/references/expert-personas.md
 # operator safety rules (all skills)

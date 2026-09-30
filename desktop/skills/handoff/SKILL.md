@@ -33,6 +33,7 @@ Check what you can do; do not assume:
 - The project files. Leave out `.git/` and folders that get rebuilt anyway, like
   `node_modules/`, `.venv/`, and build output.
 - `.make-it/app-context.json`, if the project has one (see `references/app-context.md`).
+- `.make-it/design.md` and `.make-it/prototypes/`, if the project has them (the approved preview).
 - `handoff.md` at the project root.
 - The root `CLAUDE.md` with the instruction-drift canary, if the project has one.
 

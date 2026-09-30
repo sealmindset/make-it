@@ -958,6 +958,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.28.0 -- UI gate: approve a clickable preview, then the built screens
+
+Vibe coders can't read code, but they can click. Web apps now get a clickable preview before any
+screen is built, and the finished screens are shown next to that preview before handoff.
+
+- Added `references/ui-gate.md`. Part 1: `.make-it/design.md` from the ideation answers (no new
+  questions) and a single self-contained HTML preview built on the scaffold's own layout and theme
+  tokens, revised until the user approves it. That approval is the go-ahead to build. Part 2: the
+  built screens and the approved preview, screenshotted side by side for a second yes.
+- Runs in `/make-it` (before the build, and before `/try-it`) and in `/resume-it` for features that
+  add or change screens; pages are built to match the approved preview. SDD briefs for UI tasks
+  name the preview.
+- Claude Desktop: the preview is made before the handoff and travels in the bundle.
+- Scaffold `.gitignore`s ignore `.make-it/ui-review/` (regenerable screenshots).
+
 ### v1.27.0 -- Project learnings (LEARNINGS.md)
 
 A correction made once stays made. Every generated project keeps a `LEARNINGS.md` that its
