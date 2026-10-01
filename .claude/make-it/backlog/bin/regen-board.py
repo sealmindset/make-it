@@ -27,6 +27,8 @@ def fm(p):
     return dict(l.split(':', 1) for l in m.group(1).splitlines() if ':' in l) if m else {}
 def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
+def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '')
+def warn(d): return '⚠️' if v(d, 'stakes') == 'critical' else ''
 
 out = [f'# BACKLOG BOARD — {proj}', '']
 for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
@@ -34,7 +36,7 @@ for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
     stories = [fm(s) for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md'))]
     stories.sort(key=lambda s: (ORDER.index(v(s, 'status')) if v(s, 'status') in ORDER else 9, num(s)))
     counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories)))
-    out += [f"## {v(e,'id')} · {v(e,'title')}  _[{v(e,'status')}]_", f'_{counts}_', '']
+    out += [f"## {warn(e)}{v(e,'id')} · {v(e,'title')}  _[{v(e,'status')}]_{chips(e)}", f'_{counts}_', '']
     if any(v(s, 'type') == 'breakfix' for s in stories):
         # The bug queue status line: Reported -> Cause found -> Fix ready -> Live -> Checked.
         def ids(pred): return ', '.join(v(s, 'id').split('-')[-1] for s in stories if pred(s)) or '—'
@@ -49,8 +51,8 @@ for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
         if not group: continue
         out.append(f'### {st} ({len(group)})')
         for s in group:
-            mark = ('⚠️' if v(s, 'stakes') == 'critical' else '') + ('⚡' if v(s, 'type') == 'breakfix' else ('🔬' if v(s, 'type') == 'spike' else ''))
+            mark = warn(s) + ('⚡' if v(s, 'type') == 'breakfix' else ('🔬' if v(s, 'type') == 'spike' else ''))
             stage = f" — **{v(s,'stage')}**" if v(s, 'stage') and st != 'done' else ''
-            out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_")
+            out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_{chips(s)}")
         out.append('')
 open(f'{B}/BOARD.md', 'w').write('\n'.join(out))

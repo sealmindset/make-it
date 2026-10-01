@@ -958,6 +958,28 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.29.0 -- /backlog-it: the full personal-board feature set
+
+`/backlog-it` now does everything a hand-tuned personal board does, and can be one board used
+from any folder.
+
+- **User-level settings** `~/.claude/backlog-it.json` -- one board (e.g. its own repo at
+  `~/.claude/backlog`) used from any folder without project settings; new `repo` key names the
+  code that `reconcile` and `groom` check against
+- **Two ways in:** planned work (`epic` / `story` / `task` / `add`) asks 1–4 questions first;
+  `capture` / plain text writes the card first, then an AI triage step files it (type, size,
+  placement, duplicates, new epics when nothing fits) and batches the questions
+- **`reconcile`** -- strict-JSON verdicts from a code → tests → live ladder, auto-apply only at
+  ≥ 0.8 confidence and only reversible actions, `--fast` / `--deep` / `--dry-run` / `--dispatch`
+- **`dispatch`** -- bug lanes first; with no bug waiting, one item at a time by verdict,
+  `dependsOn`, `conflictsWith`, and file overlap
+- **`groom`** -- Workflow fan-out by default, state digest (started / finished / stalled), safe vs
+  gated ship tracks, `GROOM-PLAN.md`; **`groom strategy`** writes `STRATEGY.md` (north star,
+  leverage graph, foundation vs polish)
+- The full standing preamble, the high-stakes gate with its alignment brief, the design-doc
+  template, and "verify, never block" grounding
+- `regen-board.py` renders size chips, 📌 pins, and ⚠️ on epics too
+
 ### v1.28.0 -- UI gate: approve a clickable preview, then the built screens
 
 Vibe coders can't read code, but they can click. Web apps now get a clickable preview before any
