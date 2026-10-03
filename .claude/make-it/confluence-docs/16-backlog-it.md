@@ -20,14 +20,21 @@ and waiting to be checked, and what's next.
 
 ## What is it used for?
 
-- **Capturing** a bug or idea the moment you think of it. The card is written first; any
-  questions come after, all at once.
+- **Capturing** a bug or idea the moment you think of it. The card is written first and filed
+  in the right place automatically; any questions come after, all at once.
+- **Planning** new work: for an epic, story, or task it asks a few questions first, so the card
+  says what you actually mean.
 - **Fixing bugs in order**, each one moving through five steps: *Reported → Cause found → Fix
   ready → Live → Checked*. A bug isn't finished until it has been checked on the live app.
 - **Fixing several bugs at once**, when they don't touch the same parts of the app (three at a
   time by default).
 - **Picking a card back up** later: `/backlog-it start <id>` turns the card into an instruction
   you can edit, then runs it.
+- **Keeping the board honest**: `reconcile` checks each card against the code, the tests, and
+  the live app, so nothing is marked done that isn't.
+- **Deciding what's next**: `groom` proposes the order that finishes the most, soonest (you can
+  pin anything to a spot), and `groom strategy` sorts the work into foundation and polish, and
+  says why.
 
 ---
 
@@ -43,14 +50,21 @@ we?". With one, every session -- and every AI helper -- works from the same list
 ```
 /backlog-it                        # show the board
 /backlog-it the export button does nothing on the reports page
+/backlog-it epic a monthly report for managers   # plan new work (asks first)
 /backlog-it start E02-S4           # pick a card back up
 /backlog-it dispatch               # start the next bugs that can be fixed side by side
+/backlog-it groom                  # what to do next, in order
+/backlog-it groom move E05 1       # pin E05 to the top
 ```
 
 The first run sets up the board inside your project. Settings (optional) go in
 `.claude/backlog-it.json`: where the board lives, the project's name, how many bugs to fix at
 once, and which kinds of work must always be done one at a time (for example anything that
 sends email or takes payments). Slack updates are optional and off until you add a webhook.
+
+**One personal board for everything?** Put the same settings in `~/.claude/backlog-it.json`
+instead -- for example `{"board": "~/.claude/backlog", "repo": "~/code/my-app"}` -- and
+`/backlog-it` uses that board from any folder that doesn't have its own.
 
 ---
 
