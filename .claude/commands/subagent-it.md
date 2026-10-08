@@ -42,7 +42,9 @@ No user prompt. See the reference below.
 **Sequential only** — never run implementers in parallel (they conflict). Independent parallel
 problems are `/dispatch-it`'s job.
 
-**Needs an approved plan as input** (it executes, it doesn't brainstorm). **Work on a
+**Needs an approved plan as input** (it executes, it doesn't brainstorm). A plan marked
+`status: draft` isn't approved: get the user's go, then mark it `status: approved` (Plan
+format: `~/.claude/make-it/references/backlog-board.md`). **Work on a
 branch/worktree, never main/master.** Don't pause to check in between tasks — run the whole plan;
 stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion.
 

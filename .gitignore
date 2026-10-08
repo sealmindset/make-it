@@ -18,3 +18,5 @@ temp
 
 # Generated desktop plugin output
 dist/
+# Python bytecode (helper scripts)
+__pycache__/

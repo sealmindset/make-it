@@ -35,6 +35,10 @@ and waiting to be checked, and what's next.
 - **Deciding what's next**: `groom` proposes the order that finishes the most, soonest (you can
   pin anything to a spot), and `groom strategy` sorts the work into foundation and polish, and
   says why.
+- **Deciding how to run it**: `plan` reads your handoff note and the board, and says for each
+  card whether to do it directly, investigate first (a spike), build it step by step from a plan,
+  or fix several side by side -- in the order that gets everything done soonest, without skipping
+  any safety check. You can change any card's choice with `mode`.
 
 ---
 

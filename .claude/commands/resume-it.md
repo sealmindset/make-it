@@ -541,9 +541,12 @@ unless they ask. Full spec: `worktree-workflow.md`.
 - Adds or changes screens (web app)? Run the UI gate (`ui-gate.md`): the user approves a preview
   before you implement, and the built screens (next to that preview) once tests pass
 - Reference design-blueprint.md for architectural consistency
-- For a multi-task feature or an approved plan, execute it via Subagent-Driven Development
-  (`/subagent-it`, see `subagent-driven-development.md`): a fresh implementer subagent per task +
-  per-task review (spec + quality) + a final whole-branch review, instead of hand-coding inline.
+- Work that splits into **3+ ordered tasks**: write a plan first (the Plan format in
+  `backlog-board.md` -- next to its card when the project has a board, else
+  `.make-it/plans/<slug>.md`), show it, wait for the go, mark it `status: approved`, then execute
+  it via Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): a
+  fresh implementer subagent per task + per-task review (spec + quality) + a final whole-branch
+  review, instead of hand-coding inline. Fewer tasks: just do the work.
   (Independent *parallel* problems that aren't an ordered plan → `/dispatch-it`.)
 - Implement the changes
 - After changes, automatically run existing tests (if any)

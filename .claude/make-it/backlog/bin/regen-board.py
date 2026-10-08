@@ -27,7 +27,7 @@ def fm(p):
     return dict(l.split(':', 1) for l in m.group(1).splitlines() if ':' in l) if m else {}
 def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
-def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '')
+def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '') + (f" →{v(d,'mode')}" if v(d, 'mode') else '')
 def warn(d): return '⚠️' if v(d, 'stakes') == 'critical' else ''
 
 out = [f'# BACKLOG BOARD — {proj}', '']

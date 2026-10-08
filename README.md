@@ -958,6 +958,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.31.0 -- /backlog-it plan: how to run each card, and in what order
+
+- **`plan`** reads `handoff.md` and every open card, and routes each card to **solo**, **spike**
+  (unknowns first), **`/subagent-it`** (3+ ordered tasks), or **`/dispatch-it`** (3+ independent
+  cards), in waves that finish soonest with every gate held → `PLAN.md`
+- **`check-plan.py`** gates the AI's plan: no shared files, data, or serial category in a
+  parallel wave; high-stakes cards held; `dependsOn` order kept. If it fails, nothing is written
+- Cards carry `mode:` (`mode <id> <mode>` to choose it yourself); `start` adds a mode line after
+  the preamble, `dispatch` follows the plan's next wave, and the board shows `→solo`
+- **Plan format** (Helix slice 4): `## Task N` plans next to their card (else
+  `.make-it/plans/`), drafted for approval; `/resume-it` writes one first for 3+ ordered tasks
+
 ### v1.30.1 -- Each project's handoff syncs only with its own board
 
 v1.30.0 let a folder with no board of its own sync its handoff with the personal board, which

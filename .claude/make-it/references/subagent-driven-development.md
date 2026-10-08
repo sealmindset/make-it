@@ -13,7 +13,8 @@ problems in parallel; SDD walks an *ordered plan* one task at a time. **Never ru
 in parallel** — they conflict. If a plan's tasks are genuinely independent, that's dispatch-it.
 
 This is an agent-side technique (the `/subagent-it` command exposes it). It needs an existing,
-approved plan as input — it executes, it does not brainstorm.
+approved plan as input — it executes, it does not brainstorm. The plan's shape and where it lives
+are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs the user's go first.
 
 ---
 
