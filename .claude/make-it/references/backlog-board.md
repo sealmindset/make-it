@@ -57,6 +57,7 @@ notifications are a silent no-op and the board works the same.
 ├── BOARD.md                     # rendered -- never hand-edit; regenerate after every change
 ├── README.md                    # optional
 ├── GROOM-PLAN.md                # written by `groom` (the burn-down lives here, not in cards)
+├── PLAN.md                      # written by `plan` (waves + a mode per card)
 ├── STRATEGY.md                  # written by `groom strategy`
 ├── .project                     # optional: project name
 ├── .slack-webhook               # optional, gitignored
@@ -67,6 +68,7 @@ notifications are a silent no-op and the board works the same.
         ├── epic.md              # the epic card
         ├── design.md            # optional design doc (for communicating, never a gate)
         ├── <other-docs>.md      # capture plans, ADRs, etc.
+        ├── plans/<id>.md        # `## Task N` plans for /subagent-it (see the Plan format)
         └── stories/
             └── S<n>-slug.md     # story / task / breakfix / spike cards
 ```
@@ -89,6 +91,9 @@ pin:       1              # optional rank override set by `groom move`; dropped 
 stakes:    critical       # optional -- never auto-started (see the High-stakes gate)
 dependsOn: [E02]          # optional -- not dispatched until these are done
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
+mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
+mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
+plan:      plans/E04-S2.md   # the card's `## Task N` plan, relative to the epic folder
 reconciled: YYYY-MM-DD    # set by reconcile on its first auto-apply
 created:   YYYY-MM-DD
 updated:   YYYY-MM-DD
@@ -255,7 +260,9 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `move <id> <status>` · `status <id> <status>` · `stage <id> <stage>` | Change status / bug stage (a stage change also posts `slack-notify.sh raw`) |
 | `done <id>` | End summary, `status: done` |
 | `reconcile [<id>\|all]` | Check cards against the code, tests, and live system |
-| `dispatch [--dry-run]` | Fill free bug lanes, else start the next safe item |
+| `dispatch [--dry-run]` | Follow `PLAN.md`'s next wave, else fill free bug lanes, else start the next safe item |
+| `plan [filter] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md` |
+| `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
 | `groom [filter]` | Propose the order that finishes the most, soonest |
 | `groom move <id> <pos>` · `groom pin` · `groom unpin <id>` | Pin / release an item's rank |
 | `groom strategy` | Which work is foundation and which is polish, and why |
@@ -273,7 +280,8 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 
 1. **Build the prompt.** A raw card → its own text, as-is. A design-backed card → a **precap**: a
    prompt distilled from the design doc and card. (The design doc stays a communication artifact,
-   never a gate.) **Always prepend the standing preamble** below, for every type.
+   never a gate.) **Always prepend the standing preamble** below, for every type, then the
+   card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---apply---dry-run)).
 2. **Show the assembled prompt and let the user edit it** -- anything, including the preamble.
    This is an edit step, not an approval gate.
 3. On the user's **go**, run the (possibly edited) prompt as the active instruction, start to
@@ -310,6 +318,18 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 >   customer-facing product; externally visible side effects (customer emails or notifications,
 >   filings with an outside party, billing); breaking changes or removed behavior. **When in doubt
 >   whether a change can cause harm, gate it -- ask, don't ship.**
+
+> **Mode line** (after the preamble; it governs how the work is run)
+> - `solo` -- **Mode: solo.** Do this in this session; subagents only for read-only research or
+>   an independent review.
+> - `spike` -- **Mode: spike (timebox <T>).** Answer: <question>. Append the answer to the card as
+>   `## Finding`; ship no code. Then run `/backlog-it plan` again.
+> - `subagent-it` -- **Mode: subagent-it.** Run the card's approved plan (`plan:`) with
+>   `/subagent-it`. No approved plan yet: draft it first (Plan format), show it, wait for the go,
+>   mark it `status: approved`, then run it.
+> - `dispatch-it` -- **Mode: dispatch-it (one lane).** This card is one lane of a parallel wave:
+>   its own worktree, the `/debug-it` method for a bug, no files outside its lane. `dispatch`
+>   launches the whole wave; `start` runs just this lane.
 
 **For whoever runs a started card:** "deploy" means the project's real production path, with the
 project's own smoke tests; if a deploy goes wrong, prefer the project's rollback path. Two
@@ -384,6 +404,11 @@ headlessly for one card) · `--dry-run` (print what would apply, write nothing) 
 Autonomous "do the next thing" -- a hands-free way to call `start`. **It never bypasses the
 green gate or the harm gate** in the standing preamble.
 
+0. **A current plan leads.** If `PLAN.md` exists and no card in it was updated after its date,
+   take its first wave that isn't started: a `dispatch-it` wave → its cards as `/dispatch-it`
+   lanes (still capped by `lane_cap`); a single `solo`, `spike`, or `subagent-it` card → `start`
+   it (a `subagent-it` card still waits for its plan's go). Held cards are never taken. A plan
+   older than one of its cards → run `plan` again first. No `PLAN.md` → the steps below.
 1. **Bugs first -- fill free lanes.** Take bugs from the top of the line and fill free lanes up to
    `lane_cap` under the [Parallel lanes](#parallel-lanes) rules, each started in its own worktree
    via `/dispatch-it` (one agent per card, running the `/debug-it` method).
@@ -405,6 +430,107 @@ green gate or the harm gate** in the standing preamble.
 
 Armed by default; `--dry-run` prints the picks without starting anything; everything is logged
 and reversible.
+
+### `plan [filter] [--apply] [--dry-run]`
+
+**How and in what order.** One AI pass reads the project's `handoff.md` and every open card,
+then routes each card to an execution mode and orders them into **waves** -- the path that
+**finishes soonest with every gate held**. `groom` decides *what next*; `plan` decides *how to
+run it*. Quick enough for every session: one headless call, no per-card code check (it reuses
+the evidence `reconcile` already recorded; run `groom` to re-ground).
+
+**The mode rubric:**
+- **spike** -- unknowns dominate: open questions that change the approach, no code evidence, an
+  unfamiliar outside system. Timeboxed; the output is a finding, then plan again.
+- **solo** -- one coherent change; small; tightly coupled or needs whole-system context; or
+  high-stakes (alignment brief, the user in the loop).
+- **subagent-it** -- size M or larger, splitting into **3+ ordered tasks**; needs a `## Task N`
+  plan (Plan format below).
+- **dispatch-it** -- **3+ independent cards** (`min(3, lane_cap)`): disjoint files and data, no
+  shared root cause, no two of one `serial` category. Bugs that share a cause → one `solo`
+  `/debug-it`, never parallel lanes.
+- **Order** -- most-unblocking first, a spike before the work it de-risks, near-done wins, then
+  the parallel waves. Shipping stays one PR at a time. A **wave** is one step: a `dispatch-it`
+  wave runs its cards side by side; any other wave is one card.
+
+1. **Gather** -- every open leaf card in scope (a card no open card names as `parent`): its
+   frontmatter, open questions, and the files cited in its latest `## Reconciliation` block;
+   `<repo>/handoff.md` if present (Next Steps order, Failed Approaches, what's in progress);
+   `GROOM-PLAN.md` and `STRATEGY.md` if present; settings `lane_cap` and `serial`. A card with
+   `mode_by: you` keeps its mode.
+2. **Route** with a headless `claude -p` (read-only tools `Read,Glob,Grep`, cwd = settings
+   `repo`, so it can look up which files a card would touch), passing all of the above, the
+   rubric, and today's date. It returns **strict JSON only**:
+   ```json
+   {
+     "waves": [
+       { "wave": 1, "why": "one line",
+         "items": [ { "id": "E04-S2", "mode": "solo|spike|subagent-it|dispatch-it",
+                      "reason": "one line", "files": ["src/a.ts"], "data": ["table or bucket"],
+                      "spike": { "question": "...", "timebox": "2h" },
+                      "plan_tasks": ["Task 1 title", "Task 2 title", "Task 3 title"] } ] }
+     ],
+     "held":    [ { "id": "E09-S1", "why": "high-stakes: needs the alignment brief" } ],
+     "skipped": [ { "id": "E04-S1", "why": "in progress / shipping / blocked" } ]
+   }
+   ```
+3. **Gate** -- `python3 ~/.claude/make-it/backlog/bin/check-plan.py <board> <plan.json>
+   --lane-cap N --serial a,b` (`--partial` with a filter). It enforces the hard rules: dispatch
+   waves share no files, data, or serial category and every card names its files; high-stakes
+   cards are held, never in a wave; every unfinished `dependsOn` comes in an earlier wave; every
+   open card is accounted for. Violations → send them back to the same call once; still
+   failing → stop, print them, write nothing.
+4. **Write** -- `PLAN.md` at the board root; `mode:` on each planned card (never over
+   `mode_by: you`); for each `subagent-it` card with no plan, a **draft** plan at
+   `items/<epic>/plans/<id>.md` (Plan format, `status: draft`) linked as `plan:`. Spike cards are
+   **proposed** in `PLAN.md` and filed only under `--apply` (a `type: spike` card, plus the target
+   card's `dependsOn:` on it). Drafts never run without the user's go. Bump `updated:` on touched
+   cards, regenerate, sync (commit `plan: <summary>`). `--dry-run` prints and writes nothing.
+5. **Report** -- the waves, one line each, then the held block and the proposals.
+
+**`PLAN.md`:**
+```markdown
+# Run Plan -- YYYY-MM-DD  (scope: <filter>)
+> /backlog-it plan · handoff.md + N open cards · finish soonest, every gate held · start/dispatch run it
+
+## Waves
+1. **solo** · E02-S1 · <title> -- <reason>
+2. **dispatch-it** ×3 · E05-S1 · E05-S2 · E05-S3 -- <why they're independent>
+   - E05-S1 -- <reason> · files: src/a.ts
+3. **spike** (2h) · E04-S9 (proposed) → de-risks E04-S3 -- <question>
+4. **subagent-it** · E04-S3 · <title> -- plan: items/EPIC-04-…/plans/E04-S3.md (draft) -- <reason>
+
+## ⚠️ Held -- needs the alignment brief and an explicit go
+## Skipped
+## Proposed (filed with `plan --apply`)
+```
+
+**`mode <id> <mode|auto>`** -- the human override: sets `mode:` and `mode_by: you`; `auto` removes
+both so the next `plan` decides. Regenerate, sync.
+
+### Plan format
+
+The `## Task N` plan that `/subagent-it` runs (and `/resume-it` writes for 3+ ordered tasks).
+With a board it sits next to its card, `items/<epic>/plans/<id>.md`, linked as `plan:` -- so a
+plan is as private and as backed up as the board. With no board: `.make-it/plans/<slug>.md` in
+the project, committed with the work.
+
+```markdown
+# Plan -- <title>
+_Card: <id> · drafted YYYY-MM-DD · status: draft_
+
+## Goal
+## Global Constraints
+## Task 1: <title>
+- Files: <paths>
+- Do: <the change>
+- Test: <the check that proves it>
+- Done when: <observable result>
+## Task 2: <title>
+```
+
+`/subagent-it` runs only an approved plan: `status: draft` → the user's go → `status: approved`.
+`task-brief PLAN_FILE N` reads the `## Task N` headings.
 
 ### `groom [filter] [--apply] [--dry-run] [--dispatch]`
 
@@ -434,7 +560,8 @@ think at high effort. Don't ask permission for it; the user doesn't need any ext
    (e) **cut ruthlessly** -- name what's not worth doing now. `STRATEGY.md`, if present, makes
    foundational work outrank polish in (a) unless a card is pinned.
 4. **Tag the ship track** from the standing preamble: **safe** (ships on the normal path) or
-   **gated** (stops at the PR). Keep in-progress small.
+   **gated** (stops at the PR), and the **mode** from the [`plan`](#plan-filter---apply---dry-run)
+   rubric (a card's own `mode:` wins). Keep in-progress small.
 5. **Persist.** Write `GROOM-PLAN.md` at the board root; regenerate only if `--apply` changed
    something; sync (commit `groom: <summary>`); post a one-line digest with `slack-notify.sh
    raw`. **`--dry-run` prints everything and writes nothing.**
@@ -455,8 +582,8 @@ think at high effort. Don't ask permission for it; the user doesn't need any ext
 - 📋 defer E05-S5              -- blocked until <condition>
 
 ## Burn-down   (top-down = most throughput · 📌 = pinned · ⚠️ = high-stakes, out of auto-run)
-1. 📌 <id> · <title> · [safe|gated] · pinned · blocks:<ids> / blocked-by:<ids> · est <size>
-2. <id> · <title> · [safe|gated] · <one-line reason> · blocks:<ids> / blocked-by:<ids> · est <size>
+1. 📌 <id> · <title> · [safe|gated] · <mode> · pinned · blocks:<ids> / blocked-by:<ids> · est <size>
+2. <id> · <title> · [safe|gated] · <mode> · <one-line reason> · blocks:<ids> / blocked-by:<ids> · est <size>
 
 ## ⚠️ Requires alignment before touching   (high-stakes -- not auto-runnable)
 - ⚠️ <id> · <title> · why high-stakes · needs the alignment brief + an explicit go before `start`
@@ -533,7 +660,7 @@ the last commit was; running it twice reverts the revert. Board in its own repo 
 
 `regen-board.py` rebuilds `BOARD.md` from frontmatter, so nothing transient is lost when any
 session rebuilds it: ⚠️ for high-stakes, ⚡ breakfix, 🔬 spike, the stage, a size chip (`[M]`),
-and a pin marker (`📌2`). One compact line per card.
+a pin marker (`📌2`), and the mode (`→solo`). One compact line per card.
 
 ---
 
