@@ -146,8 +146,9 @@ If work was done this session that isn't already in CHANGELOG.md:
 
 Bump each card touched this session (status, `stage:`, a one-line note; a `Fix ready` card
 whose PR has merged moves to `Live`), then regenerate
-`BOARD.md` so its status line (Now fixing / Shipping / Live, to check / Next up) matches
-`handoff.md` and `.make-it-state.md`. Sync per `backlog-board.md`.
+`BOARD.md` and have `.make-it-state.md`'s next steps cite the same cards as its status line
+(Now fixing / Shipping / Live, to check / Next up) -- the board wins over an older
+`handoff.md`. Sync per `backlog-board.md`.
 
 **5. Update .make-it-state.md:**
 

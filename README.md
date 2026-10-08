@@ -958,6 +958,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.30.0 -- The handoff and the board agree on what's next
+
+When a `/backlog-it` board exists (the personal board included), it owns *what's next*.
+
+- **`/clear-it`** pulls the board, writes each Next Step as a card id under a copy of the
+  status line, and files a card (capture, no questions) for any step that has none. It never
+  changes an existing card's status
+- **`/resume-it`** re-reads the cards a handoff cites; a card now `done` drops out and the
+  board's current stage wins
+- **`/wrap-it`** points `.make-it-state.md`'s next steps at the same cards
+- Desktop's handoff skill skips the board (none is reachable there)
+
 ### v1.29.0 -- /backlog-it: the full personal-board feature set
 
 `/backlog-it` now does everything a hand-tuned personal board does, and can be one board used

@@ -50,6 +50,8 @@ When a session is getting long or tangled — or before you step away — type:
 
 It writes `handoff.md`, then you run the normal `/clear` command to reset. The next session (or [`/resume-it`](02-resume-it.md)) reads `handoff.md` and continues right where you left off.
 
+**If you keep a board** ([`/backlog-it`](16-backlog-it.md)), the board decides what's next. Each next step in the handoff points at its card, and any step that isn't on the board yet becomes a card, so the handoff and the board always agree.
+
 ---
 
 ## When to use it
