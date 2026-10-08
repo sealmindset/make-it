@@ -958,6 +958,13 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.30.1 -- Each project's handoff syncs only with its own board
+
+v1.30.0 let a folder with no board of its own sync its handoff with the personal board, which
+mixed one project's cards into another project's `handoff.md`. Now a handoff syncs with the
+project's own board, and with the personal board only inside that board's `repo` folder.
+Running `/backlog-it` directly still works from any folder.
+
 ### v1.30.0 -- The handoff and the board agree on what's next
 
 When a `/backlog-it` board exists (the personal board included), it owns *what's next*.

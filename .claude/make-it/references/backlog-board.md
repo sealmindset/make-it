@@ -611,8 +611,10 @@ settings file alone does not switch these on):
 | `/wrap-it` | Updates each touched card and regenerates the status line alongside the handoff |
 | `/debug-it` / `/fix-it` | A new bug gets a card (`stage: Reported`) before any fix work |
 
-**The handoff is the exception: any board counts, the personal one included.** `/clear-it` finds
-the board as `/backlog-it` Step 1 does, writes `handoff.md`'s Next Steps as card ids under a copy
-of the status line, and files a card (capture, no questions) for any next step that has none.
+**The handoff is the exception: the project's own board counts, settings file or not, and so
+does the personal board inside its own `repo` folder.** A board that belongs to another project
+never feeds a handoff, so each project's `handoff.md` stays its own. `/clear-it` writes
+`handoff.md`'s Next Steps as card ids under a copy of the status line, and files a card
+(capture, no questions) for any next step that has none.
 `/resume-it` re-reads those cards when it reads the handoff. Where the two disagree, the board
 wins -- so what to work on next lives in one place.
