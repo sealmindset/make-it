@@ -464,12 +464,15 @@ re-ground). One headless call: about a minute on a small board, ~10 on a 100-car
   wave is one card. Waves run in list order.
 
 1. **Gather.** **Candidates** are the open leaf cards in scope (no open card names them as
-   `parent`) with status `backlog`, `ready`, or `designing`: pass each one's body (Goal,
-   Constraints, Answers, Open questions -- skip the Captured and triage blocks) plus the files it
-   cites anywhere. **Context:** the in-progress cards (id, stage, the files they change), the
+   `parent`) with status `backlog`, `ready`, or `designing`: pass each one's frontmatter and full
+   text except the Captured and triage blocks, plus the repo files it cites. **Context:** the
+   in-progress cards (id, stage, and the files they change -- their branch diff when there is
+   one, else the files they cite), the
    **Live, to check** list, `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the
    board wins where they disagree), `GROOM-PLAN.md` and `STRATEGY.md` if present, settings
-   `lane_cap` and `serial`. A card with `mode_by: you` keeps its mode.
+   `lane_cap` and `serial`, and the High-stakes gate's signal list. A card with `mode_by: you`
+   keeps its mode. **Release bookkeeping** that every change touches (version file, changelog,
+   generated manifest) never counts as shared files -- the serial ship queue reconciles it.
 2. **Route** with `claude -p --allowedTools "Read,Glob,Grep"` (cwd = settings `repo`), passing
    all of the above, the rubric, and today's date. Look up files only for cards that could share
    a dispatch wave; give them as repo-relative paths, and `data` as the exact tables, buckets, or
