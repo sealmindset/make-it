@@ -75,7 +75,8 @@ failed approaches, and next steps from the previous session. If it exists:
 - Treat its **Failed Approaches** section as binding: do NOT retry approaches it rules out
 - Default the session's starting point to its **Next Steps** section (confirm with the user)
 - If those steps cite card ids, re-read each card on the board (found as `/backlog-it` Step 1
-  finds it, the personal board included). The live board wins: a card now `done` drops out,
+  finds it -- this project's board only, as in /clear-it's gather step 5). The live board
+  wins: a card now `done` drops out,
   and a card's current stage replaces the handoff's
 - `.handoff-history.md`, if present, holds older archived handoffs -- consult only if needed
 

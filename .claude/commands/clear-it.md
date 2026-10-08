@@ -85,9 +85,11 @@ user ONE question: "What should the handoff say you were working toward and what
 Do not fabricate content for sections you have no evidence for -- write "None this session"
 instead.
 
-**5. The board, if there is one (`/backlog-it`):** find it exactly as `/backlog-it` Step 1 does
--- project settings, then the project's `.claude/backlog/`, then `~/.claude/backlog-it.json`.
-No board → skip this and the `board` step. Otherwise pull it first if it's its own repo
+**5. This project's board, if it has one (`/backlog-it`):** the project's
+`.claude/backlog-it.json`, else its `.claude/backlog/`, else the personal board in
+`~/.claude/backlog-it.json` -- but the personal board only when this folder is inside that
+file's `repo`. A board that belongs to another project never feeds this handoff. No board →
+skip this and the `board` step. Otherwise pull it first if it's its own repo
 (`git -C <board> pull --ff-only` -- other sessions move cards too), then read the status line
 in `BOARD.md`.
 
@@ -169,7 +171,8 @@ _Board `<path>`: Now fixing <ids> · Shipping <ids> · Live, to check <count> ·
 ```
 
 With no board, drop the `_Board_` line and the card ids. With a board, the line is copied from
-`BOARD.md` as it stands after the `board` step, with **Live, to check** shortened to a count;
+`BOARD.md` as it stands after the `board` step, with **Live, to check** shortened to a count
+(a board with no bug cards has no status line -- give just the path);
 the order of the steps is this session's, the status of each card is the board's.
 
 Rules:
