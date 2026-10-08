@@ -89,7 +89,7 @@ instead.
 -- project settings, then the project's `.claude/backlog/`, then `~/.claude/backlog-it.json`.
 No board → skip this and the `board` step. Otherwise pull it first if it's its own repo
 (`git -C <board> pull --ff-only` -- other sessions move cards too), then read the status line
-in `BOARD.md` and every card this session touched or mentioned.
+in `BOARD.md`.
 
 </step>
 
@@ -116,16 +116,22 @@ FORWARD into the new handoff.md (marked `(carried forward)`), not just the archi
 
 **Only when gather step 5 found a board. The board owns what's next; the handoff points at it.**
 
-1. Match each next step to its card. A card the board shows as `done` drops out of the Next
+1. Match each next step to its card -- search all the cards (`grep` the board's `items/`), not
+   only the ones this session mentioned. A card the board shows as `done` drops out of the Next
    Steps -- the board wins over the conversation and the old handoff.
-2. A next step with no card gets one through the capture flow in
-   `~/.claude/make-it/references/backlog-board.md` (triage, then write the card) -- but ask
-   nothing; open questions go under the card's `## Open questions`. Put what the next person
-   needs on the card (the evidence, the exact command), not only in the handoff.
+2. A next step with no card gets one through capture steps 1–4 in
+   `~/.claude/make-it/references/backlog-board.md` (snapshot, triage, validate, write) -- but
+   ask nothing; open questions go under the card's `## Open questions`. Triage the steps one at
+   a time, so a new epic made for one is in the snapshot for the next. If triage returns
+   `dedup.duplicate_of`, cite that card instead of filing. Put what the next person needs on
+   the card (the evidence, the exact command), not only in the handoff.
 3. Don't change status or stage on existing cards -- ship and `/wrap-it` do that.
-4. Regenerate `BOARD.md` and sync per `backlog-board.md`: a board in its own repo is committed
-   (`clear-it: <n> cards filed`) and pushed; a board inside the project is staged, never
-   committed.
+4. Regenerate `BOARD.md` and sync per `backlog-board.md`, once: a board in its own repo is
+   committed (`clear-it: <n> cards filed`) and pushed; a board inside the project is staged,
+   never committed.
+5. **The board never costs the checkpoint.** If the pull, a triage, or the push fails, file
+   and push nothing more, and still write the handoff -- mark the affected steps
+   `(no card, board not synced)`.
 
 </step>
 
@@ -163,8 +169,8 @@ _Board `<path>`: Now fixing <ids> · Shipping <ids> · Live, to check <count> ·
 ```
 
 With no board, drop the `_Board_` line and the card ids. With a board, the line is copied from
-`BOARD.md` as it stands after the `board` step; the order of the steps is this session's, the
-status of each card is the board's.
+`BOARD.md` as it stands after the `board` step, with **Live, to check** shortened to a count;
+the order of the steps is this session's, the status of each card is the board's.
 
 Rules:
 - Facts only -- every claim traceable to the conversation or a command you just ran.

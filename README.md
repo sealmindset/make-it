@@ -963,8 +963,9 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 When a `/backlog-it` board exists (the personal board included), it owns *what's next*.
 
 - **`/clear-it`** pulls the board, writes each Next Step as a card id under a copy of the
-  status line, and files a card (capture, no questions) for any step that has none. It never
-  changes an existing card's status
+  status line, and files a card (capture, no questions) for any step that has none -- or cites
+  the existing card when triage finds a duplicate. It never changes an existing card's status,
+  and a board it can't sync never stops the handoff from being written
 - **`/resume-it`** re-reads the cards a handoff cites; a card now `done` drops out and the
   board's current stage wins
 - **`/wrap-it`** points `.make-it-state.md`'s next steps at the same cards
