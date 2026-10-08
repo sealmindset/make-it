@@ -1,6 +1,6 @@
 ---
 name: clear-it
-description: Checkpoint your session into handoff.md, then clear context with confidence. Use mid-session when context is getting long and confused, or before stepping away. Run /clear-it, then /clear -- the next session picks up cleanly from handoff.md.
+description: Checkpoint your session into handoff.md (its Next Steps tied to the /backlog-it board when there is one), then clear context with confidence. Use mid-session when context is getting long and confused, or before stepping away. Run /clear-it, then /clear -- the next session picks up cleanly from handoff.md.
 allowed-tools:
   - Read
   - Write
@@ -27,11 +27,13 @@ the context.
 5. **Failed Approaches** -- dead ends, disproven hypotheses, and bad assumptions, with WHY
    each failed -- so the next session does not repeat them
 6. **Next Steps** -- the concrete next actions, in order, starting with the one that was
-   in progress
+   in progress -- each one a card on the board, when there is one
 
 This is a LIGHTWEIGHT checkpoint, not an end-of-day shutdown:
 - It does NOT stop containers, update CHANGELOG.md/TODO.md, or commit code (that is /wrap-it)
 - It works in ANY project, not just /make-it apps -- context rot is universal
+- When a `/backlog-it` board exists, the board owns *what's next*: the handoff cites card ids,
+  and a next step with no card gets one, so the two never disagree
 - It also serves as a save point before stepping away for a long period; /resume-it (or any
   fresh session reading handoff.md) continues from it
 
@@ -83,6 +85,12 @@ user ONE question: "What should the handoff say you were working toward and what
 Do not fabricate content for sections you have no evidence for -- write "None this session"
 instead.
 
+**5. The board, if there is one (`/backlog-it`):** find it exactly as `/backlog-it` Step 1 does
+-- project settings, then the project's `.claude/backlog/`, then `~/.claude/backlog-it.json`.
+No board → skip this and the `board` step. Otherwise pull it first if it's its own repo
+(`git -C <board> pull --ff-only` -- other sessions move cards too), then read the status line
+in `BOARD.md`.
+
 </step>
 
 <step name="archive">
@@ -101,6 +109,29 @@ If `handoff.md` already exists at the project root, prepend its full content to
 Failed-approach knowledge must never be silently lost: if the old handoff's **Failed
 Approaches** section lists dead ends still relevant to the current goal, CARRY THEM
 FORWARD into the new handoff.md (marked `(carried forward)`), not just the archive.
+
+</step>
+
+<step name="board">
+
+**Only when gather step 5 found a board. The board owns what's next; the handoff points at it.**
+
+1. Match each next step to its card -- search all the cards (`grep` the board's `items/`), not
+   only the ones this session mentioned. A card the board shows as `done` drops out of the Next
+   Steps -- the board wins over the conversation and the old handoff.
+2. A next step with no card gets one through capture steps 1–4 in
+   `~/.claude/make-it/references/backlog-board.md` (snapshot, triage, validate, write) -- but
+   ask nothing; open questions go under the card's `## Open questions`. Triage the steps one at
+   a time, so a new epic made for one is in the snapshot for the next. If triage returns
+   `dedup.duplicate_of`, cite that card instead of filing. Put what the next person needs on
+   the card (the evidence, the exact command), not only in the handoff.
+3. Don't change status or stage on existing cards -- ship and `/wrap-it` do that.
+4. Regenerate `BOARD.md` and sync per `backlog-board.md`, once: a board in its own repo is
+   committed (`clear-it: <n> cards filed`) and pushed; a board inside the project is staged,
+   never committed.
+5. **The board never costs the checkpoint.** If the pull, a triage, or the push fails, file
+   and push nothing more, and still write the handoff -- mark the affected steps
+   `(no card, board not synced)`.
 
 </step>
 
@@ -132,9 +163,14 @@ uncommitted-changes status, whether the app/tests currently run.>
 - ...
 
 ## 6. Next Steps
-1. <the step that was in progress -- with enough detail to resume mid-thought>
-2. <subsequent steps in order>
+_Board `<path>`: Now fixing <ids> · Shipping <ids> · Live, to check <count> · Next up <id>_
+1. **<card id>** -- <the step that was in progress -- with enough detail to resume mid-thought>
+2. **<card id>** -- <subsequent steps in order>
 ```
+
+With no board, drop the `_Board_` line and the card ids. With a board, the line is copied from
+`BOARD.md` as it stands after the `board` step, with **Live, to check** shortened to a count;
+the order of the steps is this session's, the status of each card is the board's.
 
 Rules:
 - Facts only -- every claim traceable to the conversation or a command you just ran.
@@ -156,6 +192,7 @@ Checkpoint saved to handoff.md
   Goal: <one line>
   Failed approaches captured: <N>
   Next step on deck: <one line>
+  Board: <N> cards filed · Next up <id>        (only when there is a board)
 
 To reset context now:   type /clear, then start with "Read handoff.md and continue"
 To step away instead:   you're safe to close this session anytime
@@ -172,7 +209,8 @@ re-explain what was saved.
 <guardrails>
 
 - NEVER commit, push, stop containers, or modify code -- this skill only writes
-  `handoff.md` and `.handoff-history.md`.
+  `handoff.md` and `.handoff-history.md`, plus new board cards and `BOARD.md` (the `board`
+  step; a board in its own repo is the one thing committed and pushed).
 - NEVER overwrite an existing `handoff.md` without archiving it first.
 - NEVER pad Failed Approaches with filler -- an inaccurate dead-end list is worse than
   none, because the next session will trust it.

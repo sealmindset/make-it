@@ -53,6 +53,7 @@ in plain words what you removed and where (never the value).
 |---|---|
 | `gather` step 2 (git commands) | Run them only if the project includes its git history and git works here. Otherwise use the conversation and the files. |
 | `gather` step 4 (thin context) | Ask the one question only if there is no plan, no build, and no deferred check to record. |
+| `gather` step 5 and the `board` step | Skip them: no board can be reached here. Write the Next Steps without card ids; the next `/clear-it` in Claude Code ties them to the board. |
 | `archive` | As written, whenever a `handoff.md` is already in the project. |
 | `write`: title block | Put `Source: claude-desktop` on its own line directly under the `# Handoff -- <project name>` title, then the `_Written ..._` line with "by the handoff skill (Claude Desktop)" instead of "by /clear-it". |
 | `write`: 4. Changes Made | Nothing was committed here. Mark each change "not committed (made in Claude Desktop)". |

@@ -610,3 +610,9 @@ settings file alone does not switch these on):
 | ship (`ship-it-guide.md`) | On merge: stage **Live**. After the live check: **Checked**, then `done`. `/resume-it` and `/wrap-it` catch up any `Fix ready` card whose PR has merged |
 | `/wrap-it` | Updates each touched card and regenerates the status line alongside the handoff |
 | `/debug-it` / `/fix-it` | A new bug gets a card (`stage: Reported`) before any fix work |
+
+**The handoff is the exception: any board counts, the personal one included.** `/clear-it` finds
+the board as `/backlog-it` Step 1 does, writes `handoff.md`'s Next Steps as card ids under a copy
+of the status line, and files a card (capture, no questions) for any next step that has none.
+`/resume-it` re-reads those cards when it reads the handoff. Where the two disagree, the board
+wins -- so what to work on next lives in one place.
