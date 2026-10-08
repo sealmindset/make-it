@@ -319,7 +319,8 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 >   filings with an outside party, billing); breaking changes or removed behavior. **When in doubt
 >   whether a change can cause harm, gate it -- ask, don't ship.**
 
-> **Mode line** (after the preamble; it governs how the work is run)
+> **Mode line** (after the preamble; it governs how the work is run -- for `solo` and `spike`
+> it replaces the preamble's opening **Launch subagents.**)
 > - `solo` -- **Mode: solo.** Do this in this session; subagents only for read-only research or
 >   an independent review.
 > - `spike` -- **Mode: spike (timebox <T>).** Answer: <question>. Append the answer to the card as
@@ -404,11 +405,14 @@ headlessly for one card) · `--dry-run` (print what would apply, write nothing) 
 Autonomous "do the next thing" -- a hands-free way to call `start`. **It never bypasses the
 green gate or the harm gate** in the standing preamble.
 
-0. **A current plan leads.** If `PLAN.md` exists and no card in it was updated after its date,
-   take its first wave that isn't started: a `dispatch-it` wave → its cards as `/dispatch-it`
-   lanes (still capped by `lane_cap`); a single `solo`, `spike`, or `subagent-it` card → `start`
-   it (a `subagent-it` card still waits for its plan's go). Held cards are never taken. A plan
-   older than one of its cards → run `plan` again first. No `PLAN.md` → the steps below.
+0. **A current plan leads.** `PLAN.md` is current when every candidate card is in it and none
+   was updated after its date; otherwise run `plan` again first (no `PLAN.md` → the steps
+   below). Take the first wave whose cards aren't all done, and start it only when every card
+   in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
+   progress. Each card must still pass step 2's excludes; one that fails waits. A `dispatch-it`
+   wave → its cards as `/dispatch-it` lanes; a `solo`, `spike`, or `subagent-it` card → `start`
+   it (a `subagent-it` card still waits for its plan's go; a proposed spike waits for
+   `plan --apply`). Held cards are never taken.
 1. **Bugs first -- fill free lanes.** Take bugs from the top of the line and fill free lanes up to
    `lane_cap` under the [Parallel lanes](#parallel-lanes) rules, each started in its own worktree
    via `/dispatch-it` (one agent per card, running the `/debug-it` method).
@@ -433,60 +437,70 @@ and reversible.
 
 ### `plan [filter] [--apply] [--dry-run]`
 
-**How and in what order.** One AI pass reads the project's `handoff.md` and every open card,
-then routes each card to an execution mode and orders them into **waves** -- the path that
+**How and in what order.** One AI pass reads the project's `handoff.md` and the board, routes
+each card that could start to an execution mode, and orders them into **waves** -- the path that
 **finishes soonest with every gate held**. `groom` decides *what next*; `plan` decides *how to
-run it*. Quick enough for every session: one headless call, no per-card code check (it reuses
-the evidence `reconcile` already recorded; run `groom` to re-ground).
+run it*. It does no per-card code check of its own (it reuses recorded evidence; run `groom` to
+re-ground). One headless call: about a minute on a small board, ~10 on a 100-card board.
 
 **The mode rubric:**
 - **spike** -- unknowns dominate: open questions that change the approach, no code evidence, an
   unfamiliar outside system. Timeboxed; the output is a finding, then plan again.
-- **solo** -- one coherent change; small; tightly coupled or needs whole-system context; or
-  high-stakes (alignment brief, the user in the loop).
-- **subagent-it** -- size M or larger, splitting into **3+ ordered tasks**; needs a `## Task N`
-  plan (Plan format below).
-- **dispatch-it** -- **3+ independent cards** (`min(3, lane_cap)`): disjoint files and data, no
-  shared root cause, no two of one `serial` category. Bugs that share a cause → one `solo`
-  `/debug-it`, never parallel lanes.
-- **Order** -- most-unblocking first, a spike before the work it de-risks, near-done wins, then
-  the parallel waves. Shipping stays one PR at a time. A **wave** is one step: a `dispatch-it`
-  wave runs its cards side by side; any other wave is one card.
+- **solo** -- one coherent change; small; or tightly coupled / needs whole-system context.
+- **subagent-it** -- splits into **3+ ordered tasks** (size is a hint, not a gate); needs a
+  `## Task N` plan (Plan format below).
+- **dispatch-it** -- **3+ independent cards** (up to `lane_cap`): disjoint files and written
+  data, no shared root cause, no two of one `serial` category. Bugs that share a cause → one
+  `solo` `/debug-it`, never parallel lanes.
+- **held** (not a mode) -- high-stakes: `stakes: critical` or a [High-stakes gate](#high-stakes-gate)
+  signal. Never in a wave; it needs the alignment brief and an explicit go.
+- **skipped** (not a mode) -- a candidate that must wait: an open `dependsOn` not planned in an
+  earlier wave, or files an in-progress card is changing. Its reason names what it waits on.
+- **Order** -- bugs before improvements (the bug queue rule), then most-unblocking first, a spike
+  before the work it de-risks, near-done wins, then the parallel waves. Shipping stays one PR at
+  a time. A **wave** is one step: a `dispatch-it` wave runs its cards side by side; any other
+  wave is one card. Waves run in list order.
 
-1. **Gather** -- every open leaf card in scope (a card no open card names as `parent`): its
-   frontmatter, open questions, and the files cited in its latest `## Reconciliation` block;
-   `<repo>/handoff.md` if present (Next Steps order, Failed Approaches, what's in progress);
-   `GROOM-PLAN.md` and `STRATEGY.md` if present; settings `lane_cap` and `serial`. A card with
-   `mode_by: you` keeps its mode.
-2. **Route** with a headless `claude -p` (read-only tools `Read,Glob,Grep`, cwd = settings
-   `repo`, so it can look up which files a card would touch), passing all of the above, the
-   rubric, and today's date. It returns **strict JSON only**:
+1. **Gather.** **Candidates** are the open leaf cards in scope (no open card names them as
+   `parent`) with status `backlog`, `ready`, or `designing`: pass each one's body (Goal,
+   Constraints, Answers, Open questions -- skip the Captured and triage blocks) plus the files it
+   cites anywhere. **Context:** the in-progress cards (id, stage, the files they change), the
+   **Live, to check** list, `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the
+   board wins where they disagree), `GROOM-PLAN.md` and `STRATEGY.md` if present, settings
+   `lane_cap` and `serial`. A card with `mode_by: you` keeps its mode.
+2. **Route** with `claude -p --allowedTools "Read,Glob,Grep"` (cwd = settings `repo`), passing
+   all of the above, the rubric, and today's date. Look up files only for cards that could share
+   a dispatch wave; give them as repo-relative paths, and `data` as the exact tables, buckets, or
+   queues the change *writes*. It returns **strict JSON only**:
    ```json
    {
      "waves": [
-       { "wave": 1, "why": "one line",
+       { "why": "one line",
          "items": [ { "id": "E04-S2", "mode": "solo|spike|subagent-it|dispatch-it",
-                      "reason": "one line", "files": ["src/a.ts"], "data": ["table or bucket"],
-                      "spike": { "question": "...", "timebox": "2h" },
+                      "reason": "one line", "files": ["src/a.ts"], "data": ["table:orders"],
+                      "spike": { "question": "...", "timebox": "2h" }, "proposed": false,
                       "plan_tasks": ["Task 1 title", "Task 2 title", "Task 3 title"] } ] }
      ],
-     "held":    [ { "id": "E09-S1", "why": "high-stakes: needs the alignment brief" } ],
-     "skipped": [ { "id": "E04-S1", "why": "in progress / shipping / blocked" } ]
+     "held":    [ { "id": "E09-S1", "why": "high-stakes: <signal>" } ],
+     "skipped": [ { "id": "E04-S5", "why": "waits on E04-S1" } ]
    }
    ```
-3. **Gate** -- `python3 ~/.claude/make-it/backlog/bin/check-plan.py <board> <plan.json>
-   --lane-cap N --serial a,b` (`--partial` with a filter). It enforces the hard rules: dispatch
-   waves share no files, data, or serial category and every card names its files; high-stakes
-   cards are held, never in a wave; every unfinished `dependsOn` comes in an earlier wave; every
-   open card is accounted for. Violations → send them back to the same call once; still
+   A spike that isn't a card yet has `"proposed": true` and a new id (next free under the epic).
+3. **Gate.** `python3 ~/.claude/make-it/backlog/bin/check-plan.py <board> <plan.json> --lane-cap
+   N` (add `--serial a,b` when settings has any; `--partial` with a filter). It enforces the hard
+   rules: waves in list order; a dispatch wave is 3..`lane_cap` cards that share no files, data,
+   or serial category and each name repo-relative files; `stakes: critical` cards are never in a
+   wave; every unfinished `dependsOn` comes in an earlier wave; only candidates sit in waves, and
+   every candidate is accounted for. Violations → re-run the call once with them appended; still
    failing → stop, print them, write nothing.
-4. **Write** -- `PLAN.md` at the board root; `mode:` on each planned card (never over
+4. **Write.** `PLAN.md` at the board root; `mode:` on each planned card (never over
    `mode_by: you`); for each `subagent-it` card with no plan, a **draft** plan at
-   `items/<epic>/plans/<id>.md` (Plan format, `status: draft`) linked as `plan:`. Spike cards are
-   **proposed** in `PLAN.md` and filed only under `--apply` (a `type: spike` card, plus the target
-   card's `dependsOn:` on it). Drafts never run without the user's go. Bump `updated:` on touched
-   cards, regenerate, sync (commit `plan: <summary>`). `--dry-run` prints and writes nothing.
-5. **Report** -- the waves, one line each, then the held block and the proposals.
+   `items/<epic>/plans/<id>.md` (Plan format, `status: draft`) linked as `plan:`. Proposed spikes
+   are filed only under `--apply` (a `type: spike` card, plus the target card's `dependsOn:` on
+   it). Drafts never run without the user's go. Bump `updated:` on touched cards, regenerate,
+   sync (commit `plan: <summary>`). `--dry-run` prints and writes nothing.
+5. **Report.** The waves, one line each, then the held block, what's skipped and why, and the
+   proposals.
 
 **`PLAN.md`:**
 ```markdown
@@ -500,8 +514,9 @@ the evidence `reconcile` already recorded; run `groom` to re-ground).
 3. **spike** (2h) · E04-S9 (proposed) → de-risks E04-S3 -- <question>
 4. **subagent-it** · E04-S3 · <title> -- plan: items/EPIC-04-…/plans/E04-S3.md (draft) -- <reason>
 
+## Live, to check first   (verify against the original report before wave 1)
 ## ⚠️ Held -- needs the alignment brief and an explicit go
-## Skipped
+## Skipped -- waits on
 ## Proposed (filed with `plan --apply`)
 ```
 
@@ -629,7 +644,7 @@ direction, not on every check.
 
 ### High-stakes gate
 
-Governs `groom`, `groom --dispatch`, and `dispatch`. A card is **high-stakes** if `stakes:
+Governs `groom`, `groom --dispatch`, `plan`, and `dispatch`. A card is **high-stakes** if `stakes:
 critical` is set, or it touches -- by signal, not guesswork -- any of:
 - anything sent to or filed with an outside party (a `serial` category)
 - auth, permissions, secrets, or session handling

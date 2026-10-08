@@ -106,11 +106,13 @@ stays serial: one PR through CI and deploy at a time.
 
 ## Step 4b -- Plan: how, and in what order
 
-`plan` reads `handoff.md` and every open card, and gives each card a mode -- **solo**, **spike**
-(unknowns first), **subagent-it** (3+ ordered tasks), or **dispatch-it** (3+ independent cards)
--- in waves that finish soonest with every gate held. One headless `claude -p` returns strict
-JSON; `check-plan.py` then enforces the hard rules (no shared files or data in a parallel wave,
-high-stakes held, `dependsOn` order) -- if it still fails after one retry, nothing is written.
+`plan` reads `handoff.md` and the board, and gives each card that could start a mode --
+**solo**, **spike** (unknowns first), **subagent-it** (3+ ordered tasks), or **dispatch-it** (3+
+independent cards) -- in waves that finish soonest with every gate held, bugs first. High-stakes
+cards are held; cards that must wait are skipped with what they wait on. One headless `claude -p`
+returns strict JSON; `check-plan.py` then enforces the hard rules (no shared files or data in a
+parallel wave, high-stakes never in a wave, `dependsOn` order) -- if it still fails after one
+re-run, nothing is written.
 It stamps `mode:` on the cards (never over `mode_by: you`), drafts `## Task N` plans for
 `subagent-it` cards, and proposes spike cards (filed with `--apply`). `start` adds the card's
 mode line after the preamble; `dispatch` follows the plan's next wave. Drafts never run without

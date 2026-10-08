@@ -6,19 +6,24 @@ Usage: check-plan.py <board> <plan.json> [--lane-cap N] [--serial a,b] [--partia
 
 The AI picks modes and order; this script is the gate. It prints one line per violation and
 exits 1 if there are any -- then nothing is written. Rules:
-  - every id is an open card on the board, used once, with a known mode
-  - a dispatch-it wave holds min(3, lane_cap)..lane_cap cards and nothing else; any other wave
-    holds exactly one card (waves are steps; only dispatch-it runs side by side)
+  - every id is used once, with a known mode; a card in a wave is a candidate (status backlog,
+    ready, or designing -- in-progress, blocked, and done cards are context, not candidates)
+  - waves run in list order (the "wave" field is ignored); a dispatch-it wave holds 3..lane_cap
+    cards and nothing else; any other wave holds exactly one card (only dispatch-it runs side by
+    side)
   - cards in one dispatch-it wave share no files, no data, no serial category, have no
-    conflictsWith between them, and each names its files (unknown files = assume overlap)
+    conflictsWith between them, and each names its files as repo-relative paths (unknown or
+    absolute files = assume overlap; "src/*" covers src/)
   - a high-stakes card (stakes: critical) is held, never in a wave
   - every unfinished dependsOn is planned in an earlier wave
-  - a spike names its question and timebox; a subagent-it card lists 3+ plan tasks
-  - every open leaf card is planned, held, or skipped (unless --partial)
+  - a spike names its question and timebox (a not-yet-filed spike says "proposed": true);
+    a subagent-it card lists 3+ plan tasks
+  - every candidate leaf card is planned, held, or skipped (unless --partial)
 """
 import glob, json, os, re, sys, tempfile
 
 MODES = {'solo', 'spike', 'subagent-it', 'dispatch-it'}
+CANDIDATE = {'backlog', 'ready', 'designing'}
 
 
 def fm(p):
@@ -30,9 +35,14 @@ def ids(s):  # "[E01-S1, E02]" or "E63-S148" -> ['E01-S1', 'E02']
     return [x.strip().upper() for x in s.strip('[] ').split(',') if x.strip()]
 
 
+def norm(p):  # "./src/*.ts" -> "src"; "" stands for the whole repo
+    p = os.path.normpath(p.split('*')[0] or '.')
+    return '' if p == '.' else p
+
+
 def overlap(a, b):  # same path, or one is a folder holding the other
-    a, b = a.rstrip('/'), b.rstrip('/')
-    return a == b or a.startswith(b + '/') or b.startswith(a + '/')
+    a, b = norm(a), norm(b)
+    return a == b or not a or not b or a.startswith(b + '/') or b.startswith(a + '/')
 
 
 def check(board, plan, lane_cap=3, serial=(), partial=False):
@@ -43,18 +53,20 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
     is_open = lambda i: i in cards and cards[i].get('status') != 'done'
     errs, seen, wave_of = [], set(), {}
 
-    for w in plan.get('waves', []):
+    waves = list(enumerate(plan.get('waves', []), 1))
+    for n, w in waves:
         for it in w.get('items', []):
-            wave_of[it.get('id', '').upper()] = w.get('wave')
-    for w in plan.get('waves', []):
-        n, items = w.get('wave'), w.get('items', [])
+            wave_of[it.get('id', '').upper()] = n
+    for n, w in waves:
+        items = w.get('items', [])
         modes = {it.get('mode') for it in items}
         if 'dispatch-it' in modes:
-            lo = min(3, lane_cap)
             if modes != {'dispatch-it'}: errs.append(f'wave {n}: dispatch-it shares the wave with other modes')
-            if not lo <= len(items) <= lane_cap: errs.append(f'wave {n}: dispatch-it needs {lo}..{lane_cap} cards, has {len(items)}')
+            if not 3 <= len(items) <= lane_cap: errs.append(f'wave {n}: dispatch-it needs 3..{lane_cap} cards, has {len(items)}')
             for i, a in enumerate(items):
                 if not a.get('files'): errs.append(f"wave {n}: {a.get('id')} names no files -- assume overlap")
+                for f in a.get('files', []):
+                    if os.path.isabs(f): errs.append(f"wave {n}: {a.get('id')} file {f} is absolute -- use repo-relative paths")
                 for b in items[i + 1:]:
                     A, Bc = cards.get(a.get('id', '').upper(), {}), cards.get(b.get('id', '').upper(), {})
                     if any(overlap(x, y) for x in a.get('files', []) for y in b.get('files', [])):
@@ -71,7 +83,12 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
             i, mode = it.get('id', '').upper(), it.get('mode')
             if i in seen: errs.append(f'{i}: planned twice')
             seen.add(i)
+            if mode == 'spike' and it.get('proposed'):  # filed by `plan --apply`, not a card yet
+                if not ((it.get('spike') or {}).get('question') and (it.get('spike') or {}).get('timebox')):
+                    errs.append(f'{i}: spike needs a question and a timebox')
+                continue
             if not is_open(i): errs.append(f'{i}: not an open card on the board'); continue
+            if cards[i].get('status') not in CANDIDATE: errs.append(f"{i}: already {cards[i].get('status')} -- not a candidate"); continue
             if mode not in MODES: errs.append(f'{i}: unknown mode {mode!r}')
             if cards[i].get('stakes') == 'critical': errs.append(f'{i}: high-stakes -- hold it, never put it in a wave')
             for d in ids(cards[i].get('dependsOn', '')):
@@ -90,8 +107,8 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
     if not partial:
         parents = {c.get('parent', '').upper() for c in cards.values() if c.get('status') != 'done'}
         for i in sorted(cards):
-            if is_open(i) and i not in parents and i not in seen:
-                errs.append(f'{i}: open card not planned, held, or skipped')
+            if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen:
+                errs.append(f'{i}: candidate card not planned, held, or skipped')
     return errs
 
 
@@ -120,11 +137,27 @@ def self_test():
         assert any('names no files' in e for e in check(b, bad))
         bad = json.loads(json.dumps(good)); bad['held'] = []; bad['waves'].append({'wave': 3, 'items': [{'id': 'E01-S4', 'mode': 'solo'}]})
         assert any('high-stakes' in e for e in check(b, bad))
-        bad = json.loads(json.dumps(good)); bad['waves'][1]['wave'] = 0
+        bad = json.loads(json.dumps(good)); bad['waves'].reverse()  # list order rules, not the field
         assert any('depends on E01-S1' in e for e in check(b, bad))
+        # path spellings that name the same file, absolute paths, globs
+        for x, y in (('./a.py', 'a.py'), ('c/*', 'c/x.py'), ('*', 'b.py')):
+            bad = json.loads(json.dumps(good)); bad['waves'][0]['items'][0]['files'] = [x]; bad['waves'][0]['items'][1]['files'] = [y]
+            assert any('share files' in e for e in check(b, bad)), (x, y)
+        bad = json.loads(json.dumps(good)); bad['waves'][0]['items'][0]['files'] = ['/repo/a.py']
+        assert any('absolute' in e for e in check(b, bad))
+        # a proposed spike passes without being a card; one missing its timebox does not
+        ok = json.loads(json.dumps(good)); ok['waves'].insert(1, {'wave': 2, 'items': [{'id': 'E01-S9', 'mode': 'spike', 'proposed': True, 'spike': {'question': 'q', 'timebox': '1h'}}]})
+        assert check(b, ok) == [], check(b, ok)
+        ok['waves'][1]['items'][0]['spike'] = {'question': 'q'}
+        assert any('timebox' in e for e in check(b, ok))
         bad = json.loads(json.dumps(good)); bad['held'] = []
-        assert any('E01-S4: open card not planned' in e for e in check(b, bad))
+        assert any('E01-S4: candidate card not planned' in e for e in check(b, bad))
         assert check(b, bad, partial=True) == []
+        # an in-progress card is context: not required in the plan, refused in a wave
+        card('stories/S6.md', id='E01-S6', status='in-progress', parent='E01')
+        assert check(b, good) == [], check(b, good)
+        bad = json.loads(json.dumps(good)); bad['waves'].append({'wave': 3, 'items': [{'id': 'E01-S6', 'mode': 'solo'}]})
+        assert any('E01-S6: already in-progress' in e for e in check(b, bad))
         # wave shape: two solos in one wave, a 2-card dispatch wave
         bad = {'waves': [{'wave': 1, 'items': [{'id': 'E01-S1', 'mode': 'solo'}, {'id': 'E01-S2', 'mode': 'solo'}]}]}
         assert any('exactly one card' in e for e in check(b, bad, partial=True))
