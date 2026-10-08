@@ -281,7 +281,8 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 1. **Build the prompt.** A raw card → its own text, as-is. A design-backed card → a **precap**: a
    prompt distilled from the design doc and card. (The design doc stays a communication artifact,
    never a gate.) **Always prepend the standing preamble** below, for every type, then the
-   card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---apply---dry-run)).
+   card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---apply---dry-run)); for
+   `solo` and `spike`, drop the preamble's opening **Launch subagents.**
 2. **Show the assembled prompt and let the user edit it** -- anything, including the preamble.
    This is an edit step, not an approval gate.
 3. On the user's **go**, run the (possibly edited) prompt as the active instruction, start to
@@ -407,10 +408,11 @@ green gate or the harm gate** in the standing preamble.
 
 0. **A current plan leads.** `PLAN.md` is current when every candidate card is in it and none
    was updated after its date; otherwise run `plan` again first (no `PLAN.md` → the steps
-   below). Take the first wave whose cards aren't all done, and start it only when every card
+   below). Take the first wave whose cards aren't all merged, and start it only when every card
    in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
    progress. Each card must still pass step 2's excludes; one that fails waits. A `dispatch-it`
-   wave → its cards as `/dispatch-it` lanes; a `solo`, `spike`, or `subagent-it` card → `start`
+   wave → its cards as `/dispatch-it` lanes, once they fit the free lanes (`lane_cap` minus the
+   lanes running); a `solo`, `spike`, or `subagent-it` card → `start`
    it (a `subagent-it` card still waits for its plan's go; a proposed spike waits for
    `plan --apply`). Held cards are never taken.
 1. **Bugs first -- fill free lanes.** Take bugs from the top of the line and fill free lanes up to

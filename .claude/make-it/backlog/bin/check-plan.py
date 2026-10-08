@@ -84,6 +84,7 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
             if i in seen: errs.append(f'{i}: planned twice')
             seen.add(i)
             if mode == 'spike' and it.get('proposed'):  # filed by `plan --apply`, not a card yet
+                if i in cards: errs.append(f'{i}: proposed spike id already exists on the board')
                 if not ((it.get('spike') or {}).get('question') and (it.get('spike') or {}).get('timebox')):
                     errs.append(f'{i}: spike needs a question and a timebox')
                 continue
@@ -148,6 +149,8 @@ def self_test():
         # a proposed spike passes without being a card; one missing its timebox does not
         ok = json.loads(json.dumps(good)); ok['waves'].insert(1, {'wave': 2, 'items': [{'id': 'E01-S9', 'mode': 'spike', 'proposed': True, 'spike': {'question': 'q', 'timebox': '1h'}}]})
         assert check(b, ok) == [], check(b, ok)
+        reuse = json.loads(json.dumps(ok)); reuse['waves'][1]['items'][0]['id'] = 'E01-S2'
+        assert any('already exists' in e for e in check(b, reuse))
         ok['waves'][1]['items'][0]['spike'] = {'question': 'q'}
         assert any('timebox' in e for e in check(b, ok))
         bad = json.loads(json.dumps(good)); bad['held'] = []
