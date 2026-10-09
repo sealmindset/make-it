@@ -9,6 +9,8 @@ or in the referenced files. Review the diff as written; do not run the implement
 - Requirements (the spec for this task): `[BRIEF_PATH]`
 - Implementer's report (what they did + test evidence): `[REPORT_PATH]`
 - The change to review (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
+- The tests were written first, by a separate test-writer, in commit `[TESTS_SHA]` (omit if the
+  task had nothing to test). Check that they test the brief's requirements, not the code.
 
 ## Global constraints (binding — your attention lens)
 [Copy the binding requirements VERBATIM from the plan's Global Constraints / spec: exact values,

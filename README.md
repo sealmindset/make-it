@@ -958,6 +958,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.32.0 -- Tests first, by a separate author (Helix slice 3)
+
+`/subagent-it` now runs a **test-writer** subagent (Sonnet) before each task's implementer. It
+writes and commits failing tests for the brief; the coordinator **runs them and they must fail**
+(red check) before any code is written; the implementer then makes them pass and **may not change
+them** -- a `git diff` against the test-writer's commit rejects any edit. A test the implementer
+thinks is wrong goes back to the test-writer. Tasks with nothing to test (docs, config, prompt
+wording) skip the step.
+
 ### v1.31.1 -- The board's "Next up" names a bug you can start
 
 "Next up" used to name the top backlog bug even when it was high-stakes or waiting on another
