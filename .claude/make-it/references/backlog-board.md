@@ -230,7 +230,8 @@ reporter per finished card.
 - **Now fixing** -- `in-progress` at Reported / Cause found (one entry per lane)
 - **Shipping** -- Fix ready
 - **Live, to check** -- Live
-- **Next up** -- the top `backlog` bug by priority, then age
+- **Next up** -- the top `backlog` bug that can start (not high-stakes, no unfinished
+  `dependsOn`), by priority, then age
 
 ## Parallel lanes
 

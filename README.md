@@ -958,6 +958,13 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.31.1 -- The board's "Next up" names a bug you can start
+
+"Next up" used to name the top backlog bug even when it was high-stakes or waiting on another
+card (on 2026-10-08 the docai board showed a `stakes: critical` P1). It now skips both, quietly;
+skipped cards still show with ⚠️ and their stage, and `PLAN.md` says why. `regen-board.py
+--self-test` covers it.
+
 ### v1.31.0 -- /backlog-it plan: how to run each card, and in what order
 
 - **`plan`** reads `handoff.md` and every open card, and routes each card to **solo**, **spike**
