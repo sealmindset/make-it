@@ -26,6 +26,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
   commit list + diffstat + `git diff -U10` for the range; prints the path.
 - `~/.claude/make-it/sdd/scripts/sdd-gate` — Stop hook that keeps an open run going until its
   gates pass (see Durable progress).
+- `~/.claude/make-it/sdd/test-writer-prompt.md` — test-writer dispatch template (tests first).
 - `~/.claude/make-it/sdd/implementer-prompt.md` — implementer dispatch template.
 - `~/.claude/make-it/sdd/task-reviewer-prompt.md` — task reviewer dispatch template.
 - Final whole-branch review: the **`/code-review`** skill.
@@ -53,21 +54,39 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
    question to the human (each finding beside the plan text that mandates it, asking which
    governs) before execution. If clean, proceed silently.
 3. **Per task** (sequential):
-   a. `task-brief PLAN_FILE N` → dispatch a fresh **implementer** subagent (template) with: one
-      line on where the task fits, the brief path ("read this first — your requirements, exact
-      values verbatim"), interfaces/decisions from earlier tasks the brief can't know, your
-      resolution of any ambiguity, and the report-file path + report contract. UI task: also the
-      approved preview file + its screen ids (`ui-gate.md`).
-   b. Answer the implementer's questions before it proceeds.
-   c. Implementer implements (TDD), tests, commits, self-reviews, writes its report file,
-      returns only status + commits + one-line test summary + concerns.
-   d. `review-package BASE HEAD` (BASE = the commit recorded **before** dispatching — never
+   a. `task-brief PLAN_FILE N`, record BASE, then dispatch a fresh **test-writer** (template, on
+      **Sonnet**) with the brief path, the test framework, and the report-file path. It writes
+      and commits tests only, and returns TESTS_READY with its commit, files, and command -- or
+      NOT_TESTABLE for a task with nothing to test (docs, config, prompt wording; then skip to b
+      with no Tests section). Answer its questions before it proceeds.
+   a2. **Red check (gate):** run its test command yourself. It must fail, for the missing
+      behavior -- not a broken test file. A test that already passes (the behavior exists, or it
+      asserts nothing) or fails for the wrong reason → back to the test-writer before any code.
+      After a mid-task test-writer fix, re-run just the corrected tests: with no implementer code
+      yet they must fail; a pass that comes from code already committed is fine.
+   b. Dispatch a fresh **implementer** subagent (template) with: one line on where the task
+      fits, the brief path ("read this first — your requirements, exact values verbatim"), the
+      **Tests** section (files, command -- it may not change them), interfaces/decisions from
+      earlier tasks the brief can't know, your resolution of any ambiguity, and the report-file
+      path + report contract. UI task: also the approved preview file + its screen ids
+      (`ui-gate.md`). Answer its questions before it proceeds. A NEEDS_CONTEXT that names a
+      wrong test → the test-writer fixes it (re-run a2), then the implementer continues.
+   c. Implementer makes the tests pass, commits, self-reviews, writes its report file, returns
+      only status + commits + one-line test summary + concerns.
+   c2. **Tests untouched and green (gate):** `git diff --name-only <TESTS_SHA> -- <test files>`
+      must print nothing (TESTS_SHA = the test-writer's latest commit; no `HEAD`, so uncommitted
+      edits count too), then run the test command yourself: all pass, none skipped. Anything
+      listed, failing, or skipped → back to the implementer; no review until it's clean.
+   d. `review-package BASE HEAD` (BASE = the commit recorded **before** the test-writer, so the
+      tests are reviewed too — never
       `HEAD~1`, which drops all but the last commit of a multi-commit task) → dispatch the
       **task reviewer** (template) with the brief, report, and package paths + verbatim global
       constraints.
    e. If the reviewer reports spec ❌ or quality issues: dispatch a **fix subagent** for
       Critical/Important findings (implementer contract: re-run the covering tests, name them,
-      report command + output) → re-review. Repeat until spec ✅ and quality approved.
+      report command + output; tests stay untouched) → **c2 again** → re-review. A finding in the
+      tests themselves goes to the test-writer instead (then c2 with its new commit). Repeat until
+      spec ✅ and quality approved.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
@@ -84,6 +103,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
 Use the least powerful model that can do each role — an omitted model inherits your (expensive)
 session model and silently defeats this.
 
+- **Test-writer:** Sonnet (owner decision).
 - **Transcription implementer** (plan text contains the complete code): cheapest tier.
 - **Mechanical implementer** (1–2 files, complete spec) / single-file fix: cheap–mid tier.
 - **Integration/judgment implementer** (multi-file, debugging): standard tier.
@@ -97,15 +117,18 @@ Map to the Agent tool's `model` / `effort` params (or Workflow's per-agent `mode
 
 ---
 
-## Handling implementer status
+## Handling subagent status
 
-- **DONE:** generate the review package (BASE = recorded pre-dispatch commit) → dispatch reviewer.
+- **DONE:** run c2, then generate the review package (BASE = recorded before the test-writer) →
+  dispatch reviewer.
 - **DONE_WITH_CONCERNS:** read the concerns first. Correctness/scope → address before review.
   Observations → note and proceed.
 - **NEEDS_CONTEXT:** provide the missing context, re-dispatch.
 - **BLOCKED:** assess — context problem → add context, same model; needs more reasoning →
   re-dispatch on a more capable model; too large → split; plan is wrong → escalate to human.
   **Never** ignore an escalation or retry the same model with no change.
+- **The test-writer** gets the same handling for NEEDS_CONTEXT and BLOCKED, but stays on Sonnet:
+  if Sonnet still can't write the tests with more context or a smaller task, escalate to the human.
 
 ## Reviewer ⚠️ "cannot verify from diff" items
 

@@ -51,7 +51,7 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 ## Tooling
 - `~/.claude/make-it/sdd/scripts/task-brief PLAN_FILE N` → the task's brief file
 - `~/.claude/make-it/sdd/scripts/review-package BASE HEAD` → one diff file for a reviewer
-- `~/.claude/make-it/sdd/implementer-prompt.md` / `task-reviewer-prompt.md` → dispatch templates
+- `~/.claude/make-it/sdd/test-writer-prompt.md` / `implementer-prompt.md` / `task-reviewer-prompt.md` → dispatch templates
 - Final review: `/code-review`. Finish: ship-it / wrap-it.
 
 ## Steps
@@ -66,8 +66,13 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 3. **Pre-flight review (once)** — scan for tasks that contradict each other/the constraints or
    that mandate something the review rubric treats as a defect; present all findings as ONE
    batched question (finding beside plan text, "which governs?"). Clean → proceed silently.
-4. **Per task (sequential):** `task-brief` → dispatch implementer (template, cheapest fitting
-   model, ALWAYS specify it) → answer its questions → on DONE, record BASE then `review-package`
+4. **Per task (sequential):** `task-brief` → record BASE → dispatch the **test-writer**
+   (template, Sonnet) → **red check**: run its tests, they must fail for the missing behavior
+   (NOT_TESTABLE: skip to the implementer with no Tests section) → dispatch implementer
+   (template, cheapest fitting model, ALWAYS specify it; it may not change the tests; a test it
+   says is wrong goes back to the test-writer) → answer its questions → on DONE, **tests
+   untouched and green**: `git diff --name-only <TESTS_SHA> -- <test files>` prints nothing and
+   you run them yourself, all passing, none skipped (again after every fix) → `review-package`
    → dispatch task reviewer (template) → fix-subagent loop for Critical/Important until spec ✅ +
    quality approved → append `Task N: complete (commits <base7>..<head7>, review clean)` to the ledger.
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.

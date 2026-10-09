@@ -16,12 +16,19 @@ Read `[BRIEF_PATH]` — it is your requirements, with the exact values to use **
 [Only what the brief cannot know: function/type signatures, file locations, conventions, and
 decisions already made that this task must match. Omit if none.]
 
+## Tests (already written -- omit this section when the task has nothing to test)
+A separate test-writer wrote the tests for this task before you: `[TEST_FILES]`, run with
+`[TEST_COMMAND]`. They fail now; your job is to make them pass. **You may not edit, rename, skip,
+or delete them** -- a check after you finish rejects any change to these files. If a test looks
+wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around it.
+
 ## Ambiguity resolution
 [Any ambiguity I noticed in the brief and how to resolve it. Omit if none.]
 
 ## How to work
 1. If anything is unclear or under-specified, ASK before implementing — do not guess.
-2. Implement test-first (TDD): write failing tests for the brief's requirements, then the code.
+2. Write the code that makes the given tests pass (no Tests section: the task has nothing a
+   test can check -- implement it and verify it as the brief says).
 3. Build only what the brief requires — no extra flags, options, or scope (YAGNI).
 4. Run the tests; iterate until they pass.
 5. Self-review your own diff for spec gaps, dead code, and quality before reporting.
