@@ -464,9 +464,10 @@ re-ground). One headless call: about a minute on a small board, ~10 on a 100-car
   a time. A **wave** is one step: a `dispatch-it` wave runs its cards side by side; any other
   wave is one card. Waves run in list order.
 
-1. **Gather.** **Candidates** are the open leaf cards in scope (no open card names them as
-   `parent`) with status `backlog`, `ready`, or `designing`: pass each one's frontmatter and full
-   text except the Captured and triage blocks, plus the repo files it cites. **Context:** the
+1. **Gather.** **Candidates** are the open leaf cards in scope (no card names them as `parent`
+   -- an epic whose children are all done is a container, not work) with status `backlog`,
+   `ready`, or `designing`: pass each one's frontmatter and full text except the Captured and
+   triage blocks, plus the repo files it cites. **Context:** the
    in-progress cards (id, stage, and the files they change -- their branch diff when there is
    one, else the files they cite), the
    **Live, to check** list, `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the

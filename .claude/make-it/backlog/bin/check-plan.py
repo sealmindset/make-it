@@ -106,7 +106,7 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
             if i in seen: errs.append(f'{i}: planned twice')
             seen.add(i)
     if not partial:
-        parents = {c.get('parent', '').upper() for c in cards.values() if c.get('status') != 'done'}
+        parents = {c.get('parent', '').upper() for c in cards.values()}  # done children still make a container
         for i in sorted(cards):
             if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen:
                 errs.append(f'{i}: candidate card not planned, held, or skipped')
@@ -161,6 +161,15 @@ def self_test():
         assert check(b, good) == [], check(b, good)
         bad = json.loads(json.dumps(good)); bad['waves'].append({'wave': 3, 'items': [{'id': 'E01-S6', 'mode': 'solo'}]})
         assert any('E01-S6: already in-progress' in e for e in check(b, bad))
+        # an epic whose children are all done is a container, not a candidate; a childless epic is one
+        os.makedirs(f'{b}/items/EPIC-02-y/stories'); os.makedirs(f'{b}/items/EPIC-03-z/stories')
+        open(f'{b}/items/EPIC-02-y/epic.md', 'w').write('---\nid: E02\nstatus: backlog\n---\n')
+        open(f'{b}/items/EPIC-02-y/stories/S1.md', 'w').write('---\nid: E02-S1\nstatus: done\nparent: E02\n---\n')
+        open(f'{b}/items/EPIC-03-z/epic.md', 'w').write('---\nid: E03\nstatus: backlog\n---\n')
+        errs = check(b, good)
+        assert any('E03: candidate card not planned' in e for e in errs), errs
+        assert not any(e.startswith('E02:') for e in errs), errs
+        os.remove(f'{b}/items/EPIC-03-z/epic.md')
         # wave shape: two solos in one wave, a 2-card dispatch wave
         bad = {'waves': [{'wave': 1, 'items': [{'id': 'E01-S1', 'mode': 'solo'}, {'id': 'E01-S2', 'mode': 'solo'}]}]}
         assert any('exactly one card' in e for e in check(b, bad, partial=True))
