@@ -2,12 +2,30 @@
 """Render <board>/BOARD.md from card frontmatter (items/ only; archive/ is not shown).
 
 Usage: regen-board.py [board_dir] [--project NAME]
+       regen-board.py --self-test
   board_dir  defaults to $BACKLOG_DIR, then ./.claude/backlog
   --project  defaults to <board>/.project, then the project folder's name
 """
 import glob, os, re, sys
 
 args = sys.argv[1:]
+if args == ['--self-test']:
+    import subprocess, tempfile
+    with tempfile.TemporaryDirectory() as t:
+        os.makedirs(f'{t}/items/EPIC-01-bugs/stories')
+        def card(name, **kv): open(f'{t}/items/EPIC-01-bugs/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+        def next_up(): subprocess.run([sys.executable, __file__, t, '--project', 't'], check=True); return open(f'{t}/BOARD.md').read()
+        card('epic.md', id='E01', title='Bugs', status='in-progress')
+        card('stories/S1.md', id='E01-S1', status='backlog', type='breakfix', priority='P1', stakes='critical')
+        card('stories/S2.md', id='E01-S2', status='backlog', type='breakfix', priority='P1', dependsOn='E01-S4')
+        card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2', dependsOn='[E01-S5, E09-S1]')
+        card('stories/S4.md', id='E01-S4', status='in-progress', type='breakfix', stage='Cause found')
+        card('stories/S5.md', id='E01-S5', status='done', type='breakfix')
+        # S1 is high-stakes, S2 waits on in-progress S4; S3's deps are done or not on this board
+        assert '**Next up:** S3' in next_up()
+        card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2', dependsOn='[e01-s4]')
+        assert '**Next up:** —' in next_up()
+    print('regen-board self-test: OK'); sys.exit(0)
 proj = None
 if '--project' in args:
     i = args.index('--project')
@@ -29,6 +47,11 @@ def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
 def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '') + (f" →{v(d,'mode')}" if v(d, 'mode') else '')
 def warn(d): return '⚠️' if v(d, 'stakes') == 'critical' else ''
+STATUS = {v(d, 'id').upper(): v(d, 'status') for d in map(fm, glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md'))}
+def startable(s):  # Next up skips what can't start: high-stakes, or waiting on an unfinished card
+    deps = [x.strip().upper() for x in v(s, 'dependsOn').strip('[]').split(',') if x.strip()]
+    # ponytail: an id not on this board doesn't block -- it may live on another board
+    return v(s, 'status') == 'backlog' and not warn(s) and all(STATUS.get(d, 'done') == 'done' for d in deps)
 
 out = [f'# BACKLOG BOARD — {proj}', '']
 for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
@@ -41,7 +64,7 @@ for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
         # The bug queue status line: Reported -> Cause found -> Fix ready -> Live -> Checked.
         def ids(pred): return ', '.join(v(s, 'id').split('-')[-1] for s in stories if pred(s)) or '—'
         op = lambda s: v(s, 'status') != 'done'
-        nxt = next((v(s, 'id').split('-')[-1] for s in sorted(stories, key=lambda s: (v(s, 'priority') or 'P9', num(s))) if v(s, 'status') == 'backlog'), '—')
+        nxt = next((v(s, 'id').split('-')[-1] for s in sorted(stories, key=lambda s: (v(s, 'priority') or 'P9', num(s))) if startable(s)), '—')
         out += ['**Now fixing:** ' + ids(lambda s: op(s) and v(s, 'status') == 'in-progress' and v(s, 'stage') in ('Reported', 'Cause found')),
                 '**Shipping:** ' + ids(lambda s: op(s) and v(s, 'stage') == 'Fix ready'),
                 '**Live, to check:** ' + ids(lambda s: op(s) and v(s, 'stage') == 'Live'),
