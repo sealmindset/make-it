@@ -130,7 +130,7 @@ def check(ledger):
     if pending:
         todo = (f"{len(done)}/{total} checkpoints complete; next is Task {pending[0]}. "
                 "Continue the plan (subagent-driven-development.md): dispatch the next "
-                "implementer / reviewer / fix loop.")
+                "test-writer / implementer / reviewer / fix loop.")
     else:
         todo = (f"all {total} checkpoints complete but the run is still open. Run the final "
                 "whole-branch review, fix its findings, then append `STATUS: DONE`.")

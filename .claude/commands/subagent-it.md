@@ -71,7 +71,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    (NOT_TESTABLE: skip to the implementer with no Tests section) → dispatch implementer
    (template, cheapest fitting model, ALWAYS specify it; it may not change the tests; a test it
    says is wrong goes back to the test-writer) → answer its questions → on DONE, **tests
-   untouched**: `git diff --name-only <TESTS_SHA> HEAD -- <test files>` prints nothing → `review-package`
+   untouched and green**: `git diff --name-only <TESTS_SHA> -- <test files>` prints nothing and
+   you run them yourself, all passing, none skipped (again after every fix) → `review-package`
    → dispatch task reviewer (template) → fix-subagent loop for Critical/Important until spec ✅ +
    quality approved → append `Task N: complete (commits <base7>..<head7>, review clean)` to the ledger.
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.

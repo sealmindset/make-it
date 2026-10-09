@@ -24,7 +24,8 @@ and how the project runs its tests. Omit if none.]
 4. Run them: they must **fail**, and for the right reason — the behavior is missing (assertion
    failure, missing function or module), not a broken test file (syntax error, bad import of the
    test framework).
-5. Commit the tests (clear message). Stay on the current branch — never commit to main/master.
+5. Commit only your own files (`git add <files>`, clear message). Stay on the current branch —
+   never commit to main/master.
 6. Nothing in the brief can be checked by a test (docs, config, prompt wording)? Write nothing
    and report NOT_TESTABLE.
 
@@ -33,7 +34,7 @@ Write your FULL report to `[REPORT_PATH]` (each test and the requirement it cove
 command, the failing output). In your reply to me, return ONLY:
 - **STATUS:** one of TESTS_READY / NOT_TESTABLE / NEEDS_CONTEXT / BLOCKED
 - **COMMIT:** the short SHA of your test commit
-- **TEST_FILES:** the test files you created or changed (repo-relative)
+- **TEST_FILES:** every file your commit touches -- tests and fixtures (repo-relative)
 - **TEST_COMMAND:** the exact command that runs them
 - **RED:** one line of the failing output (e.g. "3 failed: parse_date not defined")
 

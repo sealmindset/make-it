@@ -9,7 +9,7 @@
 #
 # Usage:
 #   review-package BASE HEAD
-#     BASE = the commit recorded BEFORE dispatching the implementer
+#     BASE = the commit recorded BEFORE dispatching the test-writer (so the tests are reviewed)
 #            (never HEAD~1 -- it drops all but the last commit of a multi-commit task)
 #     HEAD = current branch head (or the task's last commit)
 # =============================================================================
