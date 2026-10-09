@@ -20,3 +20,5 @@ temp
 dist/
 # Python bytecode (helper scripts)
 __pycache__/
+# Git worktrees made by Claude Code sessions and subagents
+.claude/worktrees/
