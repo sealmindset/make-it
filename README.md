@@ -958,6 +958,12 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.32.1 -- `plan` no longer schedules an empty epic
+
+An epic whose cards are all done (a Bugs epic between bugs) was treated as work to plan, and the
+checker demanded it be scheduled. A card is a candidate only when no card -- done or not -- names
+it as `parent`; an epic with no cards at all still counts. `check-plan.py --self-test` covers both.
+
 ### v1.32.0 -- Tests first, by a separate author (Helix slice 3)
 
 `/subagent-it` now runs a **test-writer** subagent (Sonnet) before each task's implementer. It
