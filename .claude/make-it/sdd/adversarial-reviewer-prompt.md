@@ -8,6 +8,7 @@ files. Do not edit, commit, or delete anything in the repo.
 
 ## Inputs
 - Requirements (what the code must do): `[BRIEF_PATH]`
+- Global constraints (binding): [GLOBAL_CONSTRAINTS -- verbatim from the plan]
 - The change (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
 - The tests that already pass: `[TEST_FILES]`, run with `[TEST_COMMAND]`
 - Earlier rounds' counterexamples, already fixed (don't repeat them): [PRIOR_ROUNDS or "none"]
@@ -26,12 +27,15 @@ No counterexample means CLEAN -- that is a good result, not a failure to report 
 
 ## Severity
 - **Critical** -- wrong result, crash, or data loss on an input the brief clearly allows.
-- **Important** -- wrong result on an edge the brief covers (boundaries, empty input, limits).
-- **Minor** -- correct result but a brief-stated detail is off (format, ordering, message text).
+- **Important** -- a brief requirement not met: an edge it covers (boundaries, empty input,
+  limits) or a format, ordering, or message it requires.
+- **Minor** -- the requirement is met in substance, but a detail the brief states loosely differs
+  (e.g. an equal value of another type).
 
 ## Output
 ```
 VERDICT: CLEAN | COUNTEREXAMPLES
+TRIED: <the inputs and edges you ran, one line each -- required even when CLEAN>
 1. [Critical|Important|Minor] requirement: <the brief's words>
    input: <exact input / steps>
    brief requires: <expected>

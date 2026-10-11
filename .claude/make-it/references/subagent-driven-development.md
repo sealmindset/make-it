@@ -90,18 +90,27 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       tests themselves goes to the test-writer instead (then c2 with its new commit). Repeat until
       spec ✅ and quality approved.
    e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
-      Dispatch the **adversarial reviewer** (template) with the brief, a fresh `review-package
-      BASE HEAD`, the test files and command, and earlier rounds' counterexamples. It returns
-      CLEAN or confirmed counterexamples, each grounded in the brief and run. Log every round:
+      Note `git status --porcelain` and HEAD, then dispatch the **adversarial reviewer**
+      (template) with the brief, the verbatim global constraints, a fresh `review-package BASE
+      HEAD`, the test files and command, and earlier rounds' counterexamples. Afterwards the
+      status and HEAD must be unchanged -- remove anything it left behind. It returns CLEAN (with
+      what it tried) or confirmed counterexamples. **You adjudicate each one:** grounded in the
+      brief? One that rests on input or behavior the brief doesn't mention, or that conflicts with
+      the plan, is the human's call (as for a plan-mandated finding). Confirm its severity against
+      the template's definitions; unsure → Important. Log every round:
       `Task N: adversarial round K: clean` or `... K: <n> counterexamples (<C>C <I>I <M>M)`.
       - **CLEAN** → f.
-      - **Counterexamples** → each becomes a failing test by the **test-writer** (a2's red check
-        must fail; a case that passes was not real -- drop it), then the implementer fixes it,
-        then **c2** → next round.
-      - **Still open after round 3:** any Critical/Important → stop this task: append
+      - **Counterexamples in rounds 1–2** → the **test-writer** writes one failing test per
+        counterexample, with its exact input (pass the counterexample blocks); a2's red check must
+        fail. A test that passes on the exact input means the case wasn't real -- drop it; one that
+        doesn't use the exact input goes back to the test-writer; one that can't be a test stays
+        open. Then the implementer fixes it → **c2** → re-review as in e → next round.
+      - **Round 3 counterexamples are not fixed.** Any Critical/Important → stop this task: append
         `STATUS: AWAITING_HUMAN task N: open counterexamples` and show them beside the brief.
-        Only Minor left → accept: log `Task N: minor counterexamples accepted: <list>` and point
-        the final review at them, then f.
+        Only Minor → accept: log `Task N: minor counterexamples accepted: <list>`, point the final
+        review at them, then f.
+      - **After the human answers** (`RUN: resume`): the round count doesn't reset. Apply their
+        call -- fix it once (test-writer → implementer → c2 → re-review) or accept and log -- then f.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
