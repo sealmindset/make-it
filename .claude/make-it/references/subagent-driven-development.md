@@ -28,6 +28,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
   gates pass (see Durable progress).
 - `~/.claude/make-it/sdd/test-writer-prompt.md` — test-writer dispatch template (tests first).
 - `~/.claude/make-it/sdd/implementer-prompt.md` — implementer dispatch template.
+- `~/.claude/make-it/sdd/adversarial-reviewer-prompt.md` — adversarial reviewer template
+  (counterexamples only, after the task reviewer passes).
 - `~/.claude/make-it/sdd/task-reviewer-prompt.md` — task reviewer dispatch template.
 - Final whole-branch review: the **`/code-review`** skill.
 - Finishing the branch: **ship-it / wrap-it** (+ the worktree finish from `worktree-workflow.md`).
@@ -87,6 +89,19 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       report command + output; tests stay untouched) → **c2 again** → re-review. A finding in the
       tests themselves goes to the test-writer instead (then c2 with its new commit). Repeat until
       spec ✅ and quality approved.
+   e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
+      Dispatch the **adversarial reviewer** (template) with the brief, a fresh `review-package
+      BASE HEAD`, the test files and command, and earlier rounds' counterexamples. It returns
+      CLEAN or confirmed counterexamples, each grounded in the brief and run. Log every round:
+      `Task N: adversarial round K: clean` or `... K: <n> counterexamples (<C>C <I>I <M>M)`.
+      - **CLEAN** → f.
+      - **Counterexamples** → each becomes a failing test by the **test-writer** (a2's red check
+        must fail; a case that passes was not real -- drop it), then the implementer fixes it,
+        then **c2** → next round.
+      - **Still open after round 3:** any Critical/Important → stop this task: append
+        `STATUS: AWAITING_HUMAN task N: open counterexamples` and show them beside the brief.
+        Only Minor left → accept: log `Task N: minor counterexamples accepted: <list>` and point
+        the final review at them, then f.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
@@ -104,6 +119,7 @@ Use the least powerful model that can do each role — an omitted model inherits
 session model and silently defeats this.
 
 - **Test-writer:** Sonnet (owner decision).
+- **Adversarial reviewer:** standard tier or above -- finding a real break takes reasoning.
 - **Transcription implementer** (plan text contains the complete code): cheapest tier.
 - **Mechanical implementer** (1–2 files, complete spec) / single-file fix: cheap–mid tier.
 - **Integration/judgment implementer** (multi-file, debugging): standard tier.
