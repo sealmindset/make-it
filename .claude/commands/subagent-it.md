@@ -81,7 +81,7 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    becomes one test-writer test on its exact input (red check), the implementer fixes it, tests
    untouched and green, re-review, next round; round 3's are not fixed -- open Critical/Important →
    `STATUS: AWAITING_HUMAN`, Minor only → accept and log; after the human answers, the count
-   doesn't reset -- apply their call → append `Task N: complete (commits <base7>..<head7>,
+   doesn't reset -- apply their call and carry on where you stopped → append `Task N: complete (commits <base7>..<head7>,
    review clean)` to the ledger.
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.
 5. **Final review** — `/code-review` on the most capable model with `review-package MERGE_BASE HEAD`

@@ -99,7 +99,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       the plan, is the human's call (as for a plan-mandated finding). Confirm its severity against
       the template's definitions; unsure → Important. Log every round:
       `Task N: adversarial round K: clean` or `... K: <n> counterexamples (<C>C <I>I <M>M)`.
-      - **CLEAN** → f.
+      - **CLEAN** → f -- unless a counterexample is still open (it couldn't be a test): then the
+        round-3 split below decides.
       - **Counterexamples in rounds 1–2** → the **test-writer** writes one failing test per
         counterexample, with its exact input (pass the counterexample blocks); a2's red check must
         fail. A test that passes on the exact input means the case wasn't real -- drop it; one that
@@ -110,7 +111,9 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
         Only Minor → accept: log `Task N: minor counterexamples accepted: <list>`, point the final
         review at them, then f.
       - **After the human answers** (`RUN: resume`): the round count doesn't reset. Apply their
-        call -- fix it once (test-writer → implementer → c2 → re-review) or accept and log -- then f.
+        call -- fix it once (test-writer → implementer → c2 → re-review) or accept and log -- then
+        carry on where you stopped: in rounds 1–2, the round's other counterexamples, then the next
+        round; at round 3, f.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).

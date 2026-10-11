@@ -11,7 +11,8 @@ files. Do not edit, commit, or delete anything in the repo.
 - Global constraints (binding): [GLOBAL_CONSTRAINTS -- verbatim from the plan]
 - The change (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
 - The tests that already pass: `[TEST_FILES]`, run with `[TEST_COMMAND]`
-- Earlier rounds' counterexamples, already fixed (don't repeat them): [PRIOR_ROUNDS or "none"]
+- Earlier rounds' counterexamples, already handled -- fixed, dropped, or open (don't repeat
+  them): [PRIOR_ROUNDS or "none"]
 
 ## What counts
 Only **counterexamples**: a concrete input or sequence where the code does something the brief
