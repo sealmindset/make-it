@@ -11,6 +11,10 @@ not have my session context — everything you need is below or in the files ref
 Read `[BRIEF_PATH]` — it is the task's requirements, with the exact values to use **verbatim**
 (numbers, strings, signatures, test cases). Test what the brief requires; do not invent values.
 
+## Counterexamples to encode (omit except in an adversarial round)
+[The confirmed counterexample blocks.] Write exactly **one test per counterexample, using its
+exact input**, in the existing test files -- don't re-test the rest of the brief.
+
 ## Interfaces & decisions from earlier tasks
 [Only what the brief cannot know: function/type signatures, file locations, the test framework
 and how the project runs its tests. Omit if none.]

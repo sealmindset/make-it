@@ -51,7 +51,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 ## Tooling
 - `~/.claude/make-it/sdd/scripts/task-brief PLAN_FILE N` → the task's brief file
 - `~/.claude/make-it/sdd/scripts/review-package BASE HEAD` → one diff file for a reviewer
-- `~/.claude/make-it/sdd/test-writer-prompt.md` / `implementer-prompt.md` / `task-reviewer-prompt.md` → dispatch templates
+- `~/.claude/make-it/sdd/test-writer-prompt.md` / `implementer-prompt.md` / `task-reviewer-prompt.md` /
+  `adversarial-reviewer-prompt.md` → dispatch templates
 - Final review: `/code-review`. Finish: ship-it / wrap-it.
 
 ## Steps
@@ -74,7 +75,14 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    untouched and green**: `git diff --name-only <TESTS_SHA> -- <test files>` prints nothing and
    you run them yourself, all passing, none skipped (again after every fix) → `review-package`
    → dispatch task reviewer (template) → fix-subagent loop for Critical/Important until spec ✅ +
-   quality approved → append `Task N: complete (commits <base7>..<head7>, review clean)` to the ledger.
+   quality approved → **adversarial review** (tasks with tests, at most 3 rounds per task; the
+   repo must be untouched after each): confirmed counterexamples only, which you adjudicate
+   (ungrounded or plan-conflicting → the human; unsure severity → Important); in rounds 1–2 each
+   becomes one test-writer test on its exact input (red check), the implementer fixes it, tests
+   untouched and green, re-review, next round; round 3's are not fixed -- open Critical/Important →
+   `STATUS: AWAITING_HUMAN`, Minor only → accept and log; after the human answers, the count
+   doesn't reset -- apply their call and carry on where you stopped → append `Task N: complete (commits <base7>..<head7>,
+   review clean)` to the ledger.
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.
 5. **Final review** — `/code-review` on the most capable model with `review-package MERGE_BASE HEAD`
    (`git merge-base main HEAD`); fix findings with ONE fix subagent carrying the full list.

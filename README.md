@@ -958,6 +958,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.33.0 -- An adversarial reviewer tries to break each task (Helix slice 5)
+
+After a task passes its spec and quality review, `/subagent-it` sends an **adversarial reviewer**
+to break it -- **counterexamples only**: a concrete input, run and confirmed, that breaks a
+requirement in the brief. Each one becomes a failing test by the test-writer, the implementer
+fixes it, and the next round runs. **At most 3 rounds per task**; if Critical or Important
+counterexamples are still open after round 3 the task stops and asks you, and Minor-only ones are
+accepted and logged for the final review. Tasks with nothing to test skip it.
+
 ### v1.32.1 -- `plan` no longer schedules an empty epic
 
 An epic whose cards are all done (a Bugs epic between bugs) was treated as work to plan, and the

@@ -28,6 +28,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
   gates pass (see Durable progress).
 - `~/.claude/make-it/sdd/test-writer-prompt.md` — test-writer dispatch template (tests first).
 - `~/.claude/make-it/sdd/implementer-prompt.md` — implementer dispatch template.
+- `~/.claude/make-it/sdd/adversarial-reviewer-prompt.md` — adversarial reviewer template
+  (counterexamples only, after the task reviewer passes).
 - `~/.claude/make-it/sdd/task-reviewer-prompt.md` — task reviewer dispatch template.
 - Final whole-branch review: the **`/code-review`** skill.
 - Finishing the branch: **ship-it / wrap-it** (+ the worktree finish from `worktree-workflow.md`).
@@ -87,6 +89,31 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       report command + output; tests stay untouched) → **c2 again** → re-review. A finding in the
       tests themselves goes to the test-writer instead (then c2 with its new commit). Repeat until
       spec ✅ and quality approved.
+   e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
+      Note `git status --porcelain` and HEAD, then dispatch the **adversarial reviewer**
+      (template) with the brief, the verbatim global constraints, a fresh `review-package BASE
+      HEAD`, the test files and command, and earlier rounds' counterexamples. Afterwards the
+      status and HEAD must be unchanged -- remove anything it left behind. It returns CLEAN (with
+      what it tried) or confirmed counterexamples. **You adjudicate each one:** grounded in the
+      brief? One that rests on input or behavior the brief doesn't mention, or that conflicts with
+      the plan, is the human's call (as for a plan-mandated finding). Confirm its severity against
+      the template's definitions; unsure → Important. Log every round:
+      `Task N: adversarial round K: clean` or `... K: <n> counterexamples (<C>C <I>I <M>M)`.
+      - **CLEAN** → f -- unless a counterexample is still open (it couldn't be a test): then the
+        round-3 split below decides.
+      - **Counterexamples in rounds 1–2** → the **test-writer** writes one failing test per
+        counterexample, with its exact input (pass the counterexample blocks); a2's red check must
+        fail. A test that passes on the exact input means the case wasn't real -- drop it; one that
+        doesn't use the exact input goes back to the test-writer; one that can't be a test stays
+        open. Then the implementer fixes it → **c2** → re-review as in e → next round.
+      - **Round 3 counterexamples are not fixed.** Any Critical/Important → stop this task: append
+        `STATUS: AWAITING_HUMAN task N: open counterexamples` and show them beside the brief.
+        Only Minor → accept: log `Task N: minor counterexamples accepted: <list>`, point the final
+        review at them, then f.
+      - **After the human answers** (`RUN: resume`): the round count doesn't reset. Apply their
+        call -- fix it once (test-writer → implementer → c2 → re-review) or accept and log -- then
+        carry on where you stopped: in rounds 1–2, the round's other counterexamples, then the next
+        round; at round 3, f.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
@@ -104,6 +131,7 @@ Use the least powerful model that can do each role — an omitted model inherits
 session model and silently defeats this.
 
 - **Test-writer:** Sonnet (owner decision).
+- **Adversarial reviewer:** standard tier or above -- finding a real break takes reasoning.
 - **Transcription implementer** (plan text contains the complete code): cheapest tier.
 - **Mechanical implementer** (1–2 files, complete spec) / single-file fix: cheap–mid tier.
 - **Integration/judgment implementer** (multi-file, debugging): standard tier.
