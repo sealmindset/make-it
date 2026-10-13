@@ -125,6 +125,16 @@ These apply to every project /make-it builds, no exceptions.
      at Build (step h) for new projects; build-standards check S11 adds it to existing ones through
      /resume-it and /retrofit-it.
 
+16b. **Keep the human able to notice, in `CLAUDE.md`** -- Every project's `CLAUDE.md` carries the
+     anti-approval-fatigue principle, word for word from `human-in-the-loop.md`, right after the
+     muddy-water section: ask less and ask better; make every ask decision-ready (what changes, the
+     evidence, the blast radius and undo, what is unusual, the one thing to check); evaluate rather
+     than confirm on high-stakes decisions; keep the human in practice (a digest of what ran
+     automatically, situation briefs, occasional planted harmless flaws revealed right after); hide
+     nothing (disclose any bypassed or weakened safeguard); and alerts earn their noise (an owner,
+     closed only on a positive re-check). Written at Build (step h) for new projects;
+     build-standards check S12 adds it to existing ones through /resume-it and /retrofit-it.
+
 ### Quality
 
 17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.
