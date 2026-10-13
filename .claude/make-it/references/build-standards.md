@@ -44,6 +44,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **S11** [Tier 0] [FIX] **Settle, filter, verify in CLAUDE.md** -- `CLAUDE.md` contains the `## Settle, filter, verify — the muddy-water principle` section, after the canary and before `@LEARNINGS.md`. Fix: insert the "Section -- copy exactly" block from `muddy-water.md` word for word; leave every other line untouched.
 
+**S12** [Tier 0] [FIX] **Keep the human able to notice, in CLAUDE.md** -- `CLAUDE.md` contains the `## Keep the human able to notice — against approval fatigue and blind trust` section, after the muddy-water section and before `@LEARNINGS.md`. Fix: insert the "Section -- copy exactly" block from `human-in-the-loop.md` word for word; leave every other line untouched.
+
 ---
 
 ## Version Control & Worktrees

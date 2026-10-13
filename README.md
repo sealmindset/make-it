@@ -958,6 +958,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.35.0 -- Keep the human able to notice (against approval fatigue)
+
+"Human in the loop" fails from both sides: agents route around safeguards, and people who approve
+all day slide from evaluating to confirming. Every project's `CLAUDE.md` now carries a principle
+that designs the loop so the human stays able to notice:
+1. Ask less, ask better.
+2. Make every ask decision-ready.
+3. Evaluate, don't confirm, on high-stakes decisions.
+4. Keep the human in practice (a digest of what ran automatically, situation briefs, occasional
+   planted harmless flaws revealed right after).
+5. Hide nothing: disclose any bypassed or weakened safeguard.
+6. Alerts earn their noise.
+
+New projects get it when `/make-it` writes `CLAUDE.md`. Existing projects get it through
+build-standards check **S12**, via `/resume-it` and `/retrofit-it`. The text lives once, in
+`references/human-in-the-loop.md`. The skill-level changes (the shared approval block, the digest,
+the per-skill rework) follow as their own releases.
+
 ### v1.34.0 -- Settle, filter, verify in every project
 
 Every project's `CLAUDE.md` now carries the **muddy-water principle**, so every assistant and
