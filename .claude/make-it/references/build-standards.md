@@ -42,6 +42,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **S10** [Tier 0] [FIX] **Learnings file wired in** -- `LEARNINGS.md` exists in the project root and `CLAUDE.md` imports it with an `@LEARNINGS.md` line. Fix: create the header-only file and the import per `learnings.md`. Never add entries during a fix -- each entry needs the user's yes.
 
+**S11** [Tier 0] [FIX] **Settle, filter, verify in CLAUDE.md** -- `CLAUDE.md` contains the `## Settle, filter, verify — the muddy-water principle` section, after the canary and before `@LEARNINGS.md`. Fix: insert the "Section -- copy exactly" block from `muddy-water.md` word for word; leave every other line untouched.
+
 ---
 
 ## Version Control & Worktrees

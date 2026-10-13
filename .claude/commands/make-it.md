@@ -541,6 +541,8 @@ The user sees progress updates, NOT the technical details.
       begun — a rule has been silently dropped and the rest of the output is now suspect.
       Stop and re-read the project rules.)
 
+      [MUDDY_WATER_SECTION]
+
       ## Learnings
 
       @LEARNINGS.md
@@ -549,6 +551,11 @@ The user sees progress updates, NOT the technical details.
       If `builder_name` is empty, substitute a fixed token instead: "Start every reply with the
       line `🐤 canary ok` so dropped instructions are visible." Unlike the README, this file MAY
       reference AI assistants — it exists for them. Do NOT put secrets or app logic here.
+
+      Replace `[MUDDY_WATER_SECTION]` with the "Section -- copy exactly" block from
+      `~/.claude/make-it/references/muddy-water.md`, word for word (Tier 0 guardrail
+      "Settle, filter, verify"; build-standards check S11). It sits after the canary and before
+      the Learnings import -- the order every change in the project follows.
 
       Also create `LEARNINGS.md` containing only the "Header -- copy exactly" block from
       `~/.claude/make-it/references/learnings.md` -- never its example lines. Later sessions add
@@ -1020,7 +1027,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S10**: Structure & configuration (project files, .env, stubs, secrets, README, learnings)
+- **S01-S11**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify section)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
