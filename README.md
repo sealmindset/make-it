@@ -958,6 +958,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.34.0 -- Settle, filter, verify in every project
+
+Every project's `CLAUDE.md` now carries the **muddy-water principle**, so every assistant and
+subagent working in it reads it on every turn:
+1. **Settle:** reproduce it and find the root cause from ground truth before any fix.
+2. **Filter:** one small, reversible change at a time, and never bypass a guard.
+3. **Verify:** re-run the same reproduction and check the real system before the next change and
+   before claiming done.
+4. **Don't mistake stillness for clean:** close latent risks only on a positive re-check.
+
+New projects get it when `/make-it` writes `CLAUDE.md`. Existing projects get it through
+build-standards check **S11**, which `/resume-it`'s catch-up scan and `/retrofit-it`'s verify
+add when it is missing. The text lives once, in `references/muddy-water.md`.
+
 ### v1.33.0 -- An adversarial reviewer tries to break each task (Helix slice 5)
 
 After a task passes its spec and quality review, `/subagent-it` sends an **adversarial reviewer**

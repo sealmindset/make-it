@@ -116,6 +116,15 @@ These apply to every project /make-it builds, no exceptions.
     the ONE project file that may reference AI assistants (it exists for them); it must never hold
     secrets or app logic. Created during project setup (Build Phase A), same as README/CHANGELOG/TODO.
 
+16a. **Settle, filter, verify in `CLAUDE.md`** -- Every project's `CLAUDE.md` carries the
+     muddy-water principle, word for word from `muddy-water.md`, right after the canary:
+     **settle** (reproduce and find the root cause from ground truth before any fix), **filter**
+     (one small, reversible change at a time; never bypass a guard), **verify** (re-run the same
+     reproduction and check the real system before the next change and before claiming done), and
+     **don't mistake stillness for clean** (close latent risks only on a positive re-check). Written
+     at Build (step h) for new projects; build-standards check S11 adds it to existing ones through
+     /resume-it and /retrofit-it.
+
 ### Quality
 
 17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.

@@ -146,6 +146,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       build-standards.md          # Shared verification checklist (single source of truth)
       build-verify-security.md   # Automatic security scan during build-verify Part D
       fix-strategies.md          # 12 fix strategies for auto-remediation (AUTO/SEMI-AUTO/MANUAL)
+      muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     variants/
@@ -241,6 +242,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 
 ### Tier 0: Universal (every project)
 - Ideation confirmed, Design documented in app-context.json, Build-verified before handoff
+- `CLAUDE.md` carries the settle-filter-verify (muddy-water) principle -- new projects at Build, existing ones via check S11
 - CHANGELOG.md and TODO.md from day one
 - No secrets in committed files, no hardcoded config values
 - Input validation at system boundaries, sensitive data masked in output
