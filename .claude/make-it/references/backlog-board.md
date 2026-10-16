@@ -263,6 +263,9 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
   blocks a card also goes on it as `decision:`.
 - Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one;
   the status line lists every lane.
+- **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
+  `decision:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
+  behind looks like a running lane; `status` flags a Now fixing card idle 2+ days as "lane stopped?".
 
 ---
 
@@ -373,8 +376,9 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
   ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
   take with no new ones).
 - **Needs you** -- Waiting on you, then held high-stakes cards, by priority then idle time.
-- **Drift** -- in-progress cards idle 14+ days, Live cards idle 14+ days, Checked cards not
-  closed, a stale `PLAN.md`.
+- **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
+  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a stale
+  `PLAN.md`.
 - **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
   Live and Live → Checked, by priority.
 
