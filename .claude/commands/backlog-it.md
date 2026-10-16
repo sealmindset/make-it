@@ -91,7 +91,8 @@ Ids are case-insensitive (`e02` → `E02`). Next id = highest existing + 1. `gro
   and its place in line ("✓ Filed E07-S3 (breakfix, S) under Bugs -- #2 in line"), and **every**
   open question batched in one AskUserQuestion -- only questions whose answer changes
   the fix or its order. Check what you can check yourself instead of asking. Answers go under
-  `## Answers`.
+  `## Answers`. A question that blocks a card goes on it as one line in `decision:` (the
+  board's **Waiting on you** block); the write that adds the answer removes it.
 
 ## Step 4 -- Lanes and dispatch
 
@@ -100,7 +101,7 @@ if they touch **no common source files** and **no common data**. At most one lan
 category; high-stakes cards are never auto-picked. Dispatch the lanes with `/dispatch-it` -- one
 agent per card, each in its own worktree, each running the `/debug-it` method. With no bug
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, no unfinished `dependsOn`,
-no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
+no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
 Announce each pick before it starts. Gather every lane's questions into one message. Shipping
 stays serial: one PR through CI and deploy at a time.
 
