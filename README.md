@@ -958,6 +958,14 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.36.0 -- "Waiting on you": every decision in one list
+
+A card blocked on your answer now carries the exact question in `decision:` (one line, any card
+type). `BOARD.md` opens with a **Waiting on you** block listing them all as `id · the question ·
+days since the card last changed`, and Now fixing, Next up, `plan`, and `dispatch` skip them. The
+write that records your answer clears the field. Older cards marked `stage: Needs decision` show
+too, flagged "question not on card". `regen-board.py --self-test` covers it.
+
 ### v1.35.0 -- Keep the human able to notice (against approval fatigue)
 
 "Human in the loop" fails from both sides: agents route around safeguards, and people who approve

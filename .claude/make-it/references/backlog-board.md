@@ -91,6 +91,7 @@ pin:       1              # optional rank override set by `groom move`; dropped 
 stakes:    critical       # optional -- never auto-started (see the High-stakes gate)
 dependsOn: [E02]          # optional -- not dispatched until these are done
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
+decision:  Retry or refile?   # optional -- the one question this card waits on (see Waiting on you)
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
 plan:      plans/E04-S2.md   # the card's `## Task N` plan, relative to the epic folder
@@ -202,7 +203,7 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
    behind E09-S1 · /backlog-it undo to revert` -- then **every** open question batched in one
    AskUserQuestion, in plain words, only those whose answer changes the fix or its place in line.
    Anything checkable (logs, data, the screen, the code) is checked, not asked. Answers go on the
-   card under `## Answers`. Before a bug moves to Cause found, any remaining question that would
+   card under `## Answers` (the same write clears any `decision:`). Before a bug moves to Cause found, any remaining question that would
    change the fix is asked then.
 
 ---
@@ -227,11 +228,21 @@ place. Improvements are not bugs -- they wait until the bug list is empty. One m
 reporter per finished card.
 
 **The status line** at the top of any epic with bug cards in `BOARD.md`:
-- **Now fixing** -- `in-progress` at Reported / Cause found (one entry per lane)
+- **Now fixing** -- `in-progress` at Reported / Cause found, not waiting on you (one entry per lane)
 - **Shipping** -- Fix ready
 - **Live, to check** -- Live
 - **Next up** -- the top `backlog` bug that can start (not high-stakes, no unfinished
-  `dependsOn`), by priority, then age
+  `dependsOn`, not waiting on you), by priority, then age
+
+**Waiting on you** -- one block at the top of `BOARD.md`: every open card, of any type, that
+waits on the human's answer, as `id · the question · days since the card last changed`.
+- Whoever asks (a lane, `/debug-it`, capture, a ship gate) writes the exact question as one line
+  in `decision:`, in the same write that asks it. The card keeps its stage.
+- The write that records the answer under `## Answers` removes `decision:`. A stale one keeps the
+  card out of Next up, so never leave it behind.
+- Now fixing and Next up skip a waiting card; `plan` and `dispatch` treat it as waiting on you.
+- An older card with `stage: Needs decision` is listed too, flagged "question not on card" until
+  its question moves into `decision:`.
 
 ## Parallel lanes
 
@@ -243,7 +254,8 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **Serial categories stay one at a time.** A card whose `category:` is in settings `serial`
   never shares the floor with another lane of the same category.
 - **The ship queue is serial.** One PR through CI and deploy at a time, whatever the lane count.
-- **Questions are batched.** Collect every lane's open questions into one message.
+- **Questions are batched.** Collect every lane's open questions into one message. A question that
+  blocks a card also goes on it as `decision:`.
 - Each lane moves its own card through the stages; the status line lists every lane.
 
 ---
@@ -423,8 +435,8 @@ green gate or the harm gate** in the standing preamble.
    - Filter to reconcile verdict `not-built` or `partial` (if reconcile hasn't run: `status:
      ready` or `backlog`).
    - Exclude: high-stakes cards (never auto-selected -- log the skip and why); unfinished
-     `dependsOn`; a `conflictsWith` card in progress; file overlap with any in-progress card's
-     reconcile evidence.
+     `dependsOn`; an open `decision:` (waiting on you); a `conflictsWith` card in progress; file
+     overlap with any in-progress card's reconcile evidence.
    - Sort: P1 → P3, then never-reconciled first, then oldest `updated:` first. Pick the top.
 3. **Announce** each pick -- `Dispatching <id> -- <title> [category] P# · <verdict> · confidence
    <c>` -- so the human can interrupt, then run `start <id>` with every gate in place.
@@ -458,7 +470,8 @@ re-ground). One headless call: about a minute on a small board, ~10 on a 100-car
 - **held** (not a mode) -- high-stakes: `stakes: critical` or a [High-stakes gate](#high-stakes-gate)
   signal. Never in a wave; it needs the alignment brief and an explicit go.
 - **skipped** (not a mode) -- a candidate that must wait: an open `dependsOn` not planned in an
-  earlier wave, or files an in-progress card is changing. Its reason names what it waits on.
+  earlier wave, files an in-progress card is changing, or an open `decision:` (waits on you). Its
+  reason names what it waits on.
 - **Order** -- bugs before improvements (the bug queue rule), then most-unblocking first, a spike
   before the work it de-risks, near-done wins, then the parallel waves. Shipping stays one PR at
   a time. A **wave** is one step: a `dispatch-it` wave runs its cards side by side; any other
@@ -681,7 +694,7 @@ the last commit was; running it twice reverts the revert. Board in its own repo 
 ### `regen-board`
 
 `regen-board.py` rebuilds `BOARD.md` from frontmatter, so nothing transient is lost when any
-session rebuilds it: ⚠️ for high-stakes, ⚡ breakfix, 🔬 spike, the stage, a size chip (`[M]`),
+session rebuilds it: the Waiting on you block, ⚠️ for high-stakes, ⚡ breakfix, 🔬 spike, the stage, a size chip (`[M]`),
 a pin marker (`📌2`), and the mode (`→solo`). One compact line per card.
 
 ---
