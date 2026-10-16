@@ -958,6 +958,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.38.0 -- Bug stages come from GitHub, not memory (`reconcile --prs`)
+
+A bug card now records its fix PR in `pr:` (the fixing lane sets it when it opens the PR).
+`/backlog-it reconcile --prs` -- no AI, a script -- reads each open card's PRs with `gh` and moves
+it forward on facts only: every PR closed and one merged → Live, and a Checked card closes. It
+never moves a card back or past Live (merged isn't deployed: the live check confirms that).
+`dispatch` runs it first, and `/resume-it` and `/wrap-it` use it for their catch-up instead of
+guessing which PR was the fix. It never guesses either: a card without `pr:` is listed to set.
+
 ### v1.37.0 -- `/backlog-it status`: where the board stands, in one report
 
 Bare `/backlog-it status` prints one read-only report: what's in flight (by bug stage, not

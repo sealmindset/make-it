@@ -117,7 +117,8 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
 
 If `.claude/backlog-it.json` or `.claude/backlog/BOARD.md` exists, read the board's status line.
 Default the session's starting point to its **Now fixing** lanes, then **Next up** (after any
-handoff Next Steps). First catch up: a `Fix ready` card whose PR has merged moves to `Live`.
+handoff Next Steps). First catch up: `/backlog-it reconcile --prs` moves each card whose `pr:` merged to `Live` and
+closes Checked cards.
 Cards at **Live, to check** get their live check first. See
 `backlog-board.md`.
 

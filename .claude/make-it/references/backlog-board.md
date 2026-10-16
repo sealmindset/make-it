@@ -47,6 +47,8 @@ notifications are a silent no-op and the board works the same.
 - `~/.claude/make-it/backlog/bin/regen-board.py <board> [--project NAME]` -- renders `BOARD.md`.
 - `~/.claude/make-it/backlog/bin/status.py <board> [--project NAME]` -- prints the `status` report
   (read-only; shares `regen-board.py`'s rules).
+- `~/.claude/make-it/backlog/bin/sync-prs.py <board> --repo <repo> [--dry-run]` -- `reconcile --prs`:
+  moves cards forward from their PRs' real state (needs `gh`; writes the cards, the caller syncs).
 - `~/.claude/make-it/backlog/bin/slack-notify.sh {started|done|raw} ...` -- reads `$BACKLOG_DIR`;
   needs `jq` and `curl`.
 
@@ -94,6 +96,7 @@ stakes:    critical       # optional -- never auto-started (see the High-stakes 
 dependsOn: [E02]          # optional -- not dispatched until these are done
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
 decision:  Retry or refile?   # optional -- the one question this card waits on (see Waiting on you)
+pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
 plan:      plans/E04-S2.md   # the card's `## Task N` plan, relative to the epic folder
@@ -220,11 +223,11 @@ Bugs are `type: breakfix` cards under a **Bugs** epic, each with a `stage:`:
 |-------|-------|--------|
 | Reported | card exists, cause unknown | capture / `/debug-it` intake |
 | Cause found | root cause confirmed with evidence | `/debug-it` Phase 3 |
-| Fix ready | fix + test on a branch, PR open | the fixing lane |
-| Live | merged and deployed | ship, on merge |
+| Fix ready | fix + test on a branch, PR open | the fixing lane, which records the PR in `pr:` |
+| Live | merged (and deployed, where merge deploys) | ship, on merge -- or `reconcile --prs` once `gh` shows the card's PRs merged; the live check confirms the deploy |
 | Checked | verified on the live system **against the original report** | ship, after the live check |
 
-A bug is not `done` until **Checked**. **Jump the line** only for harm happening now: damaged
+A bug is not `done` until **Checked**; `reconcile --prs` closes a Checked card. **Jump the line** only for harm happening now: damaged
 data, a wrong outgoing message, anything in a `serial` category. Everything else takes its
 place. Improvements are not bugs -- they wait until the bug list is empty. One message to the
 reporter per finished card.
@@ -258,7 +261,8 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **The ship queue is serial.** One PR through CI and deploy at a time, whatever the lane count.
 - **Questions are batched.** Collect every lane's open questions into one message. A question that
   blocks a card also goes on it as `decision:`.
-- Each lane moves its own card through the stages; the status line lists every lane.
+- Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one;
+  the status line lists every lane.
 
 ---
 
@@ -440,7 +444,12 @@ Reconcile run -- YYYY-MM-DD -- N items checked
 Auto-applied: N actions  |  Flagged for human: N items
 ```
 
-Flags: `--fast` (code rung only) · `--deep <id>` (run the project's unit and end-to-end tests
+Flags: `--prs` (no AI: `sync-prs.py` reads each open card's `pr:` with `gh pr view` and moves it
+forward on facts only -- every PR closed and one merged → Live (merged; the live check confirms the
+deploy); Checked → done; never backward, never past Live. A card with no `pr:` is never guessed
+from its text: a Shipping card without one is listed to set by hand, as is a `repo#N` short form
+(use the PR's URL). Each card is re-read at write time, so another session's move wins. No `gh`
+→ the PR step is skipped and said so) · `--fast` (code rung only) · `--deep <id>` (run the project's unit and end-to-end tests
 headlessly for one card) · `--dry-run` (print what would apply, write nothing) · `--dispatch`
 (run `dispatch` afterwards).
 
@@ -449,7 +458,9 @@ headlessly for one card) · `--dry-run` (print what would apply, write nothing) 
 Autonomous "do the next thing" -- a hands-free way to call `start`. **It never bypasses the
 green gate or the harm gate** in the standing preamble.
 
-0. **A current plan leads.** `PLAN.md` is current when every candidate card is in it and none
+0. **Stages first, then a current plan.** Run `reconcile --prs` (`--dry-run` under `dispatch
+   --dry-run`) so Shipping and Checked are true.
+   `PLAN.md` is current when every candidate card is in it and none
    was updated after its date; otherwise run `plan` again first (no `PLAN.md` → the steps
    below). Take the first wave whose cards aren't all merged, and start it only when every card
    in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
@@ -799,7 +810,7 @@ settings file alone does not switch these on):
 |-------|------|
 | `/resume-it` | Starts from the board: **Now fixing** lanes first, then **Next up** |
 | `/dispatch-it` | Takes its lanes from the board -- non-overlapping, up to `lane_cap` |
-| ship (`ship-it-guide.md`) | On merge: stage **Live**. After the live check: **Checked**, then `done`. `/resume-it` and `/wrap-it` catch up any `Fix ready` card whose PR has merged |
+| ship (`ship-it-guide.md`) | On merge: stage **Live**. After the live check: **Checked**, then `done`. `/resume-it` and `/wrap-it` catch up with `reconcile --prs` (the card's `pr:`, never a guess) |
 | `/wrap-it` | Updates each touched card and regenerates the status line alongside the handoff |
 | `/debug-it` / `/fix-it` | A new bug gets a card (`stage: Reported`) before any fix work |
 

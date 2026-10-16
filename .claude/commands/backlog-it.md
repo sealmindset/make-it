@@ -67,6 +67,7 @@ user's go, and every other skill reads the same board.
 | `status` (no id) | Run `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT"` and print its output as-is, in a code block. Read-only |
 | `move`, `status <id> <status>`, `stage`, `done` | Update the card (`done` posts the end summary) |
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
+| `reconcile --prs [--dry-run]` | No AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"`, print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
 | `dispatch [--dry-run]` | Follow `PLAN.md`'s next wave, else fill free bug lanes, else start the next safe item (Step 4) |
 | `plan [filter] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b) |
 | `mode <id> <mode\|auto>` | Choose a card's mode yourself; `plan` keeps it |
@@ -100,7 +101,8 @@ Ids are case-insensitive (`e02` → `E02`). Next id = highest existing + 1. `gro
 Bugs first: fill up to `LANE_CAP` lanes from the top of the line. Two cards share the floor only
 if they touch **no common source files** and **no common data**. At most one lane per `SERIAL`
 category; high-stakes cards are never auto-picked. Dispatch the lanes with `/dispatch-it` -- one
-agent per card, each in its own worktree, each running the `/debug-it` method. With no bug
+agent per card, each in its own worktree, each running the `/debug-it` method and recording its PR
+as `pr:`. Dispatch starts with `reconcile --prs`. With no bug
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, no unfinished `dependsOn`,
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
 Announce each pick before it starts. Gather every lane's questions into one message. Shipping
