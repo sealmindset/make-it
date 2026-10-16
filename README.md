@@ -958,6 +958,16 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.37.0 -- `/backlog-it status`: where the board stands, in one report
+
+Bare `/backlog-it status` prints one read-only report: what's in flight (by bug stage, not
+status), what's next, opened vs. closed per week with a forecast, what needs you, what has
+drifted, each epic's progress, and median cycle time. It's a script (`status.py`), not an AI
+call: under a second on a 365-card board, and the same answer every run. Dates come from the
+board's git history. `status <id> <status>` still sets a card. The board renderer's rules are now
+shared with the report, and Next up now only ever names a bug, as the doctrine says (a story in a
+bug epic could be picked before).
+
 ### v1.36.0 -- "Waiting on you": every decision in one list
 
 A card blocked on your answer now carries the exact question in `decision:` (one line, any card

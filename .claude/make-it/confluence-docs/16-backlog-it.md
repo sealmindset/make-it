@@ -53,6 +53,7 @@ we?". With one, every session -- and every AI helper -- works from the same list
 
 ```
 /backlog-it                        # show the board
+/backlog-it status                 # where things stand: in flight, next, burn-down, what needs you
 /backlog-it the export button does nothing on the reports page
 /backlog-it epic a monthly report for managers   # plan new work (asks first)
 /backlog-it start E02-S4           # pick a card back up
