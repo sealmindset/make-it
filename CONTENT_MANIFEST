@@ -17,7 +17,7 @@ a9a690c764045e610e5662e3215fff1438c68ad4fb957b9f00b0f467d2ec387a  commands/wrap-
 9c33da87c37ae7ad0ff918691d2e6ec4d3c567a5340118b2c1a347e2c5061336  make-it/backlog/bin/check-plan.py
 b44fbdd2ff432f64444a72a0a54c7bbb140e4d8bdf8248d820bd209e8e3837e3  make-it/backlog/bin/regen-board.py
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
-809f43569df1490911a5726bcbf5af6c197daaee2fece14cf19b3fd7300292ba  make-it/backlog/bin/status.py
+9a36443bfb4a93521461feaea327827b8351b2a5319f01a2c2dd36151527a768  make-it/backlog/bin/status.py
 f27f41518bed79235cbe393add5425a7689ca37347fd4d63b608d2227b3bb9df  make-it/backlog/bin/sync-prs.py
 d839c63a0dcad9e0fb0f7340e7f58cec044ba7abdb359d0dda27f11057a9daf3  make-it/confluence-docs/00-make-it-framework-overview.md
 ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/confluence-docs/01-make-it.md
@@ -36,7 +36,7 @@ b133b7b7c9b90c981c3359a75e3d2679ab11c6e524fb13b177d0aa7d73061a91  make-it/conflu
 8dd8411f4de8479a267aff0b1f3f8b978b99d6679a1c0ef9ce1cdeb979c634b1  make-it/confluence-docs/14-dispatch-it.md
 7c73e322b1e05ce3bb5af4f70c8ba0de12d42b1a6abd53b7b56c240986246fa0  make-it/confluence-docs/15-subagent-it.md
 c953fd1c24871772ab45e5b39149c62d7f9e892820c855375309bc4195f0719c  make-it/confluence-docs/16-backlog-it.md
-0836869d56e8ffb253efda05be06368e2efcb7c00b9d9948fa57a9c894a54ec3  make-it/references/backlog-board.md
+4c2fc8e7d4ae8791915f30bf7f27449e41c386ce9465b13960c98a8dec1b8e82  make-it/references/backlog-board.md
 7460d25c0e721a7dbf97fb0168cc4f20d3ea795b849eac18c73d88f18711df2c  make-it/references/build-standards.md
 6327bee67234e812fce9c1c240c967b75b3d14b62995f015b8107de202ea6aa0  make-it/references/build-verify-security.md
 a285b7ce6162b806a612e5d3be76a0fde8addabd4b69fdd8f610bc095b3cf6eb  make-it/references/deployment-profile-architecture.md

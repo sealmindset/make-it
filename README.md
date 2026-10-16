@@ -958,6 +958,13 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.38.1 -- A stopped lane shows up in days, not weeks
+
+`/backlog-it status` now flags a Now fixing card that hasn't changed in 2+ days as "lane stopped?"
+(lanes work in hours), instead of waiting for the 14-day stall. The doctrine adds that a lane
+that stops hands its card back -- the next stage, a `decision:`, or back to the backlog. No new
+card field: a `lane:` field would go stale exactly when a lane dies.
+
 ### v1.38.0 -- Bug stages come from GitHub, not memory (`reconcile --prs`)
 
 A bug card now records its fix PR in `pr:` (the fixing lane sets it when it opens the PR).
