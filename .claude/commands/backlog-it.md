@@ -64,7 +64,8 @@ user's go, and every other skill reads the same board.
 | `epic`, `story <epic>`, `task <parent>` + idea, `add` | Add planned work -- clarify first (Step 3) |
 | `capture <text>`, `bug <text>`, or text whose first word isn't a subcommand | Capture -- card first (Step 3) |
 | `start <id>` | Recall → preamble (+ alignment brief if high-stakes) → editable prompt → run on the user's go |
-| `move`, `status`, `stage`, `done` | Update the card (`done` posts the end summary) |
+| `status` (no id) | Run `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT"` and print its output as-is, in a code block. Read-only |
+| `move`, `status <id> <status>`, `stage`, `done` | Update the card (`done` posts the end summary) |
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
 | `dispatch [--dry-run]` | Follow `PLAN.md`'s next wave, else fill free bug lanes, else start the next safe item (Step 4) |
 | `plan [filter] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b) |

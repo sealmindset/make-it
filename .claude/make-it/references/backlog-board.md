@@ -45,6 +45,8 @@ notifications are a silent no-op and the board works the same.
 
 **Helpers** (installed with the framework, no hardcoded paths):
 - `~/.claude/make-it/backlog/bin/regen-board.py <board> [--project NAME]` -- renders `BOARD.md`.
+- `~/.claude/make-it/backlog/bin/status.py <board> [--project NAME]` -- prints the `status` report
+  (read-only; shares `regen-board.py`'s rules).
 - `~/.claude/make-it/backlog/bin/slack-notify.sh {started|done|raw} ...` -- reads `$BACKLOG_DIR`;
   needs `jq` and `curl`.
 
@@ -270,6 +272,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `epic` / `story <epic>` / `task <parent>` `<idea>` · `add` | Add planned work (clarify first) |
 | `capture <text>` · `bug <text>` · plain text | Capture (card first, AI triage) |
 | `start <id>` | Recall the card as an editable prompt, then run it |
+| `status` (no id) | Where the board stands: in flight, up next, burn-down + forecast, needs you, drift, epics, cycle time (see [`status`](#status)) |
 | `move <id> <status>` · `status <id> <status>` · `stage <id> <stage>` | Change status / bug stage (a stage change also posts `slack-notify.sh raw`) |
 | `done <id>` | End summary, `status: done` |
 | `reconcile [<id>\|all]` | Check cards against the code, tests, and live system |
@@ -349,6 +352,33 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 **For whoever runs a started card:** "deploy" means the project's real production path, with the
 project's own smoke tests; if a deploy goes wrong, prefer the project's rollback path. Two
 conditions halt shipping: red tests, and potential harm.
+
+### `status`
+
+Bare `status` prints one report from `status.py`: read-only, no AI call, under a second on a
+365-card board, and the same answer every run. It shares the card reader and the status-line,
+waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` never disagree.
+
+- **In flight** -- by stage, not status (most `in-progress` bugs are waiting at Live): the board's
+  Now fixing, Shipping and Live to check lines, then other in-progress work; each with its count
+  and oldest idle card.
+- **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave (stale by dispatch's own
+  rule: a candidate card is missing from it or changed after its date), and the top stories /
+  tasks / spikes that can start.
+- **Burn-down** -- per week for 4 weeks: opened, closed, net, open at week's end; then a forecast
+  ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
+  take with no new ones).
+- **Needs you** -- Waiting on you, then held high-stakes cards, by priority then idle time.
+- **Drift** -- in-progress cards idle 14+ days, Live cards idle 14+ days, Checked cards not
+  closed, a stale `PLAN.md`.
+- **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
+  Live and Live → Checked, by priority.
+
+Dates come from the board's git history: the last commit that set a card `done`, the first that
+set `Live` / `Checked`, and the last that touched it; renames are followed, and the weeks start at
+the board's first card. A card that entered git already done (a seed or an import) is left out of
+the weekly opened / closed counts, and cycle time counts only transitions git saw. With no git,
+it falls back to `created:` / `updated:` and says so. Lists show the top 5. Runs on Python 3.9+.
 
 ### `done <id>`
 
