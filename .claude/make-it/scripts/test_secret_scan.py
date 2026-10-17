@@ -1077,5 +1077,116 @@ class ReviewHoleCases(Base):
         self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v])
 
 
+# ------------------------------------------------ adversarial round 1 (2026-10-17)
+class AdversarialRound1Cases(Base):
+    """Each test is one confirmed counterexample from task-1-adv1.md, on its exact input."""
+
+    def _no_slice(self, res, secret, n=6):
+        blob = res.out + b'\n' + res.err
+        s = _b(secret)
+        for i in range(len(s) - n + 1):
+            self.assertNotIn(s[i:i + n], blob, 'secret slice leaked at %d' % i)
+
+    def _subtle_flag(self, flag):
+        r = self.fresh()
+        v = 'zq9FAKEsecretA1xyz'
+        r.write('app.py', BASE + kv('API_KEY', v))
+        r.git('add', 'app.py')
+        r.git('update-index', flag, 'app.py')
+        r.write('app.py', b'\0\0binary junk\n')
+        self.check(r.scan(), unsaved=['app.py:2: API_KEY'], secrets=[v])
+
+    def test_1_name_started_inside_a_string_literal_leaks_nothing(self):
+        r = self.fresh()
+        v = 'Zk9/c2VjcmV0QPwd='
+        r.write('auth.py', 'token = jwt.encode(payload, "%s", algorithm="HS256")\n' % v)
+        res = r.scan()
+        self._no_slice(res, v)
+        self.no_leak(res, [v])
+        self.assertNotIn(b'c2VjcmV0', res.out + res.err)
+        self.assertTrue(res.code == 0 or b'auth.py' in res.out)
+
+    def test_2a_assume_unchanged_staged_secret_with_binary_worktree(self):
+        self._subtle_flag('--assume-unchanged')
+
+    def test_2b_skip_worktree_staged_secret_with_binary_worktree(self):
+        self._subtle_flag('--skip-worktree')
+
+    def test_3_conflicted_merge_in_progress_scans_the_merge_side(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretM1xyz'
+        r.branch('side')
+        r.write('app.py', BASE + kv('API_KEY', v))
+        r.commit('side add')
+        r.write('app.py', 'name = "side"\n')
+        r.commit('side rm')
+        r.git('checkout', '-q', 'main')
+        r.write('app.py', 'name = "main"\n')
+        r.commit('main edit')
+        cp = subprocess.run(GIT + ['merge', 'side'], cwd=r.work,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotEqual(cp.returncode, 0, 'merge was expected to conflict')
+        self.assertTrue(os.path.exists(os.path.join(r.work, '.git', 'MERGE_HEAD')))
+        r.write('app.py', 'name = "resolved"\n')
+        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+
+    @unittest.skipUnless(hasattr(os, 'symlink'), 'platform has no symlinks')
+    def test_4_symlink_whose_target_text_is_a_secret(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretC1xyz'
+        os.symlink('API_KEY="%s"' % v, r.path('link.py'))
+        self.check(r.scan(), new=['link.py:1: API_KEY'], secrets=[v])
+
+    def test_5a_new_file_with_clean_filter_is_scanned_as_stored(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretD1xyz'
+        r.git('config', 'filter.r13.clean', "tr 'A-Za-z' 'N-ZA-Mn-za-m'")
+        r.write('.gitattributes', 'settings.py filter=r13\n')
+        r.write('settings.py', 'NCV_XRL = "md9SNXRfrpergQ1klm"\n')
+        self.check(r.scan(), new=['settings.py:1: API_KEY'], secrets=[v])
+
+    def test_5b_unsaved_with_nul_stripping_clean_filter(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretD2xyz'
+        r.git('config', 'filter.nonul.clean', "tr -d '\\000'")
+        r.write('.gitattributes', 'app.py filter=nonul\n')
+        r.commit('attrs')
+        r.push()
+        r.write('app.py', b'\0name = "demo"\n' + _b(kv('API_KEY', v)))
+        self.check(r.scan(), unsaved=['app.py:2: API_KEY'], secrets=[v])
+
+    def test_6_two_megabyte_single_line_finishes_quickly(self):
+        r = self.fresh()
+        r.write('big.py', 'PASSWORD = "' + '<' * 2000000 + '"\n')
+        t = time.time()
+        try:
+            cp = subprocess.run([sys.executable, SCRIPT, '--repo', r.work],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        except subprocess.TimeoutExpired:
+            self.fail('scan of a 2 MB single line did not finish within 20s')
+        res = Result(cp, time.time() - t)
+        self.assertIn(res.code, (0, 1))
+        if res.code == 1:
+            self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'big.py:1: PASSWORD', L_SAVED])
+        self.assertLess(len(res.out) + len(res.err), 2000)
+        self.assertNotIn(b'<<<<', res.out + res.err)
+        self.no_leak(res, [])
+
+    def test_7_literal_ending_in_name_sep_does_not_hide_the_real_secret(self):
+        r = self.fresh()
+        v1, v2, v3 = 'zq9FAKEsecretG1aa', 'zq9FAKEsecretG1bb', 'zq9FAKEsecretG1cc'
+        r.write('db.py', 'conn = psycopg2.connect("dbname=" + name, password="%s")\n' % v1)
+        r.write('api.js', 'fetch(base + "?user=" + u, { apiKey: "%s" });\n' % v2)
+        r.write('pr.py', 'print("user=", user); API_KEY = "%s"\n' % v3)
+        self.check(r.scan(), new=['api.js:1: apiKey', 'db.py:1: password', 'pr.py:1: API_KEY'],
+                   secrets=[v1, v2, v3])
+
+    def test_8_triple_quoted_value_is_not_an_empty_literal(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretF1aaa'
+        r.write('f1.py', 'PASSWORD = """%s"""\n' % v)
+        self.check(r.scan(), new=['f1.py:1: PASSWORD'], secrets=[v])
+
+
 if __name__ == '__main__':
     unittest.main()
