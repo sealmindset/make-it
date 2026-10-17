@@ -254,6 +254,8 @@ def hit_names(text, config, prev=None):
     a ternary (`const pw = isProd ?`, `isProd ? // prod`, or `c1 ? c2 ? a :`), this line's start is no key
     position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key. A YAML parent `env:` (no `?`) or a comment's
     `?` (`# rotate?`, `"debug": False,  # in prod?`) isn't one: the `"password": ...` under it stays a key."""
+    if not text.strip():
+        return  # a blank row holds no hit; skip decoding its (possibly huge) context line
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
     p = (prev or b'').strip()
     c = uncommented(p.decode('utf-8', 'surrogateescape')).rstrip()
