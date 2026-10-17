@@ -68,7 +68,7 @@ user's go, and every other skill reads the same board.
 | `move`, `status <id> <status>`, `stage`, `done` | Update the card (`done` posts the end summary) |
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
 | `reconcile --prs [--dry-run]` | No AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"`, print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
-| `dispatch [--dry-run]` | Follow `PLAN.md`'s next wave, else fill free bug lanes, else start the next safe item (Step 4); always end with `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --needs-you` |
+| `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item (Step 4); always end with `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --needs-you` |
 | `plan [filter] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b) |
 | `mode <id> <mode\|auto>` | Choose a card's mode yourself; `plan` keeps it |
 | `groom [filter] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md` |
@@ -119,8 +119,9 @@ parallel wave, high-stakes never in a wave, `dependsOn` order) -- if it still fa
 re-run, nothing is written.
 It stamps `mode:` on the cards (never over `mode_by: you`), drafts `## Task N` plans for
 `subagent-it` cards, and proposes spike cards (filed with `--apply`). `start` adds the card's
-mode line after the preamble; `dispatch` follows the plan's next wave. Drafts never run without
-the user's go.
+mode line after the preamble; `dispatch` follows the plan's next wave. A plan stays in force for
+the cards it lists (new bugs take a free lane first; other new cards go after its waves); re-plan
+when every wave is merged, its next wave is stuck, a spike's finding lands, or when asked. Drafts never run without the user's go.
 
 ## Step 5 -- After every change
 
