@@ -958,6 +958,32 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.43.0 -- Every ask decision-ready; every weakened safeguard disclosed
+
+`references/approval-block.md` is the working form of "Keep the human able to notice" for skills
+and agents. An ask picks its tier first: **routine** steps proceed with a note, **consequential**
+ones are batched into one ask, **high-stakes** ones need the human to state or pick the specific.
+Every ask says what changes, the evidence, the blast radius and undo, what is unusual, and the one
+thing to check; a "Recommended" option carries its strongest counter-argument.
+
+Every agent that changes files -- the SDD test-writer, implementer and fixers, and every
+`/dispatch-it` lane -- ends its report with a **SAFEGUARDS** line: "none", or each `--no-verify`,
+skipped, deleted or loosened test, edited hook, CI step or evaluator, or wider agent/tool/CI
+permission. A change the brief explicitly asks for (an expected value it states) is not a
+weakening. The task reviewer gives a third verdict, **safeguards ✅ / ⚠️ / ❌**, against every line
+the task produced: a weakening on no line is Critical and is undone; a disclosed one is undone, or
+the human decides, and the ledger records it (`safeguards undone|accepted`) so it is never asked
+twice. The adversarial reviewer reports hidden weakenings on their own output line, apart from
+counterexamples; dispatch-it's integration step re-runs a lane once, then goes to the human.
+
+Tested in scratch repos with the real templates: a loosened assertion hiding a regression and a
+deleted test called a duplicate came back ❌ in 6/6 reviews; the disclosed variant came back ⚠️;
+a test change the brief ordered came back ✅ (3/3, no false alarm); the adversarial reviewer put
+the deleted test on its SAFEGUARDS line with a CLEAN verdict. The old reviewer prompt also caught
+both plants (4/4) on these small diffs, so the gain is the required verdict, the disclosure to
+check against, and a defined path for each outcome. The skills link the block as each one's asks
+are reworked (E03-S5).
+
 ### v1.42.0 -- Live cards say how and when they'll be checked
 
 Bug cards gain `signal:` (one line: how the fix is proved on the live system, read-only) and

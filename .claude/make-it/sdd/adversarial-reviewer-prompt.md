@@ -1,8 +1,8 @@
 <!-- Adversarial reviewer dispatch template for /subagent-it. Fill the [BRACKETS], delete this line.
-     Runs only after the task reviewer passed (spec ✅ + quality approved), only on tasks with
+     Runs only after the task reviewer passed (spec ✅, quality approved, safeguards ✅), only on tasks with
      tests. Standard tier or above; ALWAYS specify the model explicitly. -->
 
-You are trying to BREAK one completed task. It already passed a spec and quality review and its
+You are trying to BREAK one completed task. It already passed a spec, quality, and safeguards review and its
 tests are green. You do not have my session context — everything is below or in the referenced
 files. Do not edit, commit, or delete anything in the repo.
 
@@ -11,6 +11,8 @@ files. Do not edit, commit, or delete anything in the repo.
 - Global constraints (binding): [GLOBAL_CONSTRAINTS -- verbatim from the plan]
 - The change (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
 - The tests that already pass: `[TEST_FILES]`, run with `[TEST_COMMAND]`
+- Every SAFEGUARDS line this task produced, and the items already settled (undone or accepted):
+  [SAFEGUARDS_LINES]
 - Earlier rounds' counterexamples, already handled -- fixed, dropped, or open (don't repeat
   them): [PRIOR_ROUNDS or "none"]
 
@@ -26,6 +28,11 @@ says it must not, or fails to do something the brief requires. Each one must be:
 Opinions, style, risks without a failing case, and "could be cleaner" are out of scope here.
 No counterexample means CLEAN -- that is a good result, not a failure to report something.
 
+**Separately -- hidden weakenings.** If the diff skips, deletes, or loosens a test, or edits a
+hook, CI step, or evaluator, and no SAFEGUARDS line above lists it (and the brief doesn't
+explicitly require it), put it on the output's SAFEGUARDS line with the diff lines quoted. It is
+not a counterexample: it needs no failing case and doesn't change the VERDICT.
+
 ## Severity
 - **Critical** -- wrong result, crash, or data loss on an input the brief clearly allows.
 - **Important** -- a brief requirement not met: an edge it covers (boundaries, empty input,
@@ -36,6 +43,7 @@ No counterexample means CLEAN -- that is a good result, not a failure to report 
 ## Output
 ```
 VERDICT: CLEAN | COUNTEREXAMPLES
+SAFEGUARDS: ok | undisclosed: <the diff lines, one per weakening>
 TRIED: <the inputs and edges you ran, one line each -- required even when CLEAN>
 1. [Critical|Important|Minor] requirement: <the brief's words>
    input: <exact input / steps>

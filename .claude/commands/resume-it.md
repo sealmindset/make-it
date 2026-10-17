@@ -546,7 +546,7 @@ unless they ask. Full spec: `worktree-workflow.md`.
   `backlog-board.md` -- next to its card when the project has a board, else
   `.make-it/plans/<slug>.md`), show it, wait for the go, mark it `status: approved`, then execute
   it via Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): a
-  fresh implementer subagent per task + per-task review (spec + quality) + a final whole-branch
+  fresh implementer subagent per task + per-task review (spec + quality + safeguards) + a final whole-branch
   review, instead of hand-coding inline. Fewer tasks: just do the work.
   (Independent *parallel* problems that aren't an ordered plan → `/dispatch-it`.)
 - Implement the changes

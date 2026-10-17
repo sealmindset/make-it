@@ -82,7 +82,8 @@ live as `signal:` -- when it opens one: `card.py set <id> stage="Fix ready" pr="
 
 Each prompt must be: **focused** (one domain), **self-contained** (paste the error text,
 failing test names, file paths — the agent sees none of your chat), and **specific about
-output** (return a structured summary of root cause + exact changes). Tell it how to attack and
+output** (return a structured summary of root cause + exact changes + the SAFEGUARDS line from
+`approval-block.md`). Tell it how to attack and
 what NOT to touch. Have each agent follow the `/debug-it` method on its domain.
 
 ## Step 5 -- Dispatch in parallel
@@ -94,7 +95,8 @@ stages, use the Workflow tool instead.
 ## Step 6 -- Review & integrate
 
 Read each summary → check for conflicts (same file touched twice?) → run the FULL test suite →
-spot-check (agents make systematic errors). Then integrate.
+spot-check (agents make systematic errors) → match every weakened safeguard in each lane's diff to
+its SAFEGUARDS line (Verification step 5 in the reference). Then integrate.
 
 ---
 

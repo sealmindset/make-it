@@ -11,6 +11,8 @@ assistant and subagent reads it on every turn.
 - **Existing projects:** build-standards check **S12** -- /resume-it's catch-up scan and
   /retrofit-it's verify add it when it is missing.
 - The same text lives in the owner's global `~/.claude/CLAUDE.md`.
+- **Skills and agents** use its working form, `approval-block.md`: the ask tiers, the
+  decision-ready ask, and the SAFEGUARDS disclosure line reviewers check.
 
 Copy the block below **exactly**. Never reword it, never shorten it, never merge it into another
 section. It sits after the muddy-water section and before the Learnings import.

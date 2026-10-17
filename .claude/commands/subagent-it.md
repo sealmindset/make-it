@@ -1,6 +1,6 @@
 ---
 name: subagent-it
-description: Execute an implementation plan in THIS session via Subagent-Driven Development — a fresh implementer subagent per task, a task review (spec compliance + code quality) after each, fix loops until clean, and a broad whole-branch review at the end. Subagents never inherit your session context; you hand them files. Use when you have an approved multi-task plan with mostly independent tasks and want continuous, reviewed execution. For parallel INDEPENDENT problems (not an ordered plan) use /dispatch-it instead.
+description: Execute an implementation plan in THIS session via Subagent-Driven Development — a fresh implementer subagent per task, a task review (spec compliance + code quality + safeguards) after each, fix loops until clean, and a broad whole-branch review at the end. Subagents never inherit your session context; you hand them files. Use when you have an approved multi-task plan with mostly independent tasks and want continuous, reviewed execution. For parallel INDEPENDENT problems (not an ordered plan) use /dispatch-it instead.
 allowed-tools:
   - Read
   - Write
@@ -17,7 +17,7 @@ allowed-tools:
 
 Turn an approved implementation plan into reviewed, committed code — one task at a time, each
 implemented by a fresh subagent with an isolated, file-based context, gated by a per-task review
-(spec + quality) and a final whole-branch review. You coordinate; subagents do the work, so your
+(spec + quality + safeguards) and a final whole-branch review. You coordinate; subagents do the work, so your
 context stays clean.
 
 Full doctrine: `~/.claude/make-it/references/subagent-driven-development.md`.
@@ -38,7 +38,7 @@ No user prompt. See the reference below.
 
 # /subagent-it -- Subagent-Driven Development
 
-**Core principle:** fresh subagent per task + task review (spec + quality) + broad final review.
+**Core principle:** fresh subagent per task + task review (spec + quality + safeguards) + broad final review.
 **Sequential only** — never run implementers in parallel (they conflict). Independent parallel
 problems are `/dispatch-it`'s job.
 
@@ -74,9 +74,13 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    says is wrong goes back to the test-writer) → answer its questions → on DONE, **tests
    untouched and green**: `git diff --name-only <TESTS_SHA> -- <test files>` prints nothing and
    you run them yourself, all passing, none skipped (again after every fix) → `review-package`
-   → dispatch task reviewer (template) → fix-subagent loop for Critical/Important until spec ✅ +
-   quality approved → **adversarial review** (tasks with tests, at most 3 rounds per task; the
-   repo must be untouched after each): confirmed counterexamples only, which you adjudicate
+   → dispatch task reviewer (template, with every SAFEGUARDS line the task produced) →
+   fix-subagent loop for Critical/Important until spec ✅, quality approved, and safeguards ✅ (an
+   undisclosed weakening is undone; a disclosed one is undone too, unless that changes behavior
+   the plan didn't decide -- then the human's call; log each as `Task N: safeguards undone|accepted:
+   <item>`) → **adversarial review** (tasks with tests, at most 3 rounds per task; the
+   repo must be untouched after each): confirmed counterexamples only (its SAFEGUARDS
+   line is separate: an `undisclosed` one is undone, in any round), which you adjudicate
    (ungrounded or plan-conflicting → the human; unsure severity → Important); in rounds 1–2 each
    becomes one test-writer test on its exact input (red check), the implementer fixes it, tests
    untouched and green, re-review, next round; round 3's are not fixed -- open Critical/Important →
@@ -85,7 +89,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    review clean)` to the ledger.
    Handle DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED per the reference.
 5. **Final review** — `/code-review` on the most capable model with `review-package MERGE_BASE HEAD`
-   (`git merge-base main HEAD`); fix findings with ONE fix subagent carrying the full list.
+   (`git merge-base main HEAD`) and every `safeguards accepted` ledger line; fix findings with ONE
+   fix subagent carrying the full list.
 6. **Finish** — after `STATUS: DONE`, offer learnings (`~/.claude/make-it/references/learnings.md`):
    queued agent lessons (e.g. reviewer findings that recurred across tasks), plus corrections the
    user made at acceptance —
@@ -95,7 +100,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 - Never pre-judge findings or tell a reviewer what not to flag.
 - Hand artifacts as FILES (brief / report / package) — never paste plan text or diffs into your context.
 - Use the recorded BASE, never `HEAD~1`. One task per dispatch — no pasted session history.
-- Both verdicts (spec + quality) are required; never skip a re-review.
+- All three verdicts (spec, quality, safeguards) are required; never skip a re-review. An
+  undisclosed weakened safeguard is undone, never kept (`approval-block.md`).
 - Trust the ledger + `git log` over recollection after a compaction/resume.
 
 See `subagent-driven-development.md` for model selection, status handling, reviewer ⚠️ items,
