@@ -283,7 +283,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `move <id> <status>` · `status <id> <status>` · `stage <id> <stage>` | Change status / bug stage (a stage change also posts `slack-notify.sh raw`) |
 | `done <id>` | End summary, `status: done` |
 | `reconcile [<id>\|all]` | Check cards against the code, tests, and live system |
-| `dispatch [--dry-run]` | Follow `PLAN.md`'s next wave, else fill free bug lanes, else start the next safe item |
+| `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
 | `plan [filter] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md` |
 | `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
 | `groom [filter]` | Propose the order that finishes the most, soonest |
@@ -370,7 +370,7 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
   Now fixing, Shipping and Live to check lines, then other in-progress work; each with its count
   and oldest idle card.
 - **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave ("covers N of M
-  candidates; K new since go after its waves"), and the top stories / tasks / spikes that can
+  candidates; K new since (new bugs first, the rest after its waves)"), and the top stories / tasks / spikes that can
   start.
 - **Burn-down** -- per week for 4 weeks: opened, closed, net, open at week's end; then a forecast
   ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
@@ -379,7 +379,8 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
   in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a
-  `PLAN.md` whose waves are all merged (re-plan).
+  `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
+  card (re-plan).
 - **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
   Live and Live → Checked, by priority.
 
@@ -464,12 +465,15 @@ Autonomous "do the next thing" -- a hands-free way to call `start`. **It never b
 green gate or the harm gate** in the standing preamble.
 
 0. **Stages first, then the plan.** Run `reconcile --prs` (`--dry-run` under `dispatch
-   --dry-run`) so Shipping and Checked are true. **A plan stays in force for the cards it names**:
-   cards changed since it was written keep their place, and cards it doesn't name (new since) go
-   after its waves -- a new bug still takes a free lane by step 1, a new improvement waits. Re-plan
-   only when every wave is merged, or when asked (`plan`); no `PLAN.md` → the steps below. (A stricter
-   "any change makes it stale" rule went stale within hours on a busy board, and the re-plan it
-   demanded was skipped every time.) Take the first wave whose cards aren't all merged, and start it only when every card
+   --dry-run`) so Shipping and Checked are true. **New bugs first:** fill free lanes with bugs the
+   plan doesn't list, by step 1's rules -- bugs before improvements holds even mid-plan. **Then the
+   plan, which stays in force for the cards it lists**: cards changed since it was written keep
+   their place, and other new cards go after its waves. **Re-plan** when every wave is merged, when
+   its next wave can't start (a card in it is held, waiting on you, or blocked -- `status` flags
+   "PLAN.md stuck"), after a spike's finding lands, or when asked (`plan`); no `PLAN.md` → the
+   steps below. (A stricter "any change makes it stale" rule went stale within hours on a busy
+   board, and the re-plan it demanded was skipped every time.) Take the first wave whose cards
+   aren't all merged, and start it only when every card
    in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
    progress. Each card must still pass step 2's excludes; one that fails waits. A `dispatch-it`
    wave → its cards as `/dispatch-it` lanes, once they fit the free lanes (`lane_cap` minus the

@@ -68,7 +68,7 @@ def render(B, proj):
             cat = None
             for s in group:
                 if big and v(s, 'category') != cat:
-                    cat = v(s, 'category'); out.append(f"**{cat or 'uncategorized'}** ({sum(v(x, 'category') == cat for x in group)})")
+                    cat = v(s, 'category'); out += ['', f"**{cat or 'uncategorized'}** ({sum(v(x, 'category') == cat for x in group)})"]
                 mark = warn(s) + ('⚡' if v(s, 'type') == 'breakfix' else ('🔬' if v(s, 'type') == 'spike' else ''))
                 stage = f" — **{v(s,'stage')}**" if v(s, 'stage') and st != 'done' else ''
                 out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_{chips(s)}")
@@ -116,6 +116,7 @@ def main(args):
             b = board(); big = b.split('## E02')[1]
             assert '### done (2)\n_listed by `/backlog-it show E02`_' in big and 'E02-S1 ·' not in big and 'E02-S2 ·' not in big, big
             assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
+            assert '\n\n**zeta** (16)\n- ' in big, 'a heading right after a list item renders glued to it'
             assert not re.search(r'^\*\*[^*:]+\*\* \(\d+\)$', b.split('## E02')[0], re.M), 'small epic grouped'
         print('regen-board self-test: OK'); return
     proj = None
