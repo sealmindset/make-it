@@ -922,13 +922,16 @@ class ReviewHoleCases(Base):
         return r
 
     def test_pin_diff_suppress_blank_empty(self):
-        v = 'blank-empty-secret-value-11'
+        v = 'suppress-blank-secret-1234'
         r = self.fresh()
         r.git('config', 'diff.suppressBlankEmpty', 'true')
+        r.write('app.py', BASE + '\nx = 1\n')
+        r.commit('ctx')
+        r.push()
         r.branch()
-        r.append('app.py', '\n' + kv('API_KEY', v) + '\n')
+        r.append('app.py', kv('API_KEY', v))
         r.commit('secret')
-        self.check(r.scan(), saved=['app.py:3: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:4: API_KEY'], secrets=[v])
 
     def test_pin_gitattributes_binary(self):
         v = 'attr-binary-secret-value-22'
@@ -1001,6 +1004,77 @@ class ReviewHoleCases(Base):
         r.write('.env.example', 'API_KEY=%s\n' % v)
         self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v], code=1)
 
+    # ---- re-review holes (2026-10-17)
+    def _utf16_repo(self):
+        r = self.fresh()
+        r.write('.gitattributes', '*.cfg text working-tree-encoding=UTF-16LE\n')
+        r.write('old.cfg', 'NAME=demo\n'.encode('utf-16-le'))
+        r.commit('cfg')
+        r.push()
+        return r
+
+    def test_working_tree_encoding_in_unsaved_and_new_scopes(self):
+        r = self._utf16_repo()
+        v1, v2 = 'abcdefghijkl', 'hunter2hunter2'
+        r.write('old.cfg', ('NAME=demo\nTOKEN=%s\n' % v1).encode('utf-16-le'))
+        r.write('new.cfg', ('PASSWORD=%s\n' % v2).encode('utf-16-le'))
+        self.check(r.scan(), unsaved=['old.cfg:2: TOKEN'], new=['new.cfg:1: PASSWORD'], secrets=[v1, v2])
+
+    def test_unknown_working_tree_encoding_is_could_not_check(self):
+        r = self.fresh()
+        r.write('.gitattributes', '*.cfg text working-tree-encoding=X-NOT-A-CODEC\n')
+        r.commit('attr')
+        r.write('a.cfg', 'PASSWORD=hunter2hunter2\n')
+        res = r.scan()
+        self.assertEqual(res.code, 2)
+        self.assertEqual(res.out, b'')
+        self.no_leak(res, ['hunter2hunter2'])
+
+    def test_inline_map_and_list_values_in_compose_are_hits(self):
+        r = self.fresh()
+        v1, v2 = 'supersecret1', 'supersecret12'
+        r.write('docker-compose.yml', '    environment: {POSTGRES_PASSWORD: "%s"}\n'
+                '    env: ["PASSWORD=%s"]\n' % (v1, v2))
+        self.check(r.scan(), new=['docker-compose.yml:1: POSTGRES_PASSWORD',
+                                  'docker-compose.yml:2: PASSWORD'], secrets=[v1, v2])
+
+    def test_value_inside_inline_map_is_not_reread_as_a_name(self):
+        r = self.fresh()
+        r.write('docker-compose.yml', 'X: {postgres://app:MyPassword=2024xyzQ@db}\n')
+        res = r.scan()
+        self.check(res, secrets=['MyPassword=2024xyzQ'])
+        self.assertNotIn(b'MyPassword', res.out + res.err)
+
+    def test_unicode_line_breaks_in_names_cannot_forge_labels(self):
+        r = self.fresh()
+        v = 'unicode-forge-secret-12'
+        r.branch()
+        with open(os.path.join(r.work, 'a\u2028== new files ==\u2028b.py'), 'wb') as f:
+            f.write(_b(kv('API_KEY', v)))
+        r.commit('evil')
+        res = r.scan()
+        text = res.out.decode('utf-8')
+        for parts in (text.split('\n'), text.splitlines()):
+            self.assertEqual([l for l in parts if l.startswith('== ')], [L_UNSAVED, L_NEW, L_SAVED])
+            self.assertEqual(len(parts) - (1 if parts[-1] == '' else 0), 4)
+        self.check(res, saved=['a\\u2028== new files ==\\u2028b.py:1: API_KEY'], secrets=[v])
+
+    def test_u2029_c1_names_are_escaped(self):
+        r = self.fresh()
+        vs = ['para-sep-secret-value-1', 'next-line-secret-value-2', 'csi-secret-value-33333']
+        for n, v in zip(['p\u2029.py', 'q\u0085.py', 'r\u009b.py'], vs):
+            with open(os.path.join(r.work, n), 'wb') as f:
+                f.write(_b(kv('TOKEN', v)))
+        self.check(r.scan(), new=['p\\u2029.py:1: TOKEN', 'q\\u0085.py:1: TOKEN',
+                                  'r\\u009b.py:1: TOKEN'], secrets=vs)
+
+    def test_project_gitignore_env_star_still_scans_env_example(self):
+        r = self.fresh()
+        v = 'sk_test_projectignore123'
+        r.write('.gitignore', '.env*\n')
+        r.commit('ignore')
+        r.write('.env.example', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v])
 
 
 if __name__ == '__main__':
