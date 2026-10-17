@@ -32,7 +32,10 @@ assistants read it.
   - **the rule** in plain words -- what would be remembered;
   - **the evidence** -- what happened that taught it (the correction the user made, the fix that
     took two tries, the error that was hit);
-  - **what it would change** -- what gets done differently next time because of it.
+  - **what it would change** -- what gets done differently next time because of it;
+  - **what is unusual** -- if it would replace or narrow a line already in `LEARNINGS.md`
+    ("Replace, don't stack", below), quote that line; if it would relax a check or touch sign-in,
+    permissions or secrets, say so plainly. Otherwise, nothing.
 - **Frame it once, not per item:** anything kept applies to the whole project from now on; any
   line can be removed later with "forget that"; the one thing to check per item is whether the
   rule holds beyond the case that taught it (a one-off is a no). Close with how to answer:
@@ -51,9 +54,9 @@ Example ask -- illustration only, never copy these learnings into a project:
 >
 > 1. **Show dates like "29 Sep 2026", never 2026-09-29.** You corrected the orders page just
 >    now. Next time, every new screen gets that format without you asking.
-> 2. **Run database changes inside the backend container.** The first try failed on your machine
->    because it has no database driver; it worked from inside the container. Next time I skip
->    the failing step.
+> 2. **Make database updates from inside the app's server box, not from your own computer.** The
+>    first try failed because your computer is missing a piece the server has; it worked from
+>    inside the server box. Next time I skip the failing step.
 >
 > Which should I keep -- "yes to 1 and 2", "just 1", or "none"?
 
