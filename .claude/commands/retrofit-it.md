@@ -403,23 +403,28 @@ data your app keeps, and how login works today'; if the codebase was too large t
 full (error-handling): 'the parts that matter most: [what was read, e.g. the pages, the
 routes, the data your app keeps, and how login works today], plus what you confirmed about
 the rest'] ([current login mechanism, or 'there is none']).
+[DATA_CHANGES, used below = what this plan adds to their data, in plain words -- e.g. 'the new
+lists of roles and permissions, a role field on your list of users, and the sample records and
+test accounts I add'.]
 **Where it happens:** on this computer[; if the app has no database or its database runs
 here too, and it does not use AI: ' only; nothing is sent anywhere'][; if its database lives
 elsewhere (connection settings in .env / compose point at another host): ', except your
-database at [host] -- [DATA_CHANGES: what this plan adds to their data, in plain words --
-e.g. 'the new lists of roles and permissions, a role field on your list of users, and the
-sample records and test accounts I add'] land there'][; if the app uses AI: ', and while I
-check the AI features I send a few test prompts to [AI provider]']. Before I touch anything I
-save a snapshot of your app's files as they are now, so I can put the files back exactly like
-this at any point. [If a snapshot from an earlier run exists: 'Putting the files back returns
-to before that first run, not to now.'] [If the app already has a database: 'There is no undo
-for [DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved
-changes: 'You have unsaved changes; I'll save them first so the snapshot is complete.']
+database at [host] -- [DATA_CHANGES] land there'][; if the app uses AI: ', and while I
+check the AI features I send a few test prompts to [AI provider]']. [First run (no snapshot
+yet): 'Before I touch anything I save a snapshot of your app's files as they are now, so I can
+put the files back exactly like this at any point.'][Re-run (a snapshot from an earlier run
+exists): 'I keep the snapshot from the earlier run: putting the files back returns to before
+that first run, not to now.'] [If the app already has a database: 'There is no undo for
+[DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved changes:
+'You have unsaved changes; I'll save them first[; first run only: ' so the snapshot is
+complete'].']
 **What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
 replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
 set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
-**One thing to check:** look at 'What stays the same' -- is anything your app does today
-missing from that list?
+**One thing to check:** [if the database lives elsewhere: 'your database at [host] -- is that
+the one people use for real today, or a test copy? If it is the real one, say so before you
+pick.'; otherwise: 'look at 'What stays the same' -- is anything your app does today missing
+from that list?']
 
 Tell me what to include: **all [ITEM_COUNT] items**, or the item numbers to leave out[; and,
 if your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
@@ -432,25 +437,44 @@ route]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
-**Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
+If they say the database at [host] is the one people use for real, stop -- change nothing
+until the connection settings point at a copy. **Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
 error-handling; nothing below runs. **Step-by-step upgrade** -- continue below with the items
 they included.]
 
-**After they pick, save their unsaved changes (every run, as announced above, with .env files
-kept out of the save) and create the pre-retrofit snapshot if there is none yet** (a re-run
-keeps the earlier one, as the ask said):
+**After they pick, save their unsaved changes (every run, as announced above, with .env files,
+key files, credential JSON and local database files kept out of the save, at any depth) and
+create the pre-retrofit snapshot if there is none yet** (a re-run keeps the earlier one, as
+the ask said). A folder that was not under git yet gets `git init` plus a `.gitignore` seeded
+from the scaffold (or a minimal list), so dependencies and build output are not saved either:
 
 ```bash
-git rev-parse --git-dir >/dev/null 2>&1 || git init -q
+fail() { echo "SNAPSHOT FAILED: $1"; exit 1; }
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  git init -q || fail "could not start tracking the files"
+  [ -e .gitignore ] || cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore .gitignore 2>/dev/null ||
+    printf 'node_modules/\n__pycache__/\n.venv/\n.next/\ndist/\nbuild/\n*.log\n' > .gitignore
+fi
 if [ -n "$(git status --porcelain)" ]; then
-  grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n' >> .gitignore
-  grep -qxF '!.env.example' .gitignore 2>/dev/null || printf '\n!.env.example\n' >> .gitignore
-  git add -A && git reset -q -- '.env*' ':(exclude).env.example'
-  git diff --cached --quiet || git commit -q -m "Save pre-retrofit state"
+  grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
+  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*'; do
+    grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
+  done
+  git add -A && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
+    ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*'
+  git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
 fi
 git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
-  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes" || fail "could not create the snapshot"
+echo "snapshot: $(git rev-parse --short pre-retrofit)"
 ```
+
+**If the block prints `SNAPSHOT FAILED` (or anything but the final `snapshot: <id>` line), stop
+here, before any retrofit change.** Tell the user plainly: "I couldn't make the snapshot of your
+files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git doesn't know your
+name and email yet; run `git config --global user.name "Your Name"` and `git config --global
+user.email "you@example.com"`, then run /retrofit-it again.']" Never go on as if a snapshot
+exists when it does not.
 
 This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
 the exact state of the files before any retrofit changes were made (the database is not
@@ -563,12 +587,14 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
      require_permission middleware, permission service with cache, JWT with flat payload,
      cookie Secure from URL protocol, logout via POST, admin UI for users/roles
    - **If no auth exists:** Add complete OIDC flow (login, callback, JWT, logout, middleware)
-   - **If auth exists and effort to wrap is reasonable:** Wrap existing auth:
+   - **If auth exists:** follow the user's pick at the plan ask ("Your login", Phase 4) --
+     the effort estimate shaped the recommendation there, the pick decides here.
+   - **If auth exists and the user picked keep:** Wrap existing auth:
      - Keep existing user model, add OIDC fields (oidc_subject, oidc_issuer)
      - Add OIDC login route alongside existing (transition path)
      - Add JWT cookie signing after OIDC callback
      - Wire existing session/token to use new JWT
-   - **If auth exists but wrapping would be more work than replacing:** Replace:
+   - **If auth exists and the user picked replace:** Replace:
      - Remove old auth code
      - Add complete OIDC flow
      - Migrate user data model
@@ -913,7 +939,9 @@ One thing to check: [open [URL] and try [the feature this step touched most]; fo
 nothing on screen (Step 5, tests): 'nothing new to look at -- the tests ran and passed'].
 
 Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
-secure login and changes who can see what -- the biggest change in the plan'].
+secure login and changes who can see what -- the biggest change in the plan'; for the
+interface-and-test-services step (Step 3, seed data): 'this also adds sample records and test
+accounts to your existing data -- no undo'].
 
 Tell me: **Continue with [next step name]**, **Fix something first** (tell me what you saw), or
 **Stop here**."
@@ -1049,6 +1077,7 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 "Your app has been upgraded and is ready to deploy! Everything that was working before still works, plus you now have:
 
+[Only what they included at the plan ask -- drop the line for any item they left out.]
 - Secure login with [OIDC provider]
 - Role-based permissions ([N] roles, [N] permissions)
 - A proper development environment with Docker
