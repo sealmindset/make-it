@@ -337,10 +337,11 @@ user picks the target by name, a plain yes isn't an answer. Fill every bracket f
 "Your app's deployment is already set up, and you have changes ready to go: [N changed files /
 M saved changes not sent yet / both] -- [one line on what they touch].
 
-If you say go, I'll give the changes a quick once-over (fixing small things if I find any),
-save them, and send them. A few minutes later the running version of your app at **{hostname}**
-updates, for everyone who uses it. To undo, I'd send the previous version the same way --
-another few minutes, not instant. [What stands out, e.g. 'this includes a database update' /
+If you pick Update {hostname}, I'll give the changes a quick once-over (fixing small things if I
+find any), save them, and send them. A few minutes later the running version of your app at
+**{hostname}** updates, for everyone who uses it. To undo, I'd send the previous version the same
+way -- another few minutes, not instant[if step 1 shows a database update: , and the database
+update can't be taken back this way]. [What stands out, e.g. 'this includes a database update' /
 'nothing unusual -- a normal update']. The one thing to check: is everything in these changes
 meant to go live?
 
@@ -447,7 +448,8 @@ I can move the value into your local settings file (.env) and have the code read
 -- those lines change, and your project history keeps the old version. Your deployed app will
 then need that value added to its settings by your DevOps team; I'll give you the exact name to
 send them. This isn't part of a normal send -- it only comes up when something looks like a
-secret. The one thing to check: is this a real secret, or just a sample value?
+secret. The one thing to check: has this value already been shared or used anywhere? If it has,
+moving it isn't enough -- it should also be changed, and **stop here** is the safer pick.
 
 Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
 out yourself?"
@@ -465,7 +467,9 @@ found ([N] problem(s) in [files], in plain words); that nothing is saved or sent
 fixing means I change those lines of your code -- you'll see each change, and your project
 history keeps the old version; [what stands out, or 'nothing unusual']; and the one thing to
 check: are any of these files ones you're in the middle of editing? Then: "Fix them now, or
-stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent. Never
+stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent. On
+'fix them now': make the fixes, list each one in a line (file, what changed, in plain words),
+re-run the step-3 checks, then continue to step 4 on the 'Update {hostname}' already given. Never
 show raw error output, linter names, or tool output to the user.
 
 **4. Execute the deployment:**
@@ -475,8 +479,10 @@ to deploy-nonprod -- the GitHub Actions workflow mirrors the source branch and p
 the manifests automatically.
 
 ```bash
-# Commit if there are uncommitted changes
-git add -A
+# Commit if there are uncommitted changes. Never stage .env (3e may have just moved a secret
+# into it) -- make sure it's ignored first, and exclude it from staging either way.
+grep -qxF '.env' .gitignore 2>/dev/null || echo '.env' >> .gitignore
+git add -A -- . ':!.env'
 git commit -m "Deploy: [brief description of changes]" || true
 
 # Push current branch -- CI takes over from here
@@ -621,7 +627,7 @@ Common issues and plain-language translations:
 
 | Issue | Auto-fix? | Action |
 |-------|-----------|--------|
-| CI didn't run | Yes | Push again: `git push origin {branch}` |
+| CI didn't run | Yes | Go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply (same as the step-1 table above) |
 | CI failed (lint/build) | Yes | Fix locally, push (same as pre-push self-review) |
 | Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
 | Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
@@ -1797,6 +1803,9 @@ git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the resul
 
 Sending starts a deployment, so this is active confirmation, per the approval block: the user
 picks the target by name, a plain yes isn't an answer. Fill every bracket from what was found.
+If the hostname was left as a TODO placeholder, write "the address still marked TODO in the
+deployment files" wherever {hostname} appears below, and make the one thing to check: who will
+fill that in before it can go live.
 
 "I've generated your deployment pipeline and saved it in your project folder -- nothing has been
 sent anywhere yet. Here's what's ready:
@@ -1821,7 +1830,9 @@ the right address for the dev version of your app?
 
 1. **Send it to GitHub** -- builds and deploys to **{hostname}** automatically
 2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
-   [only if kubectl and a local cluster are available]
+   [only if kubectl is present AND `kubectl config current-context` is a local cluster:
+   rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared
+   cluster -- leave this option out]
 3. **Show me the files first** -- nothing is sent
 4. **Not now** -- everything stays saved in your project folder; nothing is sent"
 
@@ -1850,7 +1861,8 @@ git push origin {current_branch}
 in ONBOARDING-K8S.md** (namespace, secrets, TLS cert, DNS, Argo Application).
 Share that file with your DevOps team."
 
-**Option 2 (local test):**
+**Option 2 (local test):** only offered when step 3 found a local context; never run `kubectl
+apply` against any other context.
 ```bash
 docker compose build
 kubectl apply -k {manifest_dir}/dev/
@@ -2187,7 +2199,7 @@ existing pattern.
   ask) and say so:
 - "No worries -- I'll mark it as TODO in the manifest. You can fill it in later or ask your DevOps team."
 
-**If kubectl is not available (for local testing):**
+**If kubectl is not available, or its current context isn't a local cluster (for local testing):**
 - Skip local test option
 - "Local K8s testing requires kubectl and a local cluster (Rancher Desktop, minikube, etc.). You can still push to the deploy branch for Argo CD."
 
@@ -2294,7 +2306,7 @@ existing pattern.
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
 - The user NEVER sees linter names, tool output, or raw error messages
-- Auto-fix what's fixable (lint --fix, auto-add untracked migrations, move secrets to .env)
+- Auto-fix what's fixable (lint --fix, auto-add untracked migrations); secrets move only through the 3e gate -- the user names which
 - STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
 - If env vars in docker-compose.yml don't match K8s manifests, auto-add them to manifests
 - Maximum effort: if a check fails and can't be auto-fixed, explain in plain language and offer to help
