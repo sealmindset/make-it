@@ -83,7 +83,7 @@ def run(B, look, dry, proj=None, T=None):
     out, wait = moves(B, look)
     cards = R.load(B)
     cid = lambda p: v(cards[p], 'id')
-    if not dry: out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]
+    if not dry: C.lock(B); out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]  # card.py's writer lock
     if out and not dry:
         subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
     lines = [f"PR sync -- {proj or os.path.basename(B)} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]

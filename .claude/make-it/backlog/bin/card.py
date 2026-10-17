@@ -40,33 +40,50 @@ def write(p, fields=None, section=None, text=None, T=None):
             cut = h.end() + (end.start() if end else len(body) - h.end())
             body = body[:cut].rstrip('\n') + '\n' + text + ('\n\n' + body[cut:].lstrip('\n') if end else '')
         else: body += f'\n\n## {section}\n{text}'
-    with open(p + '.tmp', 'w') as f:  # whole file, then swap: a crash never leaves half a card
+    tmp = f'{p}.{os.getpid()}.tmp'
+    with open(tmp, 'w') as f:  # whole file, then swap: a crash never leaves half a card
         f.write('---\n' + '\n'.join(lines) + '\n---' + body + '\n')
-    os.replace(p + '.tmp', p)
+    os.replace(tmp, p)
+
+def regen(B, proj): subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
+
+_locks = {}
+def lock(B):  # one card writer per board at a time, taken after stdin is read (held until exit; once per process)
+    import fcntl
+    if B not in _locks: _locks[B] = os.open(f'{B}/items', os.O_RDONLY); fcntl.flock(_locks[B], fcntl.LOCK_EX)
 
 def git(B, *a): return subprocess.run(['git', '-C', B, *a], capture_output=True, text=True)
 
 def own_repo(B):  # a board that is its own git repo commits and pushes; one inside a project only stages
     top = git(B, 'rev-parse', '--show-toplevel')
-    return None if top.returncode else os.path.realpath(top.stdout.strip()) == os.path.realpath(B)
+    return None if top.returncode else os.path.samefile(top.stdout.strip(), B)
 
 def pull(B):
+    if own_repo(B) and git(B, 'symbolic-ref', '-q', 'HEAD').returncode: sys.exit('card: board repo is not on a branch (detached or mid-rebase) -- fix it first, nothing written')
     if own_repo(B) and not git(B, 'rev-parse', '--abbrev-ref', '@{u}').returncode:
         r = git(B, 'pull', '-q', '--ff-only')
         if r.returncode: sys.exit(f'card: pull failed, nothing written -- {r.stderr.strip()[:200]}')
 
 def sync(B, paths, msg, proj):
-    subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
+    regen(B, proj)
     own = own_repo(B)
     if own is None: return 'not in git'
     paths = [os.path.relpath(p, B) for p in paths] + ['BOARD.md']
     git(B, 'add', '--', *paths)
     if not own: return 'staged (board inside a project)'
-    if git(B, 'commit', '-q', '-m', msg, '--', *paths).returncode: return 'nothing to commit'
+    c = git(B, 'commit', '-q', '-m', msg, '--', *paths)
+    if c.returncode: return 'nothing to commit' if not git(B, 'status', '--porcelain', '--', *paths).stdout.strip() else sys.exit(f'card: written, commit failed -- {c.stderr.strip()[:200]}')
     if git(B, 'rev-parse', '--abbrev-ref', '@{u}').returncode: return 'committed (no remote)'
     if git(B, 'push', '-q').returncode:  # someone pushed meanwhile: replay ours on top, once
-        if git(B, 'pull', '-q', '--rebase').returncode or git(B, 'push', '-q').returncode:
-            return 'committed, push failed -- pull --rebase and push by hand'
+        if (r := git(B, 'pull', '-q', '--rebase')).returncode:
+            if git(B, 'diff', '--name-only', '--diff-filter=U').stdout.split() == ['BOARD.md']:
+                regen(B, proj); git(B, 'add', 'BOARD.md')
+                ok = not subprocess.run(['git', '-C', B, '-c', 'core.editor=true', 'rebase', '--continue'], capture_output=True).returncode
+            else: ok = False
+            if not ok:
+                git(B, 'rebase', '--abort')  # never leave a board mid-rebase; the commit stays on the branch, unpushed
+                sys.exit(f'card: committed, not pushed -- the rebase onto the newer board failed ({(r.stderr.strip() or "conflict")[:160]}); pull --rebase and push by hand')
+        if git(B, 'push', '-q').returncode: sys.exit('card: committed, push failed -- pull --rebase and push by hand')
     return 'committed + pushed'
 
 def find(B, cid):
@@ -80,7 +97,8 @@ def new(B, epic, text, T=None):
     eps = [p for p, d in R.load(B).items() if p.endswith('/epic.md') and v(d, 'id').upper() == epic.upper()]
     if len(eps) != 1: sys.exit(f'card: epic {epic} matches {len(eps)} epics')
     epic = v(R.fm(eps[0]), 'id')
-    if not re.search(r'^id:\s*NEW\s*$', text, re.M): sys.exit('card: the new card needs `id: NEW` in its frontmatter')
+    f = re.match(r'---\n(.*?)\n---', text.lstrip('\n'), re.S)
+    if not f or not re.search(r'^id:\s*NEW\s*$', f.group(1), re.M): sys.exit('card: the new card needs `id: NEW` in its frontmatter')
     n = 1 + max([int(m.group(1)) for d in R.load(B).values() if (m := re.match(rf'{re.escape(epic)}-S(\d+)$', v(d, 'id'), re.I))] or [0])
     cid = f'{epic}-S{n}'
     title = (re.search(r'^title:\s*(.+)$', text, re.M) or [None, 'card'])[1].strip('"')
@@ -88,7 +106,7 @@ def new(B, epic, text, T=None):
     d = os.path.join(os.path.dirname(eps[0]), 'stories'); os.makedirs(d, exist_ok=True)
     p = os.path.join(d, f'S{n}-{slug}.md')
     if os.path.exists(p): sys.exit(f'card: {p} already exists')
-    with open(p, 'w') as f: f.write(re.sub(r'^id:\s*NEW\s*$', f'id: {cid}', text.strip('\n') + '\n', count=1, flags=re.M))
+    with open(p, 'x') as f: f.write(re.sub(r'^id:\s*NEW\s*$', f'id: {cid}', text.strip('\n') + '\n', count=1, flags=re.M))
     have = R.fm(p)
     write(p, {k: x for k, x in (('parent', epic), ('created', str(T))) if not v(have, k)}, T=T)
     return cid, p
@@ -104,15 +122,20 @@ def main(args):
     B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'card: no items/ folder in {B}')
     verb, rest = (args[0], args[1:]) if args else ('', [])
+    def stdin():  # the text to write: never a terminal (it would wait forever), never empty (a lost heredoc)
+        if sys.stdin.isatty(): sys.exit('card: pipe the text on stdin')
+        t = sys.stdin.read()
+        return t if t.strip() else sys.exit('card: empty text on stdin, nothing written')
     if verb == 'append' and len(rest) == 2:
-        pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=sys.stdin.read()); what = f'{v(R.fm(p), "id")}: {rest[1]}'
+        t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'
     elif verb == 'set' and len(rest) >= 2 and all('=' in a for a in rest[1:]):
         fields = dict(a.split('=', 1) for a in rest[1:])
         if 'id' in fields: sys.exit('card: id is not settable')
-        pull(B); p = find(B, rest[0]); write(p, {k: (x or None) for k, x in fields.items()})
+        if any(not re.fullmatch(r'[A-Za-z_][\w-]*', k) or re.search(r'[\r\n]', x) for k, x in fields.items()): sys.exit('card: bad key or a newline in a value')
+        lock(B); pull(B); p = find(B, rest[0]); write(p, {k: (x or None) for k, x in fields.items()})
         what = f'{v(R.fm(p), "id")}: ' + ', '.join(f'{k}={x}' if x else f'-{k}' for k, x in fields.items())
     elif verb == 'new' and len(rest) == 1:
-        pull(B); cid, p = new(B, rest[0], sys.stdin.read()); what = f'new {cid}: {v(R.fm(p), "title")}'
+        t = stdin(); lock(B); pull(B); cid, p = new(B, rest[0], t); what = f'new {cid}: {v(R.fm(p), "title")}'
     else: sys.exit(__doc__)
     print(f'{what} · {"not synced (--no-sync)" if nosync else sync(B, [p], f"card: {what}"[:72], opts.get("--project"))}')
 
@@ -167,7 +190,50 @@ def self_test():
         out = run('--board', f'{P}/.claude/backlog', 'set', 'E01-S2', 'status=in-progress').stdout
         assert 'staged (board inside a project)' in out, out  # staged, never committed
         assert '.claude/backlog/items/EPIC-01-x/stories/S2-fix-the-100-case.md' in g(P, 'diff', '--cached', '--name-only'), 'not staged'
-        assert not [f for f in os.listdir(f'{A}/items/EPIC-01-x/stories') if f.endswith('.tmp')]
+        # --- review fixes ---
+        st = lambda f: open(f).read()
+        run('--board', A, 'set', 'E01-S1', 'size=S')  # commit the --no-sync write above: the board is clean again
+        S3 = [f'{A}/items/EPIC-01-x/stories/{f}' for f in os.listdir(f'{A}/items/EPIC-01-x/stories') if f.startswith('S3-')][0]
+        C3 = f'{t}/c'; subprocess.run(['git', 'clone', '-q', f'{t}/remote.git', C3], check=True, capture_output=True)
+        run('--board', C3, 'set', 'E01-S2', 'status=done')  # another session closes S2 and pushes
+        write(S3, {'status': 'done'}); res = sync(A, [S3], 'race', None)  # ours, unpulled: push rejected, BOARD.md conflicts
+        b = st(f'{A}/BOARD.md')
+        assert res == 'committed + pushed' and '<<<<' not in b and not subprocess.run(['git', '-C', A, 'symbolic-ref', '-q', 'HEAD'], capture_output=True).returncode, res
+        assert b.split('### done')[1].count('E01-S2 ·') == 1 and 'E01-S3 ·' in b.split('### done')[1], b  # both closes kept
+        g(A, 'checkout', '-q', '--detach'); before = st(S1)
+        assert 'not on a branch' in run('--board', A, 'set', 'E01-S1', 'size=M', ok=False).stderr and st(S1) == before
+        g(A, 'checkout', '-q', '-')
+        open(f'{A}/.git/index.lock', 'w').close()  # another git process holds the index: say so, exit non-zero
+        assert 'commit failed' in run('--board', A, 'set', 'E01-S1', 'size=L', ok=False).stderr
+        os.remove(f'{A}/.git/index.lock'); run('--board', A, 'set', 'E01-S1', 'size=L')
+        if os.path.isdir(f'{t}/A'):  # case-insensitive disk: --board in another case is still the same repo
+            assert 'committed + pushed' in run('--board', f'{t}/A', 'set', 'E01-S1', 'size=XL').stdout
+        before = st(S1)
+        assert 'empty text' in run('--board', A, 'append', 'E01-S1', 'Answers', stdin=' \n', ok=False).stderr
+        assert 'bad key or a newline' in run('--board', A, 'set', 'E01-S1', 'decision=a\n---\nstatus: done', ok=False).stderr
+        assert 'bad key' in run('--board', A, 'set', 'E01-S1', '=x', ok=False).stderr and st(S1) == before
+        n0 = len(os.listdir(f'{A}/items/EPIC-01-x/stories'))
+        assert 'needs `id: NEW`' in run('--board', A, 'new', 'E01', stdin='id: NEW\ntitle: no fences\n', ok=False).stderr
+        assert 'needs `id: NEW`' in run('--board', A, 'new', 'E01', stdin='---\nid: E01-S1\n---\nid: NEW\n', ok=False).stderr
+        assert len(os.listdir(f'{A}/items/EPIC-01-x/stories')) == n0, 'a refused new card left a file'
+        PB = f'{P}/.claude/backlog'  # many writers at once (no upstream: the worst case for ids): nothing lost, no id twice
+        ps = [subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'append', 'E01-S1', 'Burst'], stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(8)]
+        ps += [subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'new', 'E01'], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(4)]
+        outs = [q.communicate(f'- line {i}\n' if i < 8 else card)[0] for i, q in enumerate(ps)]
+        assert all(f'- line {i}' in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md') for i in range(8)), outs
+        ids = [re.search(r'new (E01-S\d+)', o).group(1) for o in outs[8:]]
+        assert len(set(ids)) == 4, ids
+        import fcntl, time  # the lock is really taken: a writer waits while another holds it
+        fd = os.open(f'{PB}/items', os.O_RDONLY); fcntl.flock(fd, fcntl.LOCK_EX)
+        q = subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'append', 'E01-S1', 'Burst'], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        q.stdin.write('- waited\n'); q.stdin.close(); time.sleep(1.5)
+        assert q.poll() is None and '- waited' not in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md'), 'wrote without the lock'
+        fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd); q.wait(30)
+        assert '- waited' in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md'), q.stderr.read()
+        assert not [f for d in (A, PB) for f in os.listdir(f'{d}/items/EPIC-01-x/stories') if f.endswith('.tmp')]
     print('card self-test: OK')
 
 if __name__ == '__main__':

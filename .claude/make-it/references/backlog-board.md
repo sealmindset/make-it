@@ -809,10 +809,15 @@ Write cards only through `card.py`, never `printf`, `sed`, or a shell glob:
 - `card.py new <epic>` -- a whole card on stdin with `id: NEW`; it gets the next id **after a pull**,
   a slugged file name, and `parent:` / `created:` if missing. Prints the new id.
 
-Every verb pulls first (a board in its own repo; a failed pull writes nothing), finds the card by
-its `id:` (exactly one match, else it stops), writes the whole file then swaps it in, bumps
-`updated:`, regenerates `BOARD.md`, and syncs as below (`--no-sync` leaves the commit to you).
-`sync-prs.py` writes through the same function.
+Call it as `card.py --board "$BOARD" --project "$PROJECT" <verb> …`. Every verb reads its stdin
+first (never from a terminal; empty text is refused), then takes the board's writer lock (one card
+writer per board at a time, so parallel lanes never lose a write or share an id), pulls (a board in
+its own repo; a failed pull, a detached HEAD or a half-done rebase writes nothing), finds the card
+by its `id:` (exactly one match), writes the whole file then swaps it in, bumps `updated:`,
+regenerates `BOARD.md`, and syncs as below (`--no-sync` leaves the commit to you). If another session
+pushed first, it rebases onto theirs, regenerating `BOARD.md` when that is the only conflict, and
+never leaves the board mid-rebase. **Any write that didn't sync exits non-zero** with the reason.
+`sync-prs.py` writes through the same function, under the same lock.
 
 ## Sync
 
