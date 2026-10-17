@@ -112,8 +112,9 @@ into the state files you update below -- do not delete it; /resume-it reads it f
 
 "Wrapping up **[PROJECT_NAME]** -- let me save your progress..."
 
-**1b. Offer learnings still queued this session** (`learnings.md`): one message, one plain
-yes/no per lesson. Write the yes answers to `LEARNINGS.md` now so step 2 saves them.
+**1b. Offer learnings still queued this session** (`learnings.md`): one message, each lesson
+numbered with its evidence and what it would change; the user answers per item. Write the kept
+ones to `LEARNINGS.md` now so step 2 saves them.
 
 **2. If there are uncommitted changes, ask:**
 

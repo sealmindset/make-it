@@ -50,7 +50,7 @@ From inside your existing project, type:
 2. **Discovery** — reverse-engineers your app (no interrogation upfront).
 3. **Gap analysis** — compares what you have vs. professional standards and scores the risk.
 4. **Clarification** — asks targeted questions *only* where your code is ambiguous.
-5. **Plan** — shows you the plan and risk, and **waits for your approval**.
+5. **Plan** — shows you the plan and risk, and **asks you to pick what goes in**: all the items or the ones you name (and, if your app has a login, whether to keep or replace it).
 6. **Retrofit** — makes the changes (all at once, or in careful phases if risky).
 7. **Verify** — tests everything, then hands off to [`/ship-it`](06-ship-it.md).
 

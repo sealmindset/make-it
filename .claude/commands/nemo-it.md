@@ -51,6 +51,7 @@ This skill has 6 phases:
 
 @~/.claude/nemo-it/references/owasp-testing-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/templates/nemo-it-attestation.md
 
 </execution_context>
@@ -186,11 +187,9 @@ done
 ```
 
 - If app IS running: "Your application is running on port [N]. I will include dynamic analysis."
-- If app is NOT running and mode requires DAST (full or owasp):
-  - "Your application is not running. Dynamic analysis (OWASP ZAP, Playwright tests, API probing) requires a running app."
-  - "Would you like me to try starting it? I can look for a start command in your package.json or docker-compose file."
-  - If user says yes, attempt to start. If start fails, skip DAST phases and note it in the attestation.
-  - If user says no, skip DAST phases and note it in the attestation.
+- If app is NOT running and mode requires DAST (full or owasp): look for a start command (package.json scripts, docker-compose file) and record it as `START_COMMAND`. Do not start anything yet -- the start is picked in step 7, after the production check.
+  - If found: "Your application is not running. The live tests need it, so I will ask before starting it, together with anything I need to install."
+  - If none found: "Your application is not running and I could not find how to start it. I will skip the live tests and note it in the attestation." Skip DAST phases.
 - If mode is `sast` or `deps`: "This scan mode does not need a running app. Proceeding."
 
 **6. Check for production environment:**
@@ -203,14 +202,26 @@ echo $FLASK_ENV
 echo $DJANGO_SETTINGS_MODULE
 ```
 
-If production indicators found:
-"WARNING: This appears to be a production environment. Running security scans against production systems carries risk. I strongly recommend running against a development or staging environment instead.
+If production indicators found, stop and ask. This is high-stakes per the approval block: the user picks the specific option below; a plain "yes" or "continue" is not an answer -- ask them to pick.
 
-Do you want to continue? If yes, I will limit testing to passive scans only."
+"Hold on. This app looks like it is connected to your live system, not a test copy.
 
-Require explicit confirmation. If confirmed, set `PASSIVE_ONLY=true`.
+What I found: [each indicator as found -- host or setting name only, never a password or key -- such as `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
+What would change: [mode full or owasp, and the app is running or START_COMMAND is pending: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits data or changes anything, such as a delete or update request, extra fields slipped into a record, requests fired at the same time, or flooding it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [none of the lines above applies -- mode sast or deps, guardrails with no AI features found, or full or owasp with the app not running and no START_COMMAND found: 'Nothing in the scan itself -- this run only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
+Where it lands: [mode full or owasp, and the app is running or START_COMMAND is pending: 'every read-only request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back. What it sends back, which can include real people's records, is saved in the attestation on this computer.' / otherwise: 'nothing is sent to that live system or its AI service; what I find about this project stays in the attestation on this computer.']
+What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
+One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
-**7. Install required tools (with user permission):**
+Pick one:
+- Go ahead with this project as it is, connected to [TARGET AS FOUND -- host or setting name only, never a password or key][mode full or owasp: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
+- Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
+- Not sure"
+
+Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. [Say each line that applies; if both kinds of indicator were found, say both. Indicator found in a file: 'To scan a test copy: have this app, on this computer, use settings that point at your test database and services (I saw the live one as `[VARIABLE]` in `[FILE]`). If `[FILE]` is the settings file your live setup uses, leave it as it is.' Indicator from this terminal's own settings (`NODE_ENV`, `FLASK_ENV` or `DJANGO_SETTINGS_MODULE`): 'This terminal has `[VARIABLE]` set to `[VALUE]`. Change it to your test setting, or open a fresh terminal. A value set in your terminal's startup file (shell profile, such as ~/.zshrc) stays after opening a fresh terminal until you remove it from that file.'] Then run /nemo-it again." Nothing else runs.
+
+If no production indicators were found: `PASSIVE_ONLY=false`. Either way, each Bash call is a new shell, so write `PASSIVE_ONLY=true` or `PASSIVE_ONLY=false` as the first line of every Phase 2 and Phase 3 command. The scanner checks run their active parts only when it is exactly `false`; unset or anything else means read-only.
+
+**7. Install required tools and start the app (one ask):**
 
 Build a list of tools needed for the selected scan mode, then check which are missing:
 
@@ -239,17 +250,28 @@ pip show pytest-html 2>/dev/null || echo "MISSING: pytest-html"
 pip show nemoguardrails 2>/dev/null || echo "MISSING: nemoguardrails"
 ```
 
-Present missing tools to user as a grouped list:
+If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block -- except the start pick when the production check was passed with Go ahead: that pick touches live data, so it is high-stakes, the start option names the target, and a plain "yes" is not an answer) with up to two picks, one for the app start and one for the installs -- include only the parts and picks that apply:
 
-"I need to install the following tools to run your scan. These are industry-standard security tools:
+"Before I scan, [one thing / two things]:
 
-- **semgrep** -- A code pattern scanner that checks for known vulnerability patterns (install via pip)
-- **trivy** -- Scans your Docker images and dependencies for known vulnerabilities (install via brew or Docker)
-- [etc.]
+[If START_COMMAND is pending:]
+**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], host or setting name only), and that cannot be undone.']
 
-Can I go ahead and install these?"
+[If tools are missing:]
+**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your code is not changed:
+- **semgrep** -- checks your code for known weak patterns (installed with pip)
+- **trivy** -- checks your Docker images and the libraries you use for known problems (installed with brew or Docker)
+- [etc., one line each, from the missing list above]
 
-Install commands (run only after user approval):
+What stands out: [production check passed with Go ahead and START_COMMAND pending: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
+One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out].
+
+[If START_COMMAND is pending:] Start the app? -- [not on the production path: 'start (Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: 'start it, connected to [TARGET AS FOUND, host or setting name only] (not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
+[If tools are missing:] Which tools? -- all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space) / only the ones you name / none."
+
+Wait for the pick(s). A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
+
+Install commands (run only the ones picked):
 
 ```bash
 # semgrep
@@ -282,6 +304,8 @@ pip install pytest pytest-html
 # nemoguardrails (only if AI features detected)
 pip install nemoguardrails
 ```
+
+If the start was picked: run `START_COMMAND`, then re-run the port check from step 5. If the app does not come up, skip DAST phases and note it in the attestation.
 
 **8. Create scan workspace:**
 
@@ -553,12 +577,12 @@ Update user: "Dependency and container scanning complete. Found [N] vulnerable d
 
 **Run when mode is: full, owasp**
 **Requires: Running application (detected in preflight)**
-**If PASSIVE_ONLY=true (production detected): Skip active scans, run passive only**
+**If PASSIVE_ONLY=true (production detected): send nothing that could change data or call the AI -- no form submission and no POST/PUT/PATCH/DELETE, signing in included. Checks that need a signed-in session are skipped. This skips, among others: the ZAP API scan, the ZAP crawler's form submissions (run zap-baseline with `-z "-config spider.processform=false"`), the SQLMap injection probes (Phase 2 step 4), the XSS form submissions, oversized inputs and special characters in input fields, malformed JSON to API endpoints, calls to API endpoints without a login or with a bad token, parameter tampering and extra fields, the HTTP method-override DELETE/PUT tests, IDOR ID changes in API calls, the race-condition concurrent requests, negative quantities, out-of-order workflow steps, the mass-assignment checks, and the rate-limit burst. Record each skipped check in the attestation with the reason "production detected"**
 
 If the app is not running, skip this phase entirely and record in the attestation:
 "Dynamic analysis was skipped because the application was not running during the scan."
 
-Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. This includes scanning for common web vulnerabilities, testing authentication flows, and checking input handling. All tests are non-destructive."
+Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. [PASSIVE_ONLY=false: 'This includes scanning for common web vulnerabilities, testing authentication flows, and checking input handling. All tests are non-destructive.' / PASSIVE_ONLY=true: 'This scans for common web vulnerabilities with read-only requests only -- no sign-in, no form submissions, nothing that changes data.']"
 
 **1. OWASP ZAP spider and scan:**
 
@@ -567,6 +591,8 @@ Tell the user: "Starting dynamic analysis. I am now testing your running applica
 TARGET_URL="http://localhost:${DETECTED_PORT}"
 
 # Run ZAP in Docker with safe scan policy
+# Fail closed: the crawler submits forms only when PASSIVE_ONLY is exactly "false"
+ZAP_PASSIVE_OPTS=(); [ "$PASSIVE_ONLY" = "false" ] || ZAP_PASSIVE_OPTS=(-z "-config spider.processform=false")
 docker run --rm --network host \
   -v /tmp/nemo-it-zap:/zap/wrk:rw \
   ghcr.io/zaproxy/zaproxy:stable \
@@ -576,10 +602,11 @@ docker run --rm --network host \
   -r zap-report.html \
   -c zap-safe-config \
   -I \
+  "${ZAP_PASSIVE_OPTS[@]}" \
   2>/dev/null
 
-# If full scan mode (not passive only), run API scan if OpenAPI spec found
-if [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ]; then
+# API scan only when PASSIVE_ONLY is exactly "false" (it sends PUT/DELETE to every operation) and an OpenAPI spec is found
+if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ]; }; then
   SPEC_FILE=$(ls openapi.json openapi.yaml swagger.json 2>/dev/null | head -1)
   docker run --rm --network host \
     -v "$(pwd):/zap/wrk:ro" \
@@ -695,7 +722,8 @@ Update user: "API security testing complete. Tested [N] endpoints for authentica
 ```bash
 # PASSIVE MODE ONLY -- detect, do not exploit
 # Only run against detected API endpoints that accept parameters
-sqlmap --url="$TARGET_URL/api/endpoint?param=test" \
+# Fail closed: the probes run only when PASSIVE_ONLY is exactly "false" (unset = read-only, skipped)
+[ "$PASSIVE_ONLY" = "false" ] && sqlmap --url="$TARGET_URL/api/endpoint?param=test" \
   --batch \
   --risk=1 \
   --level=1 \
@@ -726,6 +754,7 @@ Merge all findings from ZAP, Playwright, pytest, and SQLMap. Deduplicate. Store 
 
 **Run when mode is: full, guardrails**
 **Requires: AI_FEATURES_DETECTED=true (from preflight)**
+**If PASSIVE_ONLY=true (production detected): skip every prompt sent through the live app -- the behavioral suite and the API probing (code-level check 10) -- and record each in the attestation as skipped with the reason "production detected"; run only the code-level checks that do not call the AI (1-9), recorded the code-level way**
 
 If AI features were NOT detected in preflight:
 
@@ -742,9 +771,9 @@ Tell the user: "I detected AI features in your project. I am now running NeMo Gu
 Before attempting live AI calls, check whether the AI provider is actually accessible:
 
 ```bash
-# Check if AI provider env vars are set and reachable
-# Look for configured endpoints/keys in .env
-grep -i "AZURE_OPENAI_ENDPOINT\|ANTHROPIC_API_KEY\|OPENAI_API_KEY\|OLLAMA_BASE_URL" .env 2>/dev/null
+# Check if AI provider env vars are set
+# Key NAMES only -- never print a value (operator-safety §1); this holds on the live-system path above all
+grep -oiE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_URL)=' .env 2>/dev/null
 ```
 
 - If AI provider IS configured and reachable: run **behavioral tests** (send actual

@@ -93,8 +93,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    fix subagent carrying the full list.
 6. **Finish** — after `STATUS: DONE`, offer learnings (`~/.claude/make-it/references/learnings.md`):
    queued agent lessons (e.g. reviewer findings that recurred across tasks), plus corrections the
-   user made at acceptance —
-   one message, one plain yes/no each. Then ship-it / wrap-it.
+   user made at acceptance — one message, each numbered with its evidence and what it would
+   change; the user answers per item. Then ship-it / wrap-it.
 
 ## Hard rules (see reference for the full list)
 - Never pre-judge findings or tell a reviewer what not to flag.

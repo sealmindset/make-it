@@ -20,18 +20,48 @@ Not a learning: one-off tweaks; anything already in `CLAUDE.md`, build-standards
 scaffold; task status (that goes in TODO.md / .make-it-state.md); secrets, `.env` values, or
 personal data (operator-safety.md §1).
 
-## Ask first: one plain yes/no per learning
+## Ask first: one batched, decision-ready ask
 
-Never write a learning without a yes. Ask in plain language; the stored line may be technical,
-because assistants read it.
-- **User corrections:** ask right after the fix is verified: "Want me to remember this for next
-  time? *<plain one-line version>*"
+Adding a learning is **consequential** (`approval-block.md`): every assistant in the project
+follows it from then on, and the undo is one "forget that". So it gets one decision-ready ask,
+never a bare "want me to remember this?". Never write a learning without the user's yes --
+nothing is added on its own. Ask in plain language; the stored line may be technical, because
+assistants read it.
+
+- **One message, every proposed learning numbered.** Each number carries, in a line or two:
+  - **the rule** in plain words -- what would be remembered;
+  - **the evidence** -- what happened that taught it (the correction the user made, the fix that
+    took two tries, the error that was hit);
+  - **what it would change** -- what gets done differently next time because of it;
+  - **what is unusual** -- if it would replace or narrow a line already in `LEARNINGS.md`
+    ("Replace, don't stack", below), quote that line; if it would relax a check or touch sign-in,
+    permissions or secrets, say so plainly. Otherwise, nothing.
+- **Frame it once, not per item:** anything kept applies to the whole project from now on; any
+  line can be removed later with "forget that"; the one thing to check per item is whether the
+  rule holds beyond the case that taught it (a one-off is a no). Close with how to answer:
+  "yes to 1 and 3", or "none".
+- **User corrections:** ask right after the fix is verified -- same shape, usually a one-item list.
 - **Agent lessons:** don't interrupt the work. Queue them and ask at the end of the work item or
-  in /wrap-it: one message, one numbered yes/no line per lesson, so the user can answer "yes to
-  1 and 3".
-- The numbered list counts as ONE question: ask it on its own and wait for the answer before
-  asking anything else. Nothing queued -> skip it silently.
-- **No:** drop it, and don't offer the same lesson again this session.
+  in /wrap-it, in the same message as any pending correction.
+- The message counts as ONE ask: send it on its own and wait for the answer before asking
+  anything else. Only the items the user names are written. An item flagged as relaxing a check
+  or touching sign-in, permissions or secrets is written only when the user names its number --
+  never through a blanket "yes" or "all". Nothing queued -> skip it silently.
+- **No** (or not named in the answer): drop it, and don't offer the same lesson again this session.
+
+Example ask -- illustration only, never copy these learnings into a project:
+
+> Two things I'd remember for this project. Anything you keep applies to all future work here,
+> and "forget that" removes it later. For each, the thing to check: does it hold beyond today?
+>
+> 1. **Show dates like "29 Sep 2026", never 2026-09-29.** You corrected the orders page just
+>    now. Next time, every new screen gets that format without you asking. Replaces the line
+>    already here: "Show dates as ISO".
+> 2. **Make database updates from inside the app's server box, not from your own computer.** The
+>    first try failed because your computer is missing a piece the server has; it worked from
+>    inside the server box. Next time I skip the failing step.
+>
+> Which should I keep -- "yes to 1 and 2", "just 1", or "none"?
 
 ## Before writing
 

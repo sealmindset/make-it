@@ -41,6 +41,7 @@ prompt; work in character to that persona's output standard. See the reference b
 <execution_context>
 
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -325,19 +326,31 @@ The user just wants their changes deployed. Keep it simple and non-technical.
 
 ```bash
 git status --short
-git log --oneline origin/{current_branch}..HEAD 2>/dev/null
+git log --oneline HEAD --not --remotes          # saved changes not sent yet (works on a never-pushed branch too)
+git rev-list --count HEAD --not --remotes       # M for "[M saved changes not sent yet]"
 ```
 
-**2. Tell the user what will happen in PLAIN LANGUAGE:**
+**2. Tell the user what will happen in PLAIN LANGUAGE, and get the go:**
 
-"Your app's deployment is already set up. I see you have new changes ready to go.
+Sending updates the running app, so this is active confirmation, per the approval block: the
+user picks the target by name, a plain yes isn't an answer. Fill every bracket from step 1.
 
-Here's what I'll do:
-1. Save your changes (if not already saved)
-2. Send them to your deployment pipeline
-3. Your app will update automatically in a few minutes
+"Your app's deployment is already set up, and you have changes ready to go: [N changed files /
+M saved changes not sent yet / both] -- [one line on what they touch].
 
-Ready to deploy?"
+If you pick Update {hostname}, I'll give the changes a quick once-over (fixing small things if I
+find any), save them, and send them. A few minutes later the running version of your app at
+**{hostname}** updates, for everyone who uses it. To undo, I'd send the previous version the same
+way -- another few minutes, not instant[if step 1 shows a database update: , and the database
+update can't be taken back this way]. [What stands out, e.g. 'this includes a database update' /
+'nothing unusual -- a normal update']. The one thing to check: is everything in these changes
+meant to go live?
+
+- **Update {hostname}** -- send now
+- **Not now** -- nothing is saved or sent; your changes stay as they are"
+
+Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which. On 'not now', stop here;
+steps 3-4 run only on 'Update {hostname}'.
 
 **NEVER say:** git push, merge, Argo CD sync, deploy branch, CI pipeline, Docker image,
 container, manifest, kubectl, namespace, pod, or any other technical term.
@@ -367,9 +380,8 @@ fi
 ```
 
 If lint/type errors are found: auto-fix what's fixable (`ruff check --fix`, `eslint --fix`),
-then include the fixes in the commit. If unfixable errors remain, tell the user in plain
-language: "I found a small issue in your code that I can't fix automatically. Here's what's
-wrong: [plain description]. Want me to help fix it?"
+then include the fixes in the commit. If unfixable errors remain, note them for the one ask at
+the end of step 3 (don't stop here).
 
 **3b. Cross-check env vars against K8s manifests:**
 ```bash
@@ -417,24 +429,87 @@ if echo "$CHANGED" | grep -q 'package.json'; then
 fi
 ```
 
-If syntax errors are found: tell the user in plain language and offer to help fix.
+If syntax errors are found: note them for the one ask at the end of step 3 (don't stop here).
 Never show raw Python tracebacks.
 
-**3e. Secret leak scan on the diff:**
+**3e. Secret leak scan on what step 4 will send:**
 ```bash
-# Scan staged changes for potential secrets
-DIFF=$(git diff --cached 2>/dev/null || git diff HEAD 2>/dev/null)
-echo "$DIFF" | grep -iE '(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' | \
-  grep -v '\.example\|TODO\|placeholder\|changeme\|your-.*-here' || true
+# Nothing is staged yet, so scan what step 4 will actually send: unsaved edits, new files
+# (ignored ones excluded), and saved changes not sent yet (step 1's range). Three separate
+# scans: a binary new file can't hide the others, and the ask below treats a hit in a saved
+# change differently. .env is left out of the first two -- its values live there on purpose.
+# The two diff scans read added (+) lines only -- a removed line never adds a secret -- and
+# awk tags each line with its file from the "+++ b/" header, so every hit reads file:+line.
+# Each scan prints its label first; the ask below goes by the label a hit sits under.
+# SKIP is matched on the line after the file tag, never on the path (lib/placeholder_image.py
+# can hold a real secret). The git flags pin the output the awk tagger reads, whatever the
+# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, and names unquoted unless they hold a
+# double quote, backslash or control character (git still quotes those).
+PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
+SKIP='\(\.example\|TODO\|placeholder\|changeme\|your-.*-here\)'
+TAG='/^\+\+\+ b\//{f=substr($0,7);sub(/\t$/,"",f);next} /^\+/{print f":"$0}'
+echo "== unsaved edits =="
+git -c core.quotePath=false diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD -- . ':!.env' \
+  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
+echo "== new files =="
+git ls-files --others --exclude-standard -z -- . ':!.env' \
+  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "^[^:]*:.*$SKIP" || true   # one at a time, name shown
+echo "== saved, not sent =="
+git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -p --cc --format= HEAD --not --remotes \
+  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
 ```
 
-If potential secrets are found: STOP. Tell the user: "I found what looks like a password
-or secret key in your changes. Secrets should never be saved in code. Want me to move it
-to a safe location?" Then move the value to `.env` and replace with `os.getenv()` /
-`process.env.` reference.
+If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
+the approval block: the user names what to move, a plain yes isn't an answer.
+
+**If any hit sits under `== saved, not sent ==`: the only option is stop here.** Step
+4 sends the saved change that holds the value, so moving it out of the current files can't keep
+it out of the send. Say so plainly, and what to do next; offer nothing else:
+
+"I found what looks like a password or secret key in a change you already saved but haven't sent
+yet: **[VAR_NAME] in [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
+under the other labels: I also found **[VAR_NAME] in [file]** in changes you haven't saved yet; that
+one needs moving too.] Secrets should never be saved in code, so
+I won't send this. Because it's already in your saved history, moving the value now wouldn't take
+it out of what gets sent -- so I'm stopping here. I haven't saved or sent anything new; the small
+fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
+DevOps team to help remove it from the saved history before sending, and if this value has
+already been shared or used anywhere, have it changed too."
+
+Then stop -- steps 4 and later don't run.
+
+**Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
+
+"I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
+[, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
+I can move the value into your local settings file (.env) and have the code read it from there
+-- those lines change, and your project history keeps the old version. Your deployed app will
+then need that value added to its settings by your DevOps team; I'll give you the exact name to
+send them. This isn't part of a normal send -- it only comes up when something looks like a
+secret. The one thing to check: has this value already been shared or used anywhere? If it has,
+moving it isn't enough -- it should also be changed, and **stop here** is the safer pick.
+
+Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
+out yourself?"
+
+Move only the ones they named: the value goes to `.env`, the code gets an `os.getenv()` /
+`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
+nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
+your files. If any found value is still in the code (not named, or called a
+sample), stop and say which one is holding things up -- never send with a found secret still in
+the code, whatever they say.
 
 **If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
-**If any check fails and can't be auto-fixed:** pause and explain in plain language. Never
+**If any check fails and can't be auto-fixed** (3a, 3d -- 3e has its own gate above): one ask
+for everything found (consequential, per the approval block), in a few plain lines: what I
+found ([N] problem(s) in [files], in plain words); that nothing is saved or sent yet; that
+fixing means I change those lines of your code -- you'll see each change, and your project
+history keeps the old version; [what stands out, or 'nothing unusual']; and the one thing to
+check: are any of these files ones you're in the middle of editing? Then: "Fix them now, or
+stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent, and the
+small fixes already made earlier in this step (3a, 3b, 3c) stay in your files. On
+'fix them now': make the fixes, list each one in a line (file, what changed, in plain words),
+re-run the step-3 checks, then continue to step 4 on the 'Update {hostname}' already given. Never
 show raw error output, linter names, or tool output to the user.
 
 **4. Execute the deployment:**
@@ -444,13 +519,34 @@ to deploy-nonprod -- the GitHub Actions workflow mirrors the source branch and p
 the manifests automatically.
 
 ```bash
-# Commit if there are uncommitted changes
-git add -A
-git commit -m "Deploy: [brief description of changes]" || true
+# Commit if there are uncommitted changes. Never stage secret or database files (3e may have
+# just moved a secret into .env) -- the operator-safety §1 list plus databases, at any depth:
+# make sure each is ignored (own line, even if .gitignore lacks a final newline), then unstage
+# them in case any is tracked. :(top,...) = from the repo root, so a nested repo's pre-staged
+# files stay out too. If the save fails, stop here: nothing is sent.
+fail() { echo "SAVE FAILED: $1"; exit 1; }
+grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
+for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
+         '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
+  grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
+done
+{ git add -A && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
+  ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
+  ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
+  ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+  ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
+  ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
+git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
 
 # Push current branch -- CI takes over from here
 git push origin {current_branch}
 ```
+
+**If the block prints `SAVE FAILED`, stop here -- nothing was sent.** Tell the user plainly:
+"I couldn't save your changes, so nothing was sent and nothing is deploying. [the reason, in
+plain words -- e.g. 'Git doesn't know your name and email yet; run `git config --global
+user.name "Your Name"` and `git config --global user.email "you@example.com"`, then run /argo-it
+again.']" Never push as if the save had worked.
 
 That's it. The CI workflow will:
 1. Build and push container images to the registry
@@ -511,8 +607,8 @@ LATEST_RUN=$(gh run list --workflow=build-and-deploy.yml --limit=1 --json databa
 |-----------|--------------|----------------------|
 | `completed` + `success` | CI built and pushed the image. Problem is downstream. | "Your build succeeded. Let me check if the running app picked up the new version..." |
 | `completed` + `failure` | CI failed -- image was never pushed. | "Your build didn't finish successfully. Let me check what went wrong..." Then read the logs, diagnose, and auto-fix if possible. |
-| `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes. Want me to check back in a bit?" |
-| No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet. Want me to push them now?" |
+| `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes -- I'll check again in a couple of minutes." Then re-check (no ask). |
+| No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet." Then go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply; never push from here without them. |
 | Run exists but wrong branch | CI ran on a different branch. | "Your build ran on a different branch. Let me push from the right one..." |
 
 **2. If CI succeeded, check if the deploy branch was updated:**
@@ -590,7 +686,7 @@ Common issues and plain-language translations:
 
 | Issue | Auto-fix? | Action |
 |-------|-----------|--------|
-| CI didn't run | Yes | Push again: `git push origin {branch}` |
+| CI didn't run | Yes | Go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply (same as the step-1 table above) |
 | CI failed (lint/build) | Yes | Fix locally, push (same as pre-push self-review) |
 | Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
 | Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
@@ -625,7 +721,8 @@ or resolved from `.argo-it.yml`.**
 4. User answers (ask only if none of the above resolve it)
 5. Sensible defaults (lowest priority)
 
-If everything was resolved, skip directly to generation with a confirmation.
+If everything was resolved, skip directly to generation, saying the settings in one line (no
+ask -- the deploy gate in PHASE 5 is where the user checks the hostname).
 
 **1. Greet and explain:**
 
@@ -1752,39 +1849,67 @@ git add env/ .github/workflows/ ONBOARDING-K8S.md
 git commit -m "Add K8s manifests and CI workflow for Argo CD deployment"
 ```
 
-**2. Ensure the deploy branch exists:**
+**2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
+it' in step 4, after the user's go; nothing leaves the machine before the ask):
 
 ```bash
 # Check if deploy branch exists remotely
 git fetch origin {deploy_branch} 2>/dev/null || true
-if ! git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
-  # Create the deploy branch from current state
-  git checkout -b {deploy_branch}
-  git push -u origin {deploy_branch}
-  git checkout {previous_branch}
-fi
+git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the result for step 3
+git log --oneline HEAD --not --remotes   # step 3 names every saved change listed here other than the one step 1 just made
 ```
 
 **3. Ask the user what they want to do:**
 
-"I've generated your deployment pipeline. Here's what's ready:
+Sending starts a deployment, so this is active confirmation, per the approval block: the user
+picks the target by name, a plain yes isn't an answer. Fill every bracket from what was found.
+If the hostname was left as a TODO placeholder, write "the address still marked TODO in the
+deployment files" wherever {hostname} appears below, and make the one thing to check: who will
+fill that in before it can go live.
+
+"I've generated your deployment pipeline and saved it in your project folder -- nothing has been
+sent anywhere yet. Here's what's ready:
 
 **Generated files:**
-- `{manifest_dir}/dev/` -- [N] manifest files for dev
-- `{manifest_dir}/prod/` -- [N] manifest files for prod
-- `.github/workflows/build-and-deploy.yml` -- Full CI/CD pipeline
+- `{manifest_dir}/dev/` -- [N] deployment files for dev
+- `{manifest_dir}/prod/` -- [N] deployment files for prod
+- `.github/workflows/build-and-deploy.yml` -- the automated build-and-deploy steps
 - `ONBOARDING-K8S.md` -- Setup checklist for DevOps and developers
+
+If I send this to GitHub, then from now on, every time anyone sends code to this project it
+builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
+deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
+system watches.] [If step 2 listed saved changes other than the one step 1 just made: This also
+sends the [M] other saved changes you haven't sent yet, which touch [one line on what they touch].] Nothing goes live until your DevOps
+team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, this send goes
+live too. To undo, I'd remove these files and send again -- the pipeline stops, but whatever
+already went live stays until it's replaced. [What stands out, e.g. 'the database runs inside
+the cluster for dev' / 'this sits next to an existing workflow' / 'nothing unusual']. The one
+thing to check: is **{hostname}** the right address for the dev version of your app?
 
 **What would you like to do?**
 
-1. **Push to GitHub** -- CI will build images and deploy automatically
-2. **Test locally first** -- Apply to your local K8s cluster
-3. **Review files** -- Show me the generated manifests before doing anything"
+1. **Send it -- deploys to {hostname}** -- builds it and deploys it automatically
+2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
+   [only if kubectl is present AND `kubectl config current-context` is a local cluster:
+   rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared
+   cluster -- leave this option out]
+3. **Show me the files first** -- nothing is sent
+4. **Not now** -- everything stays saved in your project folder; nothing is sent"
+
+Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which.
 
 **4. Execute based on user choice:**
 
-**Option 1 (push -- CI deploys automatically):**
+**Option 1 (send -- CI deploys automatically):**
 ```bash
+# Create the deploy branch first if step 2 found it missing
+if ! git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
+  git checkout -b {deploy_branch}
+  git push -u origin {deploy_branch}
+  git checkout {previous_branch}
+fi
+
 git push origin {current_branch}
 ```
 
@@ -1797,15 +1922,24 @@ git push origin {current_branch}
 in ONBOARDING-K8S.md** (namespace, secrets, TLS cert, DNS, Argo Application).
 Share that file with your DevOps team."
 
-**Option 2 (local test):**
+**Option 2 (local test):** only offered when step 3 found a local context; pin every command to
+that context ({local_context} = the `kubectl config current-context` value step 3 found) so a
+context switch in another terminal can't send this to a shared cluster.
 ```bash
 docker compose build
-kubectl apply -k {manifest_dir}/dev/
-kubectl get pods -n {namespace}
-kubectl get svc -n {namespace}
+kubectl --context {local_context} apply -k {manifest_dir}/dev/
+kubectl --context {local_context} get pods -n {namespace}
+kubectl --context {local_context} get svc -n {namespace}
 ```
 
-Then ask: "How does it look? Want me to push to GitHub now?"
+Then say what came up, in plain words, and go back to the step-3 pick without option 2 (the
+same gate -- 'Send it -- deploys to {hostname}' by name, 'Show me the files first', or 'Not now').
+
+**Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask),
+then go back to the step-3 pick without option 3.
+
+**Option 4 (not now):** say the files are saved in the project folder and nothing was sent;
+stop here. Skip step 5.
 
 **5. Report success:**
 
@@ -2104,18 +2238,32 @@ or updating -- they want to deploy their changes, not reconfigure infrastructure
 Only offer manifest regeneration if the user explicitly asks.
 
 **If existing manifests are found but deploy infrastructure is incomplete:**
-"I see existing K8s manifests in `{dir}`. Want me to:
-1. Regenerate them from your current Docker Compose (overwrites existing)
-2. Update specific files only
-3. Use them as a reference pattern for a new app"
+Replacing files someone wrote is hard to undo, so this is active confirmation, per the approval
+block: the user names which files, a plain yes isn't an answer. Fill every bracket from PHASE 0.
+
+"I found existing deployment files in `{dir}`: [list the N files]. [What's missing from the
+setup, e.g. 'there's no automated build-and-deploy workflow yet'] -- that's why I'm asking. I can
+write fresh files from your Docker Compose setup, but that replaces what's there. [Undo: 'they're
+saved in your project history, so I can bring them back' / 'they aren't saved in your project
+history yet -- replaced means gone']. The one thing to check: does anything already running
+depend on these files as they are?
+
+Which should I do?
+- **Replace all [N] files in `{dir}`**
+- **Replace only these:** (name the files)
+- **Leave them all as they are** -- I'll follow their pattern for anything new I add"
+
+Replace only what they named. 'Leave them': generate only what's missing, following the
+existing pattern.
 
 **If the user doesn't know a setting (namespace, hostname, etc.):**
-- Offer to generate manifests with `TODO` placeholders that can be filled in later
+- Generate the manifests with `TODO` placeholders that can be filled in later (routine -- no
+  ask) and say so:
 - "No worries -- I'll mark it as TODO in the manifest. You can fill it in later or ask your DevOps team."
 
-**If kubectl is not available (for local testing):**
+**If kubectl is not available, or its current context isn't a local cluster (for local testing):**
 - Skip local test option
-- "Local K8s testing requires kubectl and a local cluster (Rancher Desktop, minikube, etc.). You can still push to the deploy branch for Argo CD."
+- "Trying it on this computer needs a local Kubernetes (Rancher Desktop, Docker Desktop, minikube, or kind). [Yours isn't set up / Your computer is currently pointed at a shared cluster, not a local one], so I've left that option out. You can still send it to GitHub -- the deployment runs from there."
 
 **If no CI system is detected:**
 - Still generate the GitHub Actions workflow as default
@@ -2154,7 +2302,7 @@ Only offer manifest regeneration if the user explicitly asks.
 - ALWAYS generate both dev and prod environments
 - ALWAYS skip mock services (they're local dev only)
 - ALWAYS generate ONBOARDING-K8S.md with DevOps and Developer sections
-- ALWAYS offer local K8s testing as an option before pushing
+- ALWAYS offer local K8s testing as an option before pushing when kubectl points at a local cluster
 - ALWAYS use `subPath: pgdata` for PostgreSQL PVC mounts (prevents lost+found conflict)
 - ALWAYS auto-detect split-service architecture -- never ask the user, just inform them
 - ALWAYS include concurrency control on the deploy branch in CI workflows
@@ -2220,7 +2368,7 @@ Only offer manifest regeneration if the user explicitly asks.
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
 - The user NEVER sees linter names, tool output, or raw error messages
-- Auto-fix what's fixable (lint --fix, auto-add untracked migrations, move secrets to .env)
+- Auto-fix what's fixable (lint --fix, auto-add untracked migrations); secrets move only through the 3e gate -- the user names which
 - STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
 - If env vars in docker-compose.yml don't match K8s manifests, auto-add them to manifests
 - Maximum effort: if a check fails and can't be auto-fixed, explain in plain language and offer to help

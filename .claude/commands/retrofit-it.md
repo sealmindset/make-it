@@ -49,6 +49,7 @@ This skill has 7 phases:
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
+@~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -359,52 +360,143 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 - Your [pages/features/business logic] will work exactly as they do now
 
 **What I'll add:**
-- [Gap 1]: [What it gives the user + why it matters. E.g., "Secure login -- so only
+1. [Gap 1]: [What it gives the user + why it matters. E.g., "Secure login -- so only
   authorized people can access your app" NOT "OIDC authentication with JWT cookies"]
-- [Gap 2]: [Same plain-language pattern]
-- ...
+2. [Gap 2]: [Same plain-language pattern]
+3. ...
 
 **What I'll adjust:**
-- [Change 1]: [What the user will notice, if anything. E.g., "Your tables will get
+[Continue the numbering -- the user picks items by number below.]
+4. [Change 1]: [What the user will notice, if anything. E.g., "Your tables will get
   sorting and filtering built in" NOT "Replace HTML tables with DataTable component"]
-- ...
+5. ...
 
 [If phased mode:]
-**I'll do this in [N] steps, checking with you between each one:**
-1. **Setting up your development environment** -- no risk to your existing features
-2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
-3. **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
-4. **Polishing the interface** -- your app will look the same, just with a few upgrades
-5. **Setting up test services** -- so you can develop without needing real external systems
-6. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
-7. **Final security checks and deployment prep** -- locking everything down
+**I'll do this in [STEP_COUNT] steps, checking with you between each one:**
+[Bullets, not numbers -- the item numbers above are the only numbers on this screen.]
+- **Setting up your development environment** -- no risk to your existing features
+- **Preparing your database for users and permissions** -- I'll verify everything works before continuing
+- **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
+- **Polishing the interface** -- your app will look the same, just with a few upgrades
+- **Setting up test services** -- so you can develop without needing real external systems
+- **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+- **Final security checks and deployment prep** -- locking everything down
 
 I'll check with you after each step before moving on.
 
 [If single-pass mode:]
 **I'll do all of this in one pass, then verify everything works.**
 
-Ready for me to start?"
+[If the app already has a login system -- guardrails rule 7:]
+**Your login:** I can keep your current login and add the new secure sign-in alongside it
+(touches about [N_WRAP] files), or replace it with the new one (touches about [N_REPLACE]
+files). Recommended: [keep / replace] -- [why, one line]. The catch: [the strongest reason
+for the other choice].
 
-**Wait for user approval before proceeding.**
+[If Very High risk:]
+**Another route:** instead of upgrading this app, build a fresh one with /make-it and move
+your data and logic into it. Recommended: [step-by-step upgrade / fresh build] -- [why, one
+line]. The catch: [the strongest reason for the other choice].
 
-**After user approves, create a pre-retrofit snapshot:**
+**How I know:** I read [FILES_READ] files -- [if fully analyzed: 'every page, every list of
+data your app keeps, and how login works today'; if the codebase was too large to read in
+full (error-handling): 'the parts that matter most: [what was read, e.g. the pages, the
+routes, the data your app keeps, and how login works today], plus what you confirmed about
+the rest'] ([current login mechanism, or 'there is none']).
+[DATA_CHANGES, used below = what this plan adds to their data, in plain words -- e.g. 'the new
+lists of roles and permissions, a role field on your list of users, and the sample records and
+test accounts I add'.]
+**Where it happens:** on this computer[; if the app has no database or its database runs
+here too, it does not use AI, and it calls no outside service with real keys: ' only; nothing
+is sent anywhere'][; if its database lives
+elsewhere (connection settings in .env / compose point at another host): ', except your
+database at [host] -- [DATA_CHANGES] land there'][; if the app uses AI: ', and while I
+check the AI features I send a few test prompts to [AI provider]'][; if the app calls outside
+services with real keys in its settings: ', and my checks may call [the services, by name --
+e.g. Stripe, SendGrid] with the keys your app already uses']. [First run (no snapshot
+yet): 'Before I touch anything I save a snapshot of your app's files as they are now, so I can
+put the files back exactly like this at any point.'][Re-run (a snapshot from an earlier run
+exists): 'I keep the snapshot from the earlier run: putting the files back returns to before
+that first run, not to now.'][If the app has a .env: ' Your settings file (.env) isn't part of the
+snapshot; I'll show you what I change in it.'] [If the app already has a database: 'There is no undo for
+[DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved changes:
+'You have unsaved changes; I'll save them first[; first run only: ' so the snapshot is
+complete'].']
+**What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
+replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
+set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
+**One thing to check:** [if the database lives elsewhere: 'your database at [host] -- find out
+whether it is the one people use for real today or a test copy; I ask you below.'; otherwise:
+'look at 'What stays the same' -- is anything your app does today missing from that list?']
+
+Tell me what to include: **all [ITEM_COUNT] items**, or the item numbers to leave out[; and,
+if your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
+or fresh build][; and, if the database lives elsewhere: is [host] a test copy or the one
+people use for real] -- or **Not now**."
+
+**Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
+what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
+item number)[; and, if the app has a login, keep or replace][; and, if Very High, which
+route][; and, if the database lives elsewhere: is [host] a test copy or the one people use
+for real]. Build only what they included; anything left out
+goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
+error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
+left-out item is needed by one they kept, say which in one line and ask them to pick again.
+If the database lives elsewhere and they picked anything other than Not now or the fresh build: unless they say the database at [host] is a test copy (not sure counts as not a test copy),
+stop and change nothing:
+"I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
+database your settings point at, and there is no undo for that -- so I won't run it unless I
+know it is a test copy. What you need: a test copy of that database, with your app's settings
+file (.env) pointing at it. Then run /retrofit-it again."
+
+**Not now:** change nothing and stop.
+
+[If Very High: **fresh build** -- help migrate per error-handling; nothing below runs.
+**Step-by-step upgrade** -- continue below with the items they included.]
+
+**After they pick, save their unsaved changes (every run, as announced above, with .env files,
+key, certificate and credential files and local databases kept out of the save, at any depth) and
+create the pre-retrofit snapshot if there is none yet** (a re-run keeps the earlier one, as
+the ask said). A folder that was not under git yet gets `git init` plus a `.gitignore` seeded
+from the scaffold (or a minimal list), so dependencies and build output are not saved either:
 
 ```bash
-# Create a tag marking the exact state before any retrofit changes
-git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+fail() { echo "SNAPSHOT FAILED: $1"; exit 1; }
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  git init -q || fail "could not start tracking the files"
+  [ -e .gitignore ] || cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore .gitignore 2>/dev/null ||
+    printf 'node_modules/\n__pycache__/\n.venv/\n.next/\ndist/\nbuild/\n*.log\n' > .gitignore
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
+  for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
+           '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
+    grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
+  done
+  # :(top,...) = from the repo root, so a nested repo's pre-staged files stay out too
+  { git add -A . && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
+    ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
+    ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
+    ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+    ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
+    ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
+  git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
+fi
+git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
+  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes" || fail "could not create the snapshot"
+echo "snapshot: $(git rev-parse --short pre-retrofit)"
 ```
 
-Tell user (only if they have uncommitted changes):
-"I noticed you have some unsaved changes. Let me save those first so we have a clean
-starting point."
-```bash
-git add -A && git commit -m "Save pre-retrofit state"
-git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
-```
+**If the block prints `SNAPSHOT FAILED` (or anything but the final `snapshot: <id>` line), stop
+here, before any retrofit change.** Tell the user plainly: "I couldn't make the snapshot of your
+files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git doesn't know your
+name and email yet; run `git config --global user.name "Your Name"` and `git config --global
+user.email "you@example.com"`, then run /retrofit-it again.']" Never go on as if a snapshot
+exists when it does not.
 
 This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
-the exact state before any retrofit changes were made.
+the exact state of the files before any retrofit changes were made (the database is not
+part of it -- see the plan ask's undo line).
 
 </step>
 
@@ -513,12 +605,14 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
      require_permission middleware, permission service with cache, JWT with flat payload,
      cookie Secure from URL protocol, logout via POST, admin UI for users/roles
    - **If no auth exists:** Add complete OIDC flow (login, callback, JWT, logout, middleware)
-   - **If auth exists and effort to wrap is reasonable:** Wrap existing auth:
+   - **If auth exists:** follow the user's pick at the plan ask ("Your login", Phase 4) --
+     the effort estimate shaped the recommendation there, the pick decides here.
+   - **If auth exists and the user picked keep:** Wrap existing auth:
      - Keep existing user model, add OIDC fields (oidc_subject, oidc_issuer)
      - Add OIDC login route alongside existing (transition path)
      - Add JWT cookie signing after OIDC callback
      - Wire existing session/token to use new JWT
-   - **If auth exists but wrapping would be more work than replacing:** Replace:
+   - **If auth exists and the user picked replace:** Replace:
      - Remove old auth code
      - Add complete OIDC flow
      - Migrate user data model
@@ -846,7 +940,39 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 After each step:
 "[Step name] is done. Let me verify everything still works..."
 [Run targeted verification for that step]
-"Everything looks good. Ready for me to continue with [next step name]?"
+Then one ask, per the approval block -- the user's own check is the point of phased mode, so
+never a plain "ready?":
+"Everything I can test passed: [what was verified for this step, in plain words -- e.g. 'your
+app starts in its new sandbox and every page I found still loads'].
+
+What changed: [this step's user-facing scope, one line][; if this step changed .env: ', and in
+your settings file (.env): [the settings added or changed, by name, values hidden]'].
+Your files are saved on this computer[; if the database lives elsewhere: ', and the data
+changes are in your database at [host]']. If anything is off, I can put the app's files back to
+how they were before this step, or before the upgrade started[; if this step or an earlier step changed .env: ' (your
+settings file, .env, isn't part of that, so the settings I changed stay changed[; if this step changed it: " -- the list above is what I changed in it"])']. [If the app already had a
+database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
+'the new lists of roles and permissions', 'the sample records and test accounts I added']:
+putting the files back does not remove them.']
+What stands out: [anything that differs from a typical upgrade of this kind -- or 'nothing'].
+One thing to check: [open [URL] and try [the feature this step touched most]; for a step with
+nothing on screen (Step 5, tests): 'nothing new to look at -- the tests ran and passed'].
+
+Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
+secure login and changes who can see what -- the biggest change in the plan[; if the app had a
+database before Step 2: '; it also adds a role field to your existing list of users -- no
+undo']'; for the interface-and-test-services step (Step 3, seed data), if the app had a
+database before Step 2: 'this also adds sample records and test accounts to your existing
+data -- no undo'].
+
+Tell me: **Continue with [next step name]**, **Fix something first** (tell me what you saw), or
+**Stop here**."
+
+Wait for their pick. A plain yes is not an answer -- ask which. **Fix something first:** fix or
+undo the breaking change (guardrails rule 1), re-verify, and ask again. **Stop here:** leave the
+app as it is now (it passed this step's checks), list the remaining steps in TODO.md with what
+each would have added, and stop -- running /retrofit-it again later finds what is still missing.
+[After the last step there is no pick: go straight to Phase 6.]
 
 **Adaptation rules for existing code:**
 
@@ -872,6 +998,11 @@ After each step:
 **Build-verify is a SILENT QUALITY GATE** identical to /make-it's. The user sees
 "Making sure everything works..." but NOT the technical details.
 
+**Left-out items (the user's plan pick, Phase 4) stay out through Parts A-D:** any static
+check, live test, retrofit-specific check, or fix-cycle fix that belongs to an item they left
+out is skipped -- no auto-fix, no block, no fix in app code. TODO.md already lists it as
+"left out by your choice".
+
 **PART A: Static code verification (before starting the app)**
 
 Run ALL checks from `build-standards.md` that match the project's active tiers.
@@ -893,7 +1024,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 
-For each failing check:
+For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
 - `[WARN]` items: note in TODO.md, continue
@@ -948,6 +1079,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 - What was retrofitted (gap inventory summary)
 - Risk score and strategy used
 - Verification results (all Part A-D results)
+- Items the user left out at the plan ask, as "left out by your choice" (so /try-it and
+  /resume-it see them and don't add them back)
 - Any remaining TODOs
 
 **Generate app-context.json** -- So /resume-it and /ship-it work going forward.
@@ -966,11 +1099,14 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 "Your app has been upgraded and is ready to deploy! Everything that was working before still works, plus you now have:
 
+[Only what they included at the plan ask -- drop the line for any item they left out.]
 - Secure login with [OIDC provider]
 - Role-based permissions ([N] roles, [N] permissions)
 - A proper development environment with Docker
 - Mock services for testing without real dependencies
 - Security hardening throughout
+[If .env was changed: 'Your settings file (.env) now has [the settings added or changed, by
+name, values hidden].']
 
 When you're ready to deploy, just type: **/ship-it**"
 
@@ -1003,7 +1139,7 @@ When you're ready to deploy, just type: **/ship-it**"
 
 **If the risk score is Very High (61+):**
 - Present the phased plan AND a migration recommendation
-- Let the user choose: phased retrofit or fresh /make-it build with data migration
+- Let the user choose at the plan ask (Phase 4, one stop): phased retrofit or fresh /make-it build with data migration
 - If they choose fresh build, help migrate their data model and business logic into a new /make-it project
 
 </error-handling>
@@ -1024,6 +1160,6 @@ When you're ready to deploy, just type: **/ship-it**"
 
 6. **Stack migration is a last resort** -- Only recommend migration if the existing stack literally cannot support a required foundation (e.g., no OIDC library exists for the framework, or the framework is abandoned/EOL).
 
-7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate.
+7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate at the plan ask (Phase 4, "Your login" -- one stop); the user picks keep or replace there.
 
 </guardrails>

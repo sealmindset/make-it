@@ -131,9 +131,9 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
    and every `safeguards accepted` ledger line, so nothing weakened ships unseen.
    Fix findings with ONE fix subagent carrying the complete list (not one fixer per finding).
 5. **After `STATUS: DONE`, offer learnings** (`learnings.md`): queued agent lessons (e.g. reviewer
-   findings that recurred across tasks) and any correction the user made at acceptance, one
-   yes/no each. Then **finish the branch** via
-   ship-it / wrap-it.
+   findings that recurred across tasks) and any correction the user made at acceptance, in one
+   message, each numbered with its evidence and what it would change; the user answers per item.
+   Then **finish the branch** via ship-it / wrap-it.
 
 ---
 

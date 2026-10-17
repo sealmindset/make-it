@@ -39,6 +39,7 @@ If /make-it's build-verify did its job, /try-it finds zero issues.
 @~/.claude/make-it/references/prompt-templates.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/learnings.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -89,6 +90,10 @@ docker-compose.yml (or docker-compose.yaml)
 
 **2. Extract key information:**
 
+From .make-it-state.md (if present), note every item listed as "left out by your choice"
+(a /retrofit-it upgrade the user declined): a failure that belongs to one of them is reported,
+not fixed, and does not block handoff.
+
 From app-context.json, determine:
 - Project name
 - Frontend port (default: 3000)
@@ -108,7 +113,9 @@ From docker-compose.yml, determine:
 
 ```bash
 # Is Docker running?
-docker info >/dev/null 2>&1
+# No answer within ~10s (a hung daemon) counts as not up. SIGALRM alone does not stop the Go-based
+# docker CLI, so the wrapper forks and kills the child.
+perl -e '$p=fork; exec @ARGV if !$p; $SIG{ALRM}=sub{kill 9,$p}; alarm 10; waitpid $p,0; exit($? ? 1 : 0)' docker info >/dev/null 2>&1
 
 # Are there any containers already running from this project?
 docker compose ps 2>/dev/null
@@ -262,19 +269,56 @@ Tell user the port if it changed:
 SSL-inspecting proxies break Docker image pulls and builds. Before building:
 
 ```bash
-# Check if common SSL-inspecting proxies are running
-pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
-pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
+# Check each common SSL-inspecting proxy separately, so every running one is named.
+# Bracketed first letter: the pattern can never match its own shell's command line.
+for p in '[Z]scaler' '[N]etskope' '[G]lobalProtect'; do
+  pgrep -f "$p" >/dev/null 2>&1 && echo "$(echo "$p" | tr -d '[]') running"
+done
 ```
 
-If a proxy is detected (or if a Docker build fails with TLS/certificate errors):
+If a proxy is detected (or if a Docker build fails with TLS/certificate errors), this is a
+high-stakes stop (per the approval block): the user is turning off a security tool on their own
+computer, so they state the specifics -- never a plain "done". Fill `[TOOL]` with every name the
+check printed (Zscaler, Netskope or GlobalProtect; all of them if more than one matched). If the
+check found nothing and a build failed with a certificate error, use "your network security tool
+(often Zscaler, Netskope or GlobalProtect)", the second evidence line, and the 'don't have one'
+sentence.
 
-Tell user: "Before I can build your app, I need you to temporarily pause your network security tool. It sometimes interferes with downloading the pieces your app needs. Look for the security application in your menu bar or system tray (it might be Zscaler, Netskope, GlobalProtect, or similar), choose 'Disable' or 'Pause,' and pick the longest time option. Let me know when it's done!"
+Tell user: "Before I can put your app together, I need you to pause [TOOL] for a little while.
+[If detected: 'I can see it running on your computer, and it blocks the downloads your app
+needs.' If a build failed: 'The download just failed in the way these tools make it fail.']
+While it's paused, that tool isn't checking your computer's internet traffic -- nothing about
+your app or your files changes. If it offers a time limit, it turns itself back on when that
+runs out; either way, I'll remind you to turn it back on as soon as I'm done downloading,
+whether or not everything worked. Normally I handle everything myself; this is the one thing I
+can't do for you.
+The one thing to check: it's your company's tool and you're allowed to pause it. If you're not
+sure, say 'not sure' and I'll stop here instead.
+[Only when the check found nothing: 'If you don't have a tool like this, say "don't have one"
+and I'll keep working on the download problem myself.']
+To pause it: find [TOOL] in your menu bar or system tray, choose 'Disable' or 'Pause,' and if it
+asks, pick a time long enough for the downloads. Then tell me which tool you paused and how long
+for -- 'no time limit' is fine if it didn't offer one."
 
-**Wait for user confirmation before proceeding.** Do NOT attempt Docker builds while the proxy is active.
+**Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
+'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
+none was given. When `[TOOL]` names more than one tool, the answer must cover every one of them
+before any build starts; ask about the ones still missing. 'not sure', 'can't', or 'no' means
+stop; 'don't have one' (offered only when the check found nothing) means the tool wasn't the
+cause -- go back to the normal "If build fails" diagnosis in step 2 and keep fixing, and don't
+offer this pause again this run (a later certificate error gets the normal diagnosis, not this
+ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
+missing. Do NOT attempt Docker builds while the proxy is active. On stop: if they already said
+they paused any tool, give it the reminder below first; then tell the user "Your app can't be
+put together on this network [if detected: 'while [only the tools still running] is running' /
+otherwise: 'while something is blocking the downloads']. Ask whoever manages your computer, or
+try again from another network." Then run the save-state step and end.
 
-After all Docker builds and image pulls complete, remind the user:
-"All done with the heavy lifting! You can re-enable your security tool now."
+Only if the user actually paused a tool: once the downloading is over -- the builds and pulls
+worked, or you've stopped trying -- remind the user, naming every tool they said they paused:
+"All done with the heavy lifting! You can turn [TOOL] back on now[if a time was given: ' -- no
+need to wait out the [TIME] you gave it']." No pause (never asked, or 'don't have one'), no
+reminder.
 
 **2. Build the containers:**
 
@@ -467,7 +511,8 @@ Build an internal test results summary:
   "failed": N,
   "screenshots": { "role_page": "path" },
   "failures": [
-    { "test": "description", "error": "what went wrong", "page": "url", "role": "role" }
+    { "test": "description", "error": "what went wrong", "page": "url", "role": "role",
+      "left_out": "the 'left out by your choice' item it belongs to, from .make-it-state.md, or absent" }
   ]
 }
 ```
@@ -489,7 +534,13 @@ Skip to Phase 4 (Report). Tell user: "Everything looks great!"
 
 **If smoke tests found issues:**
 
-Tell user: "I noticed a couple of things to clean up. Give me a moment..."
+Failures marked `left_out` are not fixed: the user chose to leave that item out, so fixing it
+would put it back in. Report them in Phase 4 under "Left out by your choice" and go on; they
+never count as unfixed. If every failure is one of these, it counts as all passed: skip to
+Phase 4 and tell the user: "Everything looks great! The items you chose to leave out still show
+as missing -- that's expected."
+
+For the rest, tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
 **Fix cycle:**
 
@@ -520,7 +571,7 @@ Tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
 **If some issues can't be fixed after 3 attempts:**
 Tell user: "I got most things working! There's [N] thing(s) I wasn't able to fix automatically.
-I'll note what they are so we can come back to them."
+I'll note what they are so we can come back to them." ([N] never counts left-out items.)
 - Add unfixed issues to TODO.md
 - Continue to handoff with a note about what's not working
 
@@ -537,7 +588,7 @@ Generate `TRY-IT-REPORT.md` in the project root:
 ```markdown
 # [PROJECT_NAME] -- Try-It Report
 > Tested: [TIMESTAMP]
-> Status: [All Passing / X of Y Passing]
+> Status: [All Passing / X of Y Passing][if any left out: ' -- [N] left out by your choice']
 
 ## Summary
 
@@ -583,6 +634,10 @@ Screenshots of each page (per role) are saved in `.try-it/screenshots/`:
 - **To log in as [Role 2]:** Click "Sign In", pick "[User 2 Name]" from the login screen
 - **To log in as [Role 3]:** Click "Sign In", pick "[User 3 Name]" from the login screen
 
+## Left Out by Your Choice
+[Only if any failure was marked left_out: each item in plain language. It shows as missing
+because you chose to leave it out, not because something broke.]
+
 ## Issues Found
 [If any issues remain, describe them in plain language here]
 
@@ -617,7 +672,8 @@ I tested:
 - Every page in your app ([X] pages)
 - All the behind-the-scenes features (API, permissions, data)
 
-**Everything passed!**
+**Everything passed!**[if any left out: ' The [N] item(s) you chose to leave out still show as
+missing -- that's expected.']
 
 Here's how to explore your app:
 
@@ -639,7 +695,9 @@ If SOME FAILURES:
 "Your app is running! Most things are working great.
 
 I tested [X] things and [Y] passed. There are [Z] thing(s) I wasn't able to fix
-automatically -- I've noted them in `TRY-IT-REPORT.md`.
+automatically -- I've noted them in `TRY-IT-REPORT.md`.[if any left out: ' The [N] item(s) you
+chose to leave out still show as missing -- that's expected.']
+([Z] and the list below never include left-out items.)
 
 You can still explore your app right now:
 [Same browser instructions as above]
@@ -672,7 +730,9 @@ or 'I can't click the save button.' I'll figure out what's wrong and fix it.
 **Stay available while the user explores. React to their messages:**
 
 **After any fix the user asked for, once the re-test passes:** if their correction is a rule that
-applies beyond this one fix, offer to remember it (`learnings.md`): "Want me to remember this for next time? ..."
+applies beyond this one fix, offer to remember it (`learnings.md`): one message, the rule
+numbered with its evidence and what it would change; the user answers per item. Wait for the
+answer before going on.
 
 **If user reports a visual/UX issue:**
 - "The header looks weird" / "The colors are wrong" / "Can you make the font bigger?"
@@ -709,8 +769,9 @@ applies beyond this one fix, offer to remember it (`learnings.md`): "Want me to 
 
 **If user says they're happy / done:**
 - Celebrate! "Awesome! Your app is working just how you wanted it."
-- Offer any queued agent lessons (`learnings.md`): one message, one yes/no each; wait for the
-  answer before showing next steps (skip if nothing is queued)
+- Offer any queued agent lessons (`learnings.md`): one message, each numbered with its evidence
+  and what it would change; the user answers per item. Wait for the answer before showing next
+  steps (skip if nothing is queued)
 - Route to next steps:
   "Here's what you can do next:
   - **/ship-it** -- Deploy your app so others can use it
@@ -763,8 +824,14 @@ applies beyond this one fix, offer to remember it (`learnings.md`): "Want me to 
   ```
 - Wait up to 60 seconds for Docker to be ready
 - If still not running: "Docker needs to be started. On your Mac, open the Docker app
-  from your Applications folder (it has a whale icon). Once you see it's running in your
-  menu bar, tell me and I'll continue."
+  from your Applications folder (it has a whale icon). I'll keep checking for a few minutes
+  and continue on my own as soon as it's up -- no need to tell me."
+- Routine, no stop: keep running the step-3 `docker info` probe (the same fork-and-kill
+  wrapper; no answer within ~10s counts as not up) every few seconds for up to 3 minutes,
+  posting a short line about every 30 seconds ("Still waiting for Docker to start..."), and
+  continue as soon as it succeeds
+- After 3 minutes without success: "Docker still isn't up. Open it from your Applications
+  folder, then run /try-it again." Run the save-state step and end -- never wait forever
 
 **If docker-compose.yml doesn't exist:**
 "It looks like the development environment wasn't set up during the build.
@@ -789,11 +856,11 @@ Let me create it now..."
 **If Docker build fails with TLS/certificate/SSL errors (SSL proxy interference):**
 - SSL-inspecting proxies (Zscaler, Netskope, Palo Alto, etc.) break Docker image pulls and npm/pip installs inside containers
 - Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
-- Tell user: "It looks like your network security tool is blocking the download. I need you to pause it for a few minutes.
-  Right-click the security icon in your menu bar (it might look like a small shield), choose 'Disable' or 'Pause,'
-  and pick the longest time option. Let me know when it's done!"
-- **Wait for user confirmation before retrying.** Do NOT retry builds while the SSL proxy is active.
-- After Docker builds complete, remind user: "All done! You can re-enable your security tool now."
+- Use the ask in build-and-start step 1 (with its "a build failed" evidence line) and wait for
+  the same answer; a stop there is a stop here, and if the user already answered 'don't have one'
+  this run, don't ask again -- keep diagnosing. Do NOT retry builds while the SSL proxy is active.
+- Once the downloading is over (the builds worked, or you've given up on them), give step 1's
+  reminder, under step 1's rule (only if a tool was actually paused).
 
 **If port conflicts can't be resolved:**
 - Find the next 5 available ports
@@ -811,7 +878,9 @@ Let me create it now..."
 <guardrails>
 
 **Quality gates:**
-1. **Before handoff:** ALL critical tests must pass (app starts, login works, dashboard loads)
+1. **Before handoff:** ALL critical tests must pass (app starts, login works, dashboard loads) --
+   except failures of an item .make-it-state.md lists as "left out by your choice": reported, not
+   fixed, and not a block
 2. **During explore:** Every fix must be re-tested before telling user it's done
 3. **Always:** Never modify production configuration -- only local dev settings
 4. **Always:** Never expose secrets, tokens, or technical internals to the user
