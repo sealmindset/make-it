@@ -1,7 +1,7 @@
 # Subagent-Driven Development (SDD) Reference
 
 Execute an implementation plan by dispatching a **fresh implementer subagent per task**, a
-**task review (spec compliance + code quality) after each**, and a **broad whole-branch review
+**task review (spec compliance + code quality + safeguards) after each**, and a **broad whole-branch review
 at the end**. Subagents never inherit your session history — you construct exactly the context
 each needs, which keeps them focused and preserves *your* context for coordination.
 
@@ -74,7 +74,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       (`ui-gate.md`). Answer its questions before it proceeds. A NEEDS_CONTEXT that names a
       wrong test → the test-writer fixes it (re-run a2), then the implementer continues.
    c. Implementer makes the tests pass, commits, self-reviews, writes its report file, returns
-      only status + commits + one-line test summary + concerns.
+      only status + commits + one-line test summary + concerns + its **SAFEGUARDS** line (every
+      safeguard it bypassed or weakened, or "none" -- `approval-block.md`).
    c2. **Tests untouched and green (gate):** `git diff --name-only <TESTS_SHA> -- <test files>`
       must print nothing (TESTS_SHA = the test-writer's latest commit; no `HEAD`, so uncommitted
       edits count too), then run the test command yourself: all pass, none skipped. Anything
@@ -84,15 +85,20 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       `HEAD~1`, which drops all but the last commit of a multi-commit task) → dispatch the
       **task reviewer** (template) with the brief, report, and package paths + verbatim global
       constraints.
-   e. If the reviewer reports spec ❌ or quality issues: dispatch a **fix subagent** for
-      Critical/Important findings (implementer contract: re-run the covering tests, name them,
-      report command + output; tests stay untouched) → **c2 again** → re-review. A finding in the
-      tests themselves goes to the test-writer instead (then c2 with its new commit). Repeat until
-      spec ✅ and quality approved.
+   e. If the reviewer reports spec ❌, quality issues, or safeguards ❌: dispatch a **fix
+      subagent** for Critical/Important findings (implementer contract: re-run the covering tests,
+      name them, report command + output + SAFEGUARDS; tests stay untouched) → **c2 again** →
+      re-review. An undisclosed weakening (safeguards ❌) is undone, never kept. A finding in the
+      tests themselves goes to the test-writer instead (then c2 with its new commit). Safeguards ⚠️
+      (disclosed): undo it, or -- when keeping it changes behavior the plan didn't decide -- it's
+      the human's call (`STATUS: AWAITING_HUMAN`). Repeat until spec ✅, quality approved, and
+      safeguards ✅ or an accepted ⚠️.
    e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
       Note `git status --porcelain` and HEAD, then dispatch the **adversarial reviewer**
       (template) with the brief, the verbatim global constraints, a fresh `review-package BASE
-      HEAD`, the test files and command, and earlier rounds' counterexamples. Afterwards the
+      HEAD`, the test files and command, the implementer's SAFEGUARDS line, and earlier rounds'
+      counterexamples (an `undisclosed safeguard` it reports goes back as in e, not to the
+      test-writer). Afterwards the
       status and HEAD must be unchanged -- remove anything it left behind. It returns CLEAN (with
       what it tried) or confirmed counterexamples. **You adjudicate each one:** grounded in the
       brief? One that rests on input or behavior the brief doesn't mention, or that conflicts with
@@ -116,7 +122,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
         round; at round 3, f.
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
-   capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`).
+   capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`)
+   and every accepted safeguards ⚠️ from the ledger, so nothing weakened ships unseen.
    Fix findings with ONE fix subagent carrying the complete list (not one fixer per finding).
 5. **After `STATUS: DONE`, offer learnings** (`learnings.md`): queued agent lessons (e.g. reviewer
    findings that recurred across tasks) and any correction the user made at acceptance, one

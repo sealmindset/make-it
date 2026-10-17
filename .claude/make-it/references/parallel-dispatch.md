@@ -102,8 +102,13 @@ These look like timing/race issues. Your task:
   3. Fix by replacing arbitrary timeouts with event-based waiting, fixing abort bugs if found,
      or adjusting expectations if the behavior intentionally changed.
 Do NOT just increase timeouts — find the real issue. Do NOT change unrelated code.
-Return: root cause + the exact changes you made.
+Return: root cause + the exact changes you made + SAFEGUARDS: "none", or every safeguard you
+bypassed or weakened (--no-verify; a test skipped, deleted, or loosened; a hook, CI step, or
+evaluator edited) — what, where, why.
 ```
+
+Every agent prompt ends with that **SAFEGUARDS** line (`approval-block.md`): disclosed is not
+approved, but undisclosed is a rejected lane.
 
 ---
 
@@ -137,3 +142,7 @@ per-domain rigor.
 2. Check for conflicts — did agents edit the same code?
 3. Run the full suite — verify all fixes work together.
 4. Spot-check — agents can make systematic errors; don't trust blindly.
+5. Safeguards — search each lane's diff for a test skipped, deleted, or loosened, a hook, CI step,
+   or evaluator edited, or a widened permission, and match each to that lane's SAFEGUARDS line.
+   One that isn't on it rejects the lane (undo it, re-run); a disclosed one goes in your summary
+   for the human.

@@ -33,14 +33,20 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
 4. Run the tests; iterate until they pass.
 5. Self-review your own diff for spec gaps, dead code, and quality before reporting.
 6. Commit your work (clear message). Stay on the current branch — never commit to main/master.
+7. Never weaken a safeguard to get to green: no `--no-verify`, and no skipping, deleting, or
+   loosening any test — this task's or any other. If you truly had to, name it under
+   SAFEGUARDS; the reviewer checks the diff against that line, and an undisclosed one fails.
 
 ## Report
 Write your FULL report to `[REPORT_PATH]` (what you built, decisions, test command + output,
-self-review notes). In your reply to me, return ONLY:
+self-review notes, and the SAFEGUARDS line below). In your reply to me, return ONLY:
 - **STATUS:** one of DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED
 - **COMMITS:** the short SHAs you created (`<base7>..<head7>`)
 - **TESTS:** one line (e.g. "8/8 passing via `npm test foo`")
 - **CONCERNS:** anything you flagged (or "none")
+- **SAFEGUARDS:** "none", or every safeguard you bypassed or weakened — what, where, why
+  (`--no-verify`; a test skipped, deleted, or loosened; a hook, CI step, or evaluator edited;
+  wider permissions). Mentioning it elsewhere doesn't count.
 
 Status meanings: DONE = complete & verified · DONE_WITH_CONCERNS = done but you have doubts
 (state them) · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED = cannot proceed, say why.

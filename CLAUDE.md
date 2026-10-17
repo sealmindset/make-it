@@ -148,6 +148,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       fix-strategies.md          # 12 fix strategies for auto-remediation (AUTO/SEMI-AUTO/MANUAL)
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
+      approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     variants/

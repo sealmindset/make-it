@@ -95,7 +95,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 - Never pre-judge findings or tell a reviewer what not to flag.
 - Hand artifacts as FILES (brief / report / package) — never paste plan text or diffs into your context.
 - Use the recorded BASE, never `HEAD~1`. One task per dispatch — no pasted session history.
-- Both verdicts (spec + quality) are required; never skip a re-review.
+- All three verdicts (spec, quality, safeguards) are required; never skip a re-review. An
+  undisclosed weakened safeguard is undone, never kept (`approval-block.md`).
 - Trust the ledger + `git log` over recollection after a compaction/resume.
 
 See `subagent-driven-development.md` for model selection, status handling, reviewer ⚠️ items,

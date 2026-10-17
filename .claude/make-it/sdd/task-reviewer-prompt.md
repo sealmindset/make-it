@@ -7,7 +7,7 @@ or in the referenced files. Review the diff as written; do not run the implement
 
 ## Inputs
 - Requirements (the spec for this task): `[BRIEF_PATH]`
-- Implementer's report (what they did + test evidence): `[REPORT_PATH]`
+- Implementer's report (what they did + test evidence + its SAFEGUARDS line): `[REPORT_PATH]`
 - The change to review (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
 - The tests were written first, by a separate test-writer, in commit `[TESTS_SHA]` (omit if the
   task had nothing to test). Check that they test the brief's requirements, not the code.
@@ -16,11 +16,18 @@ or in the referenced files. Review the diff as written; do not run the implement
 [Copy the binding requirements VERBATIM from the plan's Global Constraints / spec: exact values,
 exact formats, and stated relationships ("same layout as X", "matches Y"). These govern.]
 
-## Produce TWO verdicts
+## Produce THREE verdicts
 1. **Spec compliance** — ✅ or ❌. Does the diff meet every brief requirement, with nothing
    missing and nothing extra (over/under-building both fail)? List each missing or extra item.
 2. **Code quality** — Approved or Changes-requested. Correctness, tests that actually assert,
    no dead code, no needless duplication, readability, error handling.
+3. **Safeguards** — ✅, ⚠️, or ❌. Search the whole diff, tests outside this task included, for
+   any test skipped, deleted, or loosened (a weaker assertion, a wider tolerance, a changed
+   expected value), any edited hook, linter rule, CI step, evaluator, threshold, or coverage
+   floor, and any widened permission. Compare each with the report's **SAFEGUARDS** line.
+   ✅ = none in the diff. ⚠️ = every one is on that line: list them for the controller to decide.
+   ❌ = one is missing from that line, however the report describes it ("tidied", "flaky") —
+   list each as a **Critical** finding.
 
 ## Method
 - Verify against the brief and global constraints, not your assumptions.
@@ -35,6 +42,7 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
 ```
 SPEC: ✅|❌  — <missing / extra items, or "all requirements met">
 QUALITY: Approved|Changes-requested
+SAFEGUARDS: ✅|⚠️|❌  — <each weakening in the diff, and whether the report's line lists it>
 Findings:
   - [Critical] ...
   - [Important] ...

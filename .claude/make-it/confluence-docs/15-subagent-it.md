@@ -43,7 +43,7 @@ First, have an **approved plan** (a numbered list of tasks). Then, on a working 
 It will:
 1. **Resume-check** — skip tasks already done, continue from the first unfinished one.
 2. **Read the plan once** and flag any contradictions up front.
-3. **For each task, in order:** a fresh helper implements it → a reviewer checks spec + quality → fix loop until clean.
+3. **For each task, in order:** a fresh helper implements it → a reviewer checks spec + quality, and that no test or check was quietly weakened → fix loop until clean.
 4. **Final review** of the whole branch, then hand off to [`/ship-it`](06-ship-it.md) or [`/wrap-it`](13-wrap-it.md).
 
 ---

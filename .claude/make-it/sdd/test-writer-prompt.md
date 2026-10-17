@@ -35,12 +35,14 @@ and how the project runs its tests. Omit if none.]
 
 ## Report
 Write your FULL report to `[REPORT_PATH]` (each test and the requirement it covers, the test
-command, the failing output). In your reply to me, return ONLY:
+command, the failing output, the SAFEGUARDS line). In your reply to me, return ONLY:
 - **STATUS:** one of TESTS_READY / NOT_TESTABLE / NEEDS_CONTEXT / BLOCKED
 - **COMMIT:** the short SHA of your test commit
 - **TEST_FILES:** every file your commit touches -- tests and fixtures (repo-relative)
 - **TEST_COMMAND:** the exact command that runs them
 - **RED:** one line of the failing output (e.g. "3 failed: parse_date not defined")
+- **SAFEGUARDS:** "none", or every safeguard you bypassed or weakened -- what, where, why
+  (`--no-verify`, a skipped hook, an existing test skipped, deleted, or loosened)
 
 Status meanings: TESTS_READY = tests committed and failing for the right reason · NOT_TESTABLE =
 nothing to test, nothing written · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED =

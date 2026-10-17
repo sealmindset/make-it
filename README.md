@@ -958,6 +958,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.43.0 -- Every ask decision-ready; every weakened safeguard disclosed
+
+`references/approval-block.md` is the working form of "Keep the human able to notice" for skills
+and agents. An ask picks its tier first: **routine** steps proceed with a note, **consequential**
+ones are batched into one ask, **high-stakes** ones need the human to state or pick the specific.
+Every ask says what changes, the evidence, the blast radius and undo, what is unusual, and the one
+thing to check; a "Recommended" option carries its strongest counter-argument.
+
+Every SDD subagent (test-writer, implementer, fix) and every `/dispatch-it` lane now ends its
+report with a **SAFEGUARDS** line: "none", or each `--no-verify`, skipped, deleted or loosened test,
+or edited hook, CI step or evaluator. The task reviewer gives a third verdict, **safeguards ✅ / ⚠️
+/ ❌**: a weakening in the diff that isn't on the line is Critical and is undone; a disclosed one
+goes to the controller or the human. The adversarial reviewer and dispatch-it's integration step
+check the same line. Tested on two planted weakenings (a loosened assertion hiding a regression, a
+deleted test called a duplicate): flagged ❌ in 4/4 reviews; the disclosed variant came back ⚠️.
+The old prompt also caught both on these small diffs; the gain is the required verdict and a
+claim to check, not a higher catch rate there. The skills link the block as each one's asks are
+reworked (E03-S5).
+
 ### v1.42.0 -- Live cards say how and when they'll be checked
 
 Bug cards gain `signal:` (one line: how the fix is proved on the live system, read-only) and
