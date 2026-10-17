@@ -74,8 +74,8 @@ mid-session checkpoint and contains the goal, current state, active files, chang
 failed approaches, and next steps from the previous session. If it exists:
 - Read it in full FIRST -- it is the freshest, most specific picture of where work stopped
 - Treat its **Failed Approaches** section as binding: do NOT retry approaches it rules out
-- Default the session's starting point to its **Next Steps** section (no separate ask: the
-  user picks it in greet-and-suggest)
+- Default the session's starting point to its **Next Steps** section (no separate ask: it is
+  the first row of the greet-and-suggest menu, and the user picks it there)
 - If those steps cite card ids, re-read each card on the board (found as `/backlog-it` Step 1
   finds it -- this project's board only, as in /clear-it's gather step 5). The live board
   wins: a card now `done` drops out,
@@ -463,6 +463,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 |---------------|-----------------|
 | Security scanner findings (critical/high) | (Do NOT suggest -- auto-fix silently before presenting suggestions) |
 | Security scanner findings (medium) | (Do NOT suggest -- interleave fixes with user work, invisibly) |
+| handoff.md has Next Steps | "Last time you stopped at [first Next Step] -- pick up there?" (the default starting point from step 0) |
 | Board has Now fixing / Next up | "You were fixing [card] -- want to carry on? Next in line is [card]." |
 | TODO.md has items | "I found [N] items in your to-do list -- want to tackle one?" |
 | Tests don't exist yet | "Your app doesn't have automated tests yet -- want me to set that up?" |
@@ -481,7 +482,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | AI features exist but no brain layer (BN01-BN13 all GAP) | "Your app has AI features but no persistent memory -- the AI starts fresh every conversation. Want me to add a brain layer so it learns user preferences, remembers decisions, and gets smarter over time?" |
 | Code quality missing (Q01-Q13 gaps) | "Your app doesn't have linting, formatting, or pre-commit hooks set up yet -- DevOps will flag this. Want me to add code quality tools? They catch problems before code gets committed." |
 | CI quality gate workflow missing (Q13) | "Your app has local quality checks but no CI workflow to enforce them on every PR. Want me to add the quality gate workflow? It runs all checks automatically and generates an attestation artifact." |
-| Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment -- which should I apply, or all of them?" (active confirmation -- the ask below) |
+| Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment ([name each]) -- which should I apply?" (active confirmation -- the ask below) |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
@@ -491,17 +492,19 @@ If the catch-up scan found gaps, include a brief summary in the status:
 
 "I also compared your app against the latest build standards and found [N] things
 that can be improved:
-- [Critical count] security/auth updates -- these change how sign-in and permissions work
+- [Critical count] security/auth updates -- each one changes how sign-in or permissions work:
+  [name each in plain words, e.g., 'sign-out becomes a button instead of a link', 'roles come
+  from your database instead of the sign-in provider', 'every data request checks a permission']
 - [Important count] feature enhancements (e.g., admin settings, activity logs)
-- [Nice-to-have count] optional improvements
+- [Nice-to-have count] optional improvements -- I'll list these in your to-do file, not apply them
 
-Everything goes on its own branch, so nothing lands until you've seen it; the undo is to drop
-that branch. The one thing to check afterwards: sign in once and make sure each role still
-sees what it should.
+Everything is built in a separate copy we can throw away, so nothing lands until you've seen
+it. Before you decide, look down the security/auth list: check that none of those is something
+you set up that way on purpose.
 
-Which should I apply -- the security/auth updates, the enhancements, the optional ones, or all
-three? (I'd start with the security/auth updates -- the catch is they're the ones most likely
-to change how sign-in behaves, so plan to try the app right after.)"
+Which should I apply -- the security/auth updates, the enhancements, or both? (I'd start with
+the security/auth updates -- the catch is they're the ones most likely to change how sign-in
+behaves, so plan to try the app right after.)"
 
 The user names the group(s). Security/auth changes sign-in and permissions, so this is active
 confirmation, per the approval block: a plain "yes" isn't an answer -- ask which before doing
@@ -509,7 +512,7 @@ anything.
 
 **If the user accepts the catch-up work:**
 
-Route to a dedicated catch-up workflow:
+Route to a dedicated catch-up workflow, applying only the group(s) the user named (steps 1-2):
 1. Apply all critical gaps first (BLOCK items from build-standards.md)
 2. Apply important gaps next (FIX items)
 3. Note nice-to-have gaps in TODO.md (WARN items)
@@ -561,11 +564,13 @@ unless they ask. Full spec: `worktree-workflow.md`.
 - Work that splits into **3+ ordered tasks**: write a plan first (the Plan format in
   `backlog-board.md` -- next to its card when the project has a board, else
   `.make-it/plans/<slug>.md`), show it decision-ready (the approval block's five parts: what
-  changes, what you looked at, the undo, the one thing to check), wait for the go, mark it
-  `status: approved`, then execute
+  changes, what you looked at, the undo, what is unusual, the one thing to check), wait for the
+  go, mark it `status: approved`, then execute
   it via Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): a
   fresh implementer subagent per task + per-task review (spec + quality + safeguards) + a final whole-branch
-  review, instead of hand-coding inline. Fewer tasks: just do the work.
+  review, instead of hand-coding inline. If the plan touches sign-in, permissions, or the
+  database structure, the go is high-stakes: the user picks those tasks by name, not a plain
+  go. Fewer tasks: just do the work.
   (Independent *parallel* problems that aren't an ordered plan → `/dispatch-it`.)
 - Implement the changes
 - After changes, automatically run existing tests (if any)
@@ -824,7 +829,7 @@ This runs BEFORE any user-requested work. The user does not initiate this -- it 
 7. If the fix changes app behavior (UI, features, workflows):
    - Pause and tell the user, in a few plain lines (consequential, per the approval block): what
      now works differently (the screen or step, in their words); that it was a safety fix, the
-     tests pass, and it is already saved and pushed (undo: I can roll it back); and the one
+     tests pass, and it is already saved (undo: I can put it back the way it was); and the one
      thing to check -- the exact screen or step that changed. Then: "Run /try-it and tell me
      if that still works the way you want."
    - Wait for their answer before continuing
@@ -913,7 +918,8 @@ Build a snapshot:
 **Phase 3: Conversational Confirmation**
 
 Present the snapshot and upgrade plan to the user. This changes database tables, so it is
-active confirmation, per the approval block: the user types the count, never a plain yes.
+active confirmation, per the approval block: the user picks the specific -- Tier 2, which
+prompts to carry over; Tier 3, the exact phrase -- never a plain yes.
 
 **For Tier 2 Outdated (normal upgrade):**
 
@@ -935,9 +941,14 @@ I can upgrade to the latest scaffold standard, which adds:
 with a `_legacy` suffix (never deleted) so you can always reference the original data.
 [If custom columns found:] Your custom columns ([list]) will be preserved in the legacy tables.
 
-This changes your database, so I need one specific from you: to go ahead, tell me how many
-prompts I should carry over. It should be [N] -- if your number is different, I've missed
-something, and I'll stop and look before touching anything."
+This changes your database, so I need one specific from you, not a yes. Here are your prompts,
+all marked to carry over:
+- [x] [prompt name]
+- [x] [prompt name]
+- ...
+Tell me which to carry over -- 'all of them', or name the ones to leave out (those stay in the
+legacy tables only). If a prompt you use isn't on this list, stop me: I've missed something
+and will look before touching anything."
 
 **For Tier 3 Custom (protection):**
 
@@ -947,11 +958,11 @@ something, and I'll stop and look before touching anything."
 
 The scaffold upgrade would **replace** this with the simpler Tier 2 standard, which does NOT
 include [list Tier 3 features that would be lost]. **Recommended: keep what you have** -- the
-one thing you'd give up is the standard's guided editing and version timeline, and those can be
-added on later without replacing anything.
+catch is you'd go without [list the standard's features the snapshot shows yours lacks].
 
 I'll leave it alone unless you tell me otherwise. To replace it anyway, type exactly:
-'Yes, replace my Tier 3 implementation' -- that replacement can only be undone with a git revert."
+'Yes, replace my Tier 3 implementation' -- the only undo is for me to put the old version back
+from your saved history."
 
 Anything other than that exact phrase keeps the current implementation (one stop, active
 confirmation -- no separate "skip it?" ask).
@@ -978,7 +989,8 @@ The migration must:
    - prompt_test_cases (UUID PK, prompt_id FK, name, input_variables JSONB, expected_output, created_at)
    - prompt_audit_log (UUID PK, prompt_id UUID NOT FK, action, actor, changes JSONB, created_at)
 
-3. **Migrate data** from legacy tables to new schema:
+3. **Migrate data** from legacy tables to new schema (only the prompts the user named in
+   Phase 3; the rest stay in the legacy tables):
    - Map columns: name -> name, description -> description, content -> content, is_active -> is_active
    - Generate slugs from names (lowercase, hyphens, no special chars)
    - Map model-related columns (e.g., model_tier) to model_settings JSONB
@@ -1118,18 +1130,17 @@ records decisions, and gets smarter over time. Here's what this includes:
 
 Your existing AI agents ([list agents]) will automatically benefit -- no changes needed to them.
 Brain features are OFF by default (BRAIN_FEATURES_ENABLED=false) until you're ready to enable.
-Everything is added alongside what exists; the undo is to drop the branch before it lands.
+Everything is added alongside what exists, in a separate copy we can throw away before it lands.
 
-This adds database tables and permissions, so I need one specific from you: whose memory
-should the AI keep?
-- **Each person's own** -- what one user teaches it stays with that user
-- **Shared across your organization** -- decisions and preferences everyone benefits from
-- **Both** (Recommended -- the catch: something one person tells the AI can surface for a
-  colleague, so if your app holds anything about one person that another shouldn't see, pick
-  'each person's own')"
+This adds database tables and permissions, so I need you to pick one, not just say yes:
+- **Add it** -- 4 new tables, 6 new permissions (brain.own.* and brain.admin.*), and memories
+  kept per person and shared across your team (Recommended -- the catch: something one person
+  tells the AI can surface for a colleague, so if your app holds anything about one person
+  that another shouldn't see, pick 'not now' and tell me)
+- **Not now** -- nothing changes; I'll note it in your to-do file"
 
 Wait for the pick (active confirmation, per the approval block); a plain yes isn't an answer --
-ask which. Set `user_memory` / `org_memory` in app-context.json `brain_features` to match.
+ask which. 'Not now': add the TODO.md line and return to the menu; skip Phases 3-4.
 
 **Phase 3: Implement**
 
@@ -1271,7 +1282,9 @@ If SOME FAIL:
 
 I'll start fixing these now -- in the app, not by changing the tests."
 
-(Routine -- don't stop for a go-ahead; the user can say stop.)
+(Routine -- don't stop for a go-ahead; the user can say stop. If a fix touches sign-in,
+permissions, or the database structure, that fix is high-stakes: name the specific change and
+have the user pick it before applying.)
 
 If MANY FAIL:
 "I found several issues that need attention. Let me prioritize them:
@@ -1287,7 +1300,7 @@ If MANY FAIL:
 
 I'll start fixing these in that order -- in the app, not by changing the tests."
 
-(Routine -- same as above, no stop.)
+(Routine -- same as above, no stop, same high-stakes exception.)
 
 </step>
 
