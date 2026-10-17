@@ -373,13 +373,14 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 
 [If phased mode:]
 **I'll do this in [STEP_COUNT] steps, checking with you between each one:**
-1. **Setting up your development environment** -- no risk to your existing features
-2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
-3. **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
-4. **Polishing the interface** -- your app will look the same, just with a few upgrades
-5. **Setting up test services** -- so you can develop without needing real external systems
-6. **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
-7. **Final security checks and deployment prep** -- locking everything down
+[Bullets, not numbers -- the item numbers above are the only numbers on this screen.]
+- **Setting up your development environment** -- no risk to your existing features
+- **Preparing your database for users and permissions** -- I'll verify everything works before continuing
+- **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
+- **Polishing the interface** -- your app will look the same, just with a few upgrades
+- **Setting up test services** -- so you can develop without needing real external systems
+- **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+- **Final security checks and deployment prep** -- locking everything down
 
 I'll check with you after each step before moving on.
 
@@ -402,27 +403,32 @@ data your app keeps, and how login works today'; if the codebase was too large t
 full (error-handling): 'the parts that matter most: [what was read, e.g. the pages, the
 routes, the data your app keeps, and how login works today], plus what you confirmed about
 the rest'] ([current login mechanism, or 'there is none']).
-**Where it happens:** on this computer[; if the app has no database, or its database runs
-here too: ' only; nothing is sent anywhere'; if its database lives elsewhere (connection
-settings in .env / compose point at another host): ', except your database at [host] -- the
-new tables and the change to your users list land there']. Before I touch anything I save a
-snapshot of your app's files as they are now, so I can put the files back exactly like this
-at any point. [If the app already has a database: 'The new tables and the change to your
-users list stay in your data unless I back it up first.'] [If there are unsaved changes:
-'You have unsaved changes; I'll save them first so the snapshot is complete.']
+**Where it happens:** on this computer[; if the app has no database or its database runs
+here too, and it does not use AI: ' only; nothing is sent anywhere'][; if its database lives
+elsewhere (connection settings in .env / compose point at another host): ', except your
+database at [host] -- [DATA_CHANGES: what this plan adds to their data, in plain words --
+e.g. 'the new lists of roles and permissions, a role field on your list of users, and the
+sample records and test accounts I add'] land there'][; if the app uses AI: ', and while I
+check the AI features I send a few test prompts to [AI provider]']. Before I touch anything I
+save a snapshot of your app's files as they are now, so I can put the files back exactly like
+this at any point. [If a snapshot from an earlier run exists: 'Putting the files back returns
+to before that first run, not to now.'] [If the app already has a database: 'There is no undo
+for [DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved
+changes: 'You have unsaved changes; I'll save them first so the snapshot is complete.']
 **What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
 replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
 set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
 **One thing to check:** look at 'What stays the same' -- is anything your app does today
 missing from that list?
 
-Tell me what to include: **all [ITEM_COUNT] items**, or the numbers to leave out[; and, if
-your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
+Tell me what to include: **all [ITEM_COUNT] items**, or the item numbers to leave out[; and,
+if your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
 or fresh build] -- or **Not now**."
 
 **Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
 what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
-number)[; and, if Very High, which route]. Build only what they included; anything left out
+item number)[; and, if the app has a login, keep or replace][; and, if Very High, which
+route]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
@@ -430,25 +436,21 @@ left-out item is needed by one they kept, say which in one line and ask them to 
 error-handling; nothing below runs. **Step-by-step upgrade** -- continue below with the items
 they included.]
 
-**After they pick, create the pre-retrofit snapshot** (once -- a re-run keeps the earlier one;
-their unsaved changes, if any, are saved first as announced above, with .env kept out of the
-save):
+**After they pick, save their unsaved changes (every run, as announced above, with .env files
+kept out of the save) and create the pre-retrofit snapshot if there is none yet** (a re-run
+keeps the earlier one, as the ask said):
 
 ```bash
-if git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null; then
-  echo "pre-retrofit snapshot already exists -- keeping it"
-else
-  if [ -n "$(git status --porcelain)" ]; then
-    grep -qxF '.env' .gitignore 2>/dev/null || printf '\n.env\n' >> .gitignore
-    git add -A && git reset -q -- .env
-    git diff --cached --quiet || git commit -q -m "Save pre-retrofit state"
-  fi
-  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+git rev-parse --git-dir >/dev/null 2>&1 || git init -q
+if [ -n "$(git status --porcelain)" ]; then
+  grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n' >> .gitignore
+  grep -qxF '!.env.example' .gitignore 2>/dev/null || printf '\n!.env.example\n' >> .gitignore
+  git add -A && git reset -q -- '.env*' ':(exclude).env.example'
+  git diff --cached --quiet || git commit -q -m "Save pre-retrofit state"
 fi
+git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
+  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
 ```
-
-If the snapshot already existed, tell user: "I'm keeping the snapshot from the earlier run --
-it's still your app as it was before any upgrade."
 
 This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
 the exact state of the files before any retrofit changes were made (the database is not
@@ -900,9 +902,11 @@ never a plain "ready?":
 app starts in its new sandbox and every page I found still loads'].
 
 What changed: [this step's user-facing scope, one line].
-Everything is saved on this computer. If anything is off, I can put the app's files back to how
-they were before this step, or before the upgrade started. [If the app already had a database
-and this step changed it: 'The new tables and the change to your users list stay in your data;
+Your files are saved on this computer[; if the database lives elsewhere: ', and the data
+changes are in your database at [host]']. If anything is off, I can put the app's files back to
+how they were before this step, or before the upgrade started. [If the app already had a
+database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
+'the new lists of roles and permissions', 'the sample records and test accounts I added']:
 putting the files back does not remove them.']
 What stands out: [anything that differs from a typical upgrade of this kind -- or 'nothing'].
 One thing to check: [open [URL] and try [the feature this step touched most]; for a step with
@@ -944,6 +948,11 @@ each would have added, and stop -- running /retrofit-it again later finds what i
 **Build-verify is a SILENT QUALITY GATE** identical to /make-it's. The user sees
 "Making sure everything works..." but NOT the technical details.
 
+**Left-out items (the user's plan pick, Phase 4) stay out through Parts A-D:** any static
+check, live test, retrofit-specific check, or fix-cycle fix that belongs to an item they left
+out is skipped -- no auto-fix, no block, no fix in app code. TODO.md already lists it as
+"left out by your choice".
+
 **PART A: Static code verification (before starting the app)**
 
 Run ALL checks from `build-standards.md` that match the project's active tiers.
@@ -965,9 +974,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 
-For each failing check:
-- Belongs to an item the user left out at the plan ask (Phase 4): skip it -- no auto-fix, no
-  block; TODO.md already lists it as "left out by your choice"
+For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
 - `[WARN]` items: note in TODO.md, continue
@@ -1022,6 +1029,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 - What was retrofitted (gap inventory summary)
 - Risk score and strategy used
 - Verification results (all Part A-D results)
+- Items the user left out at the plan ask, as "left out by your choice" (so /try-it and
+  /resume-it see them and don't add them back)
 - Any remaining TODOs
 
 **Generate app-context.json** -- So /resume-it and /ship-it work going forward.
