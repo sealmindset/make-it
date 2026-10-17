@@ -41,6 +41,7 @@ prompt; work in character to that persona's output standard. See the reference b
 <execution_context>
 
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -328,16 +329,26 @@ git status --short
 git log --oneline origin/{current_branch}..HEAD 2>/dev/null
 ```
 
-**2. Tell the user what will happen in PLAIN LANGUAGE:**
+**2. Tell the user what will happen in PLAIN LANGUAGE, and get the go:**
 
-"Your app's deployment is already set up. I see you have new changes ready to go.
+Sending updates the running app, so this is active confirmation, per the approval block: the
+user picks the target by name, a plain yes isn't an answer. Fill every bracket from step 1.
 
-Here's what I'll do:
-1. Save your changes (if not already saved)
-2. Send them to your deployment pipeline
-3. Your app will update automatically in a few minutes
+"Your app's deployment is already set up, and you have changes ready to go: [N changed files /
+M saved changes not sent yet / both] -- [one line on what they touch].
 
-Ready to deploy?"
+If you say go, I'll give the changes a quick once-over (fixing small things if I find any),
+save them, and send them. A few minutes later the running version of your app at **{hostname}**
+updates, for everyone who uses it. To undo, I'd send the previous version the same way --
+another few minutes, not instant. [What stands out, e.g. 'this includes a database update' /
+'nothing unusual -- a normal update']. The one thing to check: is everything in these changes
+meant to go live?
+
+- **Update {hostname}** -- send now
+- **Not now** -- nothing is saved or sent; your changes stay as they are"
+
+Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which. On 'not now', stop here;
+steps 3-4 run only on 'Update {hostname}'.
 
 **NEVER say:** git push, merge, Argo CD sync, deploy branch, CI pipeline, Docker image,
 container, manifest, kubectl, namespace, pod, or any other technical term.
@@ -367,9 +378,8 @@ fi
 ```
 
 If lint/type errors are found: auto-fix what's fixable (`ruff check --fix`, `eslint --fix`),
-then include the fixes in the commit. If unfixable errors remain, tell the user in plain
-language: "I found a small issue in your code that I can't fix automatically. Here's what's
-wrong: [plain description]. Want me to help fix it?"
+then include the fixes in the commit. If unfixable errors remain, note them for the one ask at
+the end of step 3 (don't stop here).
 
 **3b. Cross-check env vars against K8s manifests:**
 ```bash
@@ -417,7 +427,7 @@ if echo "$CHANGED" | grep -q 'package.json'; then
 fi
 ```
 
-If syntax errors are found: tell the user in plain language and offer to help fix.
+If syntax errors are found: note them for the one ask at the end of step 3 (don't stop here).
 Never show raw Python tracebacks.
 
 **3e. Secret leak scan on the diff:**
@@ -428,13 +438,34 @@ echo "$DIFF" | grep -iE '(password|secret|token|api_key|private_key)\s*[:=]\s*["
   grep -v '\.example\|TODO\|placeholder\|changeme\|your-.*-here' || true
 ```
 
-If potential secrets are found: STOP. Tell the user: "I found what looks like a password
-or secret key in your changes. Secrets should never be saved in code. Want me to move it
-to a safe location?" Then move the value to `.env` and replace with `os.getenv()` /
-`process.env.` reference.
+If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
+the approval block: the user names what to move, a plain yes isn't an answer.
+
+"I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
+[, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
+I can move the value into your local settings file (.env) and have the code read it from there
+-- those lines change, and your project history keeps the old version. Your deployed app will
+then need that value added to its settings by your DevOps team; I'll give you the exact name to
+send them. This isn't part of a normal send -- it only comes up when something looks like a
+secret. The one thing to check: is this a real secret, or just a sample value?
+
+Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
+out yourself?"
+
+Move only the ones they named: the value goes to `.env`, the code gets an `os.getenv()` /
+`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
+nothing is saved or sent. If any found value is still in the code (not named, or called a
+sample), stop and say which one is holding things up -- never send with a found secret still in
+the code, whatever they say.
 
 **If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
-**If any check fails and can't be auto-fixed:** pause and explain in plain language. Never
+**If any check fails and can't be auto-fixed** (3a, 3d -- 3e has its own gate above): one ask
+for everything found (consequential, per the approval block), in a few plain lines: what I
+found ([N] problem(s) in [files], in plain words); that nothing is saved or sent yet; that
+fixing means I change those lines of your code -- you'll see each change, and your project
+history keeps the old version; [what stands out, or 'nothing unusual']; and the one thing to
+check: are any of these files ones you're in the middle of editing? Then: "Fix them now, or
+stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent. Never
 show raw error output, linter names, or tool output to the user.
 
 **4. Execute the deployment:**
@@ -511,8 +542,8 @@ LATEST_RUN=$(gh run list --workflow=build-and-deploy.yml --limit=1 --json databa
 |-----------|--------------|----------------------|
 | `completed` + `success` | CI built and pushed the image. Problem is downstream. | "Your build succeeded. Let me check if the running app picked up the new version..." |
 | `completed` + `failure` | CI failed -- image was never pushed. | "Your build didn't finish successfully. Let me check what went wrong..." Then read the logs, diagnose, and auto-fix if possible. |
-| `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes. Want me to check back in a bit?" |
-| No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet. Want me to push them now?" |
+| `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes -- I'll check again in a couple of minutes." Then re-check (no ask). |
+| No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet." Then go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply; never push from here without them. |
 | Run exists but wrong branch | CI ran on a different branch. | "Your build ran on a different branch. Let me push from the right one..." |
 
 **2. If CI succeeded, check if the deploy branch was updated:**
@@ -625,7 +656,8 @@ or resolved from `.argo-it.yml`.**
 4. User answers (ask only if none of the above resolve it)
 5. Sensible defaults (lowest priority)
 
-If everything was resolved, skip directly to generation with a confirmation.
+If everything was resolved, skip directly to generation, saying the settings in one line (no
+ask -- the deploy gate in PHASE 5 is where the user checks the hostname).
 
 **1. Greet and explain:**
 
@@ -1752,39 +1784,60 @@ git add env/ .github/workflows/ ONBOARDING-K8S.md
 git commit -m "Add K8s manifests and CI workflow for Argo CD deployment"
 ```
 
-**2. Ensure the deploy branch exists:**
+**2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
+it' in step 4, after the user's go; nothing leaves the machine before the ask):
 
 ```bash
 # Check if deploy branch exists remotely
 git fetch origin {deploy_branch} 2>/dev/null || true
-if ! git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
-  # Create the deploy branch from current state
-  git checkout -b {deploy_branch}
-  git push -u origin {deploy_branch}
-  git checkout {previous_branch}
-fi
+git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the result for step 3
 ```
 
 **3. Ask the user what they want to do:**
 
-"I've generated your deployment pipeline. Here's what's ready:
+Sending starts a deployment, so this is active confirmation, per the approval block: the user
+picks the target by name, a plain yes isn't an answer. Fill every bracket from what was found.
+
+"I've generated your deployment pipeline and saved it in your project folder -- nothing has been
+sent anywhere yet. Here's what's ready:
 
 **Generated files:**
-- `{manifest_dir}/dev/` -- [N] manifest files for dev
-- `{manifest_dir}/prod/` -- [N] manifest files for prod
-- `.github/workflows/build-and-deploy.yml` -- Full CI/CD pipeline
+- `{manifest_dir}/dev/` -- [N] deployment files for dev
+- `{manifest_dir}/prod/` -- [N] deployment files for prod
+- `.github/workflows/build-and-deploy.yml` -- the automated build-and-deploy steps
 - `ONBOARDING-K8S.md` -- Setup checklist for DevOps and developers
+
+If I send this to GitHub, then from now on, every time anyone sends code to this project it
+builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
+deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
+system watches.] Nothing goes live until your DevOps team finishes the one-time setup in
+ONBOARDING-K8S.md; if that's already done, this send goes live too. To undo, I'd remove these
+files and send again -- the pipeline stops, but whatever already went live stays until it's
+replaced. [What stands out, e.g. 'the database runs inside the cluster for dev' / 'this sits
+next to an existing workflow' / 'nothing unusual']. The one thing to check: is **{hostname}**
+the right address for the dev version of your app?
 
 **What would you like to do?**
 
-1. **Push to GitHub** -- CI will build images and deploy automatically
-2. **Test locally first** -- Apply to your local K8s cluster
-3. **Review files** -- Show me the generated manifests before doing anything"
+1. **Send it to GitHub** -- builds and deploys to **{hostname}** automatically
+2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
+   [only if kubectl and a local cluster are available]
+3. **Show me the files first** -- nothing is sent
+4. **Not now** -- everything stays saved in your project folder; nothing is sent"
+
+Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which.
 
 **4. Execute based on user choice:**
 
-**Option 1 (push -- CI deploys automatically):**
+**Option 1 (send -- CI deploys automatically):**
 ```bash
+# Create the deploy branch first if step 2 found it missing
+if ! git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
+  git checkout -b {deploy_branch}
+  git push -u origin {deploy_branch}
+  git checkout {previous_branch}
+fi
+
 git push origin {current_branch}
 ```
 
@@ -1805,7 +1858,14 @@ kubectl get pods -n {namespace}
 kubectl get svc -n {namespace}
 ```
 
-Then ask: "How does it look? Want me to push to GitHub now?"
+Then say what came up, in plain words, and go back to the step-3 pick without option 2 (the
+same gate -- 'Send it to GitHub' by name, 'Show me the files first', or 'Not now').
+
+**Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask),
+then go back to the step-3 pick without option 3.
+
+**Option 4 (not now):** say the files are saved in the project folder and nothing was sent;
+stop here. Skip step 5.
 
 **5. Report success:**
 
@@ -2104,13 +2164,27 @@ or updating -- they want to deploy their changes, not reconfigure infrastructure
 Only offer manifest regeneration if the user explicitly asks.
 
 **If existing manifests are found but deploy infrastructure is incomplete:**
-"I see existing K8s manifests in `{dir}`. Want me to:
-1. Regenerate them from your current Docker Compose (overwrites existing)
-2. Update specific files only
-3. Use them as a reference pattern for a new app"
+Replacing files someone wrote is hard to undo, so this is active confirmation, per the approval
+block: the user names which files, a plain yes isn't an answer. Fill every bracket from PHASE 0.
+
+"I found existing deployment files in `{dir}`: [list the N files]. [What's missing from the
+setup, e.g. 'there's no automated build-and-deploy workflow yet'] -- that's why I'm asking. I can
+write fresh files from your Docker Compose setup, but that replaces what's there. [Undo: 'they're
+saved in your project history, so I can bring them back' / 'they aren't saved in your project
+history yet -- replaced means gone']. The one thing to check: does anything already running
+depend on these files as they are?
+
+Which should I do?
+- **Replace all [N] files in `{dir}`**
+- **Replace only these:** (name the files)
+- **Leave them all as they are** -- I'll follow their pattern for anything new I add"
+
+Replace only what they named. 'Leave them': generate only what's missing, following the
+existing pattern.
 
 **If the user doesn't know a setting (namespace, hostname, etc.):**
-- Offer to generate manifests with `TODO` placeholders that can be filled in later
+- Generate the manifests with `TODO` placeholders that can be filled in later (routine -- no
+  ask) and say so:
 - "No worries -- I'll mark it as TODO in the manifest. You can fill it in later or ask your DevOps team."
 
 **If kubectl is not available (for local testing):**
