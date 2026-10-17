@@ -51,6 +51,7 @@ This skill has 6 phases:
 
 @~/.claude/nemo-it/references/owasp-testing-guide.md
 @~/.claude/make-it/references/guardrails.md
+@~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/templates/nemo-it-attestation.md
 
 </execution_context>
@@ -186,11 +187,9 @@ done
 ```
 
 - If app IS running: "Your application is running on port [N]. I will include dynamic analysis."
-- If app is NOT running and mode requires DAST (full or owasp):
-  - "Your application is not running. Dynamic analysis (OWASP ZAP, Playwright tests, API probing) requires a running app."
-  - "Would you like me to try starting it? I can look for a start command in your package.json or docker-compose file."
-  - If user says yes, attempt to start. If start fails, skip DAST phases and note it in the attestation.
-  - If user says no, skip DAST phases and note it in the attestation.
+- If app is NOT running and mode requires DAST (full or owasp): look for a start command (package.json scripts, docker-compose file) and record it as `START_COMMAND`. Do not start anything yet -- the start is picked in step 7, after the production check.
+  - If found: "Your application is not running. The live tests need it, so I will ask before starting it, together with anything I need to install."
+  - If none found: "Your application is not running and I could not find how to start it. I will skip the live tests and note it in the attestation." Skip DAST phases.
 - If mode is `sast` or `deps`: "This scan mode does not need a running app. Proceeding."
 
 **6. Check for production environment:**
@@ -203,14 +202,24 @@ echo $FLASK_ENV
 echo $DJANGO_SETTINGS_MODULE
 ```
 
-If production indicators found:
-"WARNING: This appears to be a production environment. Running security scans against production systems carries risk. I strongly recommend running against a development or staging environment instead.
+If production indicators found, stop and ask. This is high-stakes per the approval block: the user picks the specific option below; a plain "yes" or "continue" is not an answer -- ask them to pick.
 
-Do you want to continue? If yes, I will limit testing to passive scans only."
+"Hold on. This app looks like it is connected to your live system, not a test copy.
 
-Require explicit confirmation. If confirmed, set `PASSIVE_ONLY=true`.
+What I found: [each indicator as found -- e.g. `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
+What would change: [mode full or owasp: 'I would still scan the app on this computer, but with passive checks only -- I look at what it sends back and send nothing that tries to change it or stress it.' / mode sast or deps: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
+Where it lands: [mode full or owasp: 'every request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back.' / mode sast or deps: 'nothing is sent to that live system; what I find about this project stays in the attestation on this computer.']
+What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
+One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
-**7. Install required tools (with user permission):**
+Pick one:
+- Go ahead with this project as it is, connected to [TARGET AS FOUND] [mode full or owasp: ', passive checks only']
+- Stop -- I will point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
+- Not sure"
+
+Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written." Nothing else runs.
+
+**7. Install required tools and start the app (one ask):**
 
 Build a list of tools needed for the selected scan mode, then check which are missing:
 
@@ -239,17 +248,27 @@ pip show pytest-html 2>/dev/null || echo "MISSING: pytest-html"
 pip show nemoguardrails 2>/dev/null || echo "MISSING: nemoguardrails"
 ```
 
-Present missing tools to user as a grouped list:
+If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block) that covers both the app start and the installs -- include only the parts that apply:
 
-"I need to install the following tools to run your scan. These are industry-standard security tools:
+"Before I scan, [one thing / two things]:
 
-- **semgrep** -- A code pattern scanner that checks for known vulnerability patterns (install via pip)
-- **trivy** -- Scans your Docker images and dependencies for known vulnerabilities (install via brew or Docker)
-- [etc.]
+[If START_COMMAND is pending:]
+**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do.
 
-Can I go ahead and install these?"
+[If tools are missing:]
+**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your project files are not touched:
+- **semgrep** -- checks your code for known weak patterns (installed with pip)
+- **trivy** -- checks your Docker images and the libraries you use for known problems (installed with brew or Docker)
+- [etc., one line each, from the missing list above]
 
-Install commands (run only after user approval):
+What stands out: [a large download -- the Playwright browsers or the ZAP image -- or 'nothing'].
+One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out].
+
+Pick: [start the app and] install all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space), [install all but do not start the app,] install only the ones you name, or none."
+
+Wait for the pick. A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
+
+Install commands (run only the ones picked):
 
 ```bash
 # semgrep
@@ -282,6 +301,8 @@ pip install pytest pytest-html
 # nemoguardrails (only if AI features detected)
 pip install nemoguardrails
 ```
+
+If the start was picked: run `START_COMMAND`, then re-run the port check from step 5. If the app does not come up, skip DAST phases and note it in the attestation.
 
 **8. Create scan workspace:**
 
