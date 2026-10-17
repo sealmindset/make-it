@@ -440,21 +440,28 @@ Never show raw Python tracebacks.
 # change differently. .env is left out of the first two -- its values live there on purpose.
 # The two diff scans read added (+) lines only -- a removed line never adds a secret -- and
 # awk tags each line with its file from the "+++ b/" header, so every hit reads file:+line.
+# Each scan prints its label first; the ask below goes by the label a hit sits under.
+# SKIP is matched on the line after the file tag, never on the path (lib/placeholder_image.py
+# can hold a real secret). The git flags pin the output the awk tagger reads, whatever the
+# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, unquoted names.
 PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
-SKIP='\.example\|TODO\|placeholder\|changeme\|your-.*-here'
-TAG='/^\+\+\+ b\//{f=substr($0,7);next} /^\+/{print f":"$0}'
-git diff HEAD -- . ':!.env' | awk "$TAG" \
-  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # unsaved edits
+SKIP='\(\.example\|TODO\|placeholder\|changeme\|your-.*-here\)'
+TAG='/^\+\+\+ b\//{f=substr($0,7);sub(/\t$/,"",f);next} /^\+/{print f":"$0}'
+echo "== unsaved edits =="
+git -c core.quotePath=false diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD -- . ':!.env' \
+  | awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
+echo "== new files =="
 git ls-files --others --exclude-standard -z -- . ':!.env' \
-  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "$SKIP" || true   # new files, one at a time, name shown
-git log -p --cc --format= HEAD --not --remotes | awk "$TAG" \
-  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet (every unsent commit, merges included)
+  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "^[^:]*:.*$SKIP" || true   # one at a time, name shown
+echo "== saved, not sent =="
+git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -p --cc --format= HEAD --not --remotes \
+  | awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
 the approval block: the user names what to move, a plain yes isn't an answer.
 
-**If any hit is in a saved, unsent change (the third scan): the only option is stop here.** Step
+**If any hit sits under `== saved, not sent ==`: the only option is stop here.** Step
 4 sends the saved change that holds the value, so moving it out of the current files can't keep
 it out of the send. Say so plainly, and what to do next; offer nothing else:
 
@@ -468,7 +475,7 @@ already been shared or used anywhere, have it changed too."
 
 Then stop -- steps 4 and later don't run.
 
-**Otherwise (every hit is in unsaved edits or new files), ask which to move:**
+**Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
 
 "I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
@@ -1828,7 +1835,7 @@ it' in step 4, after the user's go; nothing leaves the machine before the ask):
 # Check if deploy branch exists remotely
 git fetch origin {deploy_branch} 2>/dev/null || true
 git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the result for step 3
-git rev-list --count HEAD --not --remotes   # if more than 1, step 3 names the others (count minus the step-1 commit)
+git log --oneline HEAD --not --remotes   # step 3 names every saved change listed here other than the one step 1 just made
 ```
 
 **3. Ask the user what they want to do:**
@@ -1851,13 +1858,13 @@ sent anywhere yet. Here's what's ready:
 If I send this to GitHub, then from now on, every time anyone sends code to this project it
 builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
 deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
-system watches.] [If step 2's count was more than 1: This also sends the [M] other saved changes
-you haven't sent yet.] Nothing goes live until your DevOps team finishes the one-time setup in
-ONBOARDING-K8S.md; if that's already done, this send goes live too. To undo, I'd remove these
-files and send again -- the pipeline stops, but whatever already went live stays until it's
-replaced. [What stands out, e.g. 'the database runs inside the cluster for dev' / 'this sits
-next to an existing workflow' / 'nothing unusual']. The one thing to check: is **{hostname}**
-the right address for the dev version of your app?
+system watches.] [If step 2 listed saved changes other than the one step 1 just made: This also
+sends the [M] other saved changes you haven't sent yet.] Nothing goes live until your DevOps
+team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, this send goes
+live too. To undo, I'd remove these files and send again -- the pipeline stops, but whatever
+already went live stays until it's replaced. [What stands out, e.g. 'the database runs inside
+the cluster for dev' / 'this sits next to an existing workflow' / 'nothing unusual']. The one
+thing to check: is **{hostname}** the right address for the dev version of your app?
 
 **What would you like to do?**
 
