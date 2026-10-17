@@ -13,9 +13,10 @@ import argparse
 import fnmatch
 import os
 import re
-import stat
+import shutil
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LABELS = (b'== unsaved edits ==', b'== new files ==', b'== saved, not sent ==')
@@ -31,38 +32,51 @@ DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--text', '--no-renames'
         '--submodule=short', '--src-prefix=a/', '--dst-prefix=b/']
 # Every unsent commit, merges included (-c: a line new to every parent is the merge's own).
 LOG = ['log', '--no-show-signature', '--format=', '-c', '--no-renames']
-UNSENT = ['HEAD', '--not', '--remotes', '--']
 
 # Keep-out list: it mirrors argo-it PHASE 5b step 4, which never stages these (at any depth).
 KEEP_OUT = (b'.env*', b'*.pem', b'*.key', b'id_rsa*', b'id_ed25519*', b'id_ecdsa*', b'id_dsa*', b'*.keychain*',
             b'.netrc', b'*credentials*.json', b'*service-account*.json', b'*.sqlite*', b'*.db', b'*.p12', b'*.pfx')
+# ...and step 4's `git reset` of them, run as-is on the scan's copy of the index.
+RESET = ([':(top,glob)**/' + p.decode() for p in KEEP_OUT + (b'.aws/credentials',)]
+         + [':(top,glob,exclude)**/.env.example'])
 CONFIG_EXTS = (b'.ini', b'.cfg', b'.conf', b'.properties', b'.toml', b'.yaml', b'.yml')
 
-ASSIGN = re.compile(r'(?<![A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*)["\'`]?[ \t]*(?::=|=|:)[ \t]*')
+NAME, SEP = r'[A-Za-z_][A-Za-z0-9_.-]*', r'[ \t]*(?::=|=|:)[ \t]*'
+IDENT, SEP_AT, ASSIGN = re.compile(NAME), re.compile(SEP), re.compile(r'(%s)%s' % (NAME, SEP))
+QUOTES = (('"', 3), ("'", 3), ('"', 1), ("'", 1), ('`', 1))
+QUOTE = '|'.join(q * n for q, n in QUOTES)  # longest first
+OPENER = re.compile(QUOTE)
+# The next literal opener or NAME sep, so a NAME only ever starts outside a literal.
+TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.-])(%s)%s' % (QUOTE, NAME, SEP))
+# One literal (backslash escapes; a triple quote may hold single quotes), unrolled so it can't backtrack.
+LITERAL = {q * n: re.compile(r'{e}[^{q}\\]*(?:(?:\\.{t})[^{q}\\]*)*{e}'.format(
+    e=q * n, q=q, t='' if n == 1 else '|%s(?!%s)' % (q, q * 2))) for q, n in QUOTES}
 WORDS = re.compile(r'[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+')
 LAST = {'password', 'passwd', 'pwd', 'secret', 'token', 'credentials', 'apikey'}
 KEY_KINDS = {'api', 'private', 'access', 'secret', 'signing', 'encryption', 'client', 'master', 'ssh'}
 UNQUOTED = re.compile(r'[^ \t\r\n]*')
 # [^}] inside {{ }}: a lazy .*? here backtracks exponentially on a crafted value.
 REFERENCE = re.compile(r'(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}\})+')
-PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|mock|your-.*-here|your_.*_here|<.*>|xxxx'
-                         r'|\*\*\*\*', re.I)
+PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|mock|xxxx|\*\*\*\*')
+# `your-…-here`, `your_…_here`, `<…>` by find, not `.*`: that regex backtracks quadratically on a long value.
+AROUND = (('your-', '-here'), ('your_', '_here'), ('<', '>'))
 
 
 class Fail(Exception):
     """Couldn't check: exit 2. Messages are our own words, never file content."""
 
 
-def git_out(cwd, *args, input=None):
-    p = subprocess.run(GIT + list(args), cwd=cwd, input=input, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+def git_out(cwd, *args, input=None, env=None):
+    p = subprocess.run(GIT + list(args), cwd=cwd, input=input, env=env, stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL)
     if p.returncode:
         raise Fail('git %s failed' % args[0])
     return p.stdout
 
 
-def git_lines(cwd, *args):
+def git_lines(cwd, *args, env=None):
     """Stream git's output line by line (all history can be bigger than memory)."""
-    with subprocess.Popen(GIT + list(args), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as p:
+    with subprocess.Popen(GIT + list(args), cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as p:
         for line in p.stdout:
             yield line.rstrip(b'\n')
     if p.returncode:
@@ -126,27 +140,73 @@ def secret_named(name):
     return bool(w) and (w[-1] in LAST or (w[-1] == 'key' and len(w) > 1 and w[-2] in KEY_KINDS))
 
 
+def placeholder(v):
+    v = v.lower()
+    if PLACEHOLDER.search(v):
+        return True
+    for a, b in AROUND:
+        i = v.find(a)
+        if i >= 0 and v.find(b, i + len(a)) >= 0:
+            return True
+    return False
+
+
+def literal_at(s, i):
+    """(content, end) of the string literal opening at s[i]; None if none opens there or it doesn't close."""
+    q = OPENER.match(s, i)
+    m = q and LITERAL[q.group()].match(s, i)
+    if m:
+        n = len(q.group())
+        return s[i + n:m.end() - n], m.end()
+
+
+def values(s, config):
+    """(NAME, VALUE) pairs on a line. A NAME only starts outside a string literal, and the search resumes after
+    its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
+    alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read or printed as a NAME.
+    Two literals hold NAMEs of their own: a quoted key (`"password": ...`) and, in a config file, a string that
+    starts with one (compose's `- "PASSWORD=..."`)."""
+    i, dead = 0, set()
+    while True:
+        m = TOKEN.search(s, i)
+        if not m:
+            return
+        i = m.end()
+        if m.group(1) is None:  # a literal opens here
+            lit = None if m.group() in dead else literal_at(s, m.start())
+            if lit is None:
+                if m.group() in ('"', "'"):  # these can't span lines: an apostrophe, not a literal. Every later
+                    dead.add(m.group())  # one is unclosed too, so skip them unscanned (else a 2 MB line is slow)
+                    continue
+                return  # a ` or triple-quoted literal runs on past this line
+            body, i = lit
+            sep = SEP_AT.match(s, i)
+            if not (sep and IDENT.fullmatch(body)):
+                if config and ASSIGN.match(body):
+                    yield from values(body, config)
+                continue
+            name, i = body, sep.end()
+        else:
+            name = m.group(1)
+        lit = literal_at(s, i)
+        if lit:
+            v, i = lit
+        elif not config:
+            continue  # source code needs quotes
+        elif s[i:i + 1] in ('{', '[') and not secret_named(name):
+            continue  # a YAML/TOML/JSON flow opener (`env: {PASSWORD: "..."}`) holds NAMEs of its own
+        else:
+            v = UNQUOTED.match(s, i).group()  # (an unclosed quote is no literal)
+            i += len(v)
+        yield name, v
+
+
 def hit_names(text, config):
-    """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes.
-    The search resumes after every NAME's value, never inside it, so part of a value
-    (`URL=postgres://app:MyPassword=...`) is never read -- or printed -- as a NAME."""
+    """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes."""
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
-    m = ASSIGN.search(s)
-    while m:
-        name, i = m.group(1), m.end()
-        resume, v, named = i, None, secret_named(name)
-        q = s[i:i + 1]
-        j = s.find(q, i + 1) if q in ('"', "'", '`') else -1
-        if j >= 0:
-            v, resume = s[i + 1:j], j + 1
-        elif config and q in ('{', '[') and not named:
-            resume = i + 1  # a YAML/TOML/JSON flow opener (`env: {PASSWORD: "..."}`) holds NAMEs of its own
-        elif config:  # (an unclosed quote is no literal: source code resumes right after the sep)
-            v = UNQUOTED.match(s, i).group()
-            resume = i + len(v)
-        if named and v is not None and len(v) >= 8 and not REFERENCE.fullmatch(v) and not PLACEHOLDER.search(v):
+    for name, v in values(s, config):
+        if len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v):
             yield name
-        m = ASSIGN.search(s, resume)
 
 
 def is_config(path):
@@ -187,67 +247,57 @@ def nul_in_head(data):
     return b'\0' in data[:8000]  # git's binary rule
 
 
-def encodings(top, paths):
-    """path -> the working-tree-encoding git converts it from to UTF-8 when staged (None: stored as-is)."""
-    out = git_out(top, 'check-attr', '--stdin', '-z', 'working-tree-encoding',
-                  input=b''.join(p + b'\0' for p in paths)).split(b'\0')
-    m = {}
-    for i in range(0, len(out) - 1, 3):
-        v = out[i + 2]  # like git: no value, or UTF-8 itself, means no conversion
-        m[out[i]] = None if v in (b'', b'unspecified') or re.fullmatch(rb'(?i)utf-?8', v) else v
-    if len(out) != 3 * len(paths) + 1 or set(m) != set(paths):
-        raise Fail('git check-attr did not answer for every file')
-    return m
-
-
-def stored(full, enc):
-    """The file as git stores and sends it, or None if that is binary. A working-tree-encoding file
-    is judged after decoding: its raw bytes (UTF-16's NULs) are not what git sends."""
-    with open(full, 'rb') as f:
-        data = f.read(8000)
-        if enc is None and nul_in_head(data):
-            return None  # never read the rest of a plain binary file
-        data += f.read()
-    if enc is not None:
+def staged(top, untracked):
+    """Added lines of what argo-it step 4 commits, and the paths new to the repo. Step 4's `git add -A` and
+    keep-out `git reset` run on a copy of the index, so git itself applies clean filters, working-tree-encoding,
+    symlinks and assume-unchanged / skip-worktree exactly as step 4 will. The real index, the working tree and
+    .gitignore are never touched; like step 4, the add writes blobs to the object store."""
+    real = os.path.join(top, git_out(top, 'rev-parse', '--git-path', 'index')[:-1])
+    with tempfile.TemporaryDirectory() as tmp:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(tmp, 'index'))
         try:
-            data = data.decode(enc.decode()).encode('utf-8')
-        except (LookupError, UnicodeError):  # our own words: the codec's message can quote the file's bytes
-            raise Fail("can't decode a file from its working-tree-encoding")
-    return None if nul_in_head(data) else data
+            shutil.copyfile(real, env['GIT_INDEX_FILE'])
+        except FileNotFoundError:
+            pass  # no index yet: git starts an empty one, as it would for step 4
+        git_out(top, 'add', '-u', env=env)  # = the tracked half of `git add -A`
+        if untracked:  # ...and the untracked half (forced: the listing already applied step 4's ignore rules)
+            git_out(top, 'add', '-f', '--pathspec-from-file=-', '--pathspec-file-nul', env=env,
+                    input=b''.join(b':(literal)' + p + b'\0' for p in untracked))
+        git_out(top, 'reset', '-q', '--', *RESET, env=env)
+        st = git_out(top, 'diff', '--cached', '--name-status', '-z', '--no-renames', 'HEAD', '--', env=env)
+        st = st.split(b'\0')[:-1]
+        names = dict(zip(st[1::2], st[::2]))  # path -> status letter
+        rows = list(added_lines(git_lines(top, 'diff', '--cached', *DIFF, 'HEAD', '--', env=env),
+                                headers(b'\0'.join(names))))
+    return rows, {p for p in untracked if names.get(p) == b'A'}
 
 
 def scan(repo):
     top = git_out(repo, 'rev-parse', '--show-toplevel')[:-1]
-    changed = git_out(top, 'diff', '--name-only', '-z', '--no-renames', 'HEAD', '--')
     # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
-    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
-                            '-z').split(b'\0')) - {b''}
-    enc = encodings(top, (set(changed.split(b'\0')) - {b''}) | untracked)
+    # Its other .gitignore lines make the keep-out files ignored: never hash those.
+    untracked = [p for p in git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
+                                    '-z').split(b'\0') if p and not kept_out(p)]
+    rows, added = staged(top, untracked)
 
-    def on_disk(path, sha):
-        full = os.path.join(top, path)
-        if not stat.S_ISREG(os.lstat(full).st_mode):
-            return False  # a symlink's text is its target
-        return stored(full, enc[path]) is None
+    def blob_binary(path, sha):
+        return nul_in_head(git_out(top, 'cat-file', 'blob', sha.decode()))
 
-    unsaved = collect(
-        (r for r in added_lines(git_lines(top, 'diff', *DIFF, 'HEAD', '--'), headers(changed))
-         if not kept_out(r[0])), on_disk)
+    unsaved = collect((r for r in rows if r[0] not in added), blob_binary)
+    new = collect((r for r in rows if r[0] in added), blob_binary)
 
-    rows = []
-    for path in untracked:
-        full = os.path.join(top, path)
-        if kept_out(path) or not stat.S_ISREG(os.lstat(full).st_mode):
-            continue  # a nested repo shows as a directory
-        data = stored(full, enc[path])
-        if data is not None:
-            rows.extend((path, n, text, None) for n, text in enumerate(data.split(b'\n'), 1))
-    new = collect(rows, lambda path, sha: False)
-
+    # Step 4's commit during a merge (MERGE_HEAD) has those heads as parents too, so the push sends them.
+    try:
+        with open(os.path.join(top, git_out(top, 'rev-parse', '--git-path', 'MERGE_HEAD')[:-1]), 'rb') as f:
+            heads = f.read().split()
+    except FileNotFoundError:
+        heads = []
+    if not all(re.fullmatch(rb'[0-9a-f]{40,64}', h) for h in heads):
+        raise Fail('unreadable MERGE_HEAD')
+    unsent = ['HEAD'] + [h.decode() for h in heads] + ['--not', '--remotes', '--']
     saved = collect(
-        added_lines(git_lines(top, *LOG, '-p', *DIFF, *UNSENT),
-                    headers(git_out(top, *LOG, '-z', '--name-only', *UNSENT))),
-        lambda path, sha: nul_in_head(git_out(top, 'cat-file', 'blob', sha.decode())))
+        added_lines(git_lines(top, *LOG, '-p', *DIFF, *unsent),
+                    headers(git_out(top, *LOG, '-z', '--name-only', *unsent))), blob_binary)
     return unsaved, new, saved
 
 
