@@ -384,7 +384,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    build-verify -- it's a lightweight file-existence and pattern check:
 
    For each check category, do a targeted scan:
-   - **Structure (S01-S12):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`)
+   - **Structure (S01-S13):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`). S13, S10, S11 and S12 all write the same file, `CLAUDE.md`: apply them together, S13 first, as one change -- never as separate `/dispatch-it` lanes.
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
    - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx

@@ -114,7 +114,9 @@ These apply to every project /make-it builds, no exceptions.
     first visible sign a rule was dropped, so the rest of that output is suspect. If `builder_name`
     is empty, use a fixed canary token (`🐤 canary ok`) at the top of each reply instead. This is
     the ONE project file that may reference AI assistants (it exists for them); it must never hold
-    secrets or app logic. Created during project setup (Build Phase A), same as README/CHANGELOG/TODO.
+    secrets or app logic. Created during project setup (Build Phase A), same as README/CHANGELOG/TODO;
+    build-standards check S13 adds it to existing projects (creating `CLAUDE.md` if missing)
+    through /resume-it and /retrofit-it.
 
 16a. **Settle, filter, verify in `CLAUDE.md`** -- Every project's `CLAUDE.md` carries the
      muddy-water principle, word for word from `muddy-water.md`, right after the canary:
