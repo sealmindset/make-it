@@ -125,6 +125,11 @@ when every wave is merged, its next wave is stuck, a spike's finding lands, or w
 
 ## Step 5 -- After every change
 
+**Card writes go through `card.py`** -- never `printf`, `sed` or a glob: `python3 ~/.claude/make-it/backlog/bin/card.py`
+`append <id> <section>` (text on stdin) · `set <id> key=value …` (`key=` removes) · `new <epic>` (a card on
+stdin with `id: NEW`). It pulls first, writes the whole file, bumps `updated:`, regenerates and syncs --
+steps 1-3 in one call. For other board files (`PLAN.md`, design docs):
+
 1. Bump `updated:` on each touched card.
 2. `python3 ~/.claude/make-it/backlog/bin/regen-board.py "$BOARD" --project "$PROJECT"`
 3. Sync: board in its own repo → commit + push there. Board inside the project → stage only the

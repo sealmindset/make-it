@@ -16,6 +16,8 @@ _bin = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(_bin, 'regen-board.py'))
 sys.dont_write_bytecode = True  # no __pycache__ beside the installed scripts
 R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
+_cspec = importlib.util.spec_from_file_location('card', os.path.join(_bin, 'card.py'))
+C = importlib.util.module_from_spec(_cspec); _cspec.loader.exec_module(C)  # the one card writer
 v = R.v
 BEFORE_LIVE = ('Reported', 'Cause found', 'Fix ready')
 URL = r'https?://[^\s,\]]+/pull/\d+'
@@ -70,19 +72,10 @@ def moves(B, look):
     return out, wait
 
 def apply(p, changes, note, T):
-    """Rewrite the changed frontmatter lines and append the note. False if the card moved meanwhile."""
-    txt = open(p).read()
+    """Write the move through card.py's writer. False if the card moved meanwhile."""
     # ponytail: re-read at write time -- another session may have moved the card while gh ran
     if not eligible(R.fm(p), 'status' in changes): return False
-    m = re.match(r'---\n(.*?)\n---', txt, re.S)
-    lines = m.group(1).split('\n')
-    for k, val in dict(changes, updated=str(T)).items():
-        i = next((i for i, l in enumerate(lines) if re.match(rf'{k}\s*:', l)), None)
-        if i is None: lines.append(f'{k}: {val}')
-        else: lines[i] = f'{k}: {val}'
-    with open(p + '.tmp', 'w') as f:  # whole file, then swap: a crash never leaves half a card
-        f.write('---\n' + '\n'.join(lines) + '\n---' + txt[m.end():].rstrip('\n') + f'\n\n## PR sync ({T})\n- {note}\n')
-    os.replace(p + '.tmp', p)
+    C.write(p, changes, f'PR sync ({T})', f'- {note}', T)
     return True
 
 def run(B, look, dry, proj=None, T=None):

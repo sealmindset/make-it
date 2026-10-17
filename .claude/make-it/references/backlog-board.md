@@ -49,6 +49,8 @@ notifications are a silent no-op and the board works the same.
   report (read-only; shares `regen-board.py`'s rules); `--needs-you` prints only its Needs you section.
 - `~/.claude/make-it/backlog/bin/sync-prs.py <board> --repo <repo> [--dry-run]` -- `reconcile --prs`:
   moves cards forward from their PRs' real state (needs `gh`; writes the cards, the caller syncs).
+- `~/.claude/make-it/backlog/bin/card.py {append <id> <section> | set <id> k=v … | new <epic>}` -- the
+  one way to write a card (see [Writing a card](#writing-a-card)).
 - `~/.claude/make-it/backlog/bin/slack-notify.sh {started|done|raw} ...` -- reads `$BACKLOG_DIR`;
   needs `jq` and `curl`.
 
@@ -191,7 +193,7 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
 3. **Validate.** The target epic must exist in the folder listing. Malformed JSON or an unknown
    epic → stop with an error, write nothing.
 4. **Write the card -- no approval gate** (`undo` is the safety valve for a board in its own repo;
-   in a project board the card rides on the branch): the understanding template,
+   in a project board the card rides on the branch), with `card.py new <epic>`: the understanding template,
    then:
    ```markdown
    ## Captured
@@ -242,8 +244,9 @@ reporter per finished card.
 **Waiting on you** -- one block at the top of `BOARD.md`: every open card, of any type, that
 waits on the human's answer, as `id · the question · days since the card last changed`.
 - Whoever asks (a lane, `/debug-it`, capture, a ship gate) writes the exact question as one line
-  in `decision:`, in the same write that asks it. The card keeps its stage.
-- The write that records the answer under `## Answers` removes `decision:`. A stale one keeps the
+  in `decision:` (`card.py set <id> decision=…`), in the same write that asks it. The card keeps its stage.
+- The write that records the answer under `## Answers` removes `decision:` (`card.py append <id>
+  Answers`, then `card.py set <id> decision=`). A stale one keeps the
   card out of Next up, so never leave it behind.
 - Now fixing and Next up skip a waiting card; `plan` and `dispatch` treat it as waiting on you.
 - An older card with `stage: Needs decision` is listed too, flagged "question not on card" until
@@ -261,7 +264,8 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **The ship queue is serial.** One PR through CI and deploy at a time, whatever the lane count.
 - **Questions are batched.** Collect every lane's open questions into one message. A question that
   blocks a card also goes on it as `decision:`.
-- Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one;
+- Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one
+  (`card.py set <id> stage=… pr=[N]`);
   the status line lists every lane.
 - **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
   `decision:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
@@ -293,7 +297,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `regen-board` | Rebuild `BOARD.md` from the cards |
 
 Every mutation: bump `updated:`, **regenerate `BOARD.md`, sync**, then notify Slack (never block
-on Slack).
+on Slack). For a card, `card.py` does all three in one call.
 
 ### `start <id>` -- the recall feature
 
@@ -794,6 +798,21 @@ and runs it regardless.
 - **Depth in proportion to consequence** -- more for live, destructive, or customer-facing work.
 
 ---
+
+## Writing a card
+
+Write cards only through `card.py`, never `printf`, `sed`, or a shell glob:
+- `card.py append <id> <section>` -- text on **stdin** (so `%`, `*`, `$` and quotes arrive intact)
+  goes under `## <section>`; an existing section grows, else a new one is added at the end.
+- `card.py set <id> key=value …` -- sets frontmatter fields; `key=` removes one (`decision=`). `id` is
+  never settable.
+- `card.py new <epic>` -- a whole card on stdin with `id: NEW`; it gets the next id **after a pull**,
+  a slugged file name, and `parent:` / `created:` if missing. Prints the new id.
+
+Every verb pulls first (a board in its own repo; a failed pull writes nothing), finds the card by
+its `id:` (exactly one match, else it stops), writes the whole file then swaps it in, bumps
+`updated:`, regenerates `BOARD.md`, and syncs as below (`--no-sync` leaves the commit to you).
+`sync-prs.py` writes through the same function.
 
 ## Sync
 

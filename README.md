@@ -958,6 +958,16 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.41.0 -- One safe way to write a card
+
+`card.py` is now the only way skills write board cards. `append <id> <section>` takes text on
+stdin, `set <id> key=value` sets or removes (`key=`) fields, and `new <epic>` files a card with the
+next free id after a pull. Each one pulls first, writes the whole file at once, bumps `updated:`,
+regenerates `BOARD.md`, and commits and pushes (or only stages, for a board inside a project). This
+fixes the three write failures a docai dispatch hit: a `%` in `printf` cut a note short, zsh globs
+skipped writes quietly, and an un-pulled board handed out a card id twice. `reconcile --prs` writes
+through it too.
+
 ### v1.40.0 -- The plan keeps leading; a big epic stays readable
 
 - **A plan stays in force for the cards it names.** The old rule (any candidate changed after the
