@@ -407,38 +407,46 @@ the rest'] ([current login mechanism, or 'there is none']).
 lists of roles and permissions, a role field on your list of users, and the sample records and
 test accounts I add'.]
 **Where it happens:** on this computer[; if the app has no database or its database runs
-here too, and it does not use AI: ' only; nothing is sent anywhere'][; if its database lives
+here too, it does not use AI, and it calls no outside service with real keys: ' only; nothing
+is sent anywhere'][; if its database lives
 elsewhere (connection settings in .env / compose point at another host): ', except your
 database at [host] -- [DATA_CHANGES] land there'][; if the app uses AI: ', and while I
-check the AI features I send a few test prompts to [AI provider]']. [First run (no snapshot
+check the AI features I send a few test prompts to [AI provider]'][; if the app calls outside
+services with real keys in its settings: ', and my checks may call [the services, by name --
+e.g. Stripe, SendGrid] with the keys your app already uses']. [First run (no snapshot
 yet): 'Before I touch anything I save a snapshot of your app's files as they are now, so I can
 put the files back exactly like this at any point.'][Re-run (a snapshot from an earlier run
 exists): 'I keep the snapshot from the earlier run: putting the files back returns to before
-that first run, not to now.'] [If the app already has a database: 'There is no undo for
+that first run, not to now.'] Your settings file (.env) isn't part of the snapshot; I'll show
+you what I change in it. [If the app already has a database: 'There is no undo for
 [DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved changes:
 'You have unsaved changes; I'll save them first[; first run only: ' so the snapshot is
 complete'].']
 **What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
 replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
 set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
-**One thing to check:** [if the database lives elsewhere: 'your database at [host] -- is that
-the one people use for real today, or a test copy? If it is the real one, say so before you
-pick.'; otherwise: 'look at 'What stays the same' -- is anything your app does today missing
-from that list?']
+**One thing to check:** [if the database lives elsewhere: 'your database at [host] -- find out
+whether it is the one people use for real today or a test copy; I ask you below.'; otherwise:
+'look at 'What stays the same' -- is anything your app does today missing from that list?']
 
 Tell me what to include: **all [ITEM_COUNT] items**, or the item numbers to leave out[; and,
 if your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
-or fresh build] -- or **Not now**."
+or fresh build][; and, if the database lives elsewhere: is [host] a test copy or the one
+people use for real] -- or **Not now**."
 
 **Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
 what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
 item number)[; and, if the app has a login, keep or replace][; and, if Very High, which
-route]. Build only what they included; anything left out
+route][; and, if the database lives elsewhere: is [host] a test copy or the one people use
+for real]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
-If they say the database at [host] is the one people use for real, stop -- change nothing
-until the connection settings point at a copy. **Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
+If they say the database at [host] is the one people use for real, stop and change nothing:
+"I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
+database your settings point at, and there is no undo for that -- so I won't run it against
+the one people use for real. What you need: a test copy of that database, with your settings
+(.env / compose) pointing at it. Then run /retrofit-it again." **Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
 error-handling; nothing below runs. **Step-by-step upgrade** -- continue below with the items
 they included.]
 
@@ -457,11 +465,12 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 if [ -n "$(git status --porcelain)" ]; then
   grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
-  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*'; do
+  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*' '*.db'; do
     grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
   done
-  git add -A && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
-    ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*'
+  { git add -A && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
+    ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*' \
+    ':(glob)**/*.db'; } || fail "could not save the unsaved changes"
   git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
 fi
 git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
@@ -927,10 +936,12 @@ never a plain "ready?":
 "Everything I can test passed: [what was verified for this step, in plain words -- e.g. 'your
 app starts in its new sandbox and every page I found still loads'].
 
-What changed: [this step's user-facing scope, one line].
+What changed: [this step's user-facing scope, one line][; if this step changed .env: ', and in
+your settings file (.env): [the settings added or changed, by name, values hidden]'].
 Your files are saved on this computer[; if the database lives elsewhere: ', and the data
 changes are in your database at [host]']. If anything is off, I can put the app's files back to
-how they were before this step, or before the upgrade started. [If the app already had a
+how they were before this step, or before the upgrade started (your settings file, .env, isn't
+part of that -- the list above is what I changed in it). [If the app already had a
 database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
 'the new lists of roles and permissions', 'the sample records and test accounts I added']:
 putting the files back does not remove them.']
@@ -939,9 +950,11 @@ One thing to check: [open [URL] and try [the feature this step touched most]; fo
 nothing on screen (Step 5, tests): 'nothing new to look at -- the tests ran and passed'].
 
 Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
-secure login and changes who can see what -- the biggest change in the plan'; for the
-interface-and-test-services step (Step 3, seed data): 'this also adds sample records and test
-accounts to your existing data -- no undo'].
+secure login and changes who can see what -- the biggest change in the plan[; if the app had a
+database before Step 2: '; it also adds a role field to your existing list of users -- no
+undo']'; for the interface-and-test-services step (Step 3, seed data), if the app had a
+database before Step 2: 'this also adds sample records and test accounts to your existing
+data -- no undo'].
 
 Tell me: **Continue with [next step name]**, **Fix something first** (tell me what you saw), or
 **Stop here**."
@@ -1083,6 +1096,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 - A proper development environment with Docker
 - Mock services for testing without real dependencies
 - Security hardening throughout
+[If .env was changed: 'Your settings file (.env) now has [the settings added or changed, by
+name, values hidden].']
 
 When you're ready to deploy, just type: **/ship-it**"
 
