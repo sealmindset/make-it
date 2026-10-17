@@ -143,6 +143,7 @@ per-domain rigor.
 3. Run the full suite — verify all fixes work together.
 4. Spot-check — agents can make systematic errors; don't trust blindly.
 5. Safeguards — search each lane's diff for a test skipped, deleted, or loosened, a hook, CI step,
-   or evaluator edited, or a widened permission, and match each to that lane's SAFEGUARDS line.
-   One that isn't on it rejects the lane (undo it, re-run); a disclosed one goes in your summary
-   for the human.
+   or evaluator edited, or wider permissions for an agent, tool, or CI, and match each to that
+   lane's SAFEGUARDS line (a change the lane's prompt explicitly asked for isn't a weakening). One
+   on no line rejects the lane: undo it and re-run the lane once with the finding in its prompt;
+   hidden again → the human. A disclosed one goes in your summary for the human.

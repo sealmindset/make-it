@@ -7,7 +7,9 @@ or in the referenced files. Review the diff as written; do not run the implement
 
 ## Inputs
 - Requirements (the spec for this task): `[BRIEF_PATH]`
-- Implementer's report (what they did + test evidence + its SAFEGUARDS line): `[REPORT_PATH]`
+- Implementer's report (what they did + test evidence): `[REPORT_PATH]`
+- Every SAFEGUARDS line this task produced (test-writer, implementer, each fix), and the items
+  already settled (undone or accepted): [SAFEGUARDS_LINES]
 - The change to review (commits + diffstat + full diff): `[REVIEW_PACKAGE_PATH]`
 - The tests were written first, by a separate test-writer, in commit `[TESTS_SHA]` (omit if the
   task had nothing to test). Check that they test the brief's requirements, not the code.
@@ -24,10 +26,15 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
 3. **Safeguards** — ✅, ⚠️, or ❌. Search the whole diff, tests outside this task included, for
    any test skipped, deleted, or loosened (a weaker assertion, a wider tolerance, a changed
    expected value), any edited hook, linter rule, CI step, evaluator, threshold, or coverage
-   floor, and any widened permission. Compare each with the report's **SAFEGUARDS** line.
-   ✅ = none in the diff. ⚠️ = every one is on that line: list them for the controller to decide.
-   ❌ = one is missing from that line, however the report describes it ("tidied", "flaky") —
-   list each as a **Critical** finding.
+   floor, and wider permissions or token scopes for an agent, tool, or CI. A change the brief
+   explicitly requires is not a weakening (an expected value it states, the tests of a function
+   it removes, the app's own roles, permissions, or limits it specifies): quote the brief line.
+   Compare the rest with the SAFEGUARDS lines above. Settled items: an accepted one is done; an
+   undone one must be gone from the diff (still there → it counts again).
+   ✅ = no unsettled weakening, and no line lists one. ⚠️ = every weakening is on a line, or a
+   line lists one the diff can't show (a skipped hook): list them for the controller to decide.
+   ❌ = a weakening on no line, however the report describes it ("tidied", "flaky") — list each
+   as a **Critical** finding.
 
 ## Method
 - Verify against the brief and global constraints, not your assumptions.
@@ -42,7 +49,7 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
 ```
 SPEC: ✅|❌  — <missing / extra items, or "all requirements met">
 QUALITY: Approved|Changes-requested
-SAFEGUARDS: ✅|⚠️|❌  — <each weakening in the diff, and whether the report's line lists it>
+SAFEGUARDS: ✅|⚠️|❌  — <each weakening, and the SAFEGUARDS line or brief line that covers it>
 Findings:
   - [Critical] ...
   - [Important] ...

@@ -5,7 +5,7 @@ Execute an implementation plan by dispatching a **fresh implementer subagent per
 at the end**. Subagents never inherit your session history — you construct exactly the context
 each needs, which keeps them focused and preserves *your* context for coordination.
 
-**Core principle:** fresh subagent per task + task review (spec + quality) + broad final review
+**Core principle:** fresh subagent per task + task review (spec + quality + safeguards) + broad final review
 = high quality, fast iteration.
 
 SDD is the **sequential sibling of `/dispatch-it`**: dispatch-it fans out *independent*
@@ -58,7 +58,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
 3. **Per task** (sequential):
    a. `task-brief PLAN_FILE N`, record BASE, then dispatch a fresh **test-writer** (template, on
       **Sonnet**) with the brief path, the test framework, and the report-file path. It writes
-      and commits tests only, and returns TESTS_READY with its commit, files, and command -- or
+      and commits tests only, and returns TESTS_READY with its commit, files, command, and SAFEGUARDS line -- or
       NOT_TESTABLE for a task with nothing to test (docs, config, prompt wording; then skip to b
       with no Tests section). Answer its questions before it proceeds.
    a2. **Red check (gate):** run its test command yourself. It must fail, for the missing
@@ -75,7 +75,9 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       wrong test → the test-writer fixes it (re-run a2), then the implementer continues.
    c. Implementer makes the tests pass, commits, self-reviews, writes its report file, returns
       only status + commits + one-line test summary + concerns + its **SAFEGUARDS** line (every
-      safeguard it bypassed or weakened, or "none" -- `approval-block.md`).
+      safeguard it bypassed or weakened, or "none" -- `approval-block.md`). Keep every SAFEGUARDS
+      line the task produces (test-writer, implementer, each fix): the reviewers get them all, with
+      the task's `safeguards undone` / `safeguards accepted` ledger lines, as `[SAFEGUARDS_LINES]`.
    c2. **Tests untouched and green (gate):** `git diff --name-only <TESTS_SHA> -- <test files>`
       must print nothing (TESTS_SHA = the test-writer's latest commit; no `HEAD`, so uncommitted
       edits count too), then run the test command yourself: all pass, none skipped. Anything
@@ -83,22 +85,25 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
    d. `review-package BASE HEAD` (BASE = the commit recorded **before** the test-writer, so the
       tests are reviewed too — never
       `HEAD~1`, which drops all but the last commit of a multi-commit task) → dispatch the
-      **task reviewer** (template) with the brief, report, and package paths + verbatim global
-      constraints.
-   e. If the reviewer reports spec ❌, quality issues, or safeguards ❌: dispatch a **fix
+      **task reviewer** (template) with the brief, report, and package paths, the SAFEGUARDS
+      lines, and the verbatim global constraints.
+   e. If the reviewer reports spec ❌, quality issues, or safeguards ❌ or ⚠️: dispatch a **fix
       subagent** for Critical/Important findings (implementer contract: re-run the covering tests,
       name them, report command + output + SAFEGUARDS; tests stay untouched) → **c2 again** →
-      re-review. An undisclosed weakening (safeguards ❌) is undone, never kept. A finding in the
-      tests themselves goes to the test-writer instead (then c2 with its new commit). Safeguards ⚠️
-      (disclosed): undo it, or -- when keeping it changes behavior the plan didn't decide -- it's
-      the human's call (`STATUS: AWAITING_HUMAN`). Repeat until spec ✅, quality approved, and
-      safeguards ✅ or an accepted ⚠️.
+      re-review. A finding in the tests themselves goes to the test-writer instead (then c2 with
+      its new commit). **Safeguards:** an undisclosed weakening (❌) is undone, never kept. A
+      disclosed one (⚠️) is undone too (a skipped hook: run it now and fix what it finds) -- unless
+      undoing it would change behavior the plan didn't decide: then it's the human's call
+      (`STATUS: AWAITING_HUMAN`). Log each as `Task N: safeguards undone: <item>` or `Task N:
+      safeguards accepted: <item>`; every later review gets those as settled, and an accepted one
+      is never asked about again. Repeat until spec ✅, quality approved, and safeguards ✅.
    e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
       Note `git status --porcelain` and HEAD, then dispatch the **adversarial reviewer**
       (template) with the brief, the verbatim global constraints, a fresh `review-package BASE
-      HEAD`, the test files and command, the implementer's SAFEGUARDS line, and earlier rounds'
-      counterexamples (an `undisclosed safeguard` it reports goes back as in e, not to the
-      test-writer). Afterwards the
+      HEAD`, the test files and command, the SAFEGUARDS lines, and earlier rounds'
+      counterexamples. Its own **SAFEGUARDS** output line is not a counterexample -- no
+      adjudication, no round count: `undisclosed` → undo it as in e, in any round, before the rules
+      below. Afterwards the
       status and HEAD must be unchanged -- remove anything it left behind. It returns CLEAN (with
       what it tried) or confirmed counterexamples. **You adjudicate each one:** grounded in the
       brief? One that rests on input or behavior the brief doesn't mention, or that conflicts with
@@ -123,7 +128,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
    f. Append one line to the ledger: `Task N: complete (commits <base7>..<head7>, review clean)`.
 4. **After all tasks:** dispatch the final whole-branch review via `/code-review` on the most
    capable model, with `review-package MERGE_BASE HEAD` (MERGE_BASE = `git merge-base main HEAD`)
-   and every accepted safeguards ⚠️ from the ledger, so nothing weakened ships unseen.
+   and every `safeguards accepted` ledger line, so nothing weakened ships unseen.
    Fix findings with ONE fix subagent carrying the complete list (not one fixer per finding).
 5. **After `STATUS: DONE`, offer learnings** (`learnings.md`): queued agent lessons (e.g. reviewer
    findings that recurred across tasks) and any correction the user made at acceptance, one
@@ -204,8 +209,10 @@ context and is re-read every later turn. Move artifacts as files:
 - **Task brief:** `task-brief PLAN_FILE N`; the dispatch points to it as the single source of
   requirements (exact values live only there).
 - **Report file:** name it after the brief (`task-N-brief.md` → `task-N-report.md`); the
-  implementer writes the full report there and returns only status/commits/test-summary/concerns.
-- **Reviewer inputs:** brief path + report path + review-package path + verbatim global constraints.
+  implementer writes the full report there and returns only status/commits/test-summary/concerns/
+  safeguards.
+- **Reviewer inputs:** brief path + report path + review-package path + the task's SAFEGUARDS lines
+  (and accepted items) + verbatim global constraints.
 - Fix dispatches append their fix report (with test results) to the same report file.
 
 ## Durable progress (survives compaction)
@@ -255,7 +262,7 @@ Install once (user-level `~/.claude/settings.json`):
 ## Red flags — never
 
 - Start implementation on main/master without explicit consent (work on a branch/worktree).
-- Skip task review, or accept a report missing either verdict (spec AND quality both required).
+- Skip task review, or accept a report missing any verdict (spec, quality, and safeguards all required).
 - Proceed with unfixed Critical/Important issues; move to the next task with open ones.
 - **Dispatch multiple implementers in parallel** (conflicts) — that's `/dispatch-it`, for
   *independent* problems only.

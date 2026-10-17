@@ -416,7 +416,7 @@ the exact state before any retrofit changes were made.
 
 **Execution model:** for a multi-step retrofit plan, drive it via Subagent-Driven Development
 (`/subagent-it`, see `subagent-driven-development.md`) -- a fresh implementer subagent per
-retrofit step + per-step review (spec + quality) + a final whole-branch review -- on a
+retrofit step + per-step review (spec + quality + safeguards) + a final whole-branch review -- on a
 branch/worktree, never main. Keep steps sequential (independent parallel problems → `/dispatch-it`).
 
 **Strategy selection based on risk score:**

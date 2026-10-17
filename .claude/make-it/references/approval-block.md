@@ -31,15 +31,21 @@ rows, which environment) or the human types them.
 
 ## Agents disclose every safeguard they bypassed or weakened
 
-Every agent and subagent report ends with one line: `SAFEGUARDS: none` -- or each one, with
-what, where, and why. It counts:
+Every agent that changes files -- a test-writer, implementer, fixer, or dispatch lane -- ends its
+report with one line: `SAFEGUARDS: none` -- or each one, with what, where, and why. It counts:
 - `--no-verify`, or any hook or check skipped;
 - a test skipped, disabled, deleted, or loosened (a weaker assertion, a wider tolerance, a
   changed expected value) -- tests outside the task included;
 - an edited hook, linter rule, CI step, evaluator, threshold, or coverage floor;
-- widened permissions or scopes.
+- wider permissions or token scopes for an agent, a tool, or CI.
 
-Mentioning it elsewhere in the report ("tidied a test") doesn't count; it goes on the line.
-Disclosed is not approved -- the reviewer and the human still judge it. **Undisclosed is a
-Critical finding.** Reviewers -- the SDD task reviewer, the adversarial reviewer, and
-dispatch-it's integration step -- check every weakening in the diff against that line.
+**Not a weakening:** a change the brief (or the dispatch prompt) explicitly asks for -- an
+expected value it states, the tests of a function it removes, the app's own roles, permissions,
+or limits it specifies. Reviewers check it against the brief's words.
+
+Mentioning a weakening elsewhere in the report ("tidied a test") doesn't count; it goes on the
+line. Disclosed is not approved: each one is undone, or the human decides, and one the human
+accepts is logged and never asked about again. **Undisclosed is a Critical finding**, and it is
+undone. Reviewers -- the SDD task reviewer, the adversarial reviewer, and dispatch-it's
+integration step -- check every weakening in the diff against every SAFEGUARDS line the task
+produced.

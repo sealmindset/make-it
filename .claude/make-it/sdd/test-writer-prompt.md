@@ -42,7 +42,9 @@ command, the failing output, the SAFEGUARDS line). In your reply to me, return O
 - **TEST_COMMAND:** the exact command that runs them
 - **RED:** one line of the failing output (e.g. "3 failed: parse_date not defined")
 - **SAFEGUARDS:** "none", or every safeguard you bypassed or weakened -- what, where, why
-  (`--no-verify`, a skipped hook, an existing test skipped, deleted, or loosened)
+  (`--no-verify` or a skipped hook; an existing test skipped, deleted, or loosened, or its
+  expected value changed when the brief doesn't state the new one; a hook, linter rule, CI step,
+  evaluator, threshold, or coverage floor edited)
 
 Status meanings: TESTS_READY = tests committed and failing for the right reason · NOT_TESTABLE =
 nothing to test, nothing written · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED =

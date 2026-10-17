@@ -34,8 +34,9 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
 5. Self-review your own diff for spec gaps, dead code, and quality before reporting.
 6. Commit your work (clear message). Stay on the current branch — never commit to main/master.
 7. Never weaken a safeguard to get to green: no `--no-verify`, and no skipping, deleting, or
-   loosening any test — this task's or any other. If you truly had to, name it under
-   SAFEGUARDS; the reviewer checks the diff against that line, and an undisclosed one fails.
+   loosening any other test (this task's tests you may not touch at all — see Tests). A change
+   the brief explicitly requires isn't a weakening. If you truly had to weaken one, name it
+   under SAFEGUARDS; the reviewer checks the diff against that line, and an undisclosed one fails.
 
 ## Report
 Write your FULL report to `[REPORT_PATH]` (what you built, decisions, test command + output,
@@ -45,8 +46,9 @@ self-review notes, and the SAFEGUARDS line below). In your reply to me, return O
 - **TESTS:** one line (e.g. "8/8 passing via `npm test foo`")
 - **CONCERNS:** anything you flagged (or "none")
 - **SAFEGUARDS:** "none", or every safeguard you bypassed or weakened — what, where, why
-  (`--no-verify`; a test skipped, deleted, or loosened; a hook, CI step, or evaluator edited;
-  wider permissions). Mentioning it elsewhere doesn't count.
+  (`--no-verify` or a skipped hook; a test skipped, deleted, or loosened; a hook, linter rule, CI
+  step, evaluator, threshold, or coverage floor edited; wider permissions for an agent, tool, or
+  CI). Mentioning it elsewhere doesn't count.
 
 Status meanings: DONE = complete & verified · DONE_WITH_CONCERNS = done but you have doubts
 (state them) · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED = cannot proceed, say why.
