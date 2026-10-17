@@ -49,6 +49,7 @@ This skill has 7 phases:
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
+@~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -384,11 +385,40 @@ I'll check with you after each step before moving on.
 [If single-pass mode:]
 **I'll do all of this in one pass, then verify everything works.**
 
-Ready for me to start?"
+[If the app already has a login system -- guardrails rule 7:]
+**Your login:** I can keep your current login and add the new secure sign-in alongside it
+(touches about [N_WRAP] files), or replace it with the new one (touches about [N_REPLACE]
+files). Recommended: [keep / replace] -- [why, one line]. The catch: [the strongest reason
+for the other choice].
 
-**Wait for user approval before proceeding.**
+[If Very High risk:]
+**Another route:** instead of upgrading this app, build a fresh one with /make-it and move
+your data and logic into it. Recommended: [step-by-step upgrade / fresh build] -- [why, one
+line]. The catch: [the strongest reason for the other choice].
 
-**After user approves, create a pre-retrofit snapshot:**
+**How I know:** I read [N] files -- every page, every data table, and how login works today
+([current login mechanism, or 'there is none']).
+**Where it happens:** on this computer only; nothing is sent anywhere. Before I touch anything
+I save a snapshot of your app as it is now, so I can put it back exactly like this at any
+point. [If there are unsaved changes: 'You have unsaved changes; I'll save them first so the
+snapshot is complete.']
+**What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
+replaced, not just extended', 'your users table gets a new column', 'this is the biggest set
+of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
+**One thing to check:** look at 'What stays the same' -- is anything your app does today
+missing from that list?
+
+Tell me what to include: **all [N] items**, or name the ones to leave out[; and, if your app
+has a login: keep it or replace it] -- or **Not now**."
+
+**Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
+what, and the database). A plain yes is not an answer -- ask which (all [N], or by name). Build
+only what they included; anything left out goes to TODO.md with what they'll need to handle
+themselves (see error-handling). If a left-out item is needed by one they kept, say which in
+one line and ask them to pick again. **Not now:** change nothing and stop. [If Very High and
+they pick the fresh build: help migrate per error-handling; nothing below runs.]
+
+**After they pick, create a pre-retrofit snapshot:**
 
 ```bash
 # Create a tag marking the exact state before any retrofit changes
@@ -846,7 +876,28 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 After each step:
 "[Step name] is done. Let me verify everything still works..."
 [Run targeted verification for that step]
-"Everything looks good. Ready for me to continue with [next step name]?"
+Then one ask, per the approval block -- the user's own check is the point of phased mode, so
+never a plain "ready?":
+"Everything I can test passed: [what was verified for this step, in plain words -- e.g. 'your
+app starts in its new sandbox and every page I found still loads'].
+
+What changed: [this step's user-facing scope, one line].
+Everything is saved on this computer. If anything is off, I can put the app back to how it was
+before this step, or before the upgrade started.
+What stands out: [anything that differs from a typical upgrade of this kind -- or 'nothing'].
+One thing to check: open [URL] and try [the feature this step touched most].
+
+Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
+secure login and changes who can see what -- the biggest change in the plan'].
+
+Tell me: **Continue with [next step name]**, **Fix something first** (tell me what you saw), or
+**Stop here**."
+
+Wait for their pick. A plain yes is not an answer -- ask which. **Fix something first:** fix or
+undo the breaking change (guardrails rule 1), re-verify, and ask again. **Stop here:** leave the
+app as it is now (it passed this step's checks), list the remaining steps in TODO.md with what
+each would have added, and stop -- running /retrofit-it again later finds what is still missing.
+[After the last step there is no pick: go straight to Phase 6.]
 
 **Adaptation rules for existing code:**
 
@@ -1003,7 +1054,7 @@ When you're ready to deploy, just type: **/ship-it**"
 
 **If the risk score is Very High (61+):**
 - Present the phased plan AND a migration recommendation
-- Let the user choose: phased retrofit or fresh /make-it build with data migration
+- Let the user choose at the plan ask (Phase 4, one stop): phased retrofit or fresh /make-it build with data migration
 - If they choose fresh build, help migrate their data model and business logic into a new /make-it project
 
 </error-handling>
