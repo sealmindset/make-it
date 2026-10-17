@@ -99,6 +99,8 @@ dependsOn: [E02]          # optional -- not dispatched until these are done
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
 decision:  Retry or refile?   # optional -- the one question this card waits on (see Waiting on you)
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
+signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
+checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
 plan:      plans/E04-S2.md   # the card's `## Task N` plan, relative to the epic folder
@@ -225,8 +227,8 @@ Bugs are `type: breakfix` cards under a **Bugs** epic, each with a `stage:`:
 |-------|-------|--------|
 | Reported | card exists, cause unknown | capture / `/debug-it` intake |
 | Cause found | root cause confirmed with evidence | `/debug-it` Phase 3 |
-| Fix ready | fix + test on a branch, PR open | the fixing lane, which records the PR in `pr:` |
-| Live | merged (and deployed, where merge deploys) | ship, on merge -- or `reconcile --prs` once `gh` shows the card's PRs merged; the live check confirms the deploy |
+| Fix ready | fix + test on a branch, PR open | the fixing lane, which records the PR in `pr:` and how the fix is proved live in `signal:` |
+| Live | merged (and deployed, where merge deploys) | ship, on merge, setting `checkAfter:` to the release that carries it -- or `reconcile --prs` once `gh` shows the card's PRs merged. **No `signal:`, no Live**: the card waits at Fix ready until it says how it will be checked |
 | Checked | verified on the live system **against the original report** | ship, after the live check |
 
 A bug is not `done` until **Checked**; `reconcile --prs` closes a Checked card. **Jump the line** only for harm happening now: damaged
@@ -237,7 +239,10 @@ reporter per finished card.
 **The status line** at the top of any epic with bug cards in `BOARD.md`:
 - **Now fixing** -- `in-progress` at Reported / Cause found, not waiting on you (one entry per lane)
 - **Shipping** -- Fix ready
-- **Live, to check** -- Live
+- **Live, to check** -- Live and due: no `checkAfter:`, or its date has come (a release tag counts as out on
+  the date in its name, `v2026.10.17`; an undated tag waits, so use a date there)
+- **Live, waits** -- Live with a `checkAfter:` still ahead, grouped by it (`v2026.10.17 → S85, S87`); only
+  shown when some card waits
 - **Next up** -- the top `backlog` bug that can start (not high-stakes, no unfinished
   `dependsOn`, not waiting on you), by priority, then age
 
@@ -264,8 +269,8 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **The ship queue is serial.** One PR through CI and deploy at a time, whatever the lane count.
 - **Questions are batched.** Collect every lane's open questions into one message. A question that
   blocks a card also goes on it as `decision:`.
-- Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one
-  (`card.py set <id> stage=… pr=[N]`);
+- Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one, with
+  how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr=[N] signal=…`);
   the status line lists every lane.
 - **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
   `decision:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
@@ -371,8 +376,9 @@ Bare `status` prints one report from `status.py`: read-only, no AI call, under a
 waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` never disagree.
 
 - **In flight** -- by stage, not status (most `in-progress` bugs are waiting at Live): the board's
-  Now fixing, Shipping and Live to check lines, then other in-progress work; each with its count
-  and oldest idle card.
+  Now fixing, Shipping and Live to check lines (the cards due now, each with its `signal:`), Live
+  waits (counted by what they wait on), then other in-progress work; each with its count and oldest
+  idle card.
 - **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave ("covers N of M
   candidates; K new since (new bugs first, the rest after its waves)"), and the top stories / tasks / spikes that can
   start.
@@ -382,8 +388,8 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
 - **Needs you** -- Waiting on you (top 5), then **every** held P1, oldest first, with P2/P3 held
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
-  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a
-  `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
+  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, Live
+  cards with no `signal:` (write one), a `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
   card (re-plan).
 - **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
   Live and Live → Checked, by priority.
@@ -456,7 +462,7 @@ Auto-applied: N actions  |  Flagged for human: N items
 
 Flags: `--prs` (no AI: `sync-prs.py` reads each open card's `pr:` with `gh pr view` and moves it
 forward on facts only -- every PR closed and one merged → Live (merged; the live check confirms the
-deploy); Checked → done; never backward, never past Live. A card with no `pr:` is never guessed
+deploy), but only with a `signal:` (a merged card without one waits, named); Checked → done; never backward, never past Live. A card with no `pr:` is never guessed
 from its text: a Shipping card without one is listed to set by hand, as is a `repo#N` short form
 (use the PR's URL). Each card is re-read at write time, so another session's move wins. No `gh`
 → the PR step is skipped and said so) · `--fast` (code rung only) · `--deep <id>` (run the project's unit and end-to-end tests

@@ -68,8 +68,8 @@ completion, file C = abort logic). Confirm fixing one does not affect another.
 
 **Project has a board (`/backlog-it`)?** Take the domains from it: the top of the bug line, no
 shared files or data between lanes, at most `lane_cap` lanes (default 3), one lane per `serial`
-category, never a `stakes: critical` card. Each agent moves its own card's `stage:` and records its PR as `pr:` when it opens one, with
-`card.py set <id> stage=… pr=[N]`. See
+category, never a `stakes: critical` card. Each agent moves its own card's `stage:` and records its PR as `pr:` -- with how the fix is proved
+live as `signal:` -- when it opens one: `card.py set <id> stage="Fix ready" pr=[N] signal=…`. See
 `backlog-board.md` → Parallel lanes.
 
 ## Step 3 -- Decide isolation (the safety gate)

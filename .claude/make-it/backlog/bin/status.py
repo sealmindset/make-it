@@ -73,7 +73,7 @@ def facts(B, T=None):
     opened = lambda p, d: day(v(d, 'created')) or day(h(p).get('added', '')) or datetime.date.min
     # last change: the later of git's last commit and the card's own updated: (a lane's write may not be committed yet)
     last = lambda p, d: max(filter(None, (day(h(p).get('touched', '')), day(v(d, 'updated')))), default=None) or opened(p, d)
-    idle = lambda p, d: (T - last(p, d)).days
+    idle = lambda p, d: max(0, (T - last(p, d)).days)  # an updated: written in UTC can be a day ahead of local time
     def done_on(p, d):  # the last commit that set it done; else (or if it entered git done) its own updated:
         x = h(p)
         return day(x['done']) if x.get('done') and not x.get('added_done') else day(v(d, 'updated')) or datetime.date.min
@@ -88,7 +88,7 @@ def facts(B, T=None):
                      sum(opened(p, d) <= end and not (p in dn and dn[p] <= end) for p, d in leaf.items())))
     bug = lambda d: v(d, 'type') == 'breakfix'
     pick = lambda pred: sorted((p for p, d in op.items() if pred(d)), key=lambda p: -idle(p, op[p]))
-    flight = {k: pick(lambda d: R.bucket(d) == k) for k in ('Now fixing', 'Shipping', 'Live, to check')}  # the board's own lines
+    flight = {k: pick(lambda d: R.bucket(d) == k) for k in ('Now fixing', 'Shipping', 'Live, to check', 'Live, waits')}  # the board's own lines
     flight['Other work'] = pick(lambda d: not bug(d) and not R.bucket(d) and v(d, 'status') == 'in-progress')
     epics = {os.path.dirname(p): d for p, d in cards.items() if p.endswith('/epic.md')}
     kids = lambda e: [p for p in leaf if os.path.dirname(os.path.dirname(p)) == e]
@@ -128,6 +128,7 @@ def facts(B, T=None):
                 lane_idle=[p for p in flight['Now fixing'] if idle(p, op[p]) >= LANE],  # lanes work in hours: idle days = it stopped
                 stalled=[p for p in flight['Other work'] if idle(p, op[p]) >= STALL],
                 live_old=[p for p in flight['Live, to check'] if idle(p, op[p]) >= STALL],
+                no_signal=[p for p in flight['Live, to check'] + flight['Live, waits'] if not v(op[p], 'signal')],
                 checked_open=[p for p, d in op.items() if v(d, 'stage') == 'Checked'],
                 epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in kids(e)), len(kids(e))) for e in epics if kids(e)),
                              key=lambda x: (-(x[2] - x[1]), x[0])),
@@ -144,7 +145,12 @@ def render(f, proj, needs_only=False):
     out = [f"BOARD STATUS — {proj} · {T}",
            f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done · dates from {f['src']}{since}", '', 'IN FLIGHT']
     for k, ps in f['flight'].items():
+        if k == 'Live, waits':  # grouped by what they wait on, soonest first
+            if ps: out.append(f"  {k:<15}{len(ps):>4}  " + ', '.join(f'{w} ×{n}' for w, n in sorted(__import__('collections').Counter(v(c[p], 'checkAfter') for p in ps).items())))
+            continue
         out.append(f"  {k:<15}{len(ps):>4}  " + (f"{ids(ps)} · oldest idle {idle(ps[0])}d" if ps else '—'))
+        if k == 'Live, to check':  # what proves each fix, oldest first
+            out += [f"    {cid(p)} · {cut(v(c[p], 'signal'), 70)}" for p in ps[:TOP] if v(c[p], 'signal')]
     out += ['', 'UP NEXT']
     out.append('  Next bug       ' + ('; '.join(name(p, 60) for p in f['next_bugs']) or '—'))
     if f['plan']:
@@ -170,7 +176,8 @@ def render(f, proj, needs_only=False):
     if needs_only: return '\n'.join(needs)
     out += [''] + needs
     drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], ' · lane stopped? it should hand the card back'),
-             (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], '')]
+             (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], ''),
+             ('Live, no signal', f['no_signal'], ' · write how the fix is checked: card.py set <id> signal=…')]
     out += ['', 'DRIFT'] + [f"  {k:<22}{len(ps):>3}  {ids(ps)}{hint}" for k, ps, hint in drift if ps]
     if f['plan'] and not f['plan'][3]: out.append('  PLAN.md ran out        every wave is merged -- run /backlog-it plan')
     if f['plan'] and f['plan'][4]: out.append(f"  PLAN.md stuck          {f['plan'][3].split(' ', 1)[0].rstrip('.')} waits on {', '.join(f['plan'][4])} -- answer it or re-plan")
@@ -207,7 +214,7 @@ def self_test():
         card('stories/S2.md', d(12), id='E01-S2', **dict(bug, priority='P1'), stage='Reported', created=d(12))
         card('stories/S14.md', d(10), id='E01-S14', title='Seeded', type='breakfix', status='done', stage='Checked', created=d(10), updated=d(10))  # entered git done, like a seed
         card('stories/S1.md', d(10), id='E01-S1', **dict(bug, status='done'), stage='Checked', created=d(20))
-        card('stories/S2.md', d(9), id='E01-S2', **dict(bug, priority='P1'), stage='Live', created=d(12))
+        card('stories/S2.md', d(9), id='E01-S2', **dict(bug, priority='P1'), stage='Live', created=d(12), signal='worker log: retry ok')
         card('stories/S12.md', d(8), id='E01-S12', **bug, stage='Live', created=d(40))  # entered git already Live: no Reported->Live seen
         card('stories/S12.md', d(7), id='E01-S12', **dict(bug, status='done'), stage='Checked', created=d(40))
         card('stories/S10.md', d(6), id='E01-S10', title='Quick one', type='story', status='backlog', created=d(6))
@@ -222,7 +229,9 @@ def self_test():
         card('stories/S20.md', d(1), id='E01-S20', **dict(bug, status='backlog'), stage='Reported', stakes='critical', created=d(1))  # held P2: counted
         card('stories/S21.md', d(1), id='E01-S21', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', decision='Ship it?', created=d(1))  # held + waiting: listed once
         for n in range(30, 36):  # six old held P1s: with S4 that's 7 -- the list must not stop at 5
-            card(f'stories/S{n}.md', d(30), id=f'E01-S{n}', type='story', status='blocked', priority='P1', stakes='critical', created=d(40))
+            card(f'stories/S{n}.md', d(30), id=f'E01-S{n}', type='story', status='blocked', priority='P1', stakes='critical', created=d(40),
+                 **({'updated': str(T + D(days=1))} if n == 30 else {}))  # S30: updated: a day ahead, as a UTC stamp can be
+        card('stories/S24.md', d(30), id='E01-S24', **bug, stage='Live', checkAfter='2099-01-01', created=d(40))  # waits for its release
         card('stories/S3.md', d(2), id='E01-S3', **dict(bug, status='backlog'), stage='Reported', decision='Retry, or refile?', created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
@@ -235,8 +244,12 @@ def self_test():
         rows = [r[1:] for r in f['rows']]
         # W0: opened S3 S4 S5 S7 S8 S10 S11 S15 S16 S17 S18 S19 S20 S21, closed S10 · W1: S2 / S1 (the move doesn't reset it), S12 · W2: S1 · W3: S6.
         # S9 and S14 entered git already done: neither opened nor closed here.
-        assert rows == [(14, 1, 21), (1, 2, 8), (1, 0, 9), (1, 0, 8)], rows  # S30-S35: open since before the window
+        assert rows == [(14, 1, 22), (1, 2, 9), (1, 0, 10), (1, 0, 9)], rows  # S30-S35, S24: open since before the window
         assert set(ids(f['flight']['Live, to check'])) == {'E01-S2', 'E01-S16'} and ids(f['flight']['Other work']) == ['E01-S6'], f['flight']
+        assert all(f['idle'](p) >= 0 for p in f['cards']), 'negative idle'
+        r = render(f, 't')  # Live splits: due now (with its signal) vs waits on a release; a Live card with no signal drifts
+        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and '2099-01-01 ×1' in r and 'E01-S2 · worker log: retry ok' in r, r
+        assert set(ids(f['no_signal'])) == {'E01-S16', 'E01-S24'} and 'Live, no signal' in r, f['no_signal']
         b = R.render(t, 't')  # the report and BOARD.md agree on every status line
         for k in ('Now fixing', 'Shipping', 'Live, to check'):
             assert set(re.search(rf'\*\*{k}:\*\* (.*)', b).group(1).split(', ')) - {'—'} == {i.split('-')[-1] for i in ids(f['flight'][k])}, k

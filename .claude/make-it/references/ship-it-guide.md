@@ -77,8 +77,10 @@ Before merging any PR, apply the `/git-it` rules so nothing lands stale or confl
   → close + delete; conflicting or stale-CI → rebase + fresh CI + verify; clean + green + wanted
   → merge. Anything touching live/irreversible paths → verify on rehearsal/staging first.
 - **Squash-merge + delete the branch.** In shared/multi-session repos, only delete branches you own.
-- **Project board (`/backlog-it`, see `backlog-board.md`):** record each card's PR in `pr:` when it
-  opens; on merge, move each shipped card to `stage: Live` (`/backlog-it reconcile --prs` does it from `pr:`); after the live check passes against the original report, to `Checked` and `done`.
+- **Project board (`/backlog-it`, see `backlog-board.md`):** record each card's PR in `pr:` and how the
+  fix is proved live in `signal:` when it opens; on merge, move each shipped card to `stage: Live` and set
+  `checkAfter:` to the release that carries it (`/backlog-it reconcile --prs` does the move from `pr:`, never
+  without a `signal:`); after the live check passes against the original report, to `Checked` and `done`.
 
 ### Pre-Push Self-Review (runs before every push)
 

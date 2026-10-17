@@ -958,6 +958,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.42.0 -- Live cards say how and when they'll be checked
+
+Bug cards gain `signal:` (one line: how the fix is proved on the live system, read-only) and
+`checkAfter:` (a release tag such as `v2026.10.17`, due on the date in its name, or a date). The fixing
+lane writes `signal:` with its PR; ship sets `checkAfter:`. `reconcile --prs` won't move a merged card
+to Live without a `signal:`. The board splits **Live, to check** (due now) from **Live, waits** (grouped
+by release or date); `status` shows each due card's signal and flags Live cards with none. The
+after-release sweep that runs the due signals is its own card, designed once real signals exist.
+
 ### v1.41.0 -- One safe way to write a card
 
 `card.py` is now the only way skills write board cards. `append <id> <section>` takes text on
