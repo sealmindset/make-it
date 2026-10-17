@@ -369,17 +369,17 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
 - **In flight** -- by stage, not status (most `in-progress` bugs are waiting at Live): the board's
   Now fixing, Shipping and Live to check lines, then other in-progress work; each with its count
   and oldest idle card.
-- **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave (stale by dispatch's own
-  rule: a candidate card is missing from it or changed after its date), and the top stories /
-  tasks / spikes that can start.
+- **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave ("covers N of M
+  candidates; K new since go after its waves"), and the top stories / tasks / spikes that can
+  start.
 - **Burn-down** -- per week for 4 weeks: opened, closed, net, open at week's end; then a forecast
   ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
   take with no new ones).
 - **Needs you** -- Waiting on you (top 5), then **every** held P1, oldest first, with P2/P3 held
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
-  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a stale
-  `PLAN.md`.
+  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a
+  `PLAN.md` whose waves are all merged (re-plan).
 - **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
   Live and Live → Checked, by priority.
 
@@ -463,11 +463,13 @@ headlessly for one card) · `--dry-run` (print what would apply, write nothing) 
 Autonomous "do the next thing" -- a hands-free way to call `start`. **It never bypasses the
 green gate or the harm gate** in the standing preamble.
 
-0. **Stages first, then a current plan.** Run `reconcile --prs` (`--dry-run` under `dispatch
-   --dry-run`) so Shipping and Checked are true.
-   `PLAN.md` is current when every candidate card is in it and none
-   was updated after its date; otherwise run `plan` again first (no `PLAN.md` → the steps
-   below). Take the first wave whose cards aren't all merged, and start it only when every card
+0. **Stages first, then the plan.** Run `reconcile --prs` (`--dry-run` under `dispatch
+   --dry-run`) so Shipping and Checked are true. **A plan stays in force for the cards it names**:
+   cards changed since it was written keep their place, and cards it doesn't name (new since) go
+   after its waves -- a new bug still takes a free lane by step 1, a new improvement waits. Re-plan
+   only when every wave is merged, or when asked (`plan`); no `PLAN.md` → the steps below. (A stricter
+   "any change makes it stale" rule went stale within hours on a busy board, and the re-plan it
+   demanded was skipped every time.) Take the first wave whose cards aren't all merged, and start it only when every card
    in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
    progress. Each card must still pass step 2's excludes; one that fails waits. A `dispatch-it`
    wave → its cards as `/dispatch-it` lanes, once they fit the free lanes (`lane_cap` minus the
@@ -506,7 +508,8 @@ and reversible.
 each card that could start to an execution mode, and orders them into **waves** -- the path that
 **finishes soonest with every gate held**. `groom` decides *what next*; `plan` decides *how to
 run it*. It does no per-card code check of its own (it reuses recorded evidence; run `groom` to
-re-ground). One headless call: about a minute on a small board, ~10 on a 100-card board.
+re-ground). One headless call: about a minute on a small board, ~10 on a 100-card board. The plan
+then leads `dispatch` for the cards it names until its waves are merged (see `dispatch` step 0).
 
 **The mode rubric:**
 - **spike** -- unknowns dominate: open questions that change the approach, no code evidence, an
@@ -745,7 +748,9 @@ the last commit was; running it twice reverts the revert. Board in its own repo 
 
 `regen-board.py` rebuilds `BOARD.md` from frontmatter, so nothing transient is lost when any
 session rebuilds it: the Waiting on you block, ⚠️ for high-stakes, ⚡ breakfix, 🔬 spike, the stage, a size chip (`[M]`),
-a pin marker (`📌2`), and the mode (`→solo`). One compact line per card.
+a pin marker (`📌2`), and the mode (`→solo`). One compact line per card. An epic of more than 30
+cards shows its done cards as a count (`show <epic>` lists them) and groups its open cards by
+`category:`, so a long-lived Bugs epic stays readable.
 
 ---
 

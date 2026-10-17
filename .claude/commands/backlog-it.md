@@ -119,8 +119,9 @@ parallel wave, high-stakes never in a wave, `dependsOn` order) -- if it still fa
 re-run, nothing is written.
 It stamps `mode:` on the cards (never over `mode_by: you`), drafts `## Task N` plans for
 `subagent-it` cards, and proposes spike cards (filed with `--apply`). `start` adds the card's
-mode line after the preamble; `dispatch` follows the plan's next wave. Drafts never run without
-the user's go.
+mode line after the preamble; `dispatch` follows the plan's next wave. A plan stays in force for
+the cards it names (new cards go after its waves); re-plan when every wave is merged or when
+asked. Drafts never run without the user's go.
 
 ## Step 5 -- After every change
 

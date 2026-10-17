@@ -105,11 +105,11 @@ def facts(B, T=None):
     if os.path.exists(pf):
         txt = open(pf).read(); pd = day((re.search(r'\d{4}-\d{2}-\d{2}', txt.split('\n', 1)[0]) or [''])[0])
         cand = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready', 'designing') and v(d, 'id').upper() not in parents]
-        changed = sum(not pd or last(p, op[p]) > pd or not re.search(rf"\b{re.escape(v(op[p], 'id'))}\b", txt) for p in cand)  # dispatch's rule
+        new = sum(not re.search(rf"\b{re.escape(v(op[p], 'id'))}\b", txt) for p in cand)  # a plan leads the cards it names; the rest go after it
         waves = re.findall(r'^\d+\. .*$', txt.split('## Waves', 1)[-1].split('\n## ', 1)[0], re.M)
         merged = lambda i: status.get(i, 'done') == 'done' or any(v(d, 'id').upper() == i and v(d, 'stage') in ('Live', 'Checked') for d in cards.values())
         nxt = next((w for w in waves if not all(merged(i.upper()) for i in re.findall(r'· (E\d+(?:-S\d+)?)', w.split(' -- ')[0]))), None)
-        plan = (pd, changed, nxt)
+        plan = (pd, len(cand) - new, new, nxt)
     rank = lambda p, d: (v(d, 'priority') or 'P9', -idle(p, d))
     opn = {p: d for p, d in cards.items() if v(d, 'status') != 'done'}
     cyc = lambda a, b: {pr: sorted((day(h(p)[b]) - (day(h(p)[a]) if a != 'created' else opened(p, d))).days
@@ -143,9 +143,9 @@ def render(f, proj, needs_only=False):
     out += ['', 'UP NEXT']
     out.append('  Next bug       ' + ('; '.join(name(p, 60) for p in f['next_bugs']) or '—'))
     if f['plan']:
-        pd, changed, nxt = f['plan']
-        out.append(f"  PLAN.md        {pd or 'undated'}" + (f" · stale: {changed} candidate cards new or changed since" if changed else ' · current'))
-        out.append(f"                 next wave: {cut(nxt, 80)}" if nxt else '                 every wave is merged')
+        pd, covered, new, nxt = f['plan']
+        out.append(f"  PLAN.md        {pd or 'undated'} · covers {covered} of {covered + new} candidates" + (f'; {new} new since go after its waves' if new else ''))
+        out.append(f"                 next wave: {cut(nxt, 80)}" if nxt else '                 every wave is merged -- re-plan')
     else: out.append('  PLAN.md        none (run /backlog-it plan)')
     for i, p in enumerate(f['can'][:TOP]):
         d = c[p]
@@ -167,7 +167,7 @@ def render(f, proj, needs_only=False):
     drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], ' · lane stopped? it should hand the card back'),
              (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], '')]
     out += ['', 'DRIFT'] + [f"  {k:<22}{len(ps):>3}  {ids(ps)}{hint}" for k, ps, hint in drift if ps]
-    if f['plan'] and f['plan'][1]: out.append(f"  PLAN.md is stale       dispatch re-plans first, or falls back to the default order")
+    if f['plan'] and not f['plan'][3]: out.append('  PLAN.md ran out        every wave is merged -- run /backlog-it plan')
     if out[-1] == 'DRIFT': out.append('  none')
     out += ['', f"EPICS  (most open first)"]
     for e, dn, tot in f['epics'][:TOP]:
@@ -220,7 +220,7 @@ def self_test():
         card('stories/S3.md', d(2), id='E01-S3', **dict(bug, status='backlog'), stage='Reported', decision='Retry, or refile?', created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
-        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(3)}  (scope: all)\n\n## Waves\n1. **solo** · E01-S1 · done -- unblocks E01-S8\n2. **solo** · E01-S8 · next\n\n## Held\n')
+        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(5)}  (scope: all)\n\n## Waves\n1. **solo** · E01-S1 · done -- unblocks E01-S8\n2. **solo** · E01-S8 · next\n\n## Held\n')
         git('mv', 'items/EPIC-01-bugs/stories/S1.md', 'items/EPIC-01-bugs/stories/S1-moved.md', when=d(0)); git('commit', '-qm', 'mv', when=d(0))
         card('stories/S1.md', d(0), id='E01-S15', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(0))  # new card, S1's old path
         open(f'{t}/items/EPIC-01-bugs/stories/S19.md', 'w').write(f'---\nid: E01-S19\ntype: breakfix\nstatus: in-progress\nstage: Cause found\ncreated: {d(5)}\nupdated: {d(0)}\n---\n')  # written, not committed: busy
@@ -239,11 +239,14 @@ def self_test():
         assert ids(f['lane_idle']) == ['E01-S17'] and set(ids(f['flight']['Now fixing'])) == {'E01-S17', 'E01-S18', 'E01-S19'}, f['lane_idle']  # S19: newer updated: wins
         assert ids(f['stalled']) == ['E01-S6'] and ids(f['checked_open']) == ['E01-S7'], (f['stalled'], f['checked_open'])
         # stale: candidates S3 S4 S5 S15 changed after the plan, S11 isn't in it; S8 changed that same day; in-flight S16 doesn't count
-        assert f['plan'][1] == 7 and f['plan'][2].startswith('2.'), f['plan']  # + S20 S21
+        # the plan leads the cards it names (S8); the 7 it doesn't (S3 S4 S5 S11 S15 S20 S21) go after its waves
+        assert f['plan'][1:3] == (1, 7) and f['plan'][3].startswith('2.') and 'ran out' not in render(f, 't'), f['plan']
         assert f['r2l'][''] == [3, 4] and f['r2l']['P1'] == [3] and f['l2c'][''] == [6], (f['r2l'], f['l2c'])  # S7 entered at Checked
         n = render(f, 't', needs_only=True)  # dispatch's closing list: every held P1 shown, the rest counted, nothing twice
         assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '⚠️ E01-S4' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
         assert 'growing +3.5/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
+        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n')  # every wave merged
+        g = facts(t, T); assert g['plan'][3] is None and 'PLAN.md ran out' in render(g, 't'), g['plan']
         assert len(facts(t, T - D(days=15))['rows']) == 3  # no week that ends before the history starts
         assert forecast([(1, 3), (1, 3)], 8, T).startswith('shrinking -2.0/wk: clear in ~4 wks'), forecast([(1, 3), (1, 3)], 8, T)
         assert forecast([], 0, T) == 'nothing open' and forecast([], 3, T) == 'no full week of history yet'

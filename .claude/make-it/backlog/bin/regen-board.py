@@ -9,6 +9,7 @@ Usage: regen-board.py [board_dir] [--project NAME]
 import datetime, glob, os, re, sys
 
 ORDER = ['in-progress', 'ready', 'blocked', 'designing', 'backlog', 'done']
+BIG = 30  # ponytail: an epic past this many cards counts its done cards and groups the rest by category
 def fm(p):
     m = re.match(r'---\n(.*?)\n---', open(p).read(), re.S)
     return dict(l.split(':', 1) for l in m.group(1).splitlines() if ':' in l) if m else {}
@@ -56,11 +57,18 @@ def render(B, proj):
             nxt = next_up(stories, STATUS)
             out += [f'**{k}:** ' + ids(lambda s: bucket(s) == k) for k in ('Now fixing', 'Shipping', 'Live, to check')] + [
                     '**Next up:** ' + nxt, '']
+        big = len(stories) > BIG
         for st in ORDER:
             group = [s for s in stories if v(s, 'status') == st]
             if not group: continue
             out.append(f'### {st} ({len(group)})')
+            if big and st == 'done':
+                out += [f"_listed by `/backlog-it show {v(e,'id')}`_", '']; continue
+            if big: group.sort(key=lambda s: (v(s, 'category') or '~', num(s)))
+            cat = None
             for s in group:
+                if big and v(s, 'category') != cat:
+                    cat = v(s, 'category'); out.append(f"**{cat or 'uncategorized'}** ({sum(v(x, 'category') == cat for x in group)})")
                 mark = warn(s) + ('⚡' if v(s, 'type') == 'breakfix' else ('🔬' if v(s, 'type') == 'spike' else ''))
                 stage = f" — **{v(s,'stage')}**" if v(s, 'stage') and st != 'done' else ''
                 out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_{chips(s)}")
@@ -99,6 +107,16 @@ def main(args):
             assert '**Next up:** S3' in b and 'Retry, or refile?' not in b and '## Waiting on you (3)' in b, b
             card('stories/S9.md', id='E01-S9', status='backlog', type='story', priority='P1')  # Next up is a bug
             assert '**Next up:** S3' in board()
+            # A big epic (over 30 cards): done cards as a count, open cards grouped by category; small epics unchanged
+            os.makedirs(f'{t}/items/EPIC-02-big/stories')
+            open(f'{t}/items/EPIC-02-big/epic.md', 'w').write('---\nid: E02\ntitle: Big\nstatus: in-progress\n---\n')
+            for n in range(1, 34):
+                kv = dict(id=f'E02-S{n}', title=f'T{n}', status='done' if n < 3 else 'backlog', category='zeta' if n % 2 else 'alpha')
+                open(f'{t}/items/EPIC-02-big/stories/S{n}.md', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            b = board(); big = b.split('## E02')[1]
+            assert '### done (2)\n_listed by `/backlog-it show E02`_' in big and 'E02-S1 ·' not in big and 'E02-S2 ·' not in big, big
+            assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
+            assert not re.search(r'^\*\*[^*:]+\*\* \(\d+\)$', b.split('## E02')[0], re.M), 'small epic grouped'
         print('regen-board self-test: OK'); return
     proj = None
     if '--project' in args:

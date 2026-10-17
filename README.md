@@ -958,6 +958,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.40.0 -- The plan keeps leading; a big epic stays readable
+
+- **A plan stays in force for the cards it names.** The old rule (any candidate changed after the
+  plan's date = stale, so re-plan first) went stale within hours on a busy board. The ~10-minute
+  re-plan it demanded was skipped every time, and dispatch quietly fell back to the default order.
+  Now cards added since go after the plan's waves (a new bug still takes a free lane), and you
+  re-plan when every wave is merged or when you ask. `status` says "covers N of M candidates; K new
+  since" and flags only a plan that has run out.
+- **An epic of more than 30 cards** shows its done cards as a count (`/backlog-it show <epic>` lists
+  them) and groups its open cards by category. docai's BOARD.md: 494 → 361 lines. Display only.
+
 ### v1.39.0 -- Held high-stakes cards come back to you
 
 Every `/backlog-it dispatch` now ends with what needs you: the decisions waiting on your answer,
