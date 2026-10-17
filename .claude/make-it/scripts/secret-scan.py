@@ -42,12 +42,13 @@ RESET = ([':(top,glob)**/' + p.decode() for p in KEEP_OUT + (b'.aws/credentials'
 CONFIG_EXTS = (b'.ini', b'.cfg', b'.conf', b'.properties', b'.toml', b'.yaml', b'.yml')
 
 NAME, SEP = r'[A-Za-z_][A-Za-z0-9_.-]*', r'[ \t]*(?::=|=|:)[ \t]*'
-IDENT, SEP_AT, ASSIGN = re.compile(NAME), re.compile(SEP), re.compile(r'(%s)%s' % (NAME, SEP))
+IDENT, SEP_AT = re.compile(NAME), re.compile(SEP)
 QUOTES = (('"', 3), ("'", 3), ('"', 1), ("'", 1), ('`', 1))
 QUOTE = '|'.join(q * n for q, n in QUOTES)  # longest first
 OPENER = re.compile(QUOTE)
-# The next literal opener or NAME sep, so a NAME only ever starts outside a literal.
-TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.-])(%s)%s' % (QUOTE, NAME, SEP))
+# The next literal opener or NAME sep, so a NAME only ever starts outside a literal -- and never inside a
+# base64 / base64url / hex run, so a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME.
+TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.+/=-])(%s)%s' % (QUOTE, NAME, SEP))
 # One literal (backslash escapes; a triple quote may hold single quotes), unrolled so it can't backtrack.
 LITERAL = {q * n: re.compile(r'{e}[^{q}\\]*(?:(?:\\.{t})[^{q}\\]*)*{e}'.format(
     e=q * n, q=q, t='' if n == 1 else '|%s(?!%s)' % (q, q * 2))) for q, n in QUOTES}
@@ -60,6 +61,8 @@ REFERENCE = re.compile(r'(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}\})+
 PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|mock|xxxx|\*\*\*\*')
 # `your-…-here`, `your_…_here`, `<…>` by find, not `.*`: that regex backtracks quadratically on a long value.
 AROUND = (('your-', '-here'), ('your_', '_here'), ('<', '>'))
+# A Git LFS pointer's oid line: the push uploads the object it names, not the pointer.
+LFS_OID = re.compile(rb'oid sha256:([0-9a-f]{64})')
 
 
 class Fail(Exception):
@@ -160,12 +163,26 @@ def literal_at(s, i):
         return s[i + n:m.end() - n], m.end()
 
 
+def key_position(s, i):
+    """A quoted key opens at line start or after `{`, `[`, `,` or a YAML `- ` -- never after a ternary's `?`."""
+    j = i
+    while j and s[j - 1] in ' \t':
+        j -= 1
+    if j < i and j and s[j - 1] == '-':
+        j -= 1
+        while j and s[j - 1] in ' \t':
+            j -= 1
+        return j == 0
+    return j == 0 or s[j - 1] in '{[,'
+
+
 def values(s, config):
     """(NAME, VALUE) pairs on a line. A NAME only starts outside a string literal, and the search resumes after
     its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
     alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read or printed as a NAME.
-    Two literals hold NAMEs of their own: a quoted key (`"password": ...`) and, in a config file, a string that
-    starts with one (compose's `- "PASSWORD=..."`)."""
+    A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
+    Any other literal that isn't a VALUE is scanned by the same rules when it holds JSON (`json.loads('{...}')`),
+    and always in a config file (compose's `- "PASSWORD=..."`, `command: sh -c "... PASSWORD=..."`)."""
     i, dead = 0, set()
     while True:
         m = TOKEN.search(s, i)
@@ -181,8 +198,8 @@ def values(s, config):
                 return  # a ` or triple-quoted literal runs on past this line
             body, i = lit
             sep = SEP_AT.match(s, i)
-            if not (sep and IDENT.fullmatch(body)):
-                if config and ASSIGN.match(body):
+            if not (sep and IDENT.fullmatch(body) and key_position(s, m.start())):
+                if config or body[:1] in ('{', '['):
                     yield from values(body, config)
                 continue
             name, i = body, sep.end()
@@ -230,16 +247,37 @@ def shown(path):
     return s.encode('utf-8', 'surrogateescape')
 
 
-def collect(rows, is_binary):
-    """Hits from (path, line, text, blob) rows; a file's binary check runs only once it has a hit."""
-    hits, binary = set(), {}
+def collect(rows, blob, lfs):
+    """Hits from (path, line, text, blob) rows; a file's binary check runs only once it has a hit.
+    An LFS pointer is scanned as the whole object it names (what the push uploads); a missing object can't
+    be checked."""
+    hits, binary, pointers = set(), {}, {}
     for path, n, text, sha in rows:
+        oid = LFS_OID.fullmatch(text)
+        if oid:
+            pointers[path, sha] = oid.group(1)
         found = list(hit_names(text, is_config(path)))
         if found:
             if (path, sha) not in binary:
-                binary[path, sha] = is_binary(path, sha)
+                binary[path, sha] = nul_in_head(blob(sha))
             if not binary[path, sha]:
                 hits.update((path, n, name) for name in found)
+    for (path, sha), oid in pointers.items():
+        data = blob(sha)
+        if len(data) >= 1024 or not data.startswith(b'version https://'):
+            continue  # git-lfs reads only a small blob that opens with its version line as a pointer
+        # ponytail: default storage dir only -- a custom lfs.storage reads as missing (exit 2); ask `git lfs env`
+        # if that bites. Every line counts (the old object isn't diffed), so already-pushed lines can stop the send.
+        try:
+            f = open(os.path.join(lfs, oid[:2], oid[2:4], oid), 'rb')
+        except FileNotFoundError:
+            raise Fail('an LFS object in scope is not on disk')
+        with f:
+            if nul_in_head(f.read(8000)):
+                continue
+            f.seek(0)
+            for n, line in enumerate(f, 1):
+                hits.update((path, n, name) for name in hit_names(line.rstrip(b'\n'), is_config(path)))
     return hits
 
 
@@ -274,18 +312,15 @@ def staged(top, untracked):
 
 def scan(repo):
     top = git_out(repo, 'rev-parse', '--show-toplevel')[:-1]
-    # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
-    # Its other .gitignore lines make the keep-out files ignored: never hash those.
-    untracked = [p for p in git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
-                                    '-z').split(b'\0') if p and not kept_out(p)]
-    rows, added = staged(top, untracked)
 
-    def blob_binary(path, sha):
-        return nul_in_head(git_out(top, 'cat-file', 'blob', sha.decode()))
+    def blob(sha):
+        return git_out(top, 'cat-file', 'blob', sha.decode())
 
-    unsaved = collect((r for r in rows if r[0] not in added), blob_binary)
-    new = collect((r for r in rows if r[0] in added), blob_binary)
+    # git-lfs keeps objects under the common git dir (shared by linked worktrees), not --git-path.
+    lfs = os.path.join(top, git_out(top, 'rev-parse', '--git-common-dir')[:-1], b'lfs', b'objects')
 
+    # Saved, not sent runs before staged(): its `git add` can re-run the LFS clean filter on a racily clean file
+    # and re-create a missing object, so a commit's LFS objects are checked as the user left them.
     # Step 4's commit during a merge (MERGE_HEAD) has those heads as parents too, so the push sends them.
     try:
         with open(os.path.join(top, git_out(top, 'rev-parse', '--git-path', 'MERGE_HEAD')[:-1]), 'rb') as f:
@@ -297,7 +332,15 @@ def scan(repo):
     unsent = ['HEAD'] + [h.decode() for h in heads] + ['--not', '--remotes', '--']
     saved = collect(
         added_lines(git_lines(top, *LOG, '-p', *DIFF, *unsent),
-                    headers(git_out(top, *LOG, '-z', '--name-only', *unsent))), blob_binary)
+                    headers(git_out(top, *LOG, '-z', '--name-only', *unsent))), blob, lfs)
+
+    # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
+    # Its other .gitignore lines make the keep-out files ignored: never hash those.
+    untracked = [p for p in git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
+                                    '-z').split(b'\0') if p and not kept_out(p)]
+    rows, added = staged(top, untracked)
+    unsaved = collect((r for r in rows if r[0] not in added), blob, lfs)
+    new = collect((r for r in rows if r[0] in added), blob, lfs)
     return unsaved, new, saved
 
 
