@@ -442,7 +442,7 @@ for real]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
-Unless they say the database at [host] is a test copy (not sure counts as not a test copy),
+If the database lives elsewhere and they picked the upgrade: unless they say the database at [host] is a test copy (not sure counts as not a test copy),
 stop and change nothing:
 "I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
 database your settings point at, and there is no undo for that -- so I won't run it unless I
@@ -472,7 +472,7 @@ if [ -n "$(git status --porcelain)" ]; then
   for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*' '*.db' 'credentials*.json' 'id_rsa*' 'id_ed25519*' '*.p12' '*.pfx'; do
     grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
   done
-  { git add -A && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
+  { git add -A . && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
     ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*' \
     ':(glob)**/*.db' ':(glob)**/credentials*.json' ':(glob)**/id_rsa*' ':(glob)**/id_ed25519*' \
     ':(glob)**/*.p12' ':(glob)**/*.pfx'; } || fail "could not save the unsaved changes"
@@ -945,8 +945,8 @@ What changed: [this step's user-facing scope, one line][; if this step changed .
 your settings file (.env): [the settings added or changed, by name, values hidden]'].
 Your files are saved on this computer[; if the database lives elsewhere: ', and the data
 changes are in your database at [host]']. If anything is off, I can put the app's files back to
-how they were before this step, or before the upgrade started[; if this step changed .env: ' (your
-settings file, .env, isn't part of that -- the list above is what I changed in it; settings
+how they were before this step, or before the upgrade started[; if this step or an earlier step changed .env: ' (your
+settings file, .env, isn't part of that[; if this step changed it: " -- the list above is what I changed in it"]; settings
 changed in earlier steps stay changed when going back)']. [If the app already had a
 database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
 'the new lists of roles and permissions', 'the sample records and test accounts I added']:
