@@ -819,5 +819,67 @@ class CouldNotCheckCases(Base):
         self.assertEqual(cp.returncode, 2)
 
 
+class AmendmentCases(Base):
+    """Amendments 2026-10-17: `mock` is a placeholder word; control bytes in printed names are \\xNN."""
+
+    def _write_named(self, r, name, v, var='TOKEN'):
+        with open(os.path.join(r.work, name), 'wb') as f:
+            f.write(_b(kv(var, v)))
+
+    def test_mock_values_are_no_hit_in_all_three_scopes(self):
+        r = self.fresh()
+        m1, m2, m3 = 'mock-oidc-secret-1234', 'MyMockToken12345', 'MOCK_secret_value_99'
+        real = ['real-secret-value-1111', 'real-secret-value-2222', 'real-secret-value-3333']
+        r.branch()
+        r.append('app.py', kv('CLIENT_SECRET', m1) + kv('API_KEY', real[0]))
+        r.commit('saved')
+        r.append('app.py', kv('AUTH_TOKEN', m2) + kv('PASSWORD', real[1]))
+        r.write('new.py', kv('SECRET_KEY', m3) + kv('TOKEN', real[2]))
+        self.check(r.scan(), unsaved=['app.py:5: PASSWORD'], new=['new.py:2: TOKEN'],
+                   saved=['app.py:3: API_KEY'], secrets=[m1, m2, m3] + real)
+
+    def test_mock_alone_is_clean_in_each_scope(self):
+        r = self.fresh()
+        vals = ['mock-oidc-secret-1234', 'MyMockToken12345', 'mock-password-abcdef']
+        r.branch()
+        r.append('app.py', kv('CLIENT_SECRET', vals[0]))
+        r.commit('saved')
+        r.append('app.py', kv('AUTH_TOKEN', vals[1]))
+        r.write('new.py', kv('PASSWORD', vals[2]))
+        self.check(r.scan(), secrets=vals)
+
+    def test_newline_name_is_escaped_and_stays_one_line(self):
+        r = self.fresh()
+        v = 'newline-name-secret-1234'
+        self._write_named(r, 'x\ny.py', v)
+        self.check(r.scan(), new=['x\\x0ay.py:1: TOKEN'], secrets=[v])
+
+    def test_tab_and_esc_names_are_escaped(self):
+        r = self.fresh()
+        v1, v2 = 'tab-name-secret-value-1', 'esc-name-secret-value-2'
+        self._write_named(r, 'a\tb.py', v1)
+        self._write_named(r, 'e\x1bz.py', v2)
+        self.check(r.scan(), new=['a\\x09b.py:1: TOKEN', 'e\\x1bz.py:1: TOKEN'], secrets=[v1, v2])
+
+    def test_committed_name_faking_a_label_cannot_forge_one(self):
+        r = self.fresh()
+        v = 'label-forging-secret-1234'
+        r.branch()
+        self._write_named(r, 'a\n== new files ==\nb.py', v)
+        r.commit('evil name')
+        res = r.scan()
+        self.assertEqual([l for l in res.lines if l.startswith('== ')], [L_UNSAVED, L_NEW, L_SAVED])
+        self.check(res, saved=['a\\x0a== new files ==\\x0ab.py:1: TOKEN'], secrets=[v])
+
+    def test_spaces_quote_and_non_ascii_names_stay_unescaped(self):
+        r = self.fresh()
+        v1, v2, v3 = 'plain-name-secret-1111', 'plain-name-secret-2222', 'plain-name-secret-3333'
+        self._write_named(r, 'my file.py', v1)
+        self._write_named(r, 'q"t.py', v2)
+        self._write_named(r, 'naïve.py', v3)
+        self.check(r.scan(), new=['my file.py:1: TOKEN', 'naïve.py:1: TOKEN', 'q"t.py:1: TOKEN'],
+                   secrets=[v1, v2, v3])
+
+
 if __name__ == '__main__':
     unittest.main()
