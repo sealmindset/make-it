@@ -6,3 +6,5 @@
 .claude/make-it/templates/nemo-it-attestation.md
 # operator safety rules (all skills)
 .claude/make-it/references/operator-safety.md
+# approval block (nemo-it.md @-imports it)
+.claude/make-it/references/approval-block.md

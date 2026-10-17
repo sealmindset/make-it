@@ -958,6 +958,36 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.0 -- Fewer asks, same gates: six skills ask through the approval block
+
+`/resume-it`, `/make-it`, `/argo-it`, `/retrofit-it`, `/nemo-it`, `/try-it` and the learnings ask now
+ask through `references/approval-block.md`. Routine asks are removed: the skill proceeds and says
+so. Consequential asks are batched into one decision-ready ask (what changes, the evidence, the
+blast radius and undo, what is unusual, the one thing to check). Every high-stakes gate is kept as
+active confirmation: the user picks or types the specific (the target, the items, the tool), never
+a plain yes. No bare yes/no remains in these skills.
+
+| Skill | Asks before | Asks after | High-stakes gates |
+|---|---|---|---|
+| resume-it | 30 | 24 | 4 kept + 1 conditional (sign-in, permissions, database changes) |
+| make-it | 14 (11 interview) | 14 | 1 kept + 1 added (sign-in / who-can-do-what changes mid-build) |
+| argo-it | 23 | 17 | 6 kept, 2 tightened |
+| retrofit-it | 11 | 9 | 7 kept |
+| nemo-it | 3 | 2 | 2 kept |
+| try-it | 6 | 4 | 1 kept |
+| learnings (learnings.md + callers) | 6 | 6 | -- (one batched, decision-ready message) |
+
+The card's earlier rough counts (resume-it 37, make-it 31, argo-it 16, retrofit-it 14, nemo-it 12,
+try-it 11) came from a grep with no recorded method. The table above is a line-by-line inventory:
+an ask is any point the skill stops for the user's answer, and interview questions stay word for word.
+
+Also fixed on the gates' own paths:
+- argo-it's secret check before a send now actually runs. It used to read an empty diff and never fired. It reads unsaved edits, new files and unsent saved changes, and a secret already in a saved change stops the send. Its inline scan is a stopgap; a tested rebuild is filed as E02-S5.
+- Deploy and snapshot saves never stage `.env` files, keys, or credential and local-database files.
+- retrofit-it's snapshot is honest about what it can undo (files, not data), and a failed save stops the run.
+- nemo-it's read-only mode for live systems is really read-only (no form submissions, no sign-in, no injection probes).
+- Declined or left-out items stay out instead of being re-added by later automatic steps.
+
 ### v1.43.0 -- Every ask decision-ready; every weakened safeguard disclosed
 
 `references/approval-block.md` is the working form of "Keep the human able to notice" for skills
