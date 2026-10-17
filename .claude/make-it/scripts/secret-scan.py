@@ -199,10 +199,9 @@ def scan(repo):
          if not kept_out(r[0])), on_disk)
 
     rows = []
-    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0'))
-    # argo-it step 4 un-ignores and stages every .env.example, so scan each one whatever its ignore state.
-    untracked.update(p for p in git_out(top, 'ls-files', '--others', '--ignored', '--exclude=.env.example',
-                                        '-z').split(b'\0') if p.rsplit(b'/', 1)[-1] == b'.env.example')
+    # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
+    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
+                            '-z').split(b'\0'))
     for path in untracked:
         full = os.path.join(top, path)
         if not path or kept_out(path) or not stat.S_ISREG(os.lstat(full).st_mode):
