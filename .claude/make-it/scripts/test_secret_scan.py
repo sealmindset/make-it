@@ -1235,9 +1235,9 @@ class ReReview3Cases(Base):
                   'docker-compose.yml:1: PASSWORD', 'zq9FAKEcompose1')
 
     def test_2e_compose_command_and_chain_is_scanned(self):
-        self._one('compose2/docker-compose.yml',
+        self._one('c2/docker-compose.yml',
                   '    command: bash -c "pip install x && SECRET_KEY=zq9FAKEcompose2 python app.py"\n',
-                  'compose2/docker-compose.yml:1: SECRET_KEY', 'zq9FAKEcompose2')
+                  'c2/docker-compose.yml:1: SECRET_KEY', 'zq9FAKEcompose2')
 
     def test_3_lexer_misread_never_leaks_a_base64_slice(self):
         r = self.fresh()
