@@ -10,6 +10,7 @@ values, runs the scanner, and asserts (1) the exact stdout, (2) the exit code,
 stdout or stderr.  Python 3.9 compatible, stdlib only.
 """
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1165,9 +1166,8 @@ class AdversarialRound1Cases(Base):
         except subprocess.TimeoutExpired:
             self.fail('scan of a 2 MB single line did not finish within 20s')
         res = Result(cp, time.time() - t)
-        self.assertIn(res.code, (0, 1))
-        if res.code == 1:
-            self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'big.py:1: PASSWORD', L_SAVED])
+        self.assertEqual(res.code, 1)
+        self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'big.py:1: PASSWORD', L_SAVED])
         self.assertLess(len(res.out) + len(res.err), 2000)
         self.assertNotIn(b'<<<<', res.out + res.err)
         self.no_leak(res, [])
@@ -1186,6 +1186,97 @@ class AdversarialRound1Cases(Base):
         v = 'zq9FAKEsecretF1aaa'
         r.write('f1.py', 'PASSWORD = """%s"""\n' % v)
         self.check(r.scan(), new=['f1.py:1: PASSWORD'], secrets=[v])
+
+
+class ReReview3Cases(Base):
+    """Confirmed counterexamples from task-1-review3.md, each on its exact input."""
+
+    def _no_slice(self, res, secret, n=6, ok=()):
+        blob = res.out + b'\n' + res.err
+        s = _b(secret)
+        for i in range(len(s) - n + 1):
+            sl = s[i:i + n]
+            if any(sl in _b(o) for o in ok):
+                continue
+            self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
+
+    def test_1_ternary_branches_never_print(self):
+        r = self.fresh()
+        r.write('app.js', 'const pw = prod ? "AcmeProdPassword" : "localdevpass1";\n')
+        r.write('cfg.js', 'const c = { password: isProd ? "AdminPassword" : "devdevdevdev" };\n')
+        r.write('App.java', 'String t = prod ? "ghp_MySecretToken" : "devtokenvalue";\n')
+        r.write('sq.js', "const pw = prod ? 'AcmeProdPassword' : 'localdevpass1';\n")
+        res = r.scan()
+        blob = res.out + b'\n' + res.err
+        for v in ('AcmeProdPassword', 'AdminPassword', 'ghp_MySecretToken'):
+            self._no_slice(res, v, ok=('password', 'PASSWORD', 'token', 'TOKEN'))
+            self.assertNotIn(_b(v), blob)
+        self.no_leak(res, [])
+
+    def _one(self, rel, text, hit, secret):
+        r = self.fresh()
+        r.write(rel, text)
+        self.check(r.scan(), new=[hit], secrets=[secret])
+
+    def test_2a_json_loads_literal_body_is_scanned(self):
+        self._one('a.py', 'data = json.loads(\'{"password": "hunter2hunter2"}\')\n',
+                  'a.py:1: password', 'hunter2hunter2')
+
+    def test_2b_json_parse_literal_body_is_scanned(self):
+        self._one('b.js', 'const c = JSON.parse(\'{"apiKey":"sk-live-abcdef123456"}\');\n',
+                  'b.js:1: apiKey', 'sk-live-abcdef123456')
+
+    def test_2c_curl_json_body_in_shell_is_scanned(self):
+        self._one('seed.sh', 'curl -d \'{"username":"admin","password":"zq9FAKEsecretSH1"}\' http://localhost/api\n',
+                  'seed.sh:1: password', 'zq9FAKEsecretSH1')
+
+    def test_2d_compose_command_export_is_scanned(self):
+        self._one('docker-compose.yml', '    command: sh -c "export X=1; PASSWORD=zq9FAKEcompose1"\n',
+                  'docker-compose.yml:1: PASSWORD', 'zq9FAKEcompose1')
+
+    def test_2e_compose_command_and_chain_is_scanned(self):
+        self._one('compose2/docker-compose.yml',
+                  '    command: bash -c "pip install x && SECRET_KEY=zq9FAKEcompose2 python app.py"\n',
+                  'compose2/docker-compose.yml:1: SECRET_KEY', 'zq9FAKEcompose2')
+
+    def test_3_lexer_misread_never_leaks_a_base64_slice(self):
+        r = self.fresh()
+        v = 'Zk9/c2VjcmV0QPwd='
+        r.write('x.js', 's.replace(/"/g, "_"); sign("%s", algorithm="HS256")\n' % v)
+        r.write('Y.cs', 'var p = @"C:\\Users\\"; Encode("%s", algorithm="HS256");\n' % v)
+        r.write('app.yml', 'description: use key %sabcdefgh1\n' % v)
+        res = r.scan()
+        self._no_slice(res, v)
+        self.assertNotIn(b'c2VjcmV0', res.out + res.err)
+        self.no_leak(res, [v])
+
+    def _lfs_repo(self):
+        r = self.fresh()
+        r.git('lfs', 'install', '--local')
+        r.git('lfs', 'track', '*.json')
+        r.commit('lfs attrs')
+        r.push()
+        return r
+
+    @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
+    def test_4a_untracked_lfs_file_content_is_scanned(self):
+        r = self._lfs_repo()
+        v = 'sk-live-lfs-secret-12345'
+        r.write('settings.json', '{"apiKey": "%s"}\n' % v)
+        self.check(r.scan(), new=['settings.json:1: apiKey'], secrets=[v])
+
+    @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
+    def test_4b_missing_lfs_object_fails_closed(self):
+        r = self._lfs_repo()
+        v = 'sk-live-lfs-secret-12345'
+        r.branch('feat')
+        r.write('settings.json', '{"apiKey": "%s"}\n' % v)
+        r.commit('add settings')
+        shutil.rmtree(r.path('.git/lfs/objects'))
+        res = r.scan()
+        self.assertEqual(res.code, 2, 'stderr=%r' % res.err[:300])
+        self.assertEqual(res.out, b'')
+        self.no_leak(res, [v])
 
 
 if __name__ == '__main__':
