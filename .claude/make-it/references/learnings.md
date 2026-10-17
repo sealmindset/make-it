@@ -44,7 +44,9 @@ assistants read it.
 - **Agent lessons:** don't interrupt the work. Queue them and ask at the end of the work item or
   in /wrap-it, in the same message as any pending correction.
 - The message counts as ONE ask: send it on its own and wait for the answer before asking
-  anything else. Only the items the user names are written. Nothing queued -> skip it silently.
+  anything else. Only the items the user names are written. An item flagged as relaxing a check
+  or touching sign-in, permissions or secrets is written only when the user names its number --
+  never through a blanket "yes" or "all". Nothing queued -> skip it silently.
 - **No** (or not named in the answer): drop it, and don't offer the same lesson again this session.
 
 Example ask -- illustration only, never copy these learnings into a project:
@@ -53,7 +55,8 @@ Example ask -- illustration only, never copy these learnings into a project:
 > and "forget that" removes it later. For each, the thing to check: does it hold beyond today?
 >
 > 1. **Show dates like "29 Sep 2026", never 2026-09-29.** You corrected the orders page just
->    now. Next time, every new screen gets that format without you asking.
+>    now. Next time, every new screen gets that format without you asking. Replaces the line
+>    already here: "Show dates as ISO".
 > 2. **Make database updates from inside the app's server box, not from your own computer.** The
 >    first try failed because your computer is missing a piece the server has; it worked from
 >    inside the server box. Next time I skip the failing step.
