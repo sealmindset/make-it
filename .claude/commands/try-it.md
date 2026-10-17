@@ -90,6 +90,10 @@ docker-compose.yml (or docker-compose.yaml)
 
 **2. Extract key information:**
 
+From .make-it-state.md (if present), note every item listed as "left out by your choice"
+(a /retrofit-it upgrade the user declined): a failure that belongs to one of them is reported,
+not fixed, and does not block handoff.
+
 From app-context.json, determine:
 - Project name
 - Frontend port (default: 3000)
@@ -109,7 +113,9 @@ From docker-compose.yml, determine:
 
 ```bash
 # Is Docker running?
-docker info >/dev/null 2>&1
+# No answer within ~10s (a hung daemon) counts as not up. SIGALRM alone does not stop the Go-based
+# docker CLI, so the wrapper forks and kills the child.
+perl -e '$p=fork; exec @ARGV if !$p; $SIG{ALRM}=sub{kill 9,$p}; alarm 10; waitpid $p,0; exit($? ? 1 : 0)' docker info >/dev/null 2>&1
 
 # Are there any containers already running from this project?
 docker compose ps 2>/dev/null
@@ -295,22 +301,24 @@ asks, pick a time long enough for the downloads. Then tell me which tool you pau
 for -- 'no time limit' is fine if it didn't offer one."
 
 **Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
-'no time limit' / 'until I turn it back on' when the tool has only a Disable switch; note a
-time as `[TIME]`, or that none was given. When `[TOOL]` names more than one tool, the answer must
-cover every one of them before any build starts; ask about the ones still missing. 'not sure',
-'can't', or 'no' means stop; 'don't have one' (offered only when the check found nothing) means
-the tool wasn't the cause -- go back to the normal "If build fails" diagnosis in step 2 and keep
-fixing, and don't offer this pause again this run (a later certificate error gets the normal
-diagnosis, not this ask); a plain 'done' or 'ok', or a name without how long, is not an answer --
-ask for what's missing. Do NOT attempt Docker builds while the proxy is active. On stop: tell the
-user "Your app can't be put together on this network [if detected: 'while [TOOL] is running' /
+'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
+none was given. When `[TOOL]` names more than one tool, the answer must cover every one of them
+before any build starts; ask about the ones still missing. 'not sure', 'can't', or 'no' means
+stop; 'don't have one' (offered only when the check found nothing) means the tool wasn't the
+cause -- go back to the normal "If build fails" diagnosis in step 2 and keep fixing, and don't
+offer this pause again this run (a later certificate error gets the normal diagnosis, not this
+ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
+missing. Do NOT attempt Docker builds while the proxy is active. On stop: if they already said
+they paused any tool, give it the reminder below first; then tell the user "Your app can't be
+put together on this network [if detected: 'while [only the tools still running] is running' /
 otherwise: 'while something is blocking the downloads']. Ask whoever manages your computer, or
 try again from another network." Then run the save-state step and end.
 
 Only if the user actually paused a tool: once the downloading is over -- the builds and pulls
-worked, or you've stopped trying -- remind the user: "All done with the heavy lifting! You can
-turn [TOOL] back on now[if a time was given: ' -- no need to wait out the [TIME] you gave
-it']." No pause (never asked, or 'don't have one'), no reminder.
+worked, or you've stopped trying -- remind the user, naming every tool they said they paused:
+"All done with the heavy lifting! You can turn [TOOL] back on now[if a time was given: ' -- no
+need to wait out the [TIME] you gave it']." No pause (never asked, or 'don't have one'), no
+reminder.
 
 **2. Build the containers:**
 
@@ -503,7 +511,8 @@ Build an internal test results summary:
   "failed": N,
   "screenshots": { "role_page": "path" },
   "failures": [
-    { "test": "description", "error": "what went wrong", "page": "url", "role": "role" }
+    { "test": "description", "error": "what went wrong", "page": "url", "role": "role",
+      "left_out": "the 'left out by your choice' item it belongs to, from .make-it-state.md, or absent" }
   ]
 }
 ```
@@ -525,7 +534,11 @@ Skip to Phase 4 (Report). Tell user: "Everything looks great!"
 
 **If smoke tests found issues:**
 
-Tell user: "I noticed a couple of things to clean up. Give me a moment..."
+Failures marked `left_out` are not fixed: the user chose to leave that item out, so fixing it
+would put it back in. Report them in Phase 4 under "Left out by your choice" and go on. If
+every failure is one of these, treat it as all passed.
+
+For the rest, tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
 **Fix cycle:**
 
@@ -804,9 +817,10 @@ answer before going on.
 - If still not running: "Docker needs to be started. On your Mac, open the Docker app
   from your Applications folder (it has a whale icon). I'll keep checking for a few minutes
   and continue on my own as soon as it's up -- no need to tell me."
-- Routine, no stop: keep running `docker info` every few seconds for up to 3 minutes, posting
-  a short line about every 30 seconds ("Still waiting for Docker to start..."), and continue as
-  soon as it succeeds
+- Routine, no stop: keep running the step-3 `docker info` probe (the same fork-and-kill
+  wrapper; no answer within ~10s counts as not up) every few seconds for up to 3 minutes,
+  posting a short line about every 30 seconds ("Still waiting for Docker to start..."), and
+  continue as soon as it succeeds
 - After 3 minutes without success: "Docker still isn't up. Open it from your Applications
   folder, then run /try-it again." Run the save-state step and end -- never wait forever
 
@@ -855,7 +869,9 @@ Let me create it now..."
 <guardrails>
 
 **Quality gates:**
-1. **Before handoff:** ALL critical tests must pass (app starts, login works, dashboard loads)
+1. **Before handoff:** ALL critical tests must pass (app starts, login works, dashboard loads) --
+   except failures of an item .make-it-state.md lists as "left out by your choice": reported, not
+   fixed, and not a block
 2. **During explore:** Every fix must be re-tested before telling user it's done
 3. **Always:** Never modify production configuration -- only local dev settings
 4. **Always:** Never expose secrets, tokens, or technical internals to the user
