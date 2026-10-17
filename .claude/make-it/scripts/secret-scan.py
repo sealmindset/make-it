@@ -53,8 +53,8 @@ class Fail(Exception):
     """Couldn't check: exit 2. Messages are our own words, never file content."""
 
 
-def git_out(cwd, *args):
-    p = subprocess.run(GIT + list(args), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+def git_out(cwd, *args, input=None):
+    p = subprocess.run(GIT + list(args), cwd=cwd, input=input, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     if p.returncode:
         raise Fail('git %s failed' % args[0])
     return p.stdout
@@ -162,8 +162,12 @@ def kept_out(path):
 
 
 def shown(path):
-    """A control byte in a name could split a hit or forge a label line: print it as \\xNN."""
-    return re.sub(rb'[\x00-\x1f\x7f]', lambda m: b'\\x%02x' % m.group()[0], path)
+    """A control byte in a name could split a hit or forge a label line: print it as \\xNN.
+    Unicode line breaks (C1 incl. NEL, U+2028, U+2029) split lines too: print them as \\uXXXX."""
+    s = path.decode('utf-8', 'surrogateescape')
+    s = re.sub(r'[\x00-\x1f\x7f]', lambda m: '\\x%02x' % ord(m.group()), s)
+    s = re.sub(r'[\x80-\x9f\u2028\u2029]', lambda m: '\\u%04x' % ord(m.group()), s)
+    return s.encode('utf-8', 'surrogateescape')
 
 
 def collect(rows, is_binary):
@@ -183,35 +187,61 @@ def nul_in_head(data):
     return b'\0' in data[:8000]  # git's binary rule
 
 
+def encodings(top, paths):
+    """path -> the working-tree-encoding git converts it from to UTF-8 when staged (None: stored as-is)."""
+    out = git_out(top, 'check-attr', '--stdin', '-z', 'working-tree-encoding',
+                  input=b''.join(p + b'\0' for p in paths)).split(b'\0')
+    m = {}
+    for i in range(0, len(out) - 1, 3):
+        v = out[i + 2]  # like git: no value, or UTF-8 itself, means no conversion
+        m[out[i]] = None if v in (b'', b'unspecified') or re.fullmatch(rb'(?i)utf-?8', v) else v
+    if len(out) != 3 * len(paths) + 1 or set(m) != set(paths):
+        raise Fail('git check-attr did not answer for every file')
+    return m
+
+
+def stored(full, enc):
+    """The file as git stores and sends it, or None if that is binary. A working-tree-encoding file
+    is judged after decoding: its raw bytes (UTF-16's NULs) are not what git sends."""
+    with open(full, 'rb') as f:
+        data = f.read(8000)
+        if enc is None and nul_in_head(data):
+            return None  # never read the rest of a plain binary file
+        data += f.read()
+    if enc is not None:
+        try:
+            data = data.decode(enc.decode()).encode('utf-8')
+        except (LookupError, UnicodeError):  # our own words: the codec's message can quote the file's bytes
+            raise Fail("can't decode a file from its working-tree-encoding")
+    return None if nul_in_head(data) else data
+
+
 def scan(repo):
     top = git_out(repo, 'rev-parse', '--show-toplevel')[:-1]
+    changed = git_out(top, 'diff', '--name-only', '-z', '--no-renames', 'HEAD', '--')
+    # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
+    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
+                            '-z').split(b'\0')) - {b''}
+    enc = encodings(top, (set(changed.split(b'\0')) - {b''}) | untracked)
 
     def on_disk(path, sha):
         full = os.path.join(top, path)
         if not stat.S_ISREG(os.lstat(full).st_mode):
             return False  # a symlink's text is its target
-        with open(full, 'rb') as f:
-            return nul_in_head(f.read(8000))
+        return stored(full, enc[path]) is None
 
     unsaved = collect(
-        (r for r in added_lines(git_lines(top, 'diff', *DIFF, 'HEAD', '--'),
-                                headers(git_out(top, 'diff', '--name-only', '-z', '--no-renames', 'HEAD', '--')))
+        (r for r in added_lines(git_lines(top, 'diff', *DIFF, 'HEAD', '--'), headers(changed))
          if not kept_out(r[0])), on_disk)
 
     rows = []
-    # argo-it's save step adds `!.env.example` to .gitignore, so list untracked files exactly as it then stages them.
-    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '--exclude=!.env.example',
-                            '-z').split(b'\0'))
     for path in untracked:
         full = os.path.join(top, path)
-        if not path or kept_out(path) or not stat.S_ISREG(os.lstat(full).st_mode):
+        if kept_out(path) or not stat.S_ISREG(os.lstat(full).st_mode):
             continue  # a nested repo shows as a directory
-        with open(full, 'rb') as f:
-            head = f.read(8000)
-            if nul_in_head(head):
-                continue
-            data = head + f.read()
-        rows.extend((path, n, text, None) for n, text in enumerate(data.split(b'\n'), 1))
+        data = stored(full, enc[path])
+        if data is not None:
+            rows.extend((path, n, text, None) for n, text in enumerate(data.split(b'\n'), 1))
     new = collect(rows, lambda path, sha: False)
 
     saved = collect(
