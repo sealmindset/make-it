@@ -483,7 +483,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Code quality missing (Q01-Q13 gaps) | "Your app doesn't have linting, formatting, or pre-commit hooks set up yet -- DevOps will flag this. Want me to add code quality tools? They catch problems before code gets committed." |
 | CI quality gate workflow missing (Q13) | "Your app has local quality checks but no CI workflow to enforce them on every PR. Want me to add the quality gate workflow? It runs all checks automatically and generates an attestation artifact." |
 | Standards gaps found (critical) | "I found [N] must-do updates before deployment ([name each]) and [M] improvements ([name each]) -- which group should I apply?" (active confirmation -- the ask below) |
-| Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
+| Standards gaps found (important) | "There are [N] improvements available since your app was built ([name each]) and no must-do updates -- should I apply the improvements, or not now?" (active confirmation -- the ask below, one group) |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
 **When standards gaps are found, present them in plain language:**
@@ -502,13 +502,18 @@ that can be improved:
 
 Everything is built in a separate copy we can throw away if you don't like it. Before you
 decide, look down the must-do list: check that none of the sign-in or permission changes is
-something you set up that way on purpose.
+something you set up that way on purpose. If one of these was set up that way on purpose, tell
+me which and I'll leave it out (and note it in your to-do file).
 
 Which should I apply -- the must-do updates, the improvements, or both? (I'd start with the
 must-do updates -- the catch is some of them change how sign-in behaves, so plan to try the app
 right after.)"
 
-The user names the group(s). The must-do group changes sign-in and permissions and the
+Show only the groups that have items: no "0 must-do updates", and never recommend an empty
+group. With one group, ask about that group alone: "Should I apply the [must-do updates /
+improvements], or not now?"
+
+The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
 plain "yes" isn't an answer -- ask which before doing anything.
 
@@ -834,7 +839,8 @@ This runs BEFORE any user-requested work. The user does not initiate this -- it 
 7. If the fix changes app behavior (UI, features, workflows):
    - Pause and tell the user, in a few plain lines (consequential, per the approval block): what
      now works differently (the screen or step, in their words); that it was a safety fix, the
-     tests pass, and it is already saved (undo: I can put it back the way it was); and the one
+     tests pass, and it is already saved (undo: I can put it back the way it was, which brings
+     the security problem back); and the one
      thing to check -- the exact screen or step that changed. Then: "Run /try-it and tell me
      if that still works the way you want."
    - Wait for their answer before continuing
@@ -929,29 +935,30 @@ prompts to carry over; Tier 3, the exact phrase -- never a plain yes.
 **For Tier 2 Outdated (normal upgrade):**
 
 "Here's what I found in your current prompt management:
-- **Tables:** [list] ([N] of 6 scaffold tables)
-- **Routes:** [N] (scaffold has ~25)
-- **Pages:** [N] (scaffold has 4)
-- **Components:** [N] of 5 scaffold components
-- **Seeded prompts:** [N] ([list names])
+- **Database tables:** [list] ([N] of the 6 the latest version uses)
+- **Behind-the-scenes actions:** [N] (the latest version has ~25)
+- **Pages:** [N] (the latest version has 4)
+- **Screen pieces:** [N] of the 5 in the latest version
+- **Starter prompts:** [N] ([list names])
 
-I can upgrade to the latest scaffold standard, which adds:
+I can upgrade to the latest version, which adds:
 - [list what's missing: version history, test cases, tags, usage tracking, audit log, etc.]
 - Card-based registry with search and filters
 - Guided editing with safety indicators and variable pills
 - Version timeline with one-click restore
 - 'Try It' testing tab
 
-**Your existing [N] prompts will be migrated to the new schema.** Old tables will be renamed
-with a `_legacy` suffix (never deleted) so you can always reference the original data.
-[If custom columns found:] Your custom columns ([list]) will be preserved in the legacy tables.
+**Your existing [N] prompts will be moved into the new tables.** Each old table is kept as a
+renamed old table (never deleted) so you can always look at the original data.
+[If custom columns found:] Your custom columns ([list]) stay in the renamed old table.
 
 This changes your database, so I need one specific from you, not a yes. Here are your prompts,
 all marked to carry over:
 - [x] [prompt name]
 - [x] [prompt name]
 - ...
-Tell me which to carry over -- 'all of them', or name the ones to leave out. A left-out prompt
+Tell me which to carry over -- 'all of them', name the ones to leave out, or 'not now' to leave
+everything as it is. A left-out prompt
 won't appear in the new editor and your app's AI stops using it after the upgrade; its text is
 kept in the renamed old table, so I can bring it over later if you ask. If a prompt you use
 isn't on this list, stop me: I've missed something and will look before touching anything."
@@ -997,8 +1004,8 @@ The migration must:
    - prompt_test_cases (UUID PK, prompt_id FK, name, input_variables JSONB, expected_output, created_at)
    - prompt_audit_log (UUID PK, prompt_id UUID NOT FK, action, actor, changes JSONB, created_at)
 
-3. **Migrate data** from legacy tables to new schema (only the prompts the user named in
-   Phase 3; the rest stay in the legacy tables):
+3. **Migrate data** from legacy tables to new schema (Tier 2: only the prompts the user named
+   in Phase 3, the rest stay in the legacy tables; Tier 3 replace: all of them):
    - Map columns: name -> name, description -> description, content -> content, is_active -> is_active
    - Generate slugs from names (lowercase, hyphens, no special chars)
    - Map model-related columns (e.g., model_tier) to model_settings JSONB
@@ -1142,7 +1149,8 @@ Everything is added alongside what exists, in a separate copy we can throw away 
 like it.
 
 This adds database tables and permissions, so I need you to pick one, not just say yes:
-- **Add it** -- 4 new tables, 6 new permissions (brain.own.* and brain.admin.*), and memories
+- **Add it** -- 4 new tables, 6 new permissions (who can see their own memories / who can
+  manage everyone's), and memories
   kept per person and shared across your team (Recommended -- the catch: something one person
   tells the AI can surface for a colleague, so if your app holds anything about one person
   that another shouldn't see, pick 'not now' and tell me)
@@ -1150,9 +1158,8 @@ This adds database tables and permissions, so I need you to pick one, not just s
 
 Wait for the pick (active confirmation, per the approval block); a plain yes isn't an answer --
 ask which. 'Not now': put app-context.json's `brain_features` back the way Phase 1 found it
-(absent, or its earlier values -- so the BN01-BN13 checks don't turn on and the next catch-up
-scan doesn't report the declined feature as gaps), add the TODO.md line and return to the menu;
-skip Phases 3-4.
+(absent, or its earlier values -- so the BN01-BN13 checks stay off; a later scan may still
+suggest the feature), add the TODO.md line and return to the menu; skip Phases 3-4.
 
 **Phase 3: Implement**
 
@@ -1295,8 +1302,8 @@ If SOME FAIL:
 I'll start fixing these now -- in the app, not by changing the tests."
 
 (Routine -- don't stop for a go-ahead; the user can say stop. If a fix touches sign-in,
-permissions, or the database structure, that fix is high-stakes: name the specific change and
-have the user pick it before applying.)
+permissions, or the database structure, that fix is high-stakes: show it with the approval
+block's five parts, as in route A, and have the user pick the specific change before applying.)
 
 If MANY FAIL:
 "I found several issues that need attention. Let me prioritize them:
