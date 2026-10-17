@@ -244,6 +244,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 
 ### Tier 0: Universal (every project)
 - Ideation confirmed, Design documented in app-context.json, Build-verified before handoff
+- `CLAUDE.md` opens with the canary (instruction-drift check) -- new projects at Build, existing ones via check S13
 - `CLAUDE.md` carries the settle-filter-verify (muddy-water) principle -- new projects at Build, existing ones via check S11
 - `CLAUDE.md` carries the keep-the-human-able-to-notice principle (against approval fatigue) -- new projects at Build, existing ones via check S12
 - CHANGELOG.md and TODO.md from day one
