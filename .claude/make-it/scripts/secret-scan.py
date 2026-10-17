@@ -207,8 +207,9 @@ def uncommented(s):
 
 def values(s, config, start=True):
     """(NAME, VALUE) on a line. A NAME only starts outside a string literal, and the search resumes after its
-    VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
-    alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read as a NAME.
+    VALUE, never inside it as a NAME -- so a matched NAME's VALUE is skipped as a VALUE (the `c2VjcmV0QPwd` in
+    `encode(p, "Zk9/c2VjcmV0QPwd=", alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`),
+    and scanned inside only for further `NAME sep VALUE` assignments (`cmd = 'API_KEY="..." ./deploy.sh'`).
     A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
     Any other literal that isn't a VALUE is scanned inside by the same rules (`json.loads('{...}')`,
     `ssh host 'export PASSWORD="..."'`, compose's `- "PASSWORD=..."`).
@@ -237,6 +238,7 @@ def values(s, config, start=True):
         lit = literal_at(s, i)
         if lit:
             v, i = lit
+            yield from values(v, config)  # a stored command (`cmd = 'API_KEY="..." ./run'`) hides an assignment
         elif not config:
             continue  # source code needs quotes
         elif s[i:i + 1] in ('{', '[') and not secret_named(name):
