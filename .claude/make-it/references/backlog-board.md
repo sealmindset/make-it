@@ -227,7 +227,7 @@ Bugs are `type: breakfix` cards under a **Bugs** epic, each with a `stage:`:
 |-------|-------|--------|
 | Reported | card exists, cause unknown | capture / `/debug-it` intake |
 | Cause found | root cause confirmed with evidence | `/debug-it` Phase 3 |
-| Fix ready | fix + test on a branch, PR open | the fixing lane, which records the PR in `pr:` and how the fix is proved live in `signal:` |
+| Fix ready | fix + test on a branch, PR open -- or merged and waiting for its `signal:` | the fixing lane, which records the PR in `pr:` and how the fix is proved live in `signal:` |
 | Live | merged (and deployed, where merge deploys) | ship, on merge, setting `checkAfter:` to the release that carries it -- or `reconcile --prs` once `gh` shows the card's PRs merged. **No `signal:`, no Live**: the card waits at Fix ready until it says how it will be checked |
 | Checked | verified on the live system **against the original report** | ship, after the live check |
 
@@ -240,7 +240,9 @@ reporter per finished card.
 - **Now fixing** -- `in-progress` at Reported / Cause found, not waiting on you (one entry per lane)
 - **Shipping** -- Fix ready
 - **Live, to check** -- Live and due: no `checkAfter:`, or its date has come (a release tag counts as out on
-  the date in its name, `v2026.10.17`; an undated tag waits, so use a date there)
+  the date in its name, `v2026.10.17`; an undated tag or a non-date waits, and `status` flags it as never
+  due). The live check first confirms that release is really out -- its tag, or the running version --
+  since a day's release can land hours into the day, or not at all
 - **Live, waits** -- Live with a `checkAfter:` still ahead, grouped by it (`v2026.10.17 → S85, S87`); only
   shown when some card waits
 - **Next up** -- the top `backlog` bug that can start (not high-stakes, no unfinished
@@ -270,7 +272,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **Questions are batched.** Collect every lane's open questions into one message. A question that
   blocks a card also goes on it as `decision:`.
 - Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one, with
-  how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr=[N] signal=…`);
+  how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr="[N]" signal="…"`);
   the status line lists every lane.
 - **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
   `decision:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
@@ -389,7 +391,7 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
   in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, Live
-  cards with no `signal:` (write one), a `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
+  cards with no `signal:` (write one), Live cards waiting on a `checkAfter:` that never comes due, a `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
   card (re-plan).
 - **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
   Live and Live → Checked, by priority.

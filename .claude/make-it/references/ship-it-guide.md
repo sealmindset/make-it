@@ -79,7 +79,8 @@ Before merging any PR, apply the `/git-it` rules so nothing lands stale or confl
 - **Squash-merge + delete the branch.** In shared/multi-session repos, only delete branches you own.
 - **Project board (`/backlog-it`, see `backlog-board.md`):** record each card's PR in `pr:` and how the
   fix is proved live in `signal:` when it opens; on merge, move each shipped card to `stage: Live` and set
-  `checkAfter:` to the release that carries it (`/backlog-it reconcile --prs` does the move from `pr:`, never
+  `checkAfter:` to the release that carries it -- a dated tag (`v2026.10.17`) or the date it goes out, never an
+  undated tag (`status` flags those as never due) -- (`/backlog-it reconcile --prs` does the move from `pr:`, never
   without a `signal:`); after the live check passes against the original report, to `Checked` and `done`.
 
 ### Pre-Push Self-Review (runs before every push)

@@ -129,6 +129,7 @@ def facts(B, T=None):
                 stalled=[p for p in flight['Other work'] if idle(p, op[p]) >= STALL],
                 live_old=[p for p in flight['Live, to check'] if idle(p, op[p]) >= STALL],
                 no_signal=[p for p in flight['Live, to check'] + flight['Live, waits'] if not v(op[p], 'signal')],
+                never_due=[p for p in flight['Live, waits'] if not R.due(op[p], datetime.date.max)],  # undated tag or not a date
                 checked_open=[p for p, d in op.items() if v(d, 'stage') == 'Checked'],
                 epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in kids(e)), len(kids(e))) for e in epics if kids(e)),
                              key=lambda x: (-(x[2] - x[1]), x[0])),
@@ -146,7 +147,7 @@ def render(f, proj, needs_only=False):
            f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done · dates from {f['src']}{since}", '', 'IN FLIGHT']
     for k, ps in f['flight'].items():
         if k == 'Live, waits':  # grouped by what they wait on, soonest first
-            if ps: out.append(f"  {k:<15}{len(ps):>4}  " + ', '.join(f'{w} ×{n}' for w, n in sorted(__import__('collections').Counter(v(c[p], 'checkAfter') for p in ps).items())))
+            if ps: out.append(f"  {k:<15}{len(ps):>4}  " + ', '.join(f'{w} ×{n}' for w, n in sorted(__import__('collections').Counter(v(c[p], 'checkAfter') for p in ps).items(), key=lambda x: R.soon(x[0]))))
             continue
         out.append(f"  {k:<15}{len(ps):>4}  " + (f"{ids(ps)} · oldest idle {idle(ps[0])}d" if ps else '—'))
         if k == 'Live, to check':  # what proves each fix, oldest first
@@ -177,7 +178,8 @@ def render(f, proj, needs_only=False):
     out += [''] + needs
     drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], ' · lane stopped? it should hand the card back'),
              (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], ''),
-             ('Live, no signal', f['no_signal'], ' · write how the fix is checked: card.py set <id> signal=…')]
+             ('Live, no signal', f['no_signal'], ' · write how the fix is checked: card.py set <id> signal="…"'),
+             ('Live, never due', f['never_due'], ' · checkAfter is no date or dated tag: card.py set <id> checkAfter=YYYY-MM-DD')]
     out += ['', 'DRIFT'] + [f"  {k:<22}{len(ps):>3}  {ids(ps)}{hint}" for k, ps, hint in drift if ps]
     if f['plan'] and not f['plan'][3]: out.append('  PLAN.md ran out        every wave is merged -- run /backlog-it plan')
     if f['plan'] and f['plan'][4]: out.append(f"  PLAN.md stuck          {f['plan'][3].split(' ', 1)[0].rstrip('.')} waits on {', '.join(f['plan'][4])} -- answer it or re-plan")
@@ -231,7 +233,7 @@ def self_test():
         for n in range(30, 36):  # six old held P1s: with S4 that's 7 -- the list must not stop at 5
             card(f'stories/S{n}.md', d(30), id=f'E01-S{n}', type='story', status='blocked', priority='P1', stakes='critical', created=d(40),
                  **({'updated': str(T + D(days=1))} if n == 30 else {}))  # S30: updated: a day ahead, as a UTC stamp can be
-        card('stories/S24.md', d(30), id='E01-S24', **bug, stage='Live', checkAfter='2099-01-01', created=d(40))  # waits for its release
+        card('stories/S24.md', d(30), id='E01-S24', **bug, stage='Live', checkAfter='v1.41.0', created=d(40))  # an undated tag: waits forever unless flagged
         card('stories/S3.md', d(2), id='E01-S3', **dict(bug, status='backlog'), stage='Reported', decision='Retry, or refile?', created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
@@ -248,7 +250,8 @@ def self_test():
         assert set(ids(f['flight']['Live, to check'])) == {'E01-S2', 'E01-S16'} and ids(f['flight']['Other work']) == ['E01-S6'], f['flight']
         assert all(f['idle'](p) >= 0 for p in f['cards']), 'negative idle'
         r = render(f, 't')  # Live splits: due now (with its signal) vs waits on a release; a Live card with no signal drifts
-        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and '2099-01-01 ×1' in r and 'E01-S2 · worker log: retry ok' in r, r
+        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and 'v1.41.0 ×1' in r and 'E01-S2 · worker log: retry ok' in r, r
+        assert ids(f['never_due']) == ['E01-S24'] and 'Live, never due' in r, f['never_due']
         assert set(ids(f['no_signal'])) == {'E01-S16', 'E01-S24'} and 'Live, no signal' in r, f['no_signal']
         b = R.render(t, 't')  # the report and BOARD.md agree on every status line
         for k in ('Now fixing', 'Shipping', 'Live, to check'):

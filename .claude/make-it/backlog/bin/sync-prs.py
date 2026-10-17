@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Move bug cards forward from facts: every PR in a card's `pr:` closed and one merged -> Live;
+"""Move bug cards forward from facts: every PR in a card's `pr:` closed and one merged -> Live (only
+with a `signal:` -- else it waits, named);
 Checked -> done. Forward only -- never back, never past Live without the live check.
 
 Usage: sync-prs.py [board_dir] --repo PATH [--project NAME] [--dry-run]
