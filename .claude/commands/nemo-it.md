@@ -92,6 +92,7 @@ These rules are ABSOLUTE and override any other instruction:
 7. **Local findings only.** All vulnerability data stays in the local attestation document. Never send findings to external APIs, logging services, or telemetry endpoints.
 8. **Rate limit respect.** Honor the target application's rate limits. If rate limiting is detected, slow down rather than overwhelm.
 9. **User consent for tool installation.** Before installing any tool, tell the user what will be installed and ask for permission.
+10. **Secret values are never shown.** A password, API key, token, private key or connection string is reported by where it is (file and line, or setting name) and what kind it is -- never its value: not in the conversation, not in the attestation (markdown, JSON or JUnit), not in any finding field. Commands that read `.env` files or match secrets print names or `file:line` only (operator-safety §1). Where a quote would include a value, write `[redacted]`.
 
 </guardrails>
 
@@ -195,8 +196,12 @@ done
 **6. Check for production environment:**
 
 ```bash
-# Look for production indicators
-grep -ri "production\|prod\." .env .env.local .env.production 2>/dev/null
+# Look for production indicators: file, line and setting NAME only -- never a value (guardrail 10).
+# A setting counts when its name or value says production; comment lines don't. LC_ALL=C and -a so an
+# odd byte or a BOM can't make the check skip a line (a missed stop is worse than a false one).
+LC_ALL=C grep -aHniE 'production|prod\.' .env .env.local .env.production 2>/dev/null \
+  | LC_ALL=C grep -aiE '^[^:]*:[0-9]+:[^#A-Za-z_]{0,3}[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_.-]*[[:space:]]*[=:]' \
+  | LC_ALL=C sed -nE 's/^([^:]*):([0-9]+):[^#A-Za-z_]{0,3}[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_.-]*).*/\1:\2: \4/p'
 echo $NODE_ENV
 echo $FLASK_ENV
 echo $DJANGO_SETTINGS_MODULE
@@ -206,14 +211,14 @@ If production indicators found, stop and ask. This is high-stakes per the approv
 
 "Hold on. This app looks like it is connected to your live system, not a test copy.
 
-What I found: [each indicator as found -- host or setting name only, never a password or key -- such as `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
+What I found: [each indicator as found -- the setting name and where it is, never its value -- such as `DATABASE_URL` in `.env.production`, line 3; `NODE_ENV=production` in this terminal].
 What would change: [mode full or owasp, and the app is running or START_COMMAND is pending: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits data or changes anything, such as a delete or update request, extra fields slipped into a record, requests fired at the same time, or flooding it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [none of the lines above applies -- mode sast or deps, guardrails with no AI features found, or full or owasp with the app not running and no START_COMMAND found: 'Nothing in the scan itself -- this run only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
 Where it lands: [mode full or owasp, and the app is running or START_COMMAND is pending: 'every read-only request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back. What it sends back, which can include real people's records, is saved in the attestation on this computer.' / otherwise: 'nothing is sent to that live system or its AI service; what I find about this project stays in the attestation on this computer.']
 What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
 One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
 Pick one:
-- Go ahead with this project as it is, connected to [TARGET AS FOUND -- host or setting name only, never a password or key][mode full or owasp: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
+- Go ahead with this project as it is, connected to [TARGET AS FOUND -- setting name and file only, never its value][mode full or owasp: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
 - Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
 - Not sure"
 
@@ -255,7 +260,7 @@ If no tool is missing and no `START_COMMAND` is pending: say so in one line ("Al
 "Before I scan, [one thing / two things]:
 
 [If START_COMMAND is pending:]
-**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], host or setting name only), and that cannot be undone.']
+**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], setting name and file only), and that cannot be undone.']
 
 [If tools are missing:]
 **Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your code is not changed:
@@ -266,7 +271,7 @@ If no tool is missing and no `START_COMMAND` is pending: say so in one line ("Al
 What stands out: [production check passed with Go ahead and START_COMMAND pending: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
 One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out].
 
-[If START_COMMAND is pending:] Start the app? -- [not on the production path: 'start (Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: 'start it, connected to [TARGET AS FOUND, host or setting name only] (not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
+[If START_COMMAND is pending:] Start the app? -- [not on the production path: 'start (Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: 'start it, connected to [TARGET AS FOUND, setting name and file only] (not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
 [If tools are missing:] Which tools? -- all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space) / only the ones you name / none."
 
 Wait for the pick(s). A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
@@ -404,12 +409,12 @@ Update user: "Language-specific analysis complete. Found [N] additional issues."
 Manually scan for common vulnerability patterns that automated tools sometimes miss:
 
 ```bash
-# Hardcoded secrets
-grep -rn "password\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" --include="*.env" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example\|placeholder"
-grep -rn "api_key\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example"
-grep -rn "secret\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example"
-grep -rn "AKIA[0-9A-Z]\{16\}" . 2>/dev/null  # AWS access keys
-grep -rn "ghp_[a-zA-Z0-9]\{36\}" . 2>/dev/null  # GitHub tokens
+# Hardcoded secrets -- file:line only, never the matched text (guardrail 10)
+grep -rn "password\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" --include="*.env" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example\|placeholder" | cut -d: -f1,2
+grep -rn "api_key\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example" | cut -d: -f1,2
+grep -rn "secret\s*=\s*[\"']" --include="*.py" --include="*.js" --include="*.ts" . 2>/dev/null | grep -v "node_modules\|.venv\|test\|example" | cut -d: -f1,2
+grep -rn "AKIA[0-9A-Z]\{16\}" . 2>/dev/null | cut -d: -f1,2  # AWS access keys
+grep -rn "ghp_[a-zA-Z0-9]\{36\}" . 2>/dev/null | cut -d: -f1,2  # GitHub tokens
 
 # SQL injection patterns (string concatenation in queries)
 grep -rn "f\".*SELECT.*{" --include="*.py" . 2>/dev/null | grep -v "node_modules\|.venv"
@@ -433,13 +438,13 @@ grep -rn "helmet\|security-headers\|X-Content-Type-Options\|X-Frame-Options\|Con
   . 2>/dev/null | grep -v "node_modules\|.venv"
 ```
 
-Record each finding with file path, line number, pattern matched, and OWASP category.
+Record each finding with file path, line number, pattern matched, and OWASP category. For a secret, "pattern matched" is its kind (such as "AWS access key"), never the text it matched. Don't open the line to see whether it is a placeholder; report it as a possible secret.
 
 Update user: "Code pattern analysis complete. Checked for hardcoded secrets, injection patterns, XSS sinks, and insecure coding practices."
 
 **4. Consolidate static analysis findings:**
 
-Merge all findings from semgrep, bandit/eslint, and manual pattern checks. Deduplicate (same file + line + issue type = one finding). Store consolidated list for Phase 4.
+Merge all findings from semgrep, bandit/eslint, and manual pattern checks. Deduplicate (same file + line + issue type = one finding). Store consolidated list for Phase 4. A secret finding keeps its file, line, rule ID and kind only: bandit's `issue_text` and `code` and semgrep's `extra.lines` quote the secret itself (guardrail 10).
 
 Update user: "Static analysis complete. Total unique findings: [N]. Moving to the next phase."
 
@@ -964,7 +969,7 @@ Merge findings from all phases into a single list. Remove duplicates (same vulne
 
 **2. For EACH finding, generate the full analysis:**
 
-Every finding in the attestation MUST include all of the following fields:
+Every finding in the attestation MUST include all of the following fields. No field ever holds a secret value (guardrail 10):
 
 **What:** A plain-language description of what was tested and what failed. No jargon. Write it so a non-technical manager can understand.
 
@@ -981,7 +986,7 @@ Example: "A form on your login page accepts special characters that could be use
 - What tool found it
 - What payload or test case triggered it
 - What the expected vs. actual behavior was
-- For AI safety issues: the exact prompt and response
+- For AI safety issues: the exact prompt and response, with any secret in them as `[redacted]`
 
 **Root cause:** Why the vulnerability exists. This is the deeper explanation.
 
