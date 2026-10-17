@@ -438,14 +438,17 @@ Never show raw Python tracebacks.
 # (ignored ones excluded), and saved changes not sent yet (step 1's range). Three separate
 # scans: a binary new file can't hide the others, and the ask below treats a hit in a saved
 # change differently. .env is left out of the first two -- its values live there on purpose.
-PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}'
+# The two diff scans read added (+) lines only -- a removed line never adds a secret -- and
+# awk tags each line with its file from the "+++ b/" header, so every hit reads file:+line.
+PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
 SKIP='\.example\|TODO\|placeholder\|changeme\|your-.*-here'
-git diff HEAD -- . ':!.env' \
+TAG='/^\+\+\+ b\//{f=substr($0,7);next} /^\+/{print f":"$0}'
+git diff HEAD -- . ':!.env' | awk "$TAG" \
   | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # unsaved edits
 git ls-files --others --exclude-standard -z -- . ':!.env' \
   | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "$SKIP" || true   # new files, one at a time, name shown
-git log -p --format= HEAD --not --remotes \
-  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet (every unsent commit)
+git log -p --cc --format= HEAD --not --remotes | awk "$TAG" \
+  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet (every unsent commit, merges included)
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
@@ -458,8 +461,8 @@ it out of the send. Say so plainly, and what to do next; offer nothing else:
 "I found what looks like a password or secret key in a change you already saved but haven't sent
 yet: **[VAR_NAME] in [file]** [, one per value found]. Secrets should never be saved in code, so
 I won't send this. Because it's already in your saved history, moving the value now wouldn't take
-it out of what gets sent -- so I'm stopping here. Nothing is saved or sent; the small fixes
-already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
+it out of what gets sent -- so I'm stopping here. I haven't saved or sent anything new; the small
+fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
 DevOps team to help remove it from the saved history before sending, and if this value has
 already been shared or used anywhere, have it changed too."
 
@@ -1825,6 +1828,7 @@ it' in step 4, after the user's go; nothing leaves the machine before the ask):
 # Check if deploy branch exists remotely
 git fetch origin {deploy_branch} 2>/dev/null || true
 git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the result for step 3
+git rev-list --count HEAD --not --remotes   # if more than 1, step 3 names the others (count minus the step-1 commit)
 ```
 
 **3. Ask the user what they want to do:**
@@ -1847,7 +1851,8 @@ sent anywhere yet. Here's what's ready:
 If I send this to GitHub, then from now on, every time anyone sends code to this project it
 builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
 deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
-system watches.] Nothing goes live until your DevOps team finishes the one-time setup in
+system watches.] [If step 2's count was more than 1: This also sends the [M] other saved changes
+you haven't sent yet.] Nothing goes live until your DevOps team finishes the one-time setup in
 ONBOARDING-K8S.md; if that's already done, this send goes live too. To undo, I'd remove these
 files and send again -- the pipeline stops, but whatever already went live stays until it's
 replaced. [What stands out, e.g. 'the database runs inside the cluster for dev' / 'this sits
