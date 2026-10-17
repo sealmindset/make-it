@@ -1581,5 +1581,83 @@ class AdversarialRound2Cases(Base):
         self.check(r.scan(), new=['ctl.yml:2', 'queries.yml:2'], secrets=[v])
 
 
+# ------------------------------------------------- adversarial round 3 (last)
+class AdversarialRound3Cases(Base):
+    PLACEHOLDER_TXT = b'name = "demo"\nAPI_KEY = "xxxxxxxxxxxxxxxxxxxx"\n'
+    FILLED = b'name = "demo"\nAPI_KEY = "zq9FAKEsecretF1xyzwq"\n'
+    SECRET = 'zq9FAKEsecretF1xyzwq'
+
+    def _sec(self, path):
+        return int(os.stat(path).st_mtime)
+
+    def _racy(self, binary):
+        """Build the racy-index repo and PROVE its precondition; retry if the timing missed the second."""
+        last = None
+        for _ in range(5):
+            r = self.fresh()
+            index = r.path('.git/index')
+            stale = b'\0' + self.FILLED[1:] if binary else self.PLACEHOLDER_TXT
+            t = time.time()
+            time.sleep(1 - (t - int(t)) + 0.02)  # start just after a second boundary
+            if binary:
+                r.write('app.py', stale)
+                r.git('add', 'app.py')  # index written this second
+            else:
+                r.write('app.py', stale)
+                r.git('commit', '-qam', 'config with placeholder')  # index written this second
+            r.write('app.py', self.FILLED)  # same size, no git command after this
+            f_sec, i_sec = self._sec(r.path('app.py')), self._sec(index)
+            idx_mtime_ns = os.stat(index).st_mtime_ns
+            blob = subprocess.run(['git', 'hash-object', '--stdin'], cwd=r.work, input=stale,
+                                  stdout=subprocess.PIPE, check=True).stdout.decode().strip()
+            staged = r.git('ls-files', '-s', 'app.py').decode().split()[1]
+            last = (f_sec, i_sec, len(stale), os.path.getsize(r.path('app.py')), staged == blob)
+            if f_sec == i_sec and last[2] == last[3] and last[4]:
+                self.assertEqual(os.stat(index).st_mtime_ns, idx_mtime_ns, 'a git command ran after the rewrite')
+                # The real index must still hold the OLD content, so only a stat shortcut could hide the edit.
+                self.assertEqual(r.git('cat-file', 'blob', staged), stale)
+                time.sleep(max(0, i_sec + 1.1 - time.time()))  # scan strictly later than that second
+                return r
+        self.fail('racy-index precondition never held in 5 tries '
+                  '(file sec, index sec, old size, new size, index has old blob) = %r' % (last,))
+
+    def test_1a_racy_index_text_rewrite_after_commit(self):
+        r = self._racy(binary=False)
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[self.SECRET])
+
+    def test_1b_racy_index_binary_staged_then_text_rewrite(self):
+        r = self._racy(binary=True)
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[self.SECRET])
+
+    def test_3a_name_glued_after_punctuation_in_five_files(self):
+        r = self.fresh()
+        r.branch()
+        v = ['zq9FAKEsecretD%dxyzw' % i for i in range(1, 6)]
+        r.write('boot.py', 'import cfg\nget_settings().api_key = "%s"\n' % v[0])
+        r.write('seed.js', 'const users = [];\nusers[0].password = "%s";\n' % v[1])
+        r.write('db.go', 'package main\nfunc init() { cfg.DB().Password = "%s" }\n' % v[2])
+        r.write('dev.js', 'const x = 1;\n  //apiKey = "%s";\n' % v[3])
+        r.write('patches/settings.patch', '--- a/s\n+++ b/s\n@@ -1,1 +1,2 @@\n name = "demo"\n+API_KEY = "%s"\n' % v[4])
+        r.commit('glued names')
+        self.check(r.scan(), saved=['boot.py:2', 'db.go:2', 'dev.js:2', 'patches/settings.patch:5', 'seed.js:2'],
+                   secrets=v)
+
+    def test_3b_name_glued_after_bang_call_and_index(self):
+        r = self.fresh()
+        r.branch()
+        v = ['zq9FAKEsecretE%dxyzw' % i for i in range(1, 4)]
+        r.write('a.ts', 'class A {}\nthis.config!.apiKey = "%s";\n' % v[0])
+        r.write('b.js', 'const Client = 1;\nnew Client().token = "%s";\n' % v[1])
+        r.write('c.py', 'clients = {}\nclients["prod"].secret = "%s"\n' % v[2])
+        r.commit('glued names 2')
+        self.check(r.scan(), saved=['a.ts:2', 'b.js:2', 'c.py:2'], secrets=v)
+
+    def test_3c_control_name_like_word_after_plus_in_base64_run_is_no_hit(self):
+        # Like ReReview3Cases.test_3 (which covers `/`): the lookbehind's reason to exist, for `+`.
+        r = self.fresh()
+        r.write('app.yml', 'description: use key Zk9+c2VjcmV0QPwd=abcdefgh1\nnote: Zk9/c2VjcmV0QPwd=abcdefgh1\n')
+        self.check(r.scan(), secrets=['Zk9+c2VjcmV0QPwd=abcdefgh1'])
+
+
 if __name__ == '__main__':
     unittest.main()
