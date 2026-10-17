@@ -10,6 +10,7 @@ values, runs the scanner, and asserts (1) the exact stdout, (2) the exit code,
 stdout or stderr.  Python 3.9 compatible, stdlib only.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -139,13 +140,13 @@ class HarnessCases(Base):
         v1, v2 = 'unstaged-secret-value-5678', 'inside-binary-file-1234'
         r.append('app.py', kv('PASSWORD', v1))
         r.write('z.png', b'\x89PNG\r\n\x1a\n\x00\x00' + bytes(range(256)) * 16 + _b('\n' + kv('PASSWORD', v2)))
-        self.check(r.scan(), unsaved=['app.py:2: PASSWORD'], secrets=[v1, v2])
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[v1, v2])
 
     def test_b_untracked_file(self):
         r = self.fresh()
         v = 'untracked-secret-value-9012'
         r.write('a.py', kv('TOKEN', v))
-        self.check(r.scan(), new=['a.py:1: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['a.py:1'], secrets=[v])
 
     def test_c_never_pushed_branch(self):
         r = self.fresh()
@@ -153,7 +154,7 @@ class HarnessCases(Base):
         r.branch()
         r.append('app.py', kv('API_KEY', v))
         r.commit('key')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_d_added_then_removed_in_unsent_commits_still_a_hit(self):
         # The brief: "added then removed in unsent commits (a hit: both commits are sent)".
@@ -165,7 +166,7 @@ class HarnessCases(Base):
         r.commit('add')
         r.write('app.py', BASE)
         r.commit('rm')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_e_dotenv_is_keep_out_untracked_and_tracked(self):
         r = self.fresh()
@@ -212,7 +213,7 @@ class HarnessCases(Base):
         r.append('app.py', kv('API_KEY', v))
         r.git('add', 'app.py')
         r.git('commit', '-q', '-m', 'merge')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     SHAPES = ('API_KEY = "sk-1234567890abcdef"\nPASSWORD = \'hunter2hunter2\'\n')
     SHAPE_VALUES = ['sk-1234567890abcdef', 'hunter2hunter2']
@@ -220,20 +221,20 @@ class HarnessCases(Base):
     def test_j_value_shapes_unsaved(self):
         r = self.fresh()
         r.append('app.py', self.SHAPES + 'SECRET_KEY = "abcdefghijk"\n')
-        self.check(r.scan(), unsaved=['app.py:2: API_KEY', 'app.py:3: PASSWORD', 'app.py:4: SECRET_KEY'],
+        self.check(r.scan(), unsaved=['app.py:2', 'app.py:3', 'app.py:4'],
                    secrets=self.SHAPE_VALUES + ['abcdefghijk'])
 
     def test_k_value_shapes_untracked(self):
         r = self.fresh()
         r.write('k.py', self.SHAPES)
-        self.check(r.scan(), new=['k.py:1: API_KEY', 'k.py:2: PASSWORD'], secrets=self.SHAPE_VALUES)
+        self.check(r.scan(), new=['k.py:1', 'k.py:2'], secrets=self.SHAPE_VALUES)
 
     def test_l_value_shapes_unsent_commit(self):
         r = self.fresh()
         r.branch()
         r.append('app.py', self.SHAPES)
         r.commit('k')
-        self.check(r.scan(), saved=['app.py:2: API_KEY', 'app.py:3: PASSWORD'], secrets=self.SHAPE_VALUES)
+        self.check(r.scan(), saved=['app.py:2', 'app.py:3'], secrets=self.SHAPE_VALUES)
 
     V_COMMITTED, V_UNSTAGED = 'committed-secret-value-1234', 'unstaged-secret-value-5678'
 
@@ -244,7 +245,7 @@ class HarnessCases(Base):
         r.append('app.py', kv('PASSWORD', self.V_UNSTAGED))
 
     def _check_m(self, r, via_cwd=False):
-        self.check(r.scan(via_cwd=via_cwd), unsaved=['app.py:3: PASSWORD'], saved=['app.py:2: API_KEY'],
+        self.check(r.scan(via_cwd=via_cwd), unsaved=['app.py:3'], saved=['app.py:2'],
                    secrets=[self.V_COMMITTED, self.V_UNSTAGED])
 
     def test_m_one_saved_one_unsaved(self):
@@ -267,7 +268,7 @@ class HarnessCases(Base):
         r = self.fresh()
         r.git('config', 'diff.noprefix', 'true')
         r.append('app.py', kv('PASSWORD', self.V_UNSTAGED))
-        self.check(r.scan(), unsaved=['app.py:2: PASSWORD'], secrets=[self.V_UNSTAGED])
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[self.V_UNSTAGED])
 
     def test_p_diff_mnemonicprefix(self):
         r = self.fresh()
@@ -298,8 +299,8 @@ class HarnessCases(Base):
         r.write('my file.py', kv('TOKEN', v2))
         r.commit('key')
         r.append('my file.py', kv('PASSWORD', v3))
-        self.check(r.scan(), unsaved=['my file.py:2: PASSWORD'],
-                   saved=['my file.py:1: TOKEN', 'naïve.py:1: API_KEY'], secrets=[v1, v2, v3])
+        self.check(r.scan(), unsaved=['my file.py:2'],
+                   saved=['my file.py:1', 'naïve.py:1'], secrets=[v1, v2, v3])
 
     def test_r_non_ascii_and_spaced_names_quotepath_true(self):
         self._names('true')
@@ -314,8 +315,8 @@ class HarnessCases(Base):
         r.write('lib/placeholder_image.py', kv('API_KEY', v1))
         r.commit('key')
         r.write('lib/placeholder_image.py', kv('TOKEN', v2))
-        self.check(r.scan(), unsaved=['lib/placeholder_image.py:1: TOKEN'],
-                   saved=['lib/placeholder_image.py:1: API_KEY'], secrets=[v1, v2])
+        self.check(r.scan(), unsaved=['lib/placeholder_image.py:1'],
+                   saved=['lib/placeholder_image.py:1'], secrets=[v1, v2])
 
     def test_t_untracked_placeholder_path_and_other(self):
         r = self.fresh()
@@ -323,8 +324,8 @@ class HarnessCases(Base):
         r.write('lib/placeholder_image.py', kv('TOKEN', v1))
         r.write('lib/other.py', kv('TOKEN', v2))
         r.write('a/b/c/deep.py', kv('TOKEN', v2))
-        self.check(r.scan(), new=['a/b/c/deep.py:1: TOKEN', 'lib/other.py:1: TOKEN',
-                                  'lib/placeholder_image.py:1: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), new=['a/b/c/deep.py:1', 'lib/other.py:1',
+                                  'lib/placeholder_image.py:1'], secrets=[v1, v2])
 
     def test_u_real_placeholders_are_skipped_everywhere(self):
         r = self.fresh()
@@ -340,7 +341,7 @@ class HarnessCases(Base):
         r = self.fresh()
         v = 'real-secret-value-5678'
         r.write('TODO.py', kv('TOKEN', v))
-        self.check(r.scan(), new=['TODO.py:1: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['TODO.py:1'], secrets=[v])
 
 
 # ---------------------------------------------------------------- harness w, x
@@ -353,7 +354,7 @@ class EncodingAndSizeCases(Base):
         r.push()
         r.append('a_seed.csv', b'1,caf\xe9\n')
         r.append('app.py', kv('PASSWORD', v))
-        self.check(r.scan(), unsaved=['app.py:2: PASSWORD'], secrets=[v])
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[v])
 
     def test_w2_unsent_commit_latin1_first_then_secret(self):
         r = self.fresh()
@@ -362,7 +363,7 @@ class EncodingAndSizeCases(Base):
         r.write('a_seed.csv', b'id,name\n1,caf\xe9\n')
         r.append('app.py', kv('API_KEY', v))
         r.commit('both')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_w3_unsent_commit_secret_first_latin1_after(self):
         r = self.fresh()
@@ -371,13 +372,13 @@ class EncodingAndSizeCases(Base):
         r.write('z_seed.csv', b'id,name\n1,caf\xe9\n')
         r.append('app.py', kv('API_KEY', v))
         r.commit('both')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_w4_untracked_latin1_file_holding_secret(self):
         r = self.fresh()
         v = 'untracked-secret-value-9012'
         r.write('l1.py', b'caf\xe9\n' + _b(kv('TOKEN', v)))
-        self.check(r.scan(), new=['l1.py:2: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['l1.py:2'], secrets=[v])
 
     def test_w5_latin1_byte_on_the_secret_line(self):
         r = self.fresh()
@@ -386,13 +387,13 @@ class EncodingAndSizeCases(Base):
         r.append('app.py', b'API_KEY = "' + v1 + b'"\n')
         r.commit('k')
         r.append('app.py', b'PASSWORD = "' + v2 + b'"\n')
-        self.check(r.scan(), unsaved=['app.py:3: PASSWORD'], saved=['app.py:2: API_KEY'], secrets=[v1, v2])
+        self.check(r.scan(), unsaved=['app.py:3'], saved=['app.py:2'], secrets=[v1, v2])
 
     def test_w6_untracked_latin1_byte_on_the_secret_line(self):
         r = self.fresh()
         v = b'caf\xe9-untracked-secret-9012'
         r.write('l2.py', b'TOKEN = "' + v + b'"\n')
-        self.check(r.scan(), new=['l2.py:1: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['l2.py:1'], secrets=[v])
 
     def _bundle(self):
         # ~2 MB on one line, no newline
@@ -404,11 +405,11 @@ class EncodingAndSizeCases(Base):
         r.write('a_bundle.js', self._bundle())
         r.append('app.py', kv('PASSWORD', v))
         res = r.scan()
-        self.check(res, unsaved=['app.py:2: PASSWORD'], secrets=[v])
+        self.check(res, unsaved=['app.py:2'], secrets=[v])
         self.assertLess(res.secs, 20)
         r.git('add', 'a_bundle.js')  # now it is an added line in `git diff HEAD`
         res = r.scan()
-        self.check(res, unsaved=['app.py:2: PASSWORD'], secrets=[v])
+        self.check(res, unsaved=['app.py:2'], secrets=[v])
         self.assertLess(res.secs, 20)
 
     def test_x1b_two_mb_single_line_with_secret_at_the_end(self):
@@ -416,7 +417,7 @@ class EncodingAndSizeCases(Base):
         v = 'bundle-secret-value-0001'
         r.write('big.py', self._bundle() + b'\n' + _b(kv('TOKEN', v)))
         res = r.scan()
-        self.check(res, new=['big.py:2: TOKEN'], secrets=[v])
+        self.check(res, new=['big.py:2'], secrets=[v])
         self.assertLess(res.secs, 20)
 
     def test_x2_nul_after_9000_bytes_is_text(self):
@@ -426,7 +427,7 @@ class EncodingAndSizeCases(Base):
         r.write('a_big.txt', b'a' * 9000 + b'\nx\x00y\n' + _b(kv('TOKEN', v2)))
         r.append('app.py', kv('API_KEY', v1))
         r.commit('k')
-        self.check(r.scan(), saved=['a_big.txt:3: TOKEN', 'app.py:2: API_KEY'], secrets=[v1, v2])
+        self.check(r.scan(), saved=['a_big.txt:3', 'app.py:2'], secrets=[v1, v2])
 
     def test_x3_double_quote_in_committed_file_name(self):
         r = self.fresh()
@@ -434,7 +435,7 @@ class EncodingAndSizeCases(Base):
         r.branch()
         r.write('q"x.py', kv('API_KEY', v))
         r.commit('k')
-        self.check(r.scan(), saved=['q"x.py:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['q"x.py:1'], secrets=[v])
 
 
 # ---------------------------------------------------------------- binary rule
@@ -452,7 +453,7 @@ class BinaryCases(Base):
         r.append('data.bin', _b('\n' + kv('PASSWORD', vs[0])))
         r.write('u.bin', b'\x00' + _b('\n' + kv('PASSWORD', vs[2])))
         r.append('app.py', kv('TOKEN', vs[3]))
-        self.check(r.scan(), unsaved=['app.py:2: TOKEN'], secrets=vs)
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=vs)
 
     def test_nul_at_byte_7999_is_binary(self):
         r = self.fresh()
@@ -478,7 +479,7 @@ class ScopeCases(Base):
         r.append('app.py', kv('PASSWORD', v1))
         r.git('add', 'app.py')
         r.append('app.py', kv('TOKEN', v2))
-        self.check(r.scan(), unsaved=['app.py:2: PASSWORD', 'app.py:3: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), unsaved=['app.py:2', 'app.py:3'], secrets=[v1, v2])
 
     def test_line_numbers_are_in_the_new_version_across_hunks(self):
         r = self.fresh()
@@ -491,7 +492,7 @@ class ScopeCases(Base):
         lines.insert(0, '# new top\n')
         lines.insert(26, kv('TOKEN', v))  # inserted after 25 old lines + 1 shift
         r.write('app.py', ''.join(lines))
-        self.check(r.scan(), unsaved=['app.py:27: TOKEN'], secrets=[v])
+        self.check(r.scan(), unsaved=['app.py:27'], secrets=[v])
 
     def test_saved_line_number_is_from_the_commit_that_added_it(self):
         r = self.fresh()
@@ -501,7 +502,7 @@ class ScopeCases(Base):
         r.commit('add')
         r.write('app.py', '# header\n' + BASE + kv('API_KEY', v))
         r.commit('shift')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_same_line_added_in_two_commits_is_reported_once(self):
         r = self.fresh()
@@ -513,7 +514,7 @@ class ScopeCases(Base):
         r.commit('rm')
         r.append('app.py', kv('API_KEY', v))
         r.commit('readd')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_clean_merge_does_not_double_report_a_side_branch_line(self):
         r = self.fresh()
@@ -525,7 +526,7 @@ class ScopeCases(Base):
         r.write('app.py', '# header\n' + BASE)
         r.commit('main moves')
         r.git('merge', '-q', '--no-ff', '-m', 'merge', 'side')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_no_remote_all_history_counts(self):
         r = self.fresh(remote=False)
@@ -534,7 +535,7 @@ class ScopeCases(Base):
         r.commit('one')
         r.write('b.py', kv('TOKEN', v2))
         r.commit('two')
-        self.check(r.scan(), saved=['app.py:2: API_KEY', 'b.py:1: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), saved=['app.py:2', 'b.py:1'], secrets=[v1, v2])
 
     def test_no_remote_clean_repo_has_no_hits(self):
         self.check(self.fresh(remote=False).scan())
@@ -546,7 +547,7 @@ class ScopeCases(Base):
         r.write('ignored.py', kv('TOKEN', v1))
         r.write('build/out.py', kv('TOKEN', v1))
         r.write('seen.py', kv('TOKEN', v2))
-        self.check(r.scan(), new=['seen.py:1: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), new=['seen.py:1'], secrets=[v1, v2])
 
     def test_output_is_sorted_numerically_by_line_and_deduped(self):
         r = self.fresh()
@@ -554,7 +555,7 @@ class ScopeCases(Base):
         a = '# 1\n' + kv('PASSWORD', v1) + '# x\n' * 7 + kv('TOKEN', v2)  # PASSWORD line 2, TOKEN line 10
         r.write('b.py', kv('TOKEN', v3))
         r.write('a.py', a)
-        exp = ['a.py:2: PASSWORD', 'a.py:10: TOKEN', 'b.py:1: TOKEN']
+        exp = ['a.py:2', 'a.py:10', 'b.py:1']
         self.check(r.scan(), new=exp, secrets=[v1, v2, v3])
         r.branch()
         r.commit('b first')  # commits both; order of files in the commit is irrelevant
@@ -600,7 +601,7 @@ class NameRuleCases(Base):
             v = 'val%02d-nameTbl-secret' % i
             vals.append(v)
             lines.append(tmpl.format(v=v))
-            exp.append('names.py:%d: %s' % (i + 1, '(quoted key)' if tmpl[0] in '"\'' else name))
+            exp.append('names.py:%d' % (i + 1))
         for j, name in enumerate(self.MISSES):
             v = 'miss%02d-nameTbl-secret' % j
             vals.append(v)
@@ -615,7 +616,7 @@ class NameRuleCases(Base):
         r.append('app.py', kv('AWS_SECRET_ACCESS_KEY', v1) + kv('secretName', v2))
         r.commit('k')
         r.append('app.py', kv('SECRET_KEY', v3))
-        self.check(r.scan(), unsaved=['app.py:4: SECRET_KEY'], saved=['app.py:2: AWS_SECRET_ACCESS_KEY'],
+        self.check(r.scan(), unsaved=['app.py:4'], saved=['app.py:2'],
                    secrets=[v1, v2, v3])
 
 
@@ -626,7 +627,7 @@ class ValueRuleCases(Base):
         short, ok = 'abcdefg', 'abcdefgh'
         r.write('v.py', kv('PASSWORD', short) + kv('PASSWORD', ok) + kv('TOKEN', 'q7chars', q="'")
                 + kv('TOKEN', 'bt-eight-chars', q='`') + 'PASSWORD = ""\n')
-        self.check(r.scan(), new=['v.py:2: PASSWORD', 'v.py:4: TOKEN'], secrets=[ok, 'bt-eight-chars'])
+        self.check(r.scan(), new=['v.py:2', 'v.py:4'], secrets=[ok, 'bt-eight-chars'])
 
     def test_references_are_not_hits(self):
         r = self.fresh()
@@ -651,20 +652,20 @@ class ValueRuleCases(Base):
         v1, v2 = 'crlf-secret-value-1234', 'crlf-unquoted-1234'
         r.write('crlf.py', 'x = 1\r\n' + kv('TOKEN', v1).replace('\n', '\r\n'))
         r.write('crlf.yml', 'password: %s\r\n' % v2)
-        self.check(r.scan(), new=['crlf.py:2: TOKEN', 'crlf.yml:1: password'], secrets=[v1, v2])
+        self.check(r.scan(), new=['crlf.py:2', 'crlf.yml:1'], secrets=[v1, v2])
 
     def test_unusual_line_separators_do_not_shift_line_numbers(self):
         r = self.fresh()
         v = 'separator-secret-1234'
         junk = 'a\x0bb\x0cc\x1cd\x1de\x1ef\rg \u0085     end\n'
         r.write('sep.py', junk + kv('TOKEN', v))
-        self.check(r.scan(), new=['sep.py:2: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['sep.py:2'], secrets=[v])
 
     def test_diff_lookalike_content_cannot_misdirect_the_scan(self):
         r = self.fresh()
         v = 'lookalike-secret-1234'
         r.append('app.py', '++ b/fake.py\n@@ -1 +100 @@\ndiff --git a/x b/x\n' + kv('PASSWORD', v))
-        self.check(r.scan(), unsaved=['app.py:5: PASSWORD'], secrets=[v])
+        self.check(r.scan(), unsaved=['app.py:5'], secrets=[v])
 
     def test_file_without_trailing_newline(self):
         r = self.fresh()
@@ -673,7 +674,7 @@ class ValueRuleCases(Base):
         r.write('nonl.py', 'TOKEN = "%s"' % v1)
         r.commit('nonl')
         r.write('nonl2.py', 'TOKEN = "%s"' % v2)
-        self.check(r.scan(), new=['nonl2.py:1: TOKEN'], saved=['nonl.py:1: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), new=['nonl2.py:1'], saved=['nonl.py:1'], secrets=[v1, v2])
 
 
 # ---------------------------------------------------------------- config files
@@ -687,7 +688,7 @@ class ConfigFileCases(Base):
         miss = ['run.sh', 'notes.txt', 'app.js', 'a.py', 'README.md', 'config.json']
         for n in hit + miss:
             r.write(n, 'PASSWORD=%s\n' % v)
-        self.check(r.scan(), new=['%s:1: PASSWORD' % n for n in sorted(hit)], secrets=[v])
+        self.check(r.scan(), new=['%s:1' % n for n in sorted(hit)], secrets=[v])
 
     def test_unquoted_value_shapes_in_a_compose_file(self):
         r = self.fresh()
@@ -705,8 +706,8 @@ class ConfigFileCases(Base):
                 '      TOKEN=<token-here>\n'
                 '      PASSWORD=\n') % tuple(vs)
         r.write('docker-compose.yml', text)
-        self.check(r.scan(), new=['docker-compose.yml:4: POSTGRES_PASSWORD', 'docker-compose.yml:5: password',
-                                  'docker-compose.yml:6: TOKEN'], secrets=vs)
+        self.check(r.scan(), new=['docker-compose.yml:4', 'docker-compose.yml:5',
+                                  'docker-compose.yml:6'], secrets=vs)
 
     def test_committed_compose_and_dotenv_in_unsent_commits(self):
         r = self.fresh()
@@ -717,7 +718,7 @@ class ConfigFileCases(Base):
         r.commit('compose')
         r.write('.env', 'PASSWORD=%s\n' % v2)
         r.commit('env')
-        self.check(r.scan(), saved=['.env:1: PASSWORD', 'docker-compose.yml:4: POSTGRES_PASSWORD'],
+        self.check(r.scan(), saved=['.env:1', 'docker-compose.yml:4'],
                    secrets=[v1, v2])
 
     def test_unquoted_non_config_and_unquoted_python_no_hit_when_committed_or_unsaved(self):
@@ -775,7 +776,7 @@ class KeepOutCases(Base):
         r.write('db.sqlite3', kv('TOKEN', v))
         r.git('add', '-f', '.')
         r.git('commit', '-q', '-m', 'oops')
-        self.check(r.scan(), saved=['db.sqlite3:1: TOKEN', 'id_rsa:1: PASSWORD'], secrets=[v])
+        self.check(r.scan(), saved=['db.sqlite3:1', 'id_rsa:1'], secrets=[v])
 
     def test_dotenv_example_and_lookalikes_are_scanned(self):
         r = self.fresh()
@@ -785,8 +786,8 @@ class KeepOutCases(Base):
         r.write('service-account.yaml', kv('API_KEY', v))
         r.write('a.pem.txt', kv('API_KEY', v))
         r.write('envfile.py', kv('API_KEY', v))
-        self.check(r.scan(), new=['.env.example:1: API_KEY', 'a.pem.txt:1: API_KEY', 'credentials.py:1: API_KEY',
-                                  'envfile.py:1: API_KEY', 'service-account.yaml:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['.env.example:1', 'a.pem.txt:1', 'credentials.py:1',
+                                  'envfile.py:1', 'service-account.yaml:1'], secrets=[v])
 
 
 # ---------------------------------------------------------------- exit code 2
@@ -838,8 +839,8 @@ class AmendmentCases(Base):
         r.commit('saved')
         r.append('app.py', kv('AUTH_TOKEN', m2) + kv('PASSWORD', real[1]))
         r.write('new.py', kv('SECRET_KEY', m3) + kv('TOKEN', real[2]))
-        self.check(r.scan(), unsaved=['app.py:5: PASSWORD'], new=['new.py:2: TOKEN'],
-                   saved=['app.py:3: API_KEY'], secrets=[m1, m2, m3] + real)
+        self.check(r.scan(), unsaved=['app.py:5'], new=['new.py:2'],
+                   saved=['app.py:3'], secrets=[m1, m2, m3] + real)
 
     def test_mock_alone_is_clean_in_each_scope(self):
         r = self.fresh()
@@ -855,14 +856,14 @@ class AmendmentCases(Base):
         r = self.fresh()
         v = 'newline-name-secret-1234'
         self._write_named(r, 'x\ny.py', v)
-        self.check(r.scan(), new=['x\\x0ay.py:1: TOKEN'], secrets=[v])
+        self.check(r.scan(), new=['x\\x0ay.py:1'], secrets=[v])
 
     def test_tab_and_esc_names_are_escaped(self):
         r = self.fresh()
         v1, v2 = 'tab-name-secret-value-1', 'esc-name-secret-value-2'
         self._write_named(r, 'a\tb.py', v1)
         self._write_named(r, 'e\x1bz.py', v2)
-        self.check(r.scan(), new=['a\\x09b.py:1: TOKEN', 'e\\x1bz.py:1: TOKEN'], secrets=[v1, v2])
+        self.check(r.scan(), new=['a\\x09b.py:1', 'e\\x1bz.py:1'], secrets=[v1, v2])
 
     def test_committed_name_faking_a_label_cannot_forge_one(self):
         r = self.fresh()
@@ -872,7 +873,7 @@ class AmendmentCases(Base):
         r.commit('evil name')
         res = r.scan()
         self.assertEqual([l for l in res.lines if l.startswith('== ')], [L_UNSAVED, L_NEW, L_SAVED])
-        self.check(res, saved=['a\\x0a== new files ==\\x0ab.py:1: TOKEN'], secrets=[v])
+        self.check(res, saved=['a\\x0a== new files ==\\x0ab.py:1'], secrets=[v])
 
     def test_spaces_quote_and_non_ascii_names_stay_unescaped(self):
         r = self.fresh()
@@ -880,7 +881,7 @@ class AmendmentCases(Base):
         self._write_named(r, 'my file.py', v1)
         self._write_named(r, 'q"t.py', v2)
         self._write_named(r, 'naïve.py', v3)
-        self.check(r.scan(), new=['my file.py:1: TOKEN', 'naïve.py:1: TOKEN', 'q"t.py:1: TOKEN'],
+        self.check(r.scan(), new=['my file.py:1', 'naïve.py:1', 'q"t.py:1'],
                    secrets=[v1, v2, v3])
 
 
@@ -912,7 +913,7 @@ class ReviewHoleCases(Base):
         r.commit('rm')
         c = r.git('commit-tree', a + '^^{tree}', '-p', a + '^', '-m', 'stand-in').decode().strip()
         r.git('replace', a, c)
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def _pin(self, v, setup):
         r = self.fresh()
@@ -932,17 +933,17 @@ class ReviewHoleCases(Base):
         r.branch()
         r.append('app.py', kv('API_KEY', v))
         r.commit('secret')
-        self.check(r.scan(), saved=['app.py:4: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:4'], secrets=[v])
 
     def test_pin_gitattributes_binary(self):
         v = 'attr-binary-secret-value-22'
         r = self._pin(v, lambda r: r.write('.gitattributes', '*.py binary\n'))
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_pin_gitattributes_minus_diff(self):
         v = 'attr-nodiff-secret-value-33'
         r = self._pin(v, lambda r: r.write('.gitattributes', '*.py -diff\n'))
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_pin_textconv_driver_printing_nothing(self):
         v = 'textconv-secret-value-4444'
@@ -951,7 +952,7 @@ class ReviewHoleCases(Base):
             r.write('.gitattributes', '*.py diff=hide\n')
             r.git('config', 'diff.hide.textconv', "sh -c 'echo redacted' #")
         r = self._pin(v, setup)
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     def test_pin_log_show_root_false_with_secret_in_root_commit(self):
         v = 'root-commit-secret-value-55'
@@ -961,7 +962,7 @@ class ReviewHoleCases(Base):
         r.git('rm', '-q', '-rf', '.')
         r.write('app.py', kv('API_KEY', v))
         r.commit('root')
-        self.check(r.scan(), saved=['app.py:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:1'], secrets=[v])
 
     def _ignore_env(self, r):
         ig = os.path.join(r.root, 'global-ignore')
@@ -974,14 +975,14 @@ class ReviewHoleCases(Base):
         v = 'sk-live-realkey-123456'
         self._ignore_env(r)
         r.write('.env.example', 'API_KEY=%s\n' % v)
-        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['.env.example:1'], secrets=[v])
 
     def test_ignored_nested_env_example_is_still_scanned(self):
         r = self.fresh()
         v = 'sk-live-realkey-123456'
         self._ignore_env(r)
         r.write('config/.env.example', 'API_KEY=%s\n' % v)
-        self.check(r.scan(), new=['config/.env.example:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['config/.env.example:1'], secrets=[v])
 
     def test_ignored_env_local_stays_no_hit(self):
         r = self.fresh()
@@ -1003,7 +1004,7 @@ class ReviewHoleCases(Base):
         v = 'sk_test_rootvalue12345'
         self._ignore_env(r)
         r.write('.env.example', 'API_KEY=%s\n' % v)
-        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v], code=1)
+        self.check(r.scan(), new=['.env.example:1'], secrets=[v], code=1)
 
     # ---- re-review holes (2026-10-17)
     def _utf16_repo(self):
@@ -1019,7 +1020,7 @@ class ReviewHoleCases(Base):
         v1, v2 = 'abcdefghijkl', 'hunter2hunter2'
         r.write('old.cfg', ('NAME=demo\nTOKEN=%s\n' % v1).encode('utf-16-le'))
         r.write('new.cfg', ('PASSWORD=%s\n' % v2).encode('utf-16-le'))
-        self.check(r.scan(), unsaved=['old.cfg:2: TOKEN'], new=['new.cfg:1: PASSWORD'], secrets=[v1, v2])
+        self.check(r.scan(), unsaved=['old.cfg:2'], new=['new.cfg:1'], secrets=[v1, v2])
 
     def test_unknown_working_tree_encoding_is_could_not_check(self):
         r = self.fresh()
@@ -1036,8 +1037,8 @@ class ReviewHoleCases(Base):
         v1, v2 = 'supersecret1', 'supersecret12'
         r.write('docker-compose.yml', '    environment: {POSTGRES_PASSWORD: "%s"}\n'
                 '    env: ["PASSWORD=%s"]\n' % (v1, v2))
-        self.check(r.scan(), new=['docker-compose.yml:1: POSTGRES_PASSWORD',
-                                  'docker-compose.yml:2: PASSWORD'], secrets=[v1, v2])
+        self.check(r.scan(), new=['docker-compose.yml:1',
+                                  'docker-compose.yml:2'], secrets=[v1, v2])
 
     def test_value_inside_inline_map_is_not_reread_as_a_name(self):
         r = self.fresh()
@@ -1058,7 +1059,7 @@ class ReviewHoleCases(Base):
         for parts in (text.split('\n'), text.splitlines()):
             self.assertEqual([l for l in parts if l.startswith('== ')], [L_UNSAVED, L_NEW, L_SAVED])
             self.assertEqual(len(parts) - (1 if parts[-1] == '' else 0), 4)
-        self.check(res, saved=['a\\u2028== new files ==\\u2028b.py:1: API_KEY'], secrets=[v])
+        self.check(res, saved=['a\\u2028== new files ==\\u2028b.py:1'], secrets=[v])
 
     def test_u2029_c1_names_are_escaped(self):
         r = self.fresh()
@@ -1066,8 +1067,8 @@ class ReviewHoleCases(Base):
         for n, v in zip(['p\u2029.py', 'q\u0085.py', 'r\u009b.py'], vs):
             with open(os.path.join(r.work, n), 'wb') as f:
                 f.write(_b(kv('TOKEN', v)))
-        self.check(r.scan(), new=['p\\u2029.py:1: TOKEN', 'q\\u0085.py:1: TOKEN',
-                                  'r\\u009b.py:1: TOKEN'], secrets=vs)
+        self.check(r.scan(), new=['p\\u2029.py:1', 'q\\u0085.py:1',
+                                  'r\\u009b.py:1'], secrets=vs)
 
     def test_project_gitignore_env_star_still_scans_env_example(self):
         r = self.fresh()
@@ -1075,7 +1076,7 @@ class ReviewHoleCases(Base):
         r.write('.gitignore', '.env*\n')
         r.commit('ignore')
         r.write('.env.example', 'API_KEY=%s\n' % v)
-        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['.env.example:1'], secrets=[v])
 
 
 # ------------------------------------------------ adversarial round 1 (2026-10-17)
@@ -1095,7 +1096,7 @@ class AdversarialRound1Cases(Base):
         r.git('add', 'app.py')
         r.git('update-index', flag, 'app.py')
         r.write('app.py', b'\0\0binary junk\n')
-        self.check(r.scan(), unsaved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[v])
 
     def test_1_name_started_inside_a_string_literal_leaks_nothing(self):
         r = self.fresh()
@@ -1129,14 +1130,14 @@ class AdversarialRound1Cases(Base):
         self.assertNotEqual(cp.returncode, 0, 'merge was expected to conflict')
         self.assertTrue(os.path.exists(os.path.join(r.work, '.git', 'MERGE_HEAD')))
         r.write('app.py', 'name = "resolved"\n')
-        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), saved=['app.py:2'], secrets=[v])
 
     @unittest.skipUnless(hasattr(os, 'symlink'), 'platform has no symlinks')
     def test_4_symlink_whose_target_text_is_a_secret(self):
         r = self.fresh()
         v = 'zq9FAKEsecretC1xyz'
         os.symlink('API_KEY="%s"' % v, r.path('link.py'))
-        self.check(r.scan(), new=['link.py:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['link.py:1'], secrets=[v])
 
     def test_5a_new_file_with_clean_filter_is_scanned_as_stored(self):
         r = self.fresh()
@@ -1144,7 +1145,7 @@ class AdversarialRound1Cases(Base):
         r.git('config', 'filter.r13.clean', "tr 'A-Za-z' 'N-ZA-Mn-za-m'")
         r.write('.gitattributes', 'settings.py filter=r13\n')
         r.write('settings.py', 'NCV_XRL = "md9SNXRfrpergQ1klm"\n')
-        self.check(r.scan(), new=['settings.py:1: API_KEY'], secrets=[v])
+        self.check(r.scan(), new=['settings.py:1'], secrets=[v])
 
     def test_5b_unsaved_with_nul_stripping_clean_filter(self):
         r = self.fresh()
@@ -1154,7 +1155,7 @@ class AdversarialRound1Cases(Base):
         r.commit('attrs')
         r.push()
         r.write('app.py', b'\0name = "demo"\n' + _b(kv('API_KEY', v)))
-        self.check(r.scan(), unsaved=['app.py:2: API_KEY'], secrets=[v])
+        self.check(r.scan(), unsaved=['app.py:2'], secrets=[v])
 
     def test_6_two_megabyte_single_line_finishes_quickly(self):
         r = self.fresh()
@@ -1167,7 +1168,7 @@ class AdversarialRound1Cases(Base):
             self.fail('scan of a 2 MB single line did not finish within 20s')
         res = Result(cp, time.time() - t)
         self.assertEqual(res.code, 1)
-        self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'big.py:1: PASSWORD', L_SAVED])
+        self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'big.py:1', L_SAVED])
         self.assertLess(len(res.out) + len(res.err), 2000)
         self.assertNotIn(b'<<<<', res.out + res.err)
         self.no_leak(res, [])
@@ -1178,14 +1179,14 @@ class AdversarialRound1Cases(Base):
         r.write('db.py', 'conn = psycopg2.connect("dbname=" + name, password="%s")\n' % v1)
         r.write('api.js', 'fetch(base + "?user=" + u, { apiKey: "%s" });\n' % v2)
         r.write('pr.py', 'print("user=", user); API_KEY = "%s"\n' % v3)
-        self.check(r.scan(), new=['api.js:1: apiKey', 'db.py:1: password', 'pr.py:1: API_KEY'],
+        self.check(r.scan(), new=['api.js:1', 'db.py:1', 'pr.py:1'],
                    secrets=[v1, v2, v3])
 
     def test_8_triple_quoted_value_is_not_an_empty_literal(self):
         r = self.fresh()
         v = 'zq9FAKEsecretF1aaa'
         r.write('f1.py', 'PASSWORD = """%s"""\n' % v)
-        self.check(r.scan(), new=['f1.py:1: PASSWORD'], secrets=[v])
+        self.check(r.scan(), new=['f1.py:1'], secrets=[v])
 
 
 class ReReview3Cases(Base):
@@ -1220,24 +1221,24 @@ class ReReview3Cases(Base):
 
     def test_2a_json_loads_literal_body_is_scanned(self):
         self._one('a.py', 'data = json.loads(\'{"password": "hunter2hunter2"}\')\n',
-                  'a.py:1: (quoted key)', 'hunter2hunter2')
+                  'a.py:1', 'hunter2hunter2')
 
     def test_2b_json_parse_literal_body_is_scanned(self):
         self._one('b.js', 'const c = JSON.parse(\'{"apiKey":"sk-live-abcdef123456"}\');\n',
-                  'b.js:1: (quoted key)', 'sk-live-abcdef123456')
+                  'b.js:1', 'sk-live-abcdef123456')
 
     def test_2c_curl_json_body_in_shell_is_scanned(self):
         self._one('seed.sh', 'curl -d \'{"username":"admin","password":"zq9FAKEsecretSH1"}\' http://localhost/api\n',
-                  'seed.sh:1: (quoted key)', 'zq9FAKEsecretSH1')
+                  'seed.sh:1', 'zq9FAKEsecretSH1')
 
     def test_2d_compose_command_export_is_scanned(self):
         self._one('docker-compose.yml', '    command: sh -c "export X=1; PASSWORD=zq9FAKEcompose1"\n',
-                  'docker-compose.yml:1: PASSWORD', 'zq9FAKEcompose1')
+                  'docker-compose.yml:1', 'zq9FAKEcompose1')
 
     def test_2e_compose_command_and_chain_is_scanned(self):
         self._one('c2/docker-compose.yml',
                   '    command: bash -c "pip install x && SECRET_KEY=zq9FAKEcompose2 python app.py"\n',
-                  'c2/docker-compose.yml:1: SECRET_KEY', 'zq9FAKEcompose2')
+                  'c2/docker-compose.yml:1', 'zq9FAKEcompose2')
 
     def test_3_lexer_misread_never_leaks_a_base64_slice(self):
         r = self.fresh()
@@ -1263,7 +1264,7 @@ class ReReview3Cases(Base):
         r = self._lfs_repo()
         v = 'sk-live-lfs-secret-12345'
         r.write('settings.json', '{"apiKey": "%s"}\n' % v)
-        self.check(r.scan(), new=['settings.json:1: (quoted key)'], secrets=[v])
+        self.check(r.scan(), new=['settings.json:1'], secrets=[v])
 
     @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
     def test_4b_missing_lfs_object_fails_closed(self):
@@ -1303,7 +1304,7 @@ class ReReview4Cases(Base):
     def _from_literal(self, rel):
         r = self.fresh()
         r.write(rel, self.SETUP)
-        self.check(r.scan(), new=[rel + ':2: JWT_SECRET', rel + ':3: POSTGRES_PASSWORD'],
+        self.check(r.scan(), new=[rel + ':2', rel + ':3'],
                    secrets=['zq9FAKEjwtA1xyz9', 'zq9FAKEpgB1xyz9'])
 
     def test_1a_from_literal_in_shell_script_hits(self):
@@ -1314,15 +1315,15 @@ class ReReview4Cases(Base):
 
     def test_1c_terraform_var_equals_hits(self):
         self._one('infra.sh', 'terraform apply -var=db_password="zq9FAKEtfC1xyz9"\n',
-                  'infra.sh:1: db_password', 'zq9FAKEtfC1xyz9')
+                  'infra.sh:1', 'zq9FAKEtfC1xyz9')
 
     def test_1d_helm_set_equals_hits(self):
         self._one('deploy.sh', 'helm install x --set=auth.password="zq9FAKEhelmD1x9"\n',
-                  'deploy.sh:1: auth.password', 'zq9FAKEhelmD1x9')
+                  'deploy.sh:1', 'zq9FAKEhelmD1x9')
 
     def test_1e_yaml_item_from_literal_hits(self):
         self._one('job.yml', '        - --from-literal=password=zq9FAKEyamlE1x9\n',
-                  'job.yml:1: password', 'zq9FAKEyamlE1x9')
+                  'job.yml:1', 'zq9FAKEyamlE1x9')
 
     def _clean(self, files, secret):
         r = self.fresh()
@@ -1351,7 +1352,7 @@ class ReReview4Cases(Base):
         r.push()
         v = 'sk-live-lfs-unsaved-1234'
         r.append('s.json', '"apiKey": "%s"\n' % v)
-        self.check(r.scan(), unsaved=['s.json:2: (quoted key)'], secrets=[v])
+        self.check(r.scan(), unsaved=['s.json:2'], secrets=[v])
 
     @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
     def test_5b_lfs_saved_commit_hits(self):
@@ -1360,7 +1361,7 @@ class ReReview4Cases(Base):
         v = 'sk-live-lfs-saved-5678'
         r.write('t.json', '{"apiKey": "%s"}\n' % v)
         r.commit('add t')
-        self.check(r.scan(), saved=['t.json:1: (quoted key)'], secrets=[v])
+        self.check(r.scan(), saved=['t.json:1'], secrets=[v])
 
 
 class ReReview5Cases(Base):
@@ -1388,28 +1389,28 @@ class ReReview5Cases(Base):
     def test_1a_comment_question_mark_keeps_python_dict_key(self):
         self._one('settings.py',
                   'CONFIG = {\n    "debug": False,  # needed in prod?\n    "password": "zq9FAKEdictP1xyz",\n',
-                  'settings.py:3: (quoted key)', 'zq9FAKEdictP1xyz')
+                  'settings.py:3', 'zq9FAKEdictP1xyz')
 
     def test_1b_comment_question_mark_keeps_js_key(self):
         self._one('cfg.js',
                   'module.exports = {\n  retries: 3, // enough?\n  "apiKey": "zq9FAKEjsP2xyz12",\n',
-                  'cfg.js:3: (quoted key)', 'zq9FAKEjsP2xyz12')
+                  'cfg.js:3', 'zq9FAKEjsP2xyz12')
 
     def test_1c_comment_question_mark_after_open_brace(self):
         self._one('s.py', 'DB = {  # which db?\n    "password": "zq9FAKEbraceP7xy",\n',
-                  's.py:2: (quoted key)', 'zq9FAKEbraceP7xy')
+                  's.py:2', 'zq9FAKEbraceP7xy')
 
     def test_1d_comment_question_mark_after_yaml_parent(self):
         self._one('c.yml', 'env:  # needed?\n  "PASSWORD": "zq9FAKEyamlP6xyz"\n',
-                  'c.yml:2: (quoted key)', 'zq9FAKEyamlP6xyz')
+                  'c.yml:2', 'zq9FAKEyamlP6xyz')
 
     def test_2a_comment_only_line_ending_in_question_mark_keeps_key(self):
         self._one('g.py', 'CONFIG = {\n    # rotate?\n    "password": "zq9FAKEguardG1xyz",\n',
-                  'g.py:3: (quoted key)', 'zq9FAKEguardG1xyz')
+                  'g.py:3', 'zq9FAKEguardG1xyz')
 
     def test_2b_yaml_parent_without_question_mark_keeps_key(self):
         self._one('g.yml', 'env:\n  "PASSWORD": "zq9FAKEguardG2xyz"\n',
-                  'g.yml:2: (quoted key)', 'zq9FAKEguardG2xyz')
+                  'g.yml:2', 'zq9FAKEguardG2xyz')
 
     def test_3_ternary_with_trailing_comment_never_prints_the_value(self):
         self._clean('t1.js',
@@ -1423,7 +1424,7 @@ class ReReview5Cases(Base):
 
 
 class QuotedKeyCases(Base):
-    """Owner amendment: quoted-key text is never printed. A hit is `(quoted key)` or no hit."""
+    """Owner amendment: quoted-key text is never printed. A hit is `file:line` or no hit."""
 
     PLANT = 'AcmeProdPassword'
     VAL = 'localdevpass1'
@@ -1445,7 +1446,7 @@ class QuotedKeyCases(Base):
         for ln in res.lines:
             if ln.startswith('=='):
                 continue
-            self.assertTrue(ln.endswith(': (quoted key)'), 'non-redacted hit line: %r' % ln)
+            self.assertTrue(re.match(r'^[^:]+:\d+$', ln), 'hit line is not file:line: %r' % ln)
         self.no_leak(res, secrets)
         for s in secrets:
             self._no_leak_slices(res, s)
@@ -1477,14 +1478,14 @@ class QuotedKeyCases(Base):
         r = self.fresh()
         r.write('w.py', 'KEYS = {"sk_live_AcmeSecretKey": "acme-corporation"}\n')
         res = r.scan()
-        self.check(res, new=['w.py:1: (quoted key)'], secrets=['sk_live_AcmeSecretKey', 'acme-corporation'])
+        self.check(res, new=['w.py:1'], secrets=['sk_live_AcmeSecretKey', 'acme-corporation'])
         self._leak_free(res, ['sk_live_AcmeSecretKey', 'acme-corporation'])
 
     def test_5_json_key_that_is_the_value_looking_string_hits_redacted(self):
         r = self.fresh()
         r.write('x.json', '{"AcmeProdPassword": "zq9FAKEjsonX1xyz"}\n')
         res = r.scan()
-        self.check(res, new=['x.json:1: (quoted key)'], secrets=['zq9FAKEjsonX1xyz'])
+        self.check(res, new=['x.json:1'], secrets=['zq9FAKEjsonX1xyz'])
         self.assertNotIn(b'AcmeProdPassword', res.out + res.err)
 
 
@@ -1494,13 +1495,13 @@ class PrintedNameCases(Base):
     def test_a_two_quoted_keys_on_one_line_print_once(self):
         r = self.fresh()
         r.write('t.js', 'const c = { "password": "zq9FAKEdupA1xyz9", "apiKey": "zq9FAKEdupB1xyz9" };\n')
-        self.check(r.scan(), new=['t.js:1: (quoted key)'], secrets=['zq9FAKEdupA1xyz9', 'zq9FAKEdupB1xyz9'])
+        self.check(r.scan(), new=['t.js:1'], secrets=['zq9FAKEdupA1xyz9', 'zq9FAKEdupB1xyz9'])
 
     def test_b_order_is_file_line_printed_name(self):
         r = self.fresh()
         r.write('a.json', '{"password": "zq9FAKEsortC1xy9"}\n')
         r.write('a.py', 'API_KEY = "zq9FAKEsortD1xy9"\n')
-        self.check(r.scan(), new=['a.json:1: (quoted key)', 'a.py:1: API_KEY'],
+        self.check(r.scan(), new=['a.json:1', 'a.py:1'],
                    secrets=['zq9FAKEsortC1xy9', 'zq9FAKEsortD1xy9'])
 
     def test_c_long_line_then_many_blank_lines_is_fast(self):
@@ -1510,7 +1511,49 @@ class PrintedNameCases(Base):
         cp = subprocess.run([sys.executable, SCRIPT, '--repo', r.work],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
         res = Result(cp, time.time() - t)
-        self.check(res, new=['big.py:10002: API_KEY'], secrets=['zq9FAKEspeedE1x9'])
+        self.check(res, new=['big.py:10002'], secrets=['zq9FAKEspeedE1x9'])
+
+
+class AdversarialRound2Cases(Base):
+    """Counterexamples from task-1-adv2.md, each on its exact input."""
+
+    def test_1_password_value_with_equals_is_never_printed(self):
+        r = self.fresh()
+        r.write('docker-compose.yml',
+                'services:\n  a:\n'
+                '    command: ["./wait-for", "postgresql+asyncpg://app:MyPassword=2024xyzQ@db/app"]\n'
+                '    x: 1\n'
+                '      - postgresql+asyncpg://app:MyPassword=2024xyzA@db/app\n')
+        r.write('Dockerfile', 'FROM x\nENV DATABASE_URL postgresql+asyncpg://app:MyPassword=2024xyzB@db/app\n')
+        r.write('settings.toml', 'urls = ["postgresql+psycopg2://app:MyPassword=2024xyzC@db/app"]\n')
+        r.write('braces.yml', 'X: {postgresql+asyncpg://app:MyPassword=2024xyzQ@db}\n')
+        r.write('k8s.yaml', 'args:\n          - -Dspring.datasource.password=MyPassword=2024xyzQ\n')
+        r.write('fr.yml', 'cl\u00e9: MyPassword=2024xyzQ\n')
+        res = r.scan()
+        self.assertEqual(res.code, 1, 'stderr=%r' % res.err[:300])
+        self.assertEqual(res.lines, [L_UNSAVED, L_NEW, 'Dockerfile:2', 'braces.yml:1',
+                                     'docker-compose.yml:3', 'docker-compose.yml:5', 'fr.yml:1',
+                                     'k8s.yaml:2', 'settings.toml:1', L_SAVED])
+        for v in ('MyPassword', '2024xyz'):
+            self.assertNotIn(_b(v), res.out + res.err)
+        self.no_leak(res, ['MyPassword=2024xyzQ'])
+
+    def test_2_quoted_assignments_inside_literals_in_non_config_files(self):
+        r = self.fresh()
+        r.write('deploy.sh', "#!/bin/sh\nssh app@prod.example.net 'export DB_PASSWORD=\"zq9FAKEsecretS1xyz\"; ./migrate'\n")
+        r.write('run.py', "import subprocess\nsubprocess.run('API_KEY=\"zq9FAKEsecretP1xyz\" ./deploy.sh', shell=True)\n")
+        r.write('job.js', "const { execSync } = require('child_process');\n"
+                          "execSync(`SECRET_KEY='zq9FAKEsecretJ1xyz' node worker.js`);\n")
+        r.write('README.md', '# App\nBefore starting, run `export API_KEY="zq9FAKEsecretM1xyz"` in your shell.\n')
+        vs = ['zq9FAKEsecretS1xyz', 'zq9FAKEsecretP1xyz', 'zq9FAKEsecretJ1xyz', 'zq9FAKEsecretM1xyz']
+        self.check(r.scan(), new=['README.md:2', 'deploy.sh:2', 'job.js:2', 'run.py:2'], secrets=vs)
+
+    def test_3_yaml_value_ending_in_question_mark_does_not_hide_next_key(self):
+        r = self.fresh()
+        v = 'zq9FAKEsecretY2xyz'
+        r.write('queries.yml', 'find_user: SELECT * FROM users WHERE id = ?\n"db_password": "%s"\n' % v)
+        r.write('ctl.yml', 'find_user: SELECT * FROM users WHERE id = 1\n"db_password": "%s"\n' % v)
+        self.check(r.scan(), new=['ctl.yml:2', 'queries.yml:2'], secrets=[v])
 
 
 if __name__ == '__main__':
