@@ -958,6 +958,14 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.39.0 -- Held high-stakes cards come back to you
+
+Every `/backlog-it dispatch` now ends with what needs you: the decisions waiting on your answer,
+then **every** held P1 high-stakes card, oldest first (P2/P3 held as a count). Dispatch rightly
+never auto-starts those cards, but before this nothing brought them back -- a P1 like "the AWS
+root account has no MFA" could sit for weeks. `status` shows the same list, a card already
+waiting on you isn't listed twice, and `status.py --needs-you` prints just this section.
+
 ### v1.38.1 -- A stopped lane shows up in days, not weeks
 
 `/backlog-it status` now flags a Now fixing card that hasn't changed in 2+ days as "lane stopped?"
