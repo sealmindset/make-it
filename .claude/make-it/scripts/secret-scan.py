@@ -47,6 +47,8 @@ IDENT, SEP_AT = re.compile(NAME), re.compile(SEP)
 QUOTES = (('"', 3), ("'", 3), ('"', 1), ("'", 1), ('`', 1))
 QUOTE = '|'.join(q * n for q, n in QUOTES)  # longest first
 OPENER = re.compile(QUOTE)
+# A literal opener or a trailing comment (` #` needs the space: `x#y`, `$#`, `this.#f` aren't comments).
+COMMENT = re.compile(r'%s|(?<=[ \t])#|//' % QUOTE)
 # The next literal opener or NAME sep, so a NAME only ever starts outside a literal -- and never inside a
 # base64 / base64url / hex run, so a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME.
 # Not `=`: base64 pads only at the end, and a NAME follows one in `--from-literal=JWT_SECRET='...'`.
@@ -111,9 +113,9 @@ def headers(names):
 
 
 def added_lines(lines, names):
-    """(path, line number in the new version, text, new blob id, the line before it in the new version or None)
-    for each line the patch adds. In a combined (merge) hunk only lines new to every parent count. Inside a hunk
-    every line starts with a column character, so file content can't pose as a header."""
+    """(path, line number in the new version, text, new blob id, the last non-blank line before it in the new
+    version or None) for each line the patch adds. In a combined (merge) hunk only lines new to every parent
+    count. Inside a hunk every line starts with a column character, so file content can't pose as a header."""
     path = sha = n = prev = None
     width = 1
     for line in lines:
@@ -123,7 +125,8 @@ def added_lines(lines, names):
                 continue
             if cols == b'+' * width:
                 yield path, n, line[width:], sha, prev
-            prev = line[width:]
+            if line[width:].strip():  # a blank line between `?` and its branch can't hide the `?`
+                prev = line[width:]
             n += 1
             continue
         n = None
@@ -182,6 +185,26 @@ def key_position(s, i, start):
     return s[j - 1] in '{,' or (s[j - 1] == '[' and j == i)
 
 
+def uncommented(s):
+    """s less a trailing ` #` or `//` comment. Literals are walked as values() walks them, so a `#` or `//` in
+    one (`"http://x"`, `"#fff"`) never cuts."""
+    i, dead = 0, set()
+    while True:
+        m = COMMENT.search(s, i)
+        if not m:
+            return s
+        i = m.end()
+        if m.group() in ('#', '//'):
+            return s[:m.start()]
+        lit = None if m.group() in dead else literal_at(s, m.start())
+        if lit:
+            i = lit[1]
+        elif m.group() in ('"', "'"):
+            dead.add(m.group())  # an apostrophe (see values()): every later one is unclosed too
+        else:
+            return s  # a ` or triple-quoted literal runs on past this line
+
+
 def values(s, config, start=True):
     """(NAME, VALUE) pairs on a line. A NAME only starts outside a string literal, and the search resumes after
     its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
@@ -227,13 +250,14 @@ def values(s, config, start=True):
 
 def hit_names(text, config, prev=None):
     """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes.
-    `prev` is the line before it in the new version: if that ends inside a ternary (`const pw = isProd ?`, or
-    `c1 ? c2 ? a :`), this line's start is no key position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key.
-    A YAML parent `env:` (no `?`) or a comment line's `?` (`# rotate?`) isn't one: the `"password": ...` under it
-    stays a key."""
+    `prev` is the last non-blank line before it in the new version: if that, less a trailing comment, ends inside
+    a ternary (`const pw = isProd ?`, `isProd ? // prod`, or `c1 ? c2 ? a :`), this line's start is no key
+    position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key. A YAML parent `env:` (no `?`) or a comment's
+    `?` (`# rotate?`, `"debug": False,  # in prod?`) isn't one: the `"password": ...` under it stays a key."""
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
     p = (prev or b'').strip()
-    ternary = p.endswith(b'?') or (p.endswith(b':') and b'?' in p)
+    c = uncommented(p.decode('utf-8', 'surrogateescape')).rstrip()
+    ternary = c.endswith('?') or (c.endswith(':') and '?' in c)
     start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
     for name, v in values(s, config, start):
         if len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v):
@@ -294,7 +318,8 @@ def collect(rows, blob, lfs):
             for n, line in enumerate(f, 1):
                 line = line.rstrip(b'\n')
                 hits.update((path, n, name) for name in hit_names(line, is_config(path), prev))
-                prev = line
+                if line.strip():
+                    prev = line
     return hits
 
 
