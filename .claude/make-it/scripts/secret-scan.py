@@ -28,7 +28,8 @@ GIT = ['git', '--no-replace-objects', '-c', 'color.ui=never', '-c', 'core.quoteP
        '-c', 'diff.noprefix=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.suppressBlankEmpty=false',
        '-c', 'log.showRoot=true']
 # --text + our own NUL check: a .gitattributes `binary` / `-diff` can't hide a text file.
-DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--text', '--no-renames', '--full-index',
+# -U1: a user's diff.context=0 can't drop the line before an added one (see hit_names).
+DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--text', '--no-renames', '--full-index', '-U1',
         '--submodule=short', '--src-prefix=a/', '--dst-prefix=b/']
 # Every unsent commit, merges included (-c: a line new to every parent is the merge's own).
 LOG = ['log', '--no-show-signature', '--format=', '-c', '--no-renames']
@@ -48,7 +49,8 @@ QUOTE = '|'.join(q * n for q, n in QUOTES)  # longest first
 OPENER = re.compile(QUOTE)
 # The next literal opener or NAME sep, so a NAME only ever starts outside a literal -- and never inside a
 # base64 / base64url / hex run, so a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME.
-TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.+/=-])(%s)%s' % (QUOTE, NAME, SEP))
+# Not `=`: base64 pads only at the end, and a NAME follows one in `--from-literal=JWT_SECRET='...'`.
+TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.+/-])(%s)%s' % (QUOTE, NAME, SEP))
 # One literal (backslash escapes; a triple quote may hold single quotes), unrolled so it can't backtrack.
 LITERAL = {q * n: re.compile(r'{e}[^{q}\\]*(?:(?:\\.{t})[^{q}\\]*)*{e}'.format(
     e=q * n, q=q, t='' if n == 1 else '|%s(?!%s)' % (q, q * 2))) for q, n in QUOTES}
@@ -109,10 +111,10 @@ def headers(names):
 
 
 def added_lines(lines, names):
-    """(path, line number in the new version, text, new blob id) for each line the patch adds.
-    In a combined (merge) hunk only lines new to every parent count. Inside a hunk every line starts
-    with a column character, so file content can't pose as a header."""
-    path = sha = n = None
+    """(path, line number in the new version, text, new blob id, the line before it in the new version or None)
+    for each line the patch adds. In a combined (merge) hunk only lines new to every parent count. Inside a hunk
+    every line starts with a column character, so file content can't pose as a header."""
+    path = sha = n = prev = None
     width = 1
     for line in lines:
         if n is not None and line[:1] in (b' ', b'+', b'-', b'\\'):
@@ -120,7 +122,8 @@ def added_lines(lines, names):
             if line[:1] == b'\\' or b'-' in cols:
                 continue
             if cols == b'+' * width:
-                yield path, n, line[width:], sha
+                yield path, n, line[width:], sha, prev
+            prev = line[width:]
             n += 1
             continue
         n = None
@@ -135,7 +138,7 @@ def added_lines(lines, names):
             plus = line.split(b' ')[width + 1]
             if path is None or not plus.startswith(b'+'):
                 raise Fail('unreadable hunk header')
-            n = int(plus[1:].split(b',')[0])
+            n, prev = int(plus[1:].split(b',')[0]), None  # with -U1 the line before an added one is in its hunk
 
 
 def secret_named(name):
@@ -163,8 +166,9 @@ def literal_at(s, i):
         return s[i + n:m.end() - n], m.end()
 
 
-def key_position(s, i):
-    """A quoted key opens at line start or after `{`, `[`, `,` or a YAML `- ` -- never after a ternary's `?`."""
+def key_position(s, i, start):
+    """A quoted key opens at line start (when `start`) or after `{`, `[`, `,` or a YAML `- ` -- never after a
+    ternary's `?`. After `[` only directly: a shell test's `[ "AcmePwd" = ...` always takes a space."""
     j = i
     while j and s[j - 1] in ' \t':
         j -= 1
@@ -172,17 +176,20 @@ def key_position(s, i):
         j -= 1
         while j and s[j - 1] in ' \t':
             j -= 1
-        return j == 0
-    return j == 0 or s[j - 1] in '{[,'
+        return j == 0 and start
+    if j == 0:
+        return start
+    return s[j - 1] in '{,' or (s[j - 1] == '[' and j == i)
 
 
-def values(s, config):
+def values(s, config, start=True):
     """(NAME, VALUE) pairs on a line. A NAME only starts outside a string literal, and the search resumes after
     its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
     alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read or printed as a NAME.
     A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
     Any other literal that isn't a VALUE is scanned by the same rules when it holds JSON (`json.loads('{...}')`),
-    and always in a config file (compose's `- "PASSWORD=..."`, `command: sh -c "... PASSWORD=..."`)."""
+    and always in a config file (compose's `- "PASSWORD=..."`, `command: sh -c "... PASSWORD=..."`).
+    `start`: line start is a key position (not when the line goes on a ternary from the line before)."""
     i, dead = 0, set()
     while True:
         m = TOKEN.search(s, i)
@@ -198,7 +205,7 @@ def values(s, config):
                 return  # a ` or triple-quoted literal runs on past this line
             body, i = lit
             sep = SEP_AT.match(s, i)
-            if not (sep and IDENT.fullmatch(body) and key_position(s, m.start())):
+            if not (sep and IDENT.fullmatch(body) and key_position(s, m.start(), start)):
                 if config or body[:1] in ('{', '['):
                     yield from values(body, config)
                 continue
@@ -218,10 +225,17 @@ def values(s, config):
         yield name, v
 
 
-def hit_names(text, config):
-    """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes."""
+def hit_names(text, config, prev=None):
+    """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes.
+    `prev` is the line before it in the new version: if that ends inside a ternary (`const pw = isProd ?`, or
+    `c1 ? c2 ? a :`), this line's start is no key position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key.
+    A YAML parent `env:` (no `?`) or a comment line's `?` (`# rotate?`) isn't one: the `"password": ...` under it
+    stays a key."""
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
-    for name, v in values(s, config):
+    p = (prev or b'').strip()
+    ternary = p.endswith(b'?') or (p.endswith(b':') and b'?' in p)
+    start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
+    for name, v in values(s, config, start):
         if len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v):
             yield name
 
@@ -248,15 +262,15 @@ def shown(path):
 
 
 def collect(rows, blob, lfs):
-    """Hits from (path, line, text, blob) rows; a file's binary check runs only once it has a hit.
+    """Hits from (path, line, text, blob, line before) rows; a file's binary check runs only once it has a hit.
     An LFS pointer is scanned as the whole object it names (what the push uploads); a missing object can't
     be checked."""
     hits, binary, pointers = set(), {}, {}
-    for path, n, text, sha in rows:
+    for path, n, text, sha, prev in rows:
         oid = LFS_OID.fullmatch(text)
         if oid:
             pointers[path, sha] = oid.group(1)
-        found = list(hit_names(text, is_config(path)))
+        found = list(hit_names(text, is_config(path), prev))
         if found:
             if (path, sha) not in binary:
                 binary[path, sha] = nul_in_head(blob(sha))
@@ -276,8 +290,11 @@ def collect(rows, blob, lfs):
             if nul_in_head(f.read(8000)):
                 continue
             f.seek(0)
+            prev = None
             for n, line in enumerate(f, 1):
-                hits.update((path, n, name) for name in hit_names(line.rstrip(b'\n'), is_config(path)))
+                line = line.rstrip(b'\n')
+                hits.update((path, n, name) for name in hit_names(line, is_config(path), prev))
+                prev = line
     return hits
 
 
