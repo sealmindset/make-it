@@ -229,10 +229,10 @@ their computer, so say it plainly:
 "Your computer is missing [N] of the tools I need (I checked): [for each: name -- what it does,
 e.g. 'Docker -- runs your app on your computer while we build it']. Installing takes a few minutes
 and may ask for your password. Only these programs (and anything they need to run) get installed,
-and each can be removed the normal way. [If Docker is on the list: 'Docker Desktop needs a paid license at larger companies;
-Rancher Desktop is free. Which does your company use? If you don't know, I'll use Rancher
-Desktop.'] If your company wants software installed its own way (an approved catalog, or through
-IT), say so.
+and each can be removed the normal way. [If Docker is on the list: 'Docker Desktop needs a paid
+license at larger companies; Rancher Desktop is free. Which does your company use? If you don't
+know, I'll use Rancher Desktop.'] If your company wants software installed its own way (an
+approved catalog, or through IT), say so.
 
 Should I install [it / them] now, or walk you through doing it yourself?"
 
@@ -461,8 +461,8 @@ reviewed, and hardened behind the scenes.
 - **Pages I'll create:** [List of screens]
 - **Security:** [e.g., 'Enterprise-grade security built in from the start']
 - [If the app uses AI] **AI:** [e.g., 'uses your Claude Code subscription -- no cost beyond your plan']
-- [Web apps] **Also built in:** the standard admin roles (Super Admin, Admin, Manager, User) and
-  admin screens (users and roles, activity log, AI Instructions)
+- [Web apps] **Also built in:** the built-in roles (Super Admin, Admin, Manager, User) and
+  admin screens (users and roles, settings, activity log, AI Instructions)
 
 Login, user types and pages come from your answers; how it's built, the security setup [and the
 AI provider] are standard choices I made for you -- say so if you'd rather pick. It goes into a
@@ -1138,41 +1138,71 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 **PART B: Live verification (start the app and test it)**
 
-21. **SSL-inspecting proxy check** -- Before any Docker build or pull:
+21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
+    tools are running (this is the same ask as /try-it step 1 -- one way to ask for a pause):
     ```bash
-    # Check for common SSL-inspecting proxy processes
-    pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
-    pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
+    # Check each common SSL-inspecting proxy separately, so every running one is named.
+    # Bracketed first letter: the pattern can never match its own shell's command line.
+    for p in '[Z]scaler' '[N]etskope' '[G]lobalProtect'; do
+      pgrep -f "$p" >/dev/null 2>&1 && echo "$(echo "$p" | tr -d '[]') running"
+    done
     ```
-    If detected (or if Docker build fails with TLS/certificate errors), the user has to pause
-    that tool themselves. It is a security tool, so this is active confirmation, per the
-    approval block -- ask in plain words:
+    A tool found running is only a name so far: try the build (step 22) first, and ask only
+    when a build or pull fails with a TLS/certificate error. Then the user has to pause the tool
+    themselves, and this is a high-stakes stop (per the approval block): they are turning off a
+    security tool on their own computer, so they state the specifics -- never a plain "done".
+    Fill `[TOOL]` with every name the check printed (Zscaler, Netskope or GlobalProtect; all of
+    them if more than one matched). If the check found nothing, use "your network security tool
+    (often Zscaler, Netskope or GlobalProtect)" and the 'don't have one' sentence.
 
-    "Your computer runs a security tool that inspects web traffic ([NAME, e.g. Zscaler]) --
-    [I found it running / it's blocking the downloads my build needs: the build stopped with a
-    certificate error]. Could you pause it for the next few minutes, just while I download and
-    build? While it's paused, that one layer of protection is off for your computer; nothing in
-    the app changes, and you turn it back on afterwards -- I'll remind you. Nothing unusual --
-    this comes up often on company laptops. The one thing to check: whether your company allows
-    pausing it. If not, don't -- tell me and I'll stop here instead.
+    Tell user: "Before I can put your app together, I need you to pause [TOOL] for a little
+    while. The download just failed in the way these tools make it fail[if detected: ', and I
+    can see [TOOL] running on your computer']. While it's paused, that tool isn't checking your
+    computer's internet traffic -- nothing about your app or your files changes. If it offers a
+    time limit, it turns itself back on when that runs out; either way, I'll remind you to turn
+    it back on as soon as I'm done downloading, whether or not everything worked. Normally I
+    handle everything myself; this is the one thing I can't do for you.
+    The one thing to check: it's your company's tool and you're allowed to pause it. If you're
+    not sure, say 'not sure' and I'll stop here instead.
+    [Only when the check found nothing: 'If you don't have a tool like this, say "don't have
+    one" and I'll keep working on the download problem myself.']
+    To pause it: find [TOOL] in your menu bar or system tray, choose 'Disable' or 'Pause,' and
+    if it asks, pick a time long enough for the downloads. Then tell me which tool you paused
+    and how long for -- 'no time limit' is fine if it didn't offer one."
 
-    Tell me either 'it's paused' or 'I can't pause it'."
+    **Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
+    'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
+    none was given. When `[TOOL]` names more than one tool, the answer must cover every one of
+    them before the build is retried; ask about the ones still missing. 'not sure', 'can't', or
+    'no' means stop; 'don't have one' (offered only when the check found nothing) means the tool
+    wasn't the cause -- go back to step 22's normal diagnosis and keep fixing, and don't offer
+    this pause again this run (a later certificate error gets the normal diagnosis, not this
+    ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
+    missing. Do NOT retry Docker builds while the tool is active. On stop: if they already said
+    they paused any tool, give it the reminder below first; then tell them in a few lines that
+    their app can't be put together on this network [if detected: 'while [only the tools still
+    running] is running' / otherwise: 'while something is blocking the downloads']; to ask
+    whoever manages their computer to allow Docker image downloads; that their project files are
+    saved in [PROJECT_DIR] so nothing is lost; and that once the downloads are allowed, they open
+    that folder, run /resume-it and say "finish building my app". Before stopping, add one line
+    to TODO.md: "Finish the build: read ~/.claude/commands/make-it.md and its
+    <execution_context>, then run build-verify from Part B (step 21) in this folder." (Agent
+    note: no `.make-it-state.md` exists yet; /resume-it reads app-context.json and scans the
+    folder instead.)
 
-    Wait for their answer. A plain 'ok' isn't an answer -- ask which of the two it is. Go on
-    with the build only on 'it's paused'. On 'I can't pause it', stop the build here: tell them
-    in a few lines to ask their IT team to allow Docker image downloads; that their project
-    files are saved in [PROJECT_DIR] so nothing is lost; and that once IT allows the downloads,
-    they open that folder, run /resume-it and say "finish building my app". Before stopping, add
-    one line to TODO.md: "Finish the build: start the app and run the checks". (Agent note: no
-    `.make-it-state.md` exists yet; /resume-it reads app-context.json and scans the folder
-    instead.) After the Docker builds complete, remind them to turn the tool back on.
+    Only if the user actually paused a tool: once the downloading is over -- the builds and
+    pulls worked, or you've stopped trying -- remind the user, naming every tool they said they
+    paused: "All done with the heavy lifting! You can turn [TOOL] back on now[if a time was
+    given: ' -- no need to wait out the [TIME] you gave it']." No pause (never asked, or 'don't
+    have one'), no reminder.
 
 22. **Build and start containers:**
     ```bash
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
-    If build fails, diagnose silently, fix, and retry (up to 3 attempts).
+    If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
+    error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
 
 23. **Wait for all services to be healthy** -- poll health endpoints for each service
@@ -1462,7 +1492,8 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
   anything, the user names the specific -- for sign-in, the new sign-in method and who it applies
   to; for permissions, what changes for which user type (e.g. "managers can also delete reports").
   A request that already names it meets the gate; a vague one ("open it up a bit", "yes, change
-  it") doesn't -- ask them to spell it out.
+  it") doesn't -- first show who can do it today (the user types and what each can do, from
+  the plan), then ask them to spell out the change.
 - Minor: Make the change and continue
 - Major: one decision-ready ask (consequential, per the approval block), in a few plain lines:
   what changes in the plan (which pages or parts get redone, in their words); what makes it
