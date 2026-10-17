@@ -206,8 +206,8 @@ If production indicators found, stop and ask. This is high-stakes per the approv
 
 "Hold on. This app looks like it is connected to your live system, not a test copy.
 
-What I found: [each indicator as found -- host or setting name only, never a password or key -- e.g. `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
-What would change: [mode full or owasp, and the app is running or START_COMMAND is pending: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits data or changes anything, such as a delete or update request, extra fields slipped into a record, requests fired at the same time, or flooding it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [mode sast or deps, or guardrails with no AI features found: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
+What I found: [each indicator as found -- host or setting name only, never a password or key -- such as `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
+What would change: [mode full or owasp, and the app is running or START_COMMAND is pending: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits data or changes anything, such as a delete or update request, extra fields slipped into a record, requests fired at the same time, or flooding it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [none of the lines above applies -- mode sast or deps, guardrails with no AI features found, or full or owasp with the app not running and no START_COMMAND found: 'Nothing in the scan itself -- this run only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
 Where it lands: [mode full or owasp, and the app is running or START_COMMAND is pending: 'every read-only request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back. What it sends back, which can include real people's records, is saved in the attestation on this computer.' / otherwise: 'nothing is sent to that live system or its AI service; what I find about this project stays in the attestation on this computer.']
 What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
 One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
@@ -217,7 +217,9 @@ Pick one:
 - Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
 - Not sure"
 
-Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. [Say each line that applies; if both kinds of indicator were found, say both. Indicator found in a file: 'To scan a test copy: have this app, on this computer, use settings that point at your test database and services (I saw the live one as `[VARIABLE]` in `[FILE]`). If `[FILE]` is the settings file your live setup uses, leave it as it is.' Indicator from this terminal's own settings (`NODE_ENV`, `FLASK_ENV` or `DJANGO_SETTINGS_MODULE`): 'This terminal has `[VARIABLE]` set to `[VALUE]`. Change it to your test setting, or open a fresh terminal. A value set in your terminal's startup file (shell profile, e.g. ~/.zshrc) stays after opening a fresh terminal until you remove it from that file.'] Then run /nemo-it again." Nothing else runs.
+Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. [Say each line that applies; if both kinds of indicator were found, say both. Indicator found in a file: 'To scan a test copy: have this app, on this computer, use settings that point at your test database and services (I saw the live one as `[VARIABLE]` in `[FILE]`). If `[FILE]` is the settings file your live setup uses, leave it as it is.' Indicator from this terminal's own settings (`NODE_ENV`, `FLASK_ENV` or `DJANGO_SETTINGS_MODULE`): 'This terminal has `[VARIABLE]` set to `[VALUE]`. Change it to your test setting, or open a fresh terminal. A value set in your terminal's startup file (shell profile, such as ~/.zshrc) stays after opening a fresh terminal until you remove it from that file.'] Then run /nemo-it again." Nothing else runs.
+
+If no production indicators were found: `PASSIVE_ONLY=false`. Either way, each Bash call is a new shell, so write `PASSIVE_ONLY=true` or `PASSIVE_ONLY=false` as the first line of every Phase 2 and Phase 3 command. The scanner checks run their active parts only when it is exactly `false`; unset or anything else means read-only.
 
 **7. Install required tools and start the app (one ask):**
 
@@ -580,7 +582,7 @@ Update user: "Dependency and container scanning complete. Found [N] vulnerable d
 If the app is not running, skip this phase entirely and record in the attestation:
 "Dynamic analysis was skipped because the application was not running during the scan."
 
-Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. This includes scanning for common web vulnerabilities, testing authentication flows, and checking input handling. All tests are non-destructive."
+Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. [PASSIVE_ONLY=false: 'This includes scanning for common web vulnerabilities, testing authentication flows, and checking input handling. All tests are non-destructive.' / PASSIVE_ONLY=true: 'This scans for common web vulnerabilities with read-only requests only -- no sign-in, no form submissions, nothing that changes data.']"
 
 **1. OWASP ZAP spider and scan:**
 
@@ -589,8 +591,8 @@ Tell the user: "Starting dynamic analysis. I am now testing your running applica
 TARGET_URL="http://localhost:${DETECTED_PORT}"
 
 # Run ZAP in Docker with safe scan policy
-# PASSIVE_ONLY: keep the crawler from submitting forms
-ZAP_PASSIVE_OPTS=(); [ "$PASSIVE_ONLY" = "true" ] && ZAP_PASSIVE_OPTS=(-z "-config spider.processform=false")
+# Fail closed: the crawler submits forms only when PASSIVE_ONLY is exactly "false"
+ZAP_PASSIVE_OPTS=(); [ "$PASSIVE_ONLY" = "false" ] || ZAP_PASSIVE_OPTS=(-z "-config spider.processform=false")
 docker run --rm --network host \
   -v /tmp/nemo-it-zap:/zap/wrk:rw \
   ghcr.io/zaproxy/zaproxy:stable \
@@ -603,8 +605,8 @@ docker run --rm --network host \
   "${ZAP_PASSIVE_OPTS[@]}" \
   2>/dev/null
 
-# If full scan mode (not passive only), run API scan if OpenAPI spec found
-if [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ]; then
+# API scan only when PASSIVE_ONLY is exactly "false" (it sends PUT/DELETE to every operation) and an OpenAPI spec is found
+if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ]; }; then
   SPEC_FILE=$(ls openapi.json openapi.yaml swagger.json 2>/dev/null | head -1)
   docker run --rm --network host \
     -v "$(pwd):/zap/wrk:ro" \
@@ -720,7 +722,8 @@ Update user: "API security testing complete. Tested [N] endpoints for authentica
 ```bash
 # PASSIVE MODE ONLY -- detect, do not exploit
 # Only run against detected API endpoints that accept parameters
-sqlmap --url="$TARGET_URL/api/endpoint?param=test" \
+# Fail closed: the probes run only when PASSIVE_ONLY is exactly "false" (unset = read-only, skipped)
+[ "$PASSIVE_ONLY" = "false" ] && sqlmap --url="$TARGET_URL/api/endpoint?param=test" \
   --batch \
   --risk=1 \
   --level=1 \
@@ -768,9 +771,9 @@ Tell the user: "I detected AI features in your project. I am now running NeMo Gu
 Before attempting live AI calls, check whether the AI provider is actually accessible:
 
 ```bash
-# Check if AI provider env vars are set and reachable
-# Look for configured endpoints/keys in .env
-grep -i "AZURE_OPENAI_ENDPOINT\|ANTHROPIC_API_KEY\|OPENAI_API_KEY\|OLLAMA_BASE_URL" .env 2>/dev/null
+# Check if AI provider env vars are set
+# Key NAMES only -- never print a value (operator-safety §1); this holds on the live-system path above all
+grep -oiE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_URL)=' .env 2>/dev/null
 ```
 
 - If AI provider IS configured and reachable: run **behavioral tests** (send actual
