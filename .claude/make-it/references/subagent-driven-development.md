@@ -244,6 +244,9 @@ the turn is refused (exit 2) with a reminder of the next checkpoint and the esca
 It checks the ledger in the session folder's repo plus any registered ledger whose path appears
 in this session's transcript (so another session's run never blocks you). It is a no-op with no
 armed ledger, so it is safe to leave installed globally.
+Waiting is not stalling: while a background agent this session launched hasn't reported back
+(up to 2 hours after launch), ending the turn to wait for its notice passes without a nudge and
+doesn't count toward the circuit breaker.
 Circuit breaker: after 3 nudges with no new `Task N: complete`, the gate records that in the
 ledger and releases — a stuck controller is handed back to the human, never looped forever.
 
