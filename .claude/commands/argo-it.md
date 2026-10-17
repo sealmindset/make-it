@@ -326,7 +326,8 @@ The user just wants their changes deployed. Keep it simple and non-technical.
 
 ```bash
 git status --short
-git log --oneline origin/{current_branch}..HEAD 2>/dev/null
+git log --oneline HEAD --not --remotes          # saved changes not sent yet (works on a never-pushed branch too)
+git rev-list --count HEAD --not --remotes       # M for "[M saved changes not sent yet]"
 ```
 
 **2. Tell the user what will happen in PLAIN LANGUAGE, and get the go:**
@@ -434,21 +435,37 @@ Never show raw Python tracebacks.
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
 # Nothing is staged yet, so scan what step 4 will actually send: unsaved edits, new files
-# (ignored ones excluded), and saved changes not sent yet (step 1's range). Keep the two
-# results apart -- the ask below treats a hit in a saved change differently.
+# (ignored ones excluded), and saved changes not sent yet (step 1's range). Three separate
+# scans: a binary new file can't hide the others, and the ask below treats a hit in a saved
+# change differently. .env is left out of the first two -- its values live there on purpose.
 PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}'
 SKIP='\.example\|TODO\|placeholder\|changeme\|your-.*-here'
-{ git diff HEAD; git ls-files --others --exclude-standard -z | xargs -0 cat; } 2>/dev/null \
-  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # unsaved edits and new files
-git diff origin/{current_branch}...HEAD 2>/dev/null \
-  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet
+git diff HEAD -- . ':!.env' \
+  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # unsaved edits
+git ls-files --others --exclude-standard -z -- . ':!.env' \
+  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "$SKIP" || true   # new files, one at a time, name shown
+git log -p --format= HEAD --not --remotes \
+  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet (every unsent commit)
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
-the approval block: the user names what to move, a plain yes isn't an answer. If a value is in a
-saved, unsent change, say so plainly in the ask: "**[VAR_NAME] in [file]** is already in a saved
-change that hasn't been sent. Moving it now takes it out of the current files but not out of the
-saved history, so the safe choice is **stop here** and get help from your DevOps team."
+the approval block: the user names what to move, a plain yes isn't an answer.
+
+**If any hit is in a saved, unsent change (the third scan): the only option is stop here.** Step
+4 sends the saved change that holds the value, so moving it out of the current files can't keep
+it out of the send. Say so plainly, and what to do next; offer nothing else:
+
+"I found what looks like a password or secret key in a change you already saved but haven't sent
+yet: **[VAR_NAME] in [file]** [, one per value found]. Secrets should never be saved in code, so
+I won't send this. Because it's already in your saved history, moving the value now wouldn't take
+it out of what gets sent -- so I'm stopping here. Nothing is saved or sent; the small fixes
+already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
+DevOps team to help remove it from the saved history before sending, and if this value has
+already been shared or used anywhere, have it changed too."
+
+Then stop -- steps 4 and later don't run.
+
+**Otherwise (every hit is in unsaved edits or new files), ask which to move:**
 
 "I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
