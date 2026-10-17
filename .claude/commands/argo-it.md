@@ -519,16 +519,34 @@ to deploy-nonprod -- the GitHub Actions workflow mirrors the source branch and p
 the manifests automatically.
 
 ```bash
-# Commit if there are uncommitted changes. Never stage .env (3e may have just moved a secret
-# into it) -- make sure it's ignored first (own line, even if .gitignore lacks a final
-# newline), then unstage it in case it's tracked. Works when .env is already ignored too.
-grep -qxF '.env' .gitignore 2>/dev/null || printf '\n.env\n' >> .gitignore
-git add -A && git reset -q -- .env
-git commit -m "Deploy: [brief description of changes]" || true
+# Commit if there are uncommitted changes. Never stage secret or database files (3e may have
+# just moved a secret into .env) -- the operator-safety §1 list plus databases, at any depth:
+# make sure each is ignored (own line, even if .gitignore lacks a final newline), then unstage
+# them in case any is tracked. :(top,...) = from the repo root, so a nested repo's pre-staged
+# files stay out too. If the save fails, stop here: nothing is sent.
+fail() { echo "SAVE FAILED: $1"; exit 1; }
+grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
+for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
+         '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
+  grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
+done
+{ git add -A && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
+  ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
+  ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
+  ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+  ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
+  ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
+git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
 
 # Push current branch -- CI takes over from here
 git push origin {current_branch}
 ```
+
+**If the block prints `SAVE FAILED`, stop here -- nothing was sent.** Tell the user plainly:
+"I couldn't save your changes, so nothing was sent and nothing is deploying. [the reason, in
+plain words -- e.g. 'Git doesn't know your name and email yet; run `git config --global
+user.name "Your Name"` and `git config --global user.email "you@example.com"`, then run /argo-it
+again.']" Never push as if the save had worked.
 
 That's it. The CI workflow will:
 1. Build and push container images to the registry
@@ -1871,7 +1889,7 @@ thing to check: is **{hostname}** the right address for the dev version of your 
 
 **What would you like to do?**
 
-1. **Send it to GitHub** -- builds and deploys to **{hostname}** automatically
+1. **Send it -- deploys to {hostname}** -- builds and deploys to **{hostname}** automatically
 2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
    [only if kubectl is present AND `kubectl config current-context` is a local cluster:
    rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared
@@ -1915,7 +1933,7 @@ kubectl --context {local_context} get svc -n {namespace}
 ```
 
 Then say what came up, in plain words, and go back to the step-3 pick without option 2 (the
-same gate -- 'Send it to GitHub' by name, 'Show me the files first', or 'Not now').
+same gate -- 'Send it -- deploys to {hostname}' by name, 'Show me the files first', or 'Not now').
 
 **Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask),
 then go back to the step-3 pick without option 3.
