@@ -958,6 +958,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.2 -- `/nemo-it` never shows a secret value
+
+`/nemo-it` reported secrets by printing them. Its production check printed whole `.env` lines,
+so a `DATABASE_URL` showed its password in the conversation. Its hardcoded-secret checks printed
+the matched line, which is the secret itself, and nothing stopped that text from being copied into
+the attestation on disk. Now:
+- The production check prints `file:line: NAME` only. A comment line no longer causes a false
+  "this is your live system" stop. A setting whose name or value says production still counts:
+  a missed stop costs more than a false one. An odd byte or a BOM in the file no longer makes it
+  miss a line, and `KEY: value` and `APP-ENV=` settings count too.
+- The hardcoded-secret checks print `file:line` only. A secret finding keeps its file, line,
+  rule ID and kind, never bandit's `issue_text`/`code` or semgrep's `extra.lines`, which quote it.
+- A new guardrail says a secret is reported by where it is and what kind it is, never its value:
+  not in the conversation, the attestation (markdown, JSON or JUnit), or any finding field.
+
+The AI-key check already printed names only (v1.44.0). It was re-checked on the same fake
+project.
+
 ### v1.44.1 -- Safety update: PyJWT 2.15.0 in every app template
 
 New apps start with PyJWT 2.15.0 instead of 2.14.0, which has two published advisories
