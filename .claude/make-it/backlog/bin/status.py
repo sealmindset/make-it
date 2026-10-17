@@ -2,7 +2,7 @@
 """Print where the board stands: in flight, up next, burn-down + forecast, needs you, drift,
 epics, and cycle time. Read-only, no AI call -- the same board gives the same answer.
 
-Usage: status.py [board_dir] [--project NAME]
+Usage: status.py [board_dir] [--project NAME] [--needs-you]
        status.py --self-test
   Dates come from the board's git history (when a card went done, Live or Checked, and when it
   last changed). With no git history, from each card's created: and updated:.
@@ -119,7 +119,7 @@ def facts(B, T=None):
     return dict(T=T, src=src, first=first, total=len(leaf), open=len(op), rows=rows,
                 flight=flight, next_bugs=next_bugs, plan=plan, can=can,
                 waiting=sorted((p for p, d in opn.items() if R.waiting(d)), key=lambda p: rank(p, opn[p])),
-                held=sorted((p for p, d in opn.items() if R.warn(d)), key=lambda p: rank(p, opn[p])),
+                held=sorted((p for p, d in opn.items() if R.warn(d) and not R.waiting(d)), key=lambda p: rank(p, opn[p])),  # waiting: listed there
                 lane_idle=[p for p in flight['Now fixing'] if idle(p, op[p]) >= LANE],  # lanes work in hours: idle days = it stopped
                 stalled=[p for p in flight['Other work'] if idle(p, op[p]) >= STALL],
                 live_old=[p for p in flight['Live, to check'] if idle(p, op[p]) >= STALL],
@@ -129,7 +129,7 @@ def facts(B, T=None):
                 r2l=cyc('created', 'live'), l2c=cyc('live', 'checked'),
                 cards=cards, idle=lambda p: idle(p, cards[p]), title=lambda p: title(cards[p]), epic_cards=epics)
 
-def render(f, proj):
+def render(f, proj, needs_only=False):
     c, idle, title, T = f['cards'], f['idle'], f['title'], f['T']
     cut = lambda s, n: s if len(s) <= n else s[:n - 1] + '…'
     cid = lambda p: v(c[p], 'id')
@@ -154,13 +154,16 @@ def render(f, proj):
     out += ['', f"BURN-DOWN  (cards per week{', history' + since if since else ''})", '  week to   opened  closed    net   open']
     out += [f"  {e.strftime('%m-%d'):<9}{o:>7}{cl:>8}{o - cl:>+7}{left:>7}" for e, o, cl, left in f['rows']]
     out.append('  Forecast: ' + forecast([(o, cl) for _, o, cl, _ in f['rows']], f['open'], T))
-    out += ['', 'NEEDS YOU']
-    out.append(f"  Waiting on you ({len(f['waiting'])})" + ('' if f['waiting'] else ': nothing'))
-    out += [f"    {cid(p)} · {cut(v(c[p], 'decision') or '(question not on card -- add `decision:`)', 70)} · idle {idle(p)}d" for p in f['waiting'][:TOP]]
-    out += [f"    +{len(f['waiting']) - TOP} more (BOARD.md lists all)"] * (len(f['waiting']) > TOP)
-    out.append(f"  Held, high-stakes ({len(f['held'])})" + ('' if f['held'] else ': none'))
-    out += [f"    ⚠️ {name(p, 60)} · {v(c[p], 'priority')} · idle {idle(p)}d" for p in f['held'][:TOP]]
-    out += [f"    +{len(f['held']) - TOP} more"] * (len(f['held']) > TOP)
+    needs = ['NEEDS YOU']
+    needs.append(f"  Waiting on you ({len(f['waiting'])})" + ('' if f['waiting'] else ': nothing'))
+    needs += [f"    {cid(p)} · {cut(v(c[p], 'decision') or '(question not on card -- add `decision:`)', 70)} · idle {idle(p)}d" for p in f['waiting'][:TOP]]
+    needs += [f"    +{len(f['waiting']) - TOP} more (BOARD.md lists all)"] * (len(f['waiting']) > TOP)
+    p1 = [p for p in f['held'] if v(c[p], 'priority') == 'P1']  # every P1, oldest first: none may drop out of sight
+    needs.append(f"  Held, high-stakes ({len(f['held'])})" + ('' if f['held'] else ': none'))
+    needs += [f"    ⚠️ {name(p, 60)} · P1 · idle {idle(p)}d" for p in p1]
+    needs += [f"    P2/P3 held: {len(f['held']) - len(p1)} (⚠️ on BOARD.md)"] * (len(f['held']) > len(p1))
+    if needs_only: return '\n'.join(needs)
+    out += [''] + needs
     drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], ' · lane stopped? it should hand the card back'),
              (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], '')]
     out += ['', 'DRIFT'] + [f"  {k:<22}{len(ps):>3}  {ids(ps)}{hint}" for k, ps, hint in drift if ps]
@@ -210,6 +213,10 @@ def self_test():
         card('stories/S17.md', d(3), id='E01-S17', **bug, stage='Reported', created=d(3))     # Now fixing, idle 3d: lane stopped?
         card('stories/S18.md', d(1), id='E01-S18', **bug, stage='Cause found', created=d(1))  # Now fixing, idle 1d: fine
         card('stories/S19.md', d(5), id='E01-S19', **bug, stage='Reported', created=d(5))
+        card('stories/S20.md', d(1), id='E01-S20', **dict(bug, status='backlog'), stage='Reported', stakes='critical', created=d(1))  # held P2: counted
+        card('stories/S21.md', d(1), id='E01-S21', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', decision='Ship it?', created=d(1))  # held + waiting: listed once
+        for n in range(30, 36):  # six old held P1s: with S4 that's 7 -- the list must not stop at 5
+            card(f'stories/S{n}.md', d(30), id=f'E01-S{n}', type='story', status='blocked', priority='P1', stakes='critical', created=d(40))
         card('stories/S3.md', d(2), id='E01-S3', **dict(bug, status='backlog'), stage='Reported', decision='Retry, or refile?', created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
@@ -220,21 +227,23 @@ def self_test():
         f = facts(t, T)
         ids = lambda ps: [v(f['cards'][p], 'id') for p in ps]
         rows = [r[1:] for r in f['rows']]
-        # W0: opened S3 S4 S5 S7 S8 S10 S11 S15 S16 S17 S18 S19, closed S10 · W1: S2 / S1 (the move doesn't reset it), S12 · W2: S1 · W3: S6.
+        # W0: opened S3 S4 S5 S7 S8 S10 S11 S15 S16 S17 S18 S19 S20 S21, closed S10 · W1: S2 / S1 (the move doesn't reset it), S12 · W2: S1 · W3: S6.
         # S9 and S14 entered git already done: neither opened nor closed here.
-        assert rows == [(12, 1, 13), (1, 2, 2), (1, 0, 3), (1, 0, 2)], rows
+        assert rows == [(14, 1, 21), (1, 2, 8), (1, 0, 9), (1, 0, 8)], rows  # S30-S35: open since before the window
         assert set(ids(f['flight']['Live, to check'])) == {'E01-S2', 'E01-S16'} and ids(f['flight']['Other work']) == ['E01-S6'], f['flight']
         b = R.render(t, 't')  # the report and BOARD.md agree on every status line
         for k in ('Now fixing', 'Shipping', 'Live, to check'):
             assert set(re.search(rf'\*\*{k}:\*\* (.*)', b).group(1).split(', ')) - {'—'} == {i.split('-')[-1] for i in ids(f['flight'][k])}, k
         assert ids(f['next_bugs']) == ['E01-S5'], ids(f['next_bugs'])  # S4 held, S3 waiting
-        assert ids(f['can']) == ['E01-S8'] and ids(f['waiting']) == ['E01-S3'] and ids(f['held']) == ['E01-S4']
+        assert ids(f['can']) == ['E01-S8'] and ids(f['waiting']) == ['E01-S21', 'E01-S3'] and ids(f['held'])[-1] == 'E01-S20' and len(f['held']) == 8
         assert ids(f['lane_idle']) == ['E01-S17'] and set(ids(f['flight']['Now fixing'])) == {'E01-S17', 'E01-S18', 'E01-S19'}, f['lane_idle']  # S19: newer updated: wins
         assert ids(f['stalled']) == ['E01-S6'] and ids(f['checked_open']) == ['E01-S7'], (f['stalled'], f['checked_open'])
         # stale: candidates S3 S4 S5 S15 changed after the plan, S11 isn't in it; S8 changed that same day; in-flight S16 doesn't count
-        assert f['plan'][1] == 5 and f['plan'][2].startswith('2.'), f['plan']
+        assert f['plan'][1] == 7 and f['plan'][2].startswith('2.'), f['plan']  # + S20 S21
         assert f['r2l'][''] == [3, 4] and f['r2l']['P1'] == [3] and f['l2c'][''] == [6], (f['r2l'], f['l2c'])  # S7 entered at Checked
-        assert 'growing +3.0/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
+        n = render(f, 't', needs_only=True)  # dispatch's closing list: every held P1 shown, the rest counted, nothing twice
+        assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '⚠️ E01-S4' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
+        assert 'growing +3.5/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
         assert len(facts(t, T - D(days=15))['rows']) == 3  # no week that ends before the history starts
         assert forecast([(1, 3), (1, 3)], 8, T).startswith('shrinking -2.0/wk: clear in ~4 wks'), forecast([(1, 3), (1, 3)], 8, T)
         assert forecast([], 0, T) == 'nothing open' and forecast([], 3, T) == 'no full week of history yet'
@@ -248,10 +257,11 @@ if __name__ == '__main__':
         i = args.index('--project')
         if i + 1 >= len(args): sys.exit('status: --project needs a name')
         proj = args[i + 1]; del args[i:i + 2]
+    needs = '--needs-you' in args; args = [a for a in args if a != '--needs-you']  # dispatch's closing list
     B = os.path.abspath(os.path.expanduser(args[0] if args else os.environ.get('BACKLOG_DIR', '.claude/backlog')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'status: no items/ folder in {B}')
     if not proj:
         parent = os.path.dirname(B)
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
         proj = open(f'{B}/.project').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
-    print(render(facts(B), proj))
+    print(render(facts(B), proj, needs_only=needs))

@@ -45,8 +45,8 @@ notifications are a silent no-op and the board works the same.
 
 **Helpers** (installed with the framework, no hardcoded paths):
 - `~/.claude/make-it/backlog/bin/regen-board.py <board> [--project NAME]` -- renders `BOARD.md`.
-- `~/.claude/make-it/backlog/bin/status.py <board> [--project NAME]` -- prints the `status` report
-  (read-only; shares `regen-board.py`'s rules).
+- `~/.claude/make-it/backlog/bin/status.py <board> [--project NAME] [--needs-you]` -- prints the `status`
+  report (read-only; shares `regen-board.py`'s rules); `--needs-you` prints only its Needs you section.
 - `~/.claude/make-it/backlog/bin/sync-prs.py <board> --repo <repo> [--dry-run]` -- `reconcile --prs`:
   moves cards forward from their PRs' real state (needs `gh`; writes the cards, the caller syncs).
 - `~/.claude/make-it/backlog/bin/slack-notify.sh {started|done|raw} ...` -- reads `$BACKLOG_DIR`;
@@ -375,7 +375,8 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
 - **Burn-down** -- per week for 4 weeks: opened, closed, net, open at week's end; then a forecast
   ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
   take with no new ones).
-- **Needs you** -- Waiting on you, then held high-stakes cards, by priority then idle time.
+- **Needs you** -- Waiting on you (top 5), then **every** held P1, oldest first, with P2/P3 held
+  as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
   in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, a stale
   `PLAN.md`.
@@ -491,6 +492,10 @@ green gate or the harm gate** in the standing preamble.
    - auto-dispatched by /backlog-it dispatch
    - verdict at dispatch: not-built · confidence: 0.82
    ```
+
+5. **End with what needs you** -- `status.py <board> --needs-you`, every time (also under
+   `--dry-run`): the decisions waiting on you, and every held P1, oldest first, so a high-stakes
+   card that dispatch rightly never takes still comes back to you.
 
 Armed by default; `--dry-run` prints the picks without starting anything; everything is logged
 and reversible.

@@ -1,5 +1,5 @@
 687ce356c1dda5f2b3434d6ad4f3ddad00b76245ca3c4515708c9965e6f66bca  commands/argo-it.md
-52b5389ca5cef0bf6ba79f174e9ef523cf43877cf0341c994213a890d427c76d  commands/backlog-it.md
+d7198e9f81a68dd905bbb19ee655950bf0c07b70286f6222e9bc140b1984939d  commands/backlog-it.md
 aa893b942a32ddba98e10ba1f084c07965465355587607f650d5b338942e9a2d  commands/clear-it.md
 b686978d88e926efc62035ca5b7c920270dd8702bcbdc20a5f8e3d0f23d04e47  commands/debug-it.md
 f86495651652681f2c00ad25e7b5c6bd74e1f92b2a5c7afc39735a6232ea1c60  commands/demo-it.md
@@ -17,7 +17,7 @@ a9a690c764045e610e5662e3215fff1438c68ad4fb957b9f00b0f467d2ec387a  commands/wrap-
 9c33da87c37ae7ad0ff918691d2e6ec4d3c567a5340118b2c1a347e2c5061336  make-it/backlog/bin/check-plan.py
 b44fbdd2ff432f64444a72a0a54c7bbb140e4d8bdf8248d820bd209e8e3837e3  make-it/backlog/bin/regen-board.py
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
-9a36443bfb4a93521461feaea327827b8351b2a5319f01a2c2dd36151527a768  make-it/backlog/bin/status.py
+ba0a776d991de841ffa1f5cd7eb464d1d9bc9bf4c53a4a1b11fe24b4f7daeb42  make-it/backlog/bin/status.py
 f27f41518bed79235cbe393add5425a7689ca37347fd4d63b608d2227b3bb9df  make-it/backlog/bin/sync-prs.py
 d839c63a0dcad9e0fb0f7340e7f58cec044ba7abdb359d0dda27f11057a9daf3  make-it/confluence-docs/00-make-it-framework-overview.md
 ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/confluence-docs/01-make-it.md
@@ -36,7 +36,7 @@ b133b7b7c9b90c981c3359a75e3d2679ab11c6e524fb13b177d0aa7d73061a91  make-it/conflu
 8dd8411f4de8479a267aff0b1f3f8b978b99d6679a1c0ef9ce1cdeb979c634b1  make-it/confluence-docs/14-dispatch-it.md
 7c73e322b1e05ce3bb5af4f70c8ba0de12d42b1a6abd53b7b56c240986246fa0  make-it/confluence-docs/15-subagent-it.md
 c953fd1c24871772ab45e5b39149c62d7f9e892820c855375309bc4195f0719c  make-it/confluence-docs/16-backlog-it.md
-4c2fc8e7d4ae8791915f30bf7f27449e41c386ce9465b13960c98a8dec1b8e82  make-it/references/backlog-board.md
+3b6633a59ff6cf64a53d419536b06cab94392947cedd5cbfd7bc0bc54c6a9b8c  make-it/references/backlog-board.md
 7460d25c0e721a7dbf97fb0168cc4f20d3ea795b849eac18c73d88f18711df2c  make-it/references/build-standards.md
 6327bee67234e812fce9c1c240c967b75b3d14b62995f015b8107de202ea6aa0  make-it/references/build-verify-security.md
 a285b7ce6162b806a612e5d3be76a0fde8addabd4b69fdd8f610bc095b3cf6eb  make-it/references/deployment-profile-architecture.md
