@@ -5,7 +5,7 @@ Usage:  secret-scan.py [--repo PATH]     (default: the current directory)
         secret-scan.py --self-test       (runs test_secret_scan.py next to this file)
 
 Prints three labels -- unsaved edits, new files, saved-not-sent -- with each hit under its
-label as `file:line: NAME` (a quoted key as `(quoted key)`). Never a value: the gate must not leak what it is guarding.
+label as `file:line`. Nothing from a file's contents is ever printed: the gate must not leak what it is guarding.
 Exit 0 = no hits, 1 = hits, 2 = couldn't check (an unreadable scope must never look clean).
 Python 3.9+, stdlib only.
 """
@@ -28,7 +28,7 @@ GIT = ['git', '--no-replace-objects', '-c', 'color.ui=never', '-c', 'core.quoteP
        '-c', 'diff.noprefix=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.suppressBlankEmpty=false',
        '-c', 'log.showRoot=true']
 # --text + our own NUL check: a .gitattributes `binary` / `-diff` can't hide a text file.
-# -U1: a user's diff.context=0 can't drop the line before an added one (see hit_names).
+# -U1: a user's diff.context=0 can't drop the line before an added one (see hit).
 DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--text', '--no-renames', '--full-index', '-U1',
         '--submodule=short', '--src-prefix=a/', '--dst-prefix=b/']
 # Every unsent commit, merges included (-c: a line new to every parent is the merge's own).
@@ -206,12 +206,12 @@ def uncommented(s):
 
 
 def values(s, config, start=True):
-    """(NAME, VALUE, quoted) on a line. A NAME only starts outside a string literal, and the search resumes after
-    its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
-    alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read or printed as a NAME.
+    """(NAME, VALUE) on a line. A NAME only starts outside a string literal, and the search resumes after its
+    VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
+    alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read as a NAME.
     A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
-    Any other literal that isn't a VALUE is scanned by the same rules when it holds JSON (`json.loads('{...}')`),
-    and always in a config file (compose's `- "PASSWORD=..."`, `command: sh -c "... PASSWORD=..."`).
+    Any other literal that isn't a VALUE is scanned inside by the same rules (`json.loads('{...}')`,
+    `ssh host 'export PASSWORD="..."'`, compose's `- "PASSWORD=..."`).
     `start`: line start is a key position (not when the line goes on a ternary from the line before)."""
     i, dead = 0, set()
     while True:
@@ -229,12 +229,11 @@ def values(s, config, start=True):
             body, i = lit
             sep = SEP_AT.match(s, i)
             if not (sep and IDENT.fullmatch(body) and key_position(s, m.start(), start)):
-                if config or body[:1] in ('{', '['):
-                    yield from values(body, config)
+                yield from values(body, config)
                 continue
-            name, i, quoted = body, sep.end(), True
+            name, i = body, sep.end()
         else:
-            name, quoted = m.group(1), False
+            name = m.group(1)
         lit = literal_at(s, i)
         if lit:
             v, i = lit
@@ -245,26 +244,27 @@ def values(s, config, start=True):
         else:
             v = UNQUOTED.match(s, i).group()  # (an unclosed quote is no literal)
             i += len(v)
-        yield name, v, quoted
+        yield name, v
 
 
-def hit_names(text, config, prev=None):
-    """Secret-named NAMEs assigned a literal value on this line, as printed. Source code needs quotes.
-    `prev` is the last non-blank line before it in the new version: if that, less a trailing comment, ends inside
-    a ternary (`const pw = isProd ?`, `isProd ? // prod`, or `c1 ? c2 ? a :`), this line's start is no key
-    position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key. A YAML parent `env:` (no `?`) or a comment's
-    `?` (`# rotate?`, `"debug": False,  # in prod?`) isn't one: the `"password": ...` under it stays a key."""
+def hit(text, config, prev=None):
+    """Does this line assign a literal value to a secret-named NAME? Source code needs quotes.
+    `prev` is the last non-blank line before it in the new version: in source code, if that, less a trailing
+    comment, ends inside a ternary (`const pw = isProd ?`, `isProd ? // prod`, or `c1 ? c2 ? a :`), this line's
+    start is no key position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key. A YAML parent `env:` (no `?`)
+    or a comment's `?` (`# rotate?`, `"debug": False,  # in prod?`) isn't one: the `"password": ...` under it
+    stays a key. Config files have no ternary: a value ending in `?` (`WHERE id = ?`) can't hide the next key."""
     if not text.strip():
-        return  # a blank row holds no hit; skip decoding its (possibly huge) context line
+        return False  # a blank row holds no hit; skip decoding its (possibly huge) context line
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
-    p = (prev or b'').strip()
-    c = uncommented(p.decode('utf-8', 'surrogateescape')).rstrip()
-    ternary = c.endswith('?') or (c.endswith(':') and '?' in c)
-    start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
-    for name, v, quoted in values(s, config, start):
-        if len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v):
-            # A quoted key's text may itself be a value (a layout the key-position rules miss): never print it.
-            yield '(quoted key)' if quoted else name
+    start = True
+    if not config:
+        p = (prev or b'').strip()
+        c = uncommented(p.decode('utf-8', 'surrogateescape')).rstrip()
+        ternary = c.endswith('?') or (c.endswith(':') and '?' in c)
+        start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
+    return any(len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v)
+               for name, v in values(s, config, start))
 
 
 def is_config(path):
@@ -297,12 +297,11 @@ def collect(rows, blob, lfs):
         oid = LFS_OID.fullmatch(text)
         if oid:
             pointers[path, sha] = oid.group(1)
-        found = list(hit_names(text, is_config(path), prev))
-        if found:
+        if hit(text, is_config(path), prev):
             if (path, sha) not in binary:
                 binary[path, sha] = nul_in_head(blob(sha))
             if not binary[path, sha]:
-                hits.update((path, n, name) for name in found)
+                hits.add((path, n))
     for (path, sha), oid in pointers.items():
         data = blob(sha)
         if len(data) >= 1024 or not data.startswith(b'version https://'):
@@ -320,7 +319,8 @@ def collect(rows, blob, lfs):
             prev = None
             for n, line in enumerate(f, 1):
                 line = line.rstrip(b'\n')
-                hits.update((path, n, name) for name in hit_names(line, is_config(path), prev))
+                if hit(line, is_config(path), prev):
+                    hits.add((path, n))
                 if line.strip():
                     prev = line
     return hits
@@ -404,8 +404,8 @@ def main():
     out = sys.stdout.buffer
     for label, hits in zip(LABELS, scopes):
         out.write(label + b'\n')
-        for path, n, name in sorted(hits):
-            out.write(b'%s:%d: %s\n' % (shown(path), n, name.encode()))
+        for path, n in sorted(hits):
+            out.write(b'%s:%d\n' % (shown(path), n))
     return 1 if any(scopes) else 0
 
 
