@@ -207,17 +207,17 @@ If production indicators found, stop and ask. This is high-stakes per the approv
 "Hold on. This app looks like it is connected to your live system, not a test copy.
 
 What I found: [each indicator as found -- host or setting name only, never a password or key -- e.g. `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
-What would change: [mode full or owasp: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits a form, sends a delete or update request, slips extra fields into a record, fires requests at the same time, or floods it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [mode sast or deps, or guardrails with no AI features found: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
+What would change: [mode full or owasp: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits data or changes anything -- a delete or update request, extra fields slipped into a record, requests fired at the same time, or flooding it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [mode sast or deps, or guardrails with no AI features found: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
 Where it lands: [mode full or owasp: 'every read-only request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back.' / otherwise: 'nothing is sent to that live system or its AI service; what I find about this project stays in the attestation on this computer.']
 What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
 One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
 Pick one:
-- Go ahead with this project as it is, connected to [TARGET AS FOUND -- host or setting name only, never a password or key][mode full or owasp: ', read-only requests only'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
+- Go ahead with this project as it is, connected to [TARGET AS FOUND -- host or setting name only, never a password or key][mode full or owasp: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
 - Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
 - Not sure"
 
-Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. To scan a test copy: in `[FILE]`, point `[VARIABLE]` at your test database or test service instead of the live one, then run /nemo-it again." Nothing else runs.
+Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. [indicator found in a file: 'To scan a test copy: in `[FILE]`, point `[VARIABLE]` at your test database or test service instead of the live one, then run /nemo-it again.' / indicator from this terminal's own settings (`NODE_ENV`, `FLASK_ENV` or `DJANGO_SETTINGS_MODULE`): 'To scan a test copy: this terminal has `[VARIABLE]` set to `[VALUE]`. Change it to your test setting, or open a fresh terminal, then run /nemo-it again.']" Nothing else runs.
 
 **7. Install required tools and start the app (one ask):**
 
@@ -248,7 +248,7 @@ pip show pytest-html 2>/dev/null || echo "MISSING: pytest-html"
 pip show nemoguardrails 2>/dev/null || echo "MISSING: nemoguardrails"
 ```
 
-If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block) with up to two picks, one for the app start and one for the installs -- include only the parts and picks that apply:
+If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block -- except the start pick when the production check was passed with Go ahead: that pick touches live data, so it is high-stakes, the start option names the target, and a plain "yes" is not an answer) with up to two picks, one for the app start and one for the installs -- include only the parts and picks that apply:
 
 "Before I scan, [one thing / two things]:
 
@@ -261,10 +261,10 @@ If no tool is missing and no `START_COMMAND` is pending: say so in one line ("Al
 - **trivy** -- checks your Docker images and the libraries you use for known problems (installed with brew or Docker)
 - [etc., one line each, from the missing list above]
 
-What stands out: [production check passed with Go ahead: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
+What stands out: [production check passed with Go ahead and START_COMMAND pending: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
 One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out].
 
-[If START_COMMAND is pending:] Start the app? -- start [not on the production path: '(Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: '(not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
+[If START_COMMAND is pending:] Start the app? -- [not on the production path: 'start (Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: 'start it, connected to [TARGET AS FOUND, host or setting name only] (not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
 [If tools are missing:] Which tools? -- all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space) / only the ones you name / none."
 
 Wait for the pick(s). A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
@@ -575,7 +575,7 @@ Update user: "Dependency and container scanning complete. Found [N] vulnerable d
 
 **Run when mode is: full, owasp**
 **Requires: Running application (detected in preflight)**
-**If PASSIVE_ONLY=true (production detected): read-only requests only -- skip the ZAP API scan, the XSS form submissions, the HTTP method-override DELETE/PUT tests, the race-condition concurrent requests, the mass-assignment checks, and the rate-limit burst; record each as skipped in the attestation**
+**If PASSIVE_ONLY=true (production detected): send nothing that could change data or call the AI -- no form submission and no POST/PUT/PATCH/DELETE beyond signing in and out. This skips, among others: the ZAP API scan, the XSS form submissions, oversized inputs and special characters in input fields, malformed JSON to API endpoints, calls to API endpoints without a login or with a bad token, parameter tampering and extra fields, the HTTP method-override DELETE/PUT tests, IDOR ID changes in API calls, the race-condition concurrent requests, negative quantities, out-of-order workflow steps, the mass-assignment checks, and the rate-limit burst. Record each skipped check in the attestation with the reason "production detected"**
 
 If the app is not running, skip this phase entirely and record in the attestation:
 "Dynamic analysis was skipped because the application was not running during the scan."
@@ -748,7 +748,7 @@ Merge all findings from ZAP, Playwright, pytest, and SQLMap. Deduplicate. Store 
 
 **Run when mode is: full, guardrails**
 **Requires: AI_FEATURES_DETECTED=true (from preflight)**
-**If PASSIVE_ONLY=true (production detected): skip every prompt sent through the live app -- the behavioral suite and the API probing (code-level check 10); run only the code-level checks that do not call the AI (1-9), marked "PASS (code-level)"**
+**If PASSIVE_ONLY=true (production detected): skip every prompt sent through the live app -- the behavioral suite and the API probing (code-level check 10) -- and record each in the attestation as skipped with the reason "production detected"; run only the code-level checks that do not call the AI (1-9), recorded the code-level way**
 
 If AI features were NOT detected in preflight:
 
