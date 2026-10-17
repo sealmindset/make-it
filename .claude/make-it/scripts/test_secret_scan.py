@@ -986,6 +986,22 @@ class ReviewHoleCases(Base):
         r.write('.env.local', 'API_KEY=%s\n' % v)
         self.check(r.scan(), secrets=[v])
 
+    def test_env_example_in_ignored_folder_is_not_scanned(self):
+        r = self.fresh()
+        v = 'sk_test_realisticvalue123'
+        r.write('.gitignore', 'node_modules/\n')
+        r.commit('ignore')
+        r.write('node_modules/pkg/.env.example', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), secrets=[v], code=0)
+
+    def test_root_env_example_hidden_by_excludes_file_is_still_a_hit(self):
+        r = self.fresh()
+        v = 'sk_test_rootvalue12345'
+        self._ignore_env(r)
+        r.write('.env.example', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v], code=1)
+
+
 
 if __name__ == '__main__':
     unittest.main()
