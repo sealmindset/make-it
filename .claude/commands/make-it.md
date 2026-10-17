@@ -226,20 +226,21 @@ If YELLOW items exist (no RED):
 One ask for the whole list (consequential, per the approval block) -- it installs programs on
 their computer, so say it plainly:
 
-"Your computer is missing [N] of the tools I need: [for each: name + what it does in plain words,
-e.g. 'Docker -- runs your app on your computer while we build it']. I checked, and [it's / they're]
-not installed. I can install [it / them] now; it can take a few minutes, and your computer may ask
-for your password. Nothing else on your machine changes, and anything I install can be removed the
-normal way. [If Docker is on the list: 'One unusual thing: at larger companies Docker Desktop needs
-a paid license -- Rancher Desktop is the free alternative. If you know which one your company uses,
-tell me.' Otherwise: 'Nothing unusual -- this is the standard setup.'] The one thing to check: does
-your company want software installed a particular way (an approved software catalog, or through
-IT)? If so, tell me and we'll do it that way.
+"Your computer is missing [N] of the tools I need (I checked): [for each: name -- what it does,
+e.g. 'Docker -- runs your app on your computer while we build it']. Installing takes a few minutes
+and may ask for your password. Only these programs get installed, and each can be removed the
+normal way. [If Docker is on the list: 'Docker Desktop needs a paid license at larger companies;
+Rancher Desktop is free. Which does your company use? If you don't know, I'll use Rancher
+Desktop.'] If your company wants software installed its own way (an approved catalog, or through
+IT), say so.
 
 Should I install [it / them] now, or walk you through doing it yourself?"
 
-Wait for the pick, then do only what they picked: install, or walk them through it.
-- For Docker specifically: Docker Desktop or Rancher Desktop, as they said above
+Wait for the pick, then do only what they picked:
+- 'Install': install them. 'Walk me through': give the steps one tool at a time.
+- Docker: Docker Desktop if they named it; otherwise Rancher Desktop.
+- 'The company's way': install nothing. Treat the list as RED (below): tell them what to request
+  and that they come back and run /make-it again afterwards.
 - After fixes: "All set now! Let's start building your app."
 -> Proceed to Phase 1
 
@@ -459,13 +460,15 @@ reviewed, and hardened behind the scenes.
 - **User types:** [e.g., 'Admins can manage everything, regular users can view reports and submit data']
 - **Pages I'll create:** [List of screens]
 - **Security:** [e.g., 'Enterprise-grade security built in from the start']
+- [If the app uses AI] **AI:** [e.g., 'uses your Claude Code subscription -- no cost beyond your plan']
 
-All of this comes straight from your answers. It goes into a new folder on your computer
-([PROJECT_DIR]); nothing is published or shared yet, and the undo is to delete that folder.
-[Anything that departs from the standard setup, in plain words -- e.g. 'no sign-in screen',
-'a first version to test the idea, so no cloud setup', 'other companies will use it too' -- or:
-'Nothing unusual -- this is the standard setup.'] The one thing to check: the page list above is
-the app you pictured.
+Login, user types and pages come from your answers; how it's built, the security setup [and the
+AI provider] are standard choices I made for you -- say so if you'd rather pick. It goes into a
+new folder on your computer ([PROJECT_DIR]); nothing is published or shared yet, and the undo is
+to delete that folder. [Anything that departs from the standard setup, in plain words -- e.g.
+'no sign-in screen', 'a first version to test the idea, so no cloud setup', 'other companies will
+use it too' -- or: 'Nothing unusual -- this is the standard setup.'] The one thing to check: who
+can do what -- the user types above (for an app with no sign-in: the list of what it does).
 
 Ready for me to start building? This will take a few minutes."
 
@@ -1155,7 +1158,10 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     Wait for their answer. A plain 'ok' isn't an answer -- ask which of the two it is. Go on
     with the build only on 'it's paused'. On 'I can't pause it', stop the build here: tell them
     in one line to ask their IT team to allow Docker image downloads, and that their project
-    files are saved in [PROJECT_DIR] so nothing is lost. After the Docker builds complete,
+    files are saved in [PROJECT_DIR] so nothing is lost; once IT allows the downloads, they open
+    that folder and run /resume-it, which picks up from the plan and files saved there (no
+    `.make-it-state.md` exists yet; /resume-it reads app-context.json and scans the folder
+    instead). After the Docker builds complete,
     remind them to turn the tool back on.
 
 22. **Build and start containers:**
@@ -1457,6 +1463,9 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
   (what they'd lose, if anything -- or 'nothing'); and the one thing to check (is the new
   version the one they want from now on, not a one-off). Then: "Change it now, or keep going
   as planned and I'll note it in your to-do list?" Wait for the pick; do only what they picked.
+  If the change touches sign-in or who can do what, it is high-stakes (per the approval block):
+  before redoing anything, the user names exactly what changes for which user type (e.g. "managers
+  can also delete reports"); "yes, change it" alone isn't enough -- ask them to spell it out.
 
 **If a build step fails:**
 - Do NOT show the error to the user
