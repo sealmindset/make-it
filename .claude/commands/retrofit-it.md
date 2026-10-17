@@ -360,18 +360,19 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 - Your [pages/features/business logic] will work exactly as they do now
 
 **What I'll add:**
-- [Gap 1]: [What it gives the user + why it matters. E.g., "Secure login -- so only
+1. [Gap 1]: [What it gives the user + why it matters. E.g., "Secure login -- so only
   authorized people can access your app" NOT "OIDC authentication with JWT cookies"]
-- [Gap 2]: [Same plain-language pattern]
-- ...
+2. [Gap 2]: [Same plain-language pattern]
+3. ...
 
 **What I'll adjust:**
-- [Change 1]: [What the user will notice, if anything. E.g., "Your tables will get
+[Continue the numbering -- the user picks items by number below.]
+4. [Change 1]: [What the user will notice, if anything. E.g., "Your tables will get
   sorting and filtering built in" NOT "Replace HTML tables with DataTable component"]
-- ...
+5. ...
 
 [If phased mode:]
-**I'll do this in [N] steps, checking with you between each one:**
+**I'll do this in [STEP_COUNT] steps, checking with you between each one:**
 1. **Setting up your development environment** -- no risk to your existing features
 2. **Preparing your database for users and permissions** -- I'll verify everything works before continuing
 3. **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
@@ -396,45 +397,62 @@ for the other choice].
 your data and logic into it. Recommended: [step-by-step upgrade / fresh build] -- [why, one
 line]. The catch: [the strongest reason for the other choice].
 
-**How I know:** I read [N] files -- every page, every data table, and how login works today
-([current login mechanism, or 'there is none']).
-**Where it happens:** on this computer only; nothing is sent anywhere. Before I touch anything
-I save a snapshot of your app as it is now, so I can put it back exactly like this at any
-point. [If there are unsaved changes: 'You have unsaved changes; I'll save them first so the
-snapshot is complete.']
+**How I know:** I read [FILES_READ] files -- [if fully analyzed: 'every page, every list of
+data your app keeps, and how login works today'; if the codebase was too large to read in
+full (error-handling): 'the parts that matter most: [what was read, e.g. the pages, the
+routes, the data your app keeps, and how login works today], plus what you confirmed about
+the rest'] ([current login mechanism, or 'there is none']).
+**Where it happens:** on this computer[; if the app has no database, or its database runs
+here too: ' only; nothing is sent anywhere'; if its database lives elsewhere (connection
+settings in .env / compose point at another host): ', except your database at [host] -- the
+new tables and the change to your users list land there']. Before I touch anything I save a
+snapshot of your app's files as they are now, so I can put the files back exactly like this
+at any point. [If the app already has a database: 'The new tables and the change to your
+users list stay in your data unless I back it up first.'] [If there are unsaved changes:
+'You have unsaved changes; I'll save them first so the snapshot is complete.']
 **What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
-replaced, not just extended', 'your users table gets a new column', 'this is the biggest set
-of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
+replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
+set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
 **One thing to check:** look at 'What stays the same' -- is anything your app does today
 missing from that list?
 
-Tell me what to include: **all [N] items**, or name the ones to leave out[; and, if your app
-has a login: keep it or replace it] -- or **Not now**."
+Tell me what to include: **all [ITEM_COUNT] items**, or the numbers to leave out[; and, if
+your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
+or fresh build] -- or **Not now**."
 
 **Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
-what, and the database). A plain yes is not an answer -- ask which (all [N], or by name). Build
-only what they included; anything left out goes to TODO.md with what they'll need to handle
-themselves (see error-handling). If a left-out item is needed by one they kept, say which in
-one line and ask them to pick again. **Not now:** change nothing and stop. [If Very High and
-they pick the fresh build: help migrate per error-handling; nothing below runs.]
+what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
+number)[; and, if Very High, which route]. Build only what they included; anything left out
+goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
+error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
+left-out item is needed by one they kept, say which in one line and ask them to pick again.
+**Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
+error-handling; nothing below runs. **Step-by-step upgrade** -- continue below with the items
+they included.]
 
-**After they pick, create a pre-retrofit snapshot:**
+**After they pick, create the pre-retrofit snapshot** (once -- a re-run keeps the earlier one;
+their unsaved changes, if any, are saved first as announced above, with .env kept out of the
+save):
 
 ```bash
-# Create a tag marking the exact state before any retrofit changes
-git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+if git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null; then
+  echo "pre-retrofit snapshot already exists -- keeping it"
+else
+  if [ -n "$(git status --porcelain)" ]; then
+    grep -qxF '.env' .gitignore 2>/dev/null || printf '\n.env\n' >> .gitignore
+    git add -A && git reset -q -- .env
+    git diff --cached --quiet || git commit -q -m "Save pre-retrofit state"
+  fi
+  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
+fi
 ```
 
-Tell user (only if they have uncommitted changes):
-"I noticed you have some unsaved changes. Let me save those first so we have a clean
-starting point."
-```bash
-git add -A && git commit -m "Save pre-retrofit state"
-git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes"
-```
+If the snapshot already existed, tell user: "I'm keeping the snapshot from the earlier run --
+it's still your app as it was before any upgrade."
 
 This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
-the exact state before any retrofit changes were made.
+the exact state of the files before any retrofit changes were made (the database is not
+part of it -- see the plan ask's undo line).
 
 </step>
 
@@ -882,10 +900,13 @@ never a plain "ready?":
 app starts in its new sandbox and every page I found still loads'].
 
 What changed: [this step's user-facing scope, one line].
-Everything is saved on this computer. If anything is off, I can put the app back to how it was
-before this step, or before the upgrade started.
+Everything is saved on this computer. If anything is off, I can put the app's files back to how
+they were before this step, or before the upgrade started. [If the app already had a database
+and this step changed it: 'The new tables and the change to your users list stay in your data;
+putting the files back does not remove them.']
 What stands out: [anything that differs from a typical upgrade of this kind -- or 'nothing'].
-One thing to check: open [URL] and try [the feature this step touched most].
+One thing to check: [open [URL] and try [the feature this step touched most]; for a step with
+nothing on screen (Step 5, tests): 'nothing new to look at -- the tests ran and passed'].
 
 Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
 secure login and changes who can see what -- the biggest change in the plan'].
@@ -945,6 +966,8 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 
 For each failing check:
+- Belongs to an item the user left out at the plan ask (Phase 4): skip it -- no auto-fix, no
+  block; TODO.md already lists it as "left out by your choice"
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
 - `[WARN]` items: note in TODO.md, continue
@@ -1075,6 +1098,6 @@ When you're ready to deploy, just type: **/ship-it**"
 
 6. **Stack migration is a last resort** -- Only recommend migration if the existing stack literally cannot support a required foundation (e.g., no OIDC library exists for the framework, or the framework is abandoned/EOL).
 
-7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate.
+7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate at the plan ask (Phase 4, "Your login" -- one stop); the user picks keep or replace there.
 
 </guardrails>
