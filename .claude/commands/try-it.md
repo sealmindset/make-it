@@ -709,8 +709,9 @@ applies beyond this one fix, offer to remember it (`learnings.md`): "Want me to 
 
 **If user says they're happy / done:**
 - Celebrate! "Awesome! Your app is working just how you wanted it."
-- Offer any queued agent lessons (`learnings.md`): one message, one yes/no each; wait for the
-  answer before showing next steps (skip if nothing is queued)
+- Offer any queued agent lessons (`learnings.md`): one message, each numbered with its evidence
+  and what it would change; the user answers per item. Wait for the answer before showing next
+  steps (skip if nothing is queued)
 - Route to next steps:
   "Here's what you can do next:
   - **/ship-it** -- Deploy your app so others can use it

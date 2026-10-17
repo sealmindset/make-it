@@ -584,8 +584,9 @@ unless they ask. Full spec: `worktree-workflow.md`.
 2b. Screens added or changed? UI gate Part 2 (`ui-gate.md`): built screens next to the approved
    preview -- wait for the yes before step 3 (its learnings go through step 3)
 3. Offer learnings (`learnings.md`): a correction the user made that is a reusable rule, plus any
-   agent lessons queued during the work -- one plain yes/no each, in one message. Skip if nothing
-   is queued; otherwise wait for the answer before the next question.
+   agent lessons queued during the work -- one message, each numbered with its evidence and what
+   it would change; the user answers per item. Skip if nothing is queued; otherwise wait for the
+   answer before the next question.
 4. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
 
 </step>
