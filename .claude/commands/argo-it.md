@@ -431,16 +431,24 @@ fi
 If syntax errors are found: note them for the one ask at the end of step 3 (don't stop here).
 Never show raw Python tracebacks.
 
-**3e. Secret leak scan on the diff:**
+**3e. Secret leak scan on what step 4 will send:**
 ```bash
-# Scan staged changes for potential secrets
-DIFF=$(git diff --cached 2>/dev/null || git diff HEAD 2>/dev/null)
-echo "$DIFF" | grep -iE '(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}' | \
-  grep -v '\.example\|TODO\|placeholder\|changeme\|your-.*-here' || true
+# Nothing is staged yet, so scan what step 4 will actually send: unsaved edits, new files
+# (ignored ones excluded), and saved changes not sent yet (step 1's range). Keep the two
+# results apart -- the ask below treats a hit in a saved change differently.
+PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["\x27][^"\x27]{8,}'
+SKIP='\.example\|TODO\|placeholder\|changeme\|your-.*-here'
+{ git diff HEAD; git ls-files --others --exclude-standard -z | xargs -0 cat; } 2>/dev/null \
+  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # unsaved edits and new files
+git diff origin/{current_branch}...HEAD 2>/dev/null \
+  | grep -iE "$PATTERN" | grep -v "$SKIP" || true      # saved, not sent yet
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
-the approval block: the user names what to move, a plain yes isn't an answer.
+the approval block: the user names what to move, a plain yes isn't an answer. If a value is in a
+saved, unsent change, say so plainly in the ask: "**[VAR_NAME] in [file]** is already in a saved
+change that hasn't been sent. Moving it now takes it out of the current files but not out of the
+saved history, so the safe choice is **stop here** and get help from your DevOps team."
 
 "I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
@@ -456,7 +464,8 @@ out yourself?"
 
 Move only the ones they named: the value goes to `.env`, the code gets an `os.getenv()` /
 `process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
-nothing is saved or sent. If any found value is still in the code (not named, or called a
+nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
+your files. If any found value is still in the code (not named, or called a
 sample), stop and say which one is holding things up -- never send with a found secret still in
 the code, whatever they say.
 
@@ -467,7 +476,8 @@ found ([N] problem(s) in [files], in plain words); that nothing is saved or sent
 fixing means I change those lines of your code -- you'll see each change, and your project
 history keeps the old version; [what stands out, or 'nothing unusual']; and the one thing to
 check: are any of these files ones you're in the middle of editing? Then: "Fix them now, or
-stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent. On
+stop here?" Do only what they picked -- 'stop here' leaves everything unsaved and unsent, and the
+small fixes already made earlier in this step (3a, 3b, 3c) stay in your files. On
 'fix them now': make the fixes, list each one in a line (file, what changed, in plain words),
 re-run the step-3 checks, then continue to step 4 on the 'Update {hostname}' already given. Never
 show raw error output, linter names, or tool output to the user.
@@ -480,9 +490,10 @@ the manifests automatically.
 
 ```bash
 # Commit if there are uncommitted changes. Never stage .env (3e may have just moved a secret
-# into it) -- make sure it's ignored first, and exclude it from staging either way.
-grep -qxF '.env' .gitignore 2>/dev/null || echo '.env' >> .gitignore
-git add -A -- . ':!.env'
+# into it) -- make sure it's ignored first (own line, even if .gitignore lacks a final
+# newline), then unstage it in case it's tracked. Works when .env is already ignored too.
+grep -qxF '.env' .gitignore 2>/dev/null || printf '\n.env\n' >> .gitignore
+git add -A && git reset -q -- .env
 git commit -m "Deploy: [brief description of changes]" || true
 
 # Push current branch -- CI takes over from here
@@ -1861,13 +1872,14 @@ git push origin {current_branch}
 in ONBOARDING-K8S.md** (namespace, secrets, TLS cert, DNS, Argo Application).
 Share that file with your DevOps team."
 
-**Option 2 (local test):** only offered when step 3 found a local context; never run `kubectl
-apply` against any other context.
+**Option 2 (local test):** only offered when step 3 found a local context; pin every command to
+that context ({local_context} = the `kubectl config current-context` value step 3 found) so a
+context switch in another terminal can't send this to a shared cluster.
 ```bash
 docker compose build
-kubectl apply -k {manifest_dir}/dev/
-kubectl get pods -n {namespace}
-kubectl get svc -n {namespace}
+kubectl --context {local_context} apply -k {manifest_dir}/dev/
+kubectl --context {local_context} get pods -n {namespace}
+kubectl --context {local_context} get svc -n {namespace}
 ```
 
 Then say what came up, in plain words, and go back to the step-3 pick without option 2 (the
@@ -2201,7 +2213,7 @@ existing pattern.
 
 **If kubectl is not available, or its current context isn't a local cluster (for local testing):**
 - Skip local test option
-- "Local K8s testing requires kubectl and a local cluster (Rancher Desktop, minikube, etc.). You can still push to the deploy branch for Argo CD."
+- "Trying it on this computer needs a local Kubernetes (Rancher Desktop, Docker Desktop, minikube, or kind). [Yours isn't set up / Your computer is currently pointed at a shared cluster, not a local one], so I've left that option out. You can still send it to GitHub -- the deployment runs from there."
 
 **If no CI system is detected:**
 - Still generate the GitHub Actions workflow as default
@@ -2240,7 +2252,7 @@ existing pattern.
 - ALWAYS generate both dev and prod environments
 - ALWAYS skip mock services (they're local dev only)
 - ALWAYS generate ONBOARDING-K8S.md with DevOps and Developer sections
-- ALWAYS offer local K8s testing as an option before pushing
+- ALWAYS offer local K8s testing as an option before pushing when kubectl points at a local cluster
 - ALWAYS use `subPath: pgdata` for PostgreSQL PVC mounts (prevents lost+found conflict)
 - ALWAYS auto-detect split-service architecture -- never ask the user, just inform them
 - ALWAYS include concurrency control on the deploy branch in CI workflows
