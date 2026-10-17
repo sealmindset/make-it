@@ -21,9 +21,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LABELS = (b'== unsaved edits ==', b'== new files ==', b'== saved, not sent ==')
 
 # Pin every setting that changes what git prints, so a user's config can't hide or garble a line.
-# (cwd is always the repo top, so diff.relative is a no-op.)
-GIT = ['git', '-c', 'color.ui=never', '-c', 'core.quotePath=false', '-c', 'diff.noprefix=false',
-       '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'log.showRoot=true']
+# (cwd is always the repo top, so diff.relative is a no-op.) --no-replace-objects: `git replace`
+# can't swap in a clean stand-in, since push sends the real objects.
+GIT = ['git', '--no-replace-objects', '-c', 'color.ui=never', '-c', 'core.quotePath=false',
+       '-c', 'diff.noprefix=false', '-c', 'diff.mnemonicPrefix=false', '-c', 'diff.suppressBlankEmpty=false',
+       '-c', 'log.showRoot=true']
 # --text + our own NUL check: a .gitattributes `binary` / `-diff` can't hide a text file.
 DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--text', '--no-renames', '--full-index',
         '--submodule=short', '--src-prefix=a/', '--dst-prefix=b/']
@@ -43,7 +45,7 @@ KEY_KINDS = {'api', 'private', 'access', 'secret', 'signing', 'encryption', 'cli
 UNQUOTED = re.compile(r'[^ \t\r\n]*')
 # [^}] inside {{ }}: a lazy .*? here backtracks exponentially on a crafted value.
 REFERENCE = re.compile(r'(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}\})+')
-PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|your-.*-here|your_.*_here|<.*>|xxxx'
+PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|mock|your-.*-here|your_.*_here|<.*>|xxxx'
                          r'|\*\*\*\*', re.I)
 
 
@@ -126,22 +128,23 @@ def secret_named(name):
 
 def hit_names(text, config):
     """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes.
-    The search resumes after a secret-named value, so `${X_SECRET:-default}` isn't re-read as `X_SECRET: ...`."""
+    The search resumes after every NAME's value, never inside it, so part of a value
+    (`URL=postgres://app:MyPassword=...`) is never read -- or printed -- as a NAME."""
     s = text.decode('utf-8', 'surrogateescape')  # any byte is fine; lengths count characters
     m = ASSIGN.search(s)
     while m:
         name, i = m.group(1), m.end()
-        resume, v = i, None
-        if secret_named(name):
-            q = s[i:i + 1]
-            if q in ('"', "'", '`'):
-                j = s.find(q, i + 1)
-                if j >= 0:
-                    v, resume = s[i + 1:j], j + 1
-            elif config:
-                v = UNQUOTED.match(s, i).group()
-                resume = i + len(v)
-        if v is not None and len(v) >= 8 and not REFERENCE.fullmatch(v) and not PLACEHOLDER.search(v):
+        resume, v, named = i, None, secret_named(name)
+        q = s[i:i + 1]
+        j = s.find(q, i + 1) if q in ('"', "'", '`') else -1
+        if j >= 0:
+            v, resume = s[i + 1:j], j + 1
+        elif config and q in ('{', '[') and not named:
+            resume = i + 1  # a YAML/TOML/JSON flow opener (`env: {PASSWORD: "..."}`) holds NAMEs of its own
+        elif config:  # (an unclosed quote is no literal: source code resumes right after the sep)
+            v = UNQUOTED.match(s, i).group()
+            resume = i + len(v)
+        if named and v is not None and len(v) >= 8 and not REFERENCE.fullmatch(v) and not PLACEHOLDER.search(v):
             yield name
         m = ASSIGN.search(s, resume)
 
@@ -156,6 +159,11 @@ def kept_out(path):
     if base == b'.env.example':
         return False
     return (b'/' + path).endswith(b'/.aws/credentials') or any(fnmatch.fnmatchcase(base, p) for p in KEEP_OUT)
+
+
+def shown(path):
+    """A control byte in a name could split a hit or forge a label line: print it as \\xNN."""
+    return re.sub(rb'[\x00-\x1f\x7f]', lambda m: b'\\x%02x' % m.group()[0], path)
 
 
 def collect(rows, is_binary):
@@ -191,7 +199,11 @@ def scan(repo):
          if not kept_out(r[0])), on_disk)
 
     rows = []
-    for path in git_out(top, 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0'):
+    untracked = set(git_out(top, 'ls-files', '--others', '--exclude-standard', '-z').split(b'\0'))
+    # argo-it step 4 un-ignores and stages every .env.example, so scan each one whatever its ignore state.
+    untracked.update(p for p in git_out(top, 'ls-files', '--others', '--ignored', '--exclude=.env.example',
+                                        '-z').split(b'\0') if p.rsplit(b'/', 1)[-1] == b'.env.example')
+    for path in untracked:
         full = os.path.join(top, path)
         if not path or kept_out(path) or not stat.S_ISREG(os.lstat(full).st_mode):
             continue  # a nested repo shows as a directory
@@ -226,7 +238,7 @@ def main():
     for label, hits in zip(LABELS, scopes):
         out.write(label + b'\n')
         for path, n, name in sorted(hits):
-            out.write(b'%s:%d: %s\n' % (path, n, name.encode()))
+            out.write(b'%s:%d: %s\n' % (shown(path), n, name.encode()))
     return 1 if any(scopes) else 0
 
 
