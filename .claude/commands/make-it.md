@@ -228,8 +228,8 @@ their computer, so say it plainly:
 
 "Your computer is missing [N] of the tools I need (I checked): [for each: name -- what it does,
 e.g. 'Docker -- runs your app on your computer while we build it']. Installing takes a few minutes
-and may ask for your password. Only these programs get installed, and each can be removed the
-normal way. [If Docker is on the list: 'Docker Desktop needs a paid license at larger companies;
+and may ask for your password. Only these programs (and anything they need to run) get installed,
+and each can be removed the normal way. [If Docker is on the list: 'Docker Desktop needs a paid license at larger companies;
 Rancher Desktop is free. Which does your company use? If you don't know, I'll use Rancher
 Desktop.'] If your company wants software installed its own way (an approved catalog, or through
 IT), say so.
@@ -461,14 +461,17 @@ reviewed, and hardened behind the scenes.
 - **Pages I'll create:** [List of screens]
 - **Security:** [e.g., 'Enterprise-grade security built in from the start']
 - [If the app uses AI] **AI:** [e.g., 'uses your Claude Code subscription -- no cost beyond your plan']
+- [Web apps] **Also built in:** the standard admin roles (Super Admin, Admin, Manager, User) and
+  admin screens (users and roles, activity log, AI Instructions)
 
 Login, user types and pages come from your answers; how it's built, the security setup [and the
 AI provider] are standard choices I made for you -- say so if you'd rather pick. It goes into a
-new folder on your computer ([PROJECT_DIR]); nothing is published or shared yet, and the undo is
-to delete that folder. [Anything that departs from the standard setup, in plain words -- e.g.
-'no sign-in screen', 'a first version to test the idea, so no cloud setup', 'other companies will
-use it too' -- or: 'Nothing unusual -- this is the standard setup.'] The one thing to check: who
-can do what -- the user types above (for an app with no sign-in: the list of what it does).
+new folder on your computer ([PROJECT_DIR]); nothing is published or shared yet, and if you want
+it gone, ask me to remove it -- the folder and the copy that's running. [Anything that departs
+from the standard setup, in plain words -- e.g. 'no sign-in screen', 'a first version to test the
+idea, so no cloud setup', 'other companies will use it too' -- or: 'Nothing unusual -- this is the
+standard setup.'] The one thing to check: who can do what -- the user types and the built-in
+admin roles above (for an app with no sign-in: the list of what it does).
 
 Ready for me to start building? This will take a few minutes."
 
@@ -1150,19 +1153,19 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     certificate error]. Could you pause it for the next few minutes, just while I download and
     build? While it's paused, that one layer of protection is off for your computer; nothing in
     the app changes, and you turn it back on afterwards -- I'll remind you. Nothing unusual --
-    this comes up on most company laptops. The one thing to check: whether your company allows
+    this comes up often on company laptops. The one thing to check: whether your company allows
     pausing it. If not, don't -- tell me and I'll stop here instead.
 
     Tell me either 'it's paused' or 'I can't pause it'."
 
     Wait for their answer. A plain 'ok' isn't an answer -- ask which of the two it is. Go on
     with the build only on 'it's paused'. On 'I can't pause it', stop the build here: tell them
-    in one line to ask their IT team to allow Docker image downloads, and that their project
-    files are saved in [PROJECT_DIR] so nothing is lost; once IT allows the downloads, they open
-    that folder and run /resume-it, which picks up from the plan and files saved there (no
+    in a few lines to ask their IT team to allow Docker image downloads; that their project
+    files are saved in [PROJECT_DIR] so nothing is lost; and that once IT allows the downloads,
+    they open that folder, run /resume-it and say "finish building my app". Before stopping, add
+    one line to TODO.md: "Finish the build: start the app and run the checks". (Agent note: no
     `.make-it-state.md` exists yet; /resume-it reads app-context.json and scans the folder
-    instead). After the Docker builds complete,
-    remind them to turn the tool back on.
+    instead.) After the Docker builds complete, remind them to turn the tool back on.
 
 22. **Build and start containers:**
     ```bash
@@ -1454,7 +1457,12 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
 
 **If the user wants to change something mid-build:**
 - Don't panic. Acknowledge the change.
-- Assess impact: minor (UI tweak) vs. major (different architecture)
+- Assess impact: minor (UI tweak) vs. major (different architecture). Either way, if the change
+  touches sign-in or who can do what, it is high-stakes (per the approval block): before redoing
+  anything, the user names the specific -- for sign-in, the new sign-in method and who it applies
+  to; for permissions, what changes for which user type (e.g. "managers can also delete reports").
+  A request that already names it meets the gate; a vague one ("open it up a bit", "yes, change
+  it") doesn't -- ask them to spell it out.
 - Minor: Make the change and continue
 - Major: one decision-ready ask (consequential, per the approval block), in a few plain lines:
   what changes in the plan (which pages or parts get redone, in their words); what makes it
@@ -1463,9 +1471,6 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
   (what they'd lose, if anything -- or 'nothing'); and the one thing to check (is the new
   version the one they want from now on, not a one-off). Then: "Change it now, or keep going
   as planned and I'll note it in your to-do list?" Wait for the pick; do only what they picked.
-  If the change touches sign-in or who can do what, it is high-stakes (per the approval block):
-  before redoing anything, the user names exactly what changes for which user type (e.g. "managers
-  can also delete reports"); "yes, change it" alone isn't enough -- ask them to spell it out.
 
 **If a build step fails:**
 - Do NOT show the error to the user
