@@ -52,6 +52,7 @@ This skill has 5 phases:
 @~/.claude/make-it/templates/app-context.md
 @~/.claude/make-it/scaffolds/fastapi-nextjs/README.md
 @~/.claude/make-it/references/ui-gate.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -210,7 +211,7 @@ Only ask if the automated checks suggest issues:
 **4. Categorize results into three buckets:**
 
 **GREEN (Ready):** Tool is installed and working -- no action needed.
-**YELLOW (Quick Fix):** Tool is missing but can be installed right now. Offer to install it.
+**YELLOW (Quick Fix):** Tool is missing but can be installed right now. One ask for all of them (below).
 **RED (Blocker):** Access request needed -- requires approval and may take 1-2 days.
 
 **5. Present results in plain language:**
@@ -221,8 +222,24 @@ If ALL GREEN:
 
 If YELLOW items exist (no RED):
 "Almost ready! I just need to set up a couple of things first."
-- For each yellow item, either install automatically or walk the user through it
-- For Docker specifically: guide them through Docker Desktop or Rancher Desktop installation
+
+One ask for the whole list (consequential, per the approval block) -- it installs programs on
+their computer, so say it plainly:
+
+"Your computer is missing [N] of the tools I need: [for each: name + what it does in plain words,
+e.g. 'Docker -- runs your app on your computer while we build it']. I checked, and [it's / they're]
+not installed. I can install [it / them] now; it can take a few minutes, and your computer may ask
+for your password. Nothing else on your machine changes, and anything I install can be removed the
+normal way. [If Docker is on the list: 'One unusual thing: at larger companies Docker Desktop needs
+a paid license -- Rancher Desktop is the free alternative. If you know which one your company uses,
+tell me.' Otherwise: 'Nothing unusual -- this is the standard setup.'] The one thing to check: does
+your company want software installed a particular way (an approved software catalog, or through
+IT)? If so, tell me and we'll do it that way.
+
+Should I install [it / them] now, or walk you through doing it yourself?"
+
+Wait for the pick, then do only what they picked: install, or walk them through it.
+- For Docker specifically: Docker Desktop or Rancher Desktop, as they said above
 - After fixes: "All set now! Let's start building your app."
 -> Proceed to Phase 1
 
@@ -443,7 +460,17 @@ reviewed, and hardened behind the scenes.
 - **Pages I'll create:** [List of screens]
 - **Security:** [e.g., 'Enterprise-grade security built in from the start']
 
+All of this comes straight from your answers. It goes into a new folder on your computer
+([PROJECT_DIR]); nothing is published or shared yet, and the undo is to delete that folder.
+[Anything that departs from the standard setup, in plain words -- e.g. 'no sign-in screen',
+'a first version to test the idea, so no cloud setup', 'other companies will use it too' -- or:
+'Nothing unusual -- this is the standard setup.'] The one thing to check: the page list above is
+the app you pictured.
+
 Ready for me to start building? This will take a few minutes."
+
+This is one ask for the whole plan (consequential, per the approval block). A change to any line
+above is an answer: fix the plan and show it again.
 
 **Web apps -- UI gate, Part 1 (`ui-gate.md`):** end the summary with "First, I'll show you a
 clickable preview of your app." instead of "Ready for me to start building?...". Then write
@@ -1111,9 +1138,25 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
     pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
     ```
-    If detected (or if Docker build fails with TLS/certificate errors), ask the user to
-    temporarily disable their SSL-inspecting proxy. Wait for confirmation. Remind them to
-    re-enable after Docker builds complete.
+    If detected (or if Docker build fails with TLS/certificate errors), the user has to pause
+    that tool themselves. It is a security tool, so this is active confirmation, per the
+    approval block -- ask in plain words:
+
+    "Your computer runs a security tool that inspects web traffic ([NAME, e.g. Zscaler]) --
+    [I found it running / it's blocking the downloads my build needs: the build stopped with a
+    certificate error]. Could you pause it for the next few minutes, just while I download and
+    build? While it's paused, that one layer of protection is off for your computer; nothing in
+    the app changes, and you turn it back on afterwards -- I'll remind you. Nothing unusual --
+    this comes up on most company laptops. The one thing to check: whether your company allows
+    pausing it. If not, don't -- tell me and I'll stop here instead.
+
+    Tell me either 'it's paused' or 'I can't pause it'."
+
+    Wait for their answer. A plain 'ok' isn't an answer -- ask which of the two it is. Go on
+    with the build only on 'it's paused'. On 'I can't pause it', stop the build here: tell them
+    in one line to ask their IT team to allow Docker image downloads, and that their project
+    files are saved in [PROJECT_DIR] so nothing is lost. After the Docker builds complete,
+    remind them to turn the tool back on.
 
 22. **Build and start containers:**
     ```bash
@@ -1407,7 +1450,13 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
 - Don't panic. Acknowledge the change.
 - Assess impact: minor (UI tweak) vs. major (different architecture)
 - Minor: Make the change and continue
-- Major: Explain what needs to change and confirm before proceeding
+- Major: one decision-ready ask (consequential, per the approval block), in a few plain lines:
+  what changes in the plan (which pages or parts get redone, in their words); what makes it
+  major (what's already built that it touches, and the time it adds); that it can be changed
+  back later the same way they asked for this; what's unusual compared with just continuing
+  (what they'd lose, if anything -- or 'nothing'); and the one thing to check (is the new
+  version the one they want from now on, not a one-off). Then: "Change it now, or keep going
+  as planned and I'll note it in your to-do list?" Wait for the pick; do only what they picked.
 
 **If a build step fails:**
 - Do NOT show the error to the user
