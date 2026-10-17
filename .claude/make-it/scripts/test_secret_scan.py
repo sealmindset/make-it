@@ -1211,7 +1211,7 @@ class ReReview3Cases(Base):
         for v in ('AcmeProdPassword', 'AdminPassword', 'ghp_MySecretToken'):
             self._no_slice(res, v, ok=('password', 'PASSWORD', 'token', 'TOKEN'))
             self.assertNotIn(_b(v), blob)
-        self.no_leak(res, [])
+        self.check(res)
 
     def _one(self, rel, text, hit, secret):
         r = self.fresh()
@@ -1248,7 +1248,7 @@ class ReReview3Cases(Base):
         res = r.scan()
         self._no_slice(res, v)
         self.assertNotIn(b'c2VjcmV0', res.out + res.err)
-        self.no_leak(res, [v])
+        self.check(res, secrets=[v])
 
     def _lfs_repo(self):
         r = self.fresh()
@@ -1277,6 +1277,90 @@ class ReReview3Cases(Base):
         self.assertEqual(res.code, 2, 'stderr=%r' % res.err[:300])
         self.assertEqual(res.out, b'')
         self.no_leak(res, [v])
+
+
+class ReReview4Cases(Base):
+    """Confirmed counterexamples from task-1-review4.md, each on its exact input."""
+
+    def _no_slice(self, res, secret, n=6, ok=()):
+        blob = res.out + b'\n' + res.err
+        s = _b(secret)
+        for i in range(len(s) - n + 1):
+            sl = s[i:i + n]
+            if any(sl in _b(o) for o in ok):
+                continue
+            self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
+
+    def _one(self, rel, text, hit, secret):
+        r = self.fresh()
+        r.write(rel, text)
+        self.check(r.scan(), new=[hit], secrets=[secret])
+
+    SETUP = ("kubectl create secret generic app-secrets \\\n"
+             "  --from-literal=JWT_SECRET='zq9FAKEjwtA1xyz9' \\\n"
+             "  --from-literal=POSTGRES_PASSWORD='zq9FAKEpgB1xyz9'\n")
+
+    def _from_literal(self, rel):
+        r = self.fresh()
+        r.write(rel, self.SETUP)
+        self.check(r.scan(), new=[rel + ':2: JWT_SECRET', rel + ':3: POSTGRES_PASSWORD'],
+                   secrets=['zq9FAKEjwtA1xyz9', 'zq9FAKEpgB1xyz9'])
+
+    def test_1a_from_literal_in_shell_script_hits(self):
+        self._from_literal('setup.sh')
+
+    def test_1b_from_literal_in_onboarding_doc_hits(self):
+        self._from_literal('ONBOARDING-K8S.md')
+
+    def test_1c_terraform_var_equals_hits(self):
+        self._one('infra.sh', 'terraform apply -var=db_password="zq9FAKEtfC1xyz9"\n',
+                  'infra.sh:1: db_password', 'zq9FAKEtfC1xyz9')
+
+    def test_1d_helm_set_equals_hits(self):
+        self._one('deploy.sh', 'helm install x --set=auth.password="zq9FAKEhelmD1x9"\n',
+                  'deploy.sh:1: auth.password', 'zq9FAKEhelmD1x9')
+
+    def test_1e_yaml_item_from_literal_hits(self):
+        self._one('job.yml', '        - --from-literal=password=zq9FAKEyamlE1x9\n',
+                  'job.yml:1: password', 'zq9FAKEyamlE1x9')
+
+    def _clean(self, files, secret):
+        r = self.fresh()
+        for rel, text in files.items():
+            r.write(rel, text)
+        res = r.scan()
+        self.check(res, secrets=[secret])
+        self._no_slice(res, secret, ok=('password', 'Password'))
+        self.assertNotIn(_b(secret), res.out + res.err)
+
+    def test_2_multiline_ternary_never_prints_the_value(self):
+        self._clean({'ml.js': 'const pw = isProd ?\n  "AcmeProdPassword" : "localdevpass1";\n',
+                     'ml.php': "$pw = $isProd ?\n  'AcmeProdPassword' : 'localdevpass1';\n"},
+                    'AcmeProdPassword')
+
+    def test_3_shell_test_never_prints_the_value(self):
+        self._clean({'yoda.sh': 'if [ "AcmeProdPassword" = "$(cat /run/pw)" ]; then echo ok; fi\n',
+                     'yoda2.sh': 'if [[ "AcmeProdPassword" = "$(cat /run/pw)" ]]; then echo ok; fi\n'},
+                    'AcmeProdPassword')
+
+    @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
+    def test_5a_lfs_unsaved_edit_hits(self):
+        r = ReReview3Cases._lfs_repo(self)
+        r.write('s.json', '{"name": "demo"}\n')
+        r.commit('s')
+        r.push()
+        v = 'sk-live-lfs-unsaved-1234'
+        r.append('s.json', '"apiKey": "%s"\n' % v)
+        self.check(r.scan(), unsaved=['s.json:2: apiKey'], secrets=[v])
+
+    @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
+    def test_5b_lfs_saved_commit_hits(self):
+        r = ReReview3Cases._lfs_repo(self)
+        r.branch('feat')
+        v = 'sk-live-lfs-saved-5678'
+        r.write('t.json', '{"apiKey": "%s"}\n' % v)
+        r.commit('add t')
+        self.check(r.scan(), saved=['t.json:1: apiKey'], secrets=[v])
 
 
 if __name__ == '__main__':
