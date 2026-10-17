@@ -958,7 +958,7 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
-### v1.44.0 -- Fewer asks, same gates: six skills ask through the approval block
+### v1.44.0 -- Fewer asks, no gate lost: six skills ask through the approval block
 
 `/resume-it`, `/make-it`, `/argo-it`, `/retrofit-it`, `/nemo-it`, `/try-it` and the learnings ask now
 ask through `references/approval-block.md`. Routine asks are removed: the skill proceeds and says
@@ -971,13 +971,13 @@ a plain yes. No bare yes/no remains in these skills.
 |---|---|---|---|
 | resume-it | 30 | 24 | 4 kept + 1 conditional (sign-in, permissions, database changes) |
 | make-it | 14 (10 interview) | 14 | 1 kept + 1 raised (pausing a security tool; sign-in / who-can-do-what changes mid-build) |
-| argo-it | 23 | 17 | 6 kept (sends, deploys, the deploy branch), 2 tightened (the secret check before a redeploy, a troubleshooting fix's send), 2 added (the deploy save's keep-out list, its failed-save stop) |
+| argo-it | 23 | 17 | 6 kept, 2 of them tightened (the secret check before a redeploy, the troubleshooting re-send when CI never ran) + 2 added (the deploy save's keep-out list, its failed-save stop) |
 | retrofit-it | 11 | 9 | 6 kept + 1 raised + 1 added (the plan, the checkpoints, the live database) |
 | nemo-it | 3 | 2 | 1 kept + 1 raised (the live-system scan, the production-path start) |
 | try-it | 6 | 4 | 1 kept (pausing a security tool) |
 | learnings (learnings.md + callers) | 6 | 6 | none (one batched, decision-ready message)[^learnings] |
 
-[^learnings]: learnings.md itself plus its callers in try-it (two), resume-it, wrap-it and subagent-it; the try-it and resume-it ones are counted in those rows too.
+[^learnings]: learnings.md itself plus the callers this card reworked: try-it (two), resume-it, wrap-it and subagent-it; the try-it and resume-it ones are counted in those rows too. ui-gate.md's offer is on card E03-S16.
 
 Gate column: *kept* = the same gate, now active confirmation; *raised* = an existing ask moved up
 to high-stakes; *added* = a new gate; *tightened* = a kept gate that now fires in more cases;
@@ -994,7 +994,7 @@ Also fixed on the gates' own paths:
   a saved change stops the send. Its inline scan is a stopgap; a tested rebuild is filed as E02-S5.
 - Deploy and snapshot saves never stage `.env` files, keys, SSH keys, keychains, credential files
   or local databases, at any depth, and a failed save stops before anything is sent.
-- retrofit-it's snapshot is honest about what it can undo (files, not data), and a failed save
+- retrofit-it's snapshot is honest about what it can undo (your files, not your .env settings or data), and a failed save
   stops the run.
 - nemo-it's read-only mode for live systems is really read-only (no form submissions, no sign-in,
   no injection probes) and fails closed: the active checks run only when the scan explicitly says

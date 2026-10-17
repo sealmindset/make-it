@@ -535,9 +535,10 @@ Skip to Phase 4 (Report). Tell user: "Everything looks great!"
 **If smoke tests found issues:**
 
 Failures marked `left_out` are not fixed: the user chose to leave that item out, so fixing it
-would put it back in. Report them in Phase 4 under "Left out by your choice" and go on. If
-every failure is one of these, skip to Phase 4 and tell the user: "Your app works. The items you
-chose to leave out still show as missing -- that's expected."
+would put it back in. Report them in Phase 4 under "Left out by your choice" and go on; they
+never count as unfixed. If every failure is one of these, it counts as all passed: skip to
+Phase 4 and tell the user: "Everything looks great! The items you chose to leave out still show
+as missing -- that's expected."
 
 For the rest, tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
@@ -570,7 +571,7 @@ For the rest, tell user: "I noticed a couple of things to clean up. Give me a mo
 
 **If some issues can't be fixed after 3 attempts:**
 Tell user: "I got most things working! There's [N] thing(s) I wasn't able to fix automatically.
-I'll note what they are so we can come back to them."
+I'll note what they are so we can come back to them." ([N] never counts left-out items.)
 - Add unfixed issues to TODO.md
 - Continue to handoff with a note about what's not working
 
@@ -587,7 +588,7 @@ Generate `TRY-IT-REPORT.md` in the project root:
 ```markdown
 # [PROJECT_NAME] -- Try-It Report
 > Tested: [TIMESTAMP]
-> Status: [All Passing / X of Y Passing]
+> Status: [All Passing / X of Y Passing][if any left out: ' -- [N] left out by your choice']
 
 ## Summary
 
@@ -633,6 +634,10 @@ Screenshots of each page (per role) are saved in `.try-it/screenshots/`:
 - **To log in as [Role 2]:** Click "Sign In", pick "[User 2 Name]" from the login screen
 - **To log in as [Role 3]:** Click "Sign In", pick "[User 3 Name]" from the login screen
 
+## Left Out by Your Choice
+[Only if any failure was marked left_out: each item in plain language. It shows as missing
+because you chose to leave it out, not because something broke.]
+
 ## Issues Found
 [If any issues remain, describe them in plain language here]
 
@@ -667,7 +672,8 @@ I tested:
 - Every page in your app ([X] pages)
 - All the behind-the-scenes features (API, permissions, data)
 
-**Everything passed!**
+**Everything passed!**[if any left out: ' The [N] item(s) you chose to leave out still show as
+missing -- that's expected.']
 
 Here's how to explore your app:
 
@@ -689,7 +695,9 @@ If SOME FAILURES:
 "Your app is running! Most things are working great.
 
 I tested [X] things and [Y] passed. There are [Z] thing(s) I wasn't able to fix
-automatically -- I've noted them in `TRY-IT-REPORT.md`.
+automatically -- I've noted them in `TRY-IT-REPORT.md`.[if any left out: ' The [N] item(s) you
+chose to leave out still show as missing -- that's expected.']
+([Z] and the list below never include left-out items.)
 
 You can still explore your app right now:
 [Same browser instructions as above]
