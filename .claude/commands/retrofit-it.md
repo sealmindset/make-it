@@ -442,7 +442,7 @@ for real]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
-If the database lives elsewhere and they picked the upgrade: unless they say the database at [host] is a test copy (not sure counts as not a test copy),
+If the database lives elsewhere and they picked anything other than Not now or the fresh build: unless they say the database at [host] is a test copy (not sure counts as not a test copy),
 stop and change nothing:
 "I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
 database your settings point at, and there is no undo for that -- so I won't run it unless I
@@ -469,13 +469,17 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 if [ -n "$(git status --porcelain)" ]; then
   grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
-  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*' '*.db' 'credentials*.json' 'id_rsa*' 'id_ed25519*' '*.p12' '*.pfx'; do
+  for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
+           '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
     grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
   done
-  { git add -A . && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
-    ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*' \
-    ':(glob)**/*.db' ':(glob)**/credentials*.json' ':(glob)**/id_rsa*' ':(glob)**/id_ed25519*' \
-    ':(glob)**/*.p12' ':(glob)**/*.pfx'; } || fail "could not save the unsaved changes"
+  # :(top,...) = from the repo root, so a nested repo's pre-staged files stay out too
+  { git add -A . && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
+    ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
+    ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
+    ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+    ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
+    ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
   git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
 fi
 git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
@@ -946,8 +950,7 @@ your settings file (.env): [the settings added or changed, by name, values hidde
 Your files are saved on this computer[; if the database lives elsewhere: ', and the data
 changes are in your database at [host]']. If anything is off, I can put the app's files back to
 how they were before this step, or before the upgrade started[; if this step or an earlier step changed .env: ' (your
-settings file, .env, isn't part of that[; if this step changed it: " -- the list above is what I changed in it"]; settings
-changed in earlier steps stay changed when going back)']. [If the app already had a
+settings file, .env, isn't part of that, so the settings I changed stay changed[; if this step changed it: " -- the list above is what I changed in it"])']. [If the app already had a
 database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
 'the new lists of roles and permissions', 'the sample records and test accounts I added']:
 putting the files back does not remove them.']
