@@ -155,9 +155,8 @@ class HarnessCases(Base):
         self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
 
     def test_d_added_then_removed_in_unsent_commits_still_a_hit(self):
-        # QUESTION FOR THE OWNER: the brief says "added then removed (no hit)", but its scope rule
-        # (every commit in HEAD --not --remotes, added lines only) and the old harness both report
-        # it: pushing the branch sends the secret in history.  This test follows the scope rule.
+        # The brief: "added then removed in unsent commits (a hit: both commits are sent)".
+        # Every commit in HEAD --not --remotes is scanned, added lines only.
         r = self.fresh()
         v = 'added-then-removed-value-777'
         r.branch()
@@ -801,6 +800,7 @@ class CouldNotCheckCases(Base):
                             stderr=subprocess.PIPE, timeout=60)
         res = Result(cp, 0)
         self.assertEqual(res.code, 2)
+        self.assertEqual(res.out, b'')
         self.assertNotIn(b'x.py:', res.out)
         self.no_leak(res, [v])
 
@@ -810,6 +810,7 @@ class CouldNotCheckCases(Base):
         cp = subprocess.run([sys.executable, SCRIPT], cwd=td.name, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=60)
         self.assertEqual(cp.returncode, 2)
+        self.assertEqual(cp.stdout, b'')
 
     def test_missing_path(self):
         td = tempfile.TemporaryDirectory()
@@ -817,6 +818,7 @@ class CouldNotCheckCases(Base):
         cp = subprocess.run([sys.executable, SCRIPT, '--repo', os.path.join(td.name, 'nope')],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
         self.assertEqual(cp.returncode, 2)
+        self.assertEqual(cp.stdout, b'')
 
 
 class AmendmentCases(Base):
@@ -879,6 +881,110 @@ class AmendmentCases(Base):
         self._write_named(r, 'naïve.py', v3)
         self.check(r.scan(), new=['my file.py:1: TOKEN', 'naïve.py:1: TOKEN', 'q"t.py:1: TOKEN'],
                    secrets=[v1, v2, v3])
+
+
+class ReviewHoleCases(Base):
+    """Review attacks (2026-10-17): value re-read as a name, replace refs, git pins, ignored .env.example."""
+
+    def test_value_is_not_reread_as_a_name_in_compose(self):
+        r = self.fresh()
+        r.write('docker-compose.yml', '      - DATABASE_URL=postgres://app:MyPassword=2024xyzQ@db/app\n')
+        res = r.scan()
+        self.check(res, secrets=['MyPassword=2024xyzQ'])
+        self.assertNotIn(b'MyPassword', res.out + res.err)
+
+    def test_value_is_not_reread_as_a_name_in_py(self):
+        r = self.fresh()
+        r.write('u.py', 'url = "postgres://app:MyPassword=2024xyzQ@db/app"\n')
+        res = r.scan()
+        self.check(res, secrets=['MyPassword=2024xyzQ'])
+        self.assertNotIn(b'MyPassword', res.out + res.err)
+
+    def test_git_replace_cannot_hide_a_saved_secret(self):
+        r = self.fresh()
+        v = 'replace-hidden-secret-9876'
+        r.branch()
+        r.append('app.py', kv('API_KEY', v))
+        r.commit('add')
+        a = r.git('rev-parse', 'HEAD').decode().strip()
+        r.write('app.py', BASE)
+        r.commit('rm')
+        c = r.git('commit-tree', a + '^^{tree}', '-p', a + '^', '-m', 'stand-in').decode().strip()
+        r.git('replace', a, c)
+        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+
+    def _pin(self, v, setup):
+        r = self.fresh()
+        r.branch()
+        setup(r)
+        r.append('app.py', kv('API_KEY', v))
+        r.commit('secret')
+        return r
+
+    def test_pin_diff_suppress_blank_empty(self):
+        v = 'blank-empty-secret-value-11'
+        r = self.fresh()
+        r.git('config', 'diff.suppressBlankEmpty', 'true')
+        r.branch()
+        r.append('app.py', '\n' + kv('API_KEY', v) + '\n')
+        r.commit('secret')
+        self.check(r.scan(), saved=['app.py:3: API_KEY'], secrets=[v])
+
+    def test_pin_gitattributes_binary(self):
+        v = 'attr-binary-secret-value-22'
+        r = self._pin(v, lambda r: r.write('.gitattributes', '*.py binary\n'))
+        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+
+    def test_pin_gitattributes_minus_diff(self):
+        v = 'attr-nodiff-secret-value-33'
+        r = self._pin(v, lambda r: r.write('.gitattributes', '*.py -diff\n'))
+        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+
+    def test_pin_textconv_driver_printing_nothing(self):
+        v = 'textconv-secret-value-4444'
+
+        def setup(r):
+            r.write('.gitattributes', '*.py diff=hide\n')
+            r.git('config', 'diff.hide.textconv', "sh -c 'echo redacted' #")
+        r = self._pin(v, setup)
+        self.check(r.scan(), saved=['app.py:2: API_KEY'], secrets=[v])
+
+    def test_pin_log_show_root_false_with_secret_in_root_commit(self):
+        v = 'root-commit-secret-value-55'
+        r = self.fresh(remote=False)
+        r.git('config', 'log.showRoot', 'false')
+        r.git('checkout', '-q', '--orphan', 'rooted')
+        r.git('rm', '-q', '-rf', '.')
+        r.write('app.py', kv('API_KEY', v))
+        r.commit('root')
+        self.check(r.scan(), saved=['app.py:1: API_KEY'], secrets=[v])
+
+    def _ignore_env(self, r):
+        ig = os.path.join(r.root, 'global-ignore')
+        with open(ig, 'w') as f:
+            f.write('.env*\n')
+        r.git('config', 'core.excludesFile', ig)
+
+    def test_ignored_untracked_env_example_is_still_scanned(self):
+        r = self.fresh()
+        v = 'sk-live-realkey-123456'
+        self._ignore_env(r)
+        r.write('.env.example', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), new=['.env.example:1: API_KEY'], secrets=[v])
+
+    def test_ignored_nested_env_example_is_still_scanned(self):
+        r = self.fresh()
+        v = 'sk-live-realkey-123456'
+        self._ignore_env(r)
+        r.write('config/.env.example', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), new=['config/.env.example:1: API_KEY'], secrets=[v])
+
+    def test_ignored_env_local_stays_no_hit(self):
+        r = self.fresh()
+        v = 'sk-live-realkey-123456'
+        self._ignore_env(r)
+        r.write('.env.local', 'API_KEY=%s\n' % v)
+        self.check(r.scan(), secrets=[v])
 
 
 if __name__ == '__main__':
