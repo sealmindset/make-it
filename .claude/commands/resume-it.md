@@ -482,7 +482,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | AI features exist but no brain layer (BN01-BN13 all GAP) | "Your app has AI features but no persistent memory -- the AI starts fresh every conversation. Want me to add a brain layer so it learns user preferences, remembers decisions, and gets smarter over time?" |
 | Code quality missing (Q01-Q13 gaps) | "Your app doesn't have linting, formatting, or pre-commit hooks set up yet -- DevOps will flag this. Want me to add code quality tools? They catch problems before code gets committed." |
 | CI quality gate workflow missing (Q13) | "Your app has local quality checks but no CI workflow to enforce them on every PR. Want me to add the quality gate workflow? It runs all checks automatically and generates an attestation artifact." |
-| Standards gaps found (critical) | "I found [N] security/auth patterns that should be added before deployment ([name each]) -- which should I apply?" (active confirmation -- the ask below) |
+| Standards gaps found (critical) | "I found [N] must-do updates before deployment ([name each]) and [M] improvements ([name each]) -- which group should I apply?" (active confirmation -- the ask below) |
 | Standards gaps found (important) | "There are [N] improvements available since your app was built (like [example: activity monitoring, admin settings]). Want me to bring your app up to date?" |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
@@ -492,23 +492,25 @@ If the catch-up scan found gaps, include a brief summary in the status:
 
 "I also compared your app against the latest build standards and found [N] things
 that can be improved:
-- [Critical count] security/auth updates -- each one changes how sign-in or permissions work:
-  [name each in plain words, e.g., 'sign-out becomes a button instead of a link', 'roles come
-  from your database instead of the sign-in provider', 'every data request checks a permission']
-- [Important count] feature enhancements (e.g., admin settings, activity logs)
+- [Critical count] must-do updates before deployment -- some of these change how sign-in or
+  permissions work: [name each in plain words, marking the ones that touch sign-in or
+  permissions, e.g., 'sign-out becomes a button instead of a link (sign-in)', 'roles come from
+  your database instead of the sign-in provider (permissions)', 'a README that explains your app']
+- [Important count] improvements -- [name each in plain words, marking the ones that add
+  database tables, e.g., 'admin settings page (adds a table)', 'activity log']
 - [Nice-to-have count] optional improvements -- I'll list these in your to-do file, not apply them
 
-Everything is built in a separate copy we can throw away, so nothing lands until you've seen
-it. Before you decide, look down the security/auth list: check that none of those is something
-you set up that way on purpose.
+Everything is built in a separate copy we can throw away if you don't like it. Before you
+decide, look down the must-do list: check that none of the sign-in or permission changes is
+something you set up that way on purpose.
 
-Which should I apply -- the security/auth updates, the enhancements, or both? (I'd start with
-the security/auth updates -- the catch is they're the ones most likely to change how sign-in
-behaves, so plan to try the app right after.)"
+Which should I apply -- the must-do updates, the improvements, or both? (I'd start with the
+must-do updates -- the catch is some of them change how sign-in behaves, so plan to try the app
+right after.)"
 
-The user names the group(s). Security/auth changes sign-in and permissions, so this is active
-confirmation, per the approval block: a plain "yes" isn't an answer -- ask which before doing
-anything.
+The user names the group(s). The must-do group changes sign-in and permissions and the
+improvements can add database tables, so this is active confirmation, per the approval block: a
+plain "yes" isn't an answer -- ask which before doing anything.
 
 **If the user accepts the catch-up work:**
 
@@ -518,7 +520,9 @@ Route to a dedicated catch-up workflow, applying only the group(s) the user name
 3. Note nice-to-have gaps in TODO.md (WARN items)
 4. After each batch, run existing tests to verify nothing broke
 5. Update CHANGELOG.md with what was added
-6. Report results: "Your app is now up to date with the latest standards."
+6. Report results: what was applied (by group, naming each change) and what is left (the group
+   the user didn't name, if any, plus the optional items filed in TODO.md). Say "up to date with
+   the latest standards" only when both groups were applied.
 
 This is effectively a mini-retrofit that runs within /resume-it, using the
 same check IDs and fix patterns from build-standards.md.
@@ -564,7 +568,8 @@ unless they ask. Full spec: `worktree-workflow.md`.
 - Work that splits into **3+ ordered tasks**: write a plan first (the Plan format in
   `backlog-board.md` -- next to its card when the project has a board, else
   `.make-it/plans/<slug>.md`), show it decision-ready (the approval block's five parts: what
-  changes, what you looked at, the undo, what is unusual, the one thing to check), wait for the
+  changes, what you looked at, what it touches and the undo, what is unusual, the one thing to
+  check), wait for the
   go, mark it `status: approved`, then execute
   it via Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): a
   fresh implementer subagent per task + per-task review (spec + quality + safeguards) + a final whole-branch
@@ -946,23 +951,26 @@ all marked to carry over:
 - [x] [prompt name]
 - [x] [prompt name]
 - ...
-Tell me which to carry over -- 'all of them', or name the ones to leave out (those stay in the
-legacy tables only). If a prompt you use isn't on this list, stop me: I've missed something
-and will look before touching anything."
+Tell me which to carry over -- 'all of them', or name the ones to leave out. A left-out prompt
+won't appear in the new editor and your app's AI stops using it after the upgrade; its text is
+kept in the renamed old table, so I can bring it over later if you ask. If a prompt you use
+isn't on this list, stop me: I've missed something and will look before touching anything."
 
 **For Tier 3 Custom (protection):**
 
-"Your app has a custom Tier 3 prompt management implementation with advanced features:
+"Your app has its own custom-built prompt management with advanced features:
 - [list detected features: import/export, orchestration, agent-binding, etc.]
 - [N] tables, [N] routes, [N] pages
 
-The scaffold upgrade would **replace** this with the simpler Tier 2 standard, which does NOT
-include [list Tier 3 features that would be lost]. **Recommended: keep what you have** -- the
-catch is you'd go without [list the standard's features the snapshot shows yours lacks].
+The upgrade would **replace** this with the simpler standard version, which does NOT include
+[list Tier 3 features that would be lost]. **Recommended: keep what you have** -- the catch is
+you'd go without [list the standard's features the snapshot shows yours lacks].
+
+The one thing to check: does your team use anything on that first list today? If yes, keep.
 
 I'll leave it alone unless you tell me otherwise. To replace it anyway, type exactly:
-'Yes, replace my Tier 3 implementation' -- the only undo is for me to put the old version back
-from your saved history."
+'Yes, replace my custom prompt management' -- the only undo is for me to put the old version
+back from your saved history."
 
 Anything other than that exact phrase keeps the current implementation (one stop, active
 confirmation -- no separate "skip it?" ask).
@@ -1130,7 +1138,8 @@ records decisions, and gets smarter over time. Here's what this includes:
 
 Your existing AI agents ([list agents]) will automatically benefit -- no changes needed to them.
 Brain features are OFF by default (BRAIN_FEATURES_ENABLED=false) until you're ready to enable.
-Everything is added alongside what exists, in a separate copy we can throw away before it lands.
+Everything is added alongside what exists, in a separate copy we can throw away if you don't
+like it.
 
 This adds database tables and permissions, so I need you to pick one, not just say yes:
 - **Add it** -- 4 new tables, 6 new permissions (brain.own.* and brain.admin.*), and memories
@@ -1140,7 +1149,10 @@ This adds database tables and permissions, so I need you to pick one, not just s
 - **Not now** -- nothing changes; I'll note it in your to-do file"
 
 Wait for the pick (active confirmation, per the approval block); a plain yes isn't an answer --
-ask which. 'Not now': add the TODO.md line and return to the menu; skip Phases 3-4.
+ask which. 'Not now': put app-context.json's `brain_features` back the way Phase 1 found it
+(absent, or its earlier values -- so the BN01-BN13 checks don't turn on and the next catch-up
+scan doesn't report the declined feature as gaps), add the TODO.md line and return to the menu;
+skip Phases 3-4.
 
 **Phase 3: Implement**
 
