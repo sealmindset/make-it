@@ -263,38 +263,48 @@ Tell user the port if it changed:
 SSL-inspecting proxies break Docker image pulls and builds. Before building:
 
 ```bash
-# Check if common SSL-inspecting proxies are running
-pgrep -x "Zscaler" >/dev/null 2>&1 || pgrep -f "ZscalerApp" >/dev/null 2>&1 || \
-pgrep -f "Netskope" >/dev/null 2>&1 || pgrep -f "GlobalProtect" >/dev/null 2>&1
+# Check each common SSL-inspecting proxy separately, so every running one is named
+for tool in Zscaler Netskope GlobalProtect; do
+  pgrep -f "$tool" >/dev/null 2>&1 && echo "$tool running"
+done
 ```
 
 If a proxy is detected (or if a Docker build fails with TLS/certificate errors), this is a
 high-stakes stop (per the approval block): the user is turning off a security tool on their own
-computer, so they name what they paused -- never a plain "done". Fill `[TOOL]` with the name the
-check found (Zscaler, Netskope or GlobalProtect). If the check found nothing and a build failed
-with a certificate error, use "your network security tool (often Zscaler, Netskope or
-GlobalProtect)" and the second evidence line.
+computer, so they state the specifics -- never a plain "done". Fill `[TOOL]` with every name the
+check printed (Zscaler, Netskope or GlobalProtect; all of them if more than one matched). If the
+check found nothing and a build failed with a certificate error, use "your network security tool
+(often Zscaler, Netskope or GlobalProtect)", the second evidence line, and the 'don't have one'
+sentence.
 
 Tell user: "Before I can put your app together, I need you to pause [TOOL] for a little while.
 [If detected: 'I can see it running on your computer, and it blocks the downloads your app
 needs.' If a build failed: 'The download just failed in the way these tools make it fail.']
 While it's paused, that tool isn't checking your computer's internet traffic -- nothing about
-your app or your files changes, and it switches itself back on when the time you pick runs out.
-I'll remind you to turn it back on the moment the downloads finish. Normally I handle everything
-myself; this is the one thing I can't do for you.
+your app or your files changes. If it offers a time limit, it turns itself back on when that
+runs out; either way, I'll remind you to turn it back on as soon as I'm done downloading,
+whether or not everything worked. Normally I handle everything myself; this is the one thing I
+can't do for you.
 The one thing to check: it's your company's tool and you're allowed to pause it. If you're not
 sure, say 'not sure' and I'll stop here instead.
+[Only when the check found nothing: 'If you don't have a tool like this, say "don't have one"
+and I'll keep working on the download problem myself.']
 To pause it: find [TOOL] in your menu bar or system tray, choose 'Disable' or 'Pause,' and pick
-the longest time option. Then tell me which tool you paused -- for example 'Zscaler is paused'."
+a time long enough for the downloads. Then tell me which tool you paused and how long you paused
+it for."
 
-**Wait for their answer.** A tool's name means go; 'not sure', 'can't', or 'no' means stop; a
-plain 'done' or 'ok' is not an answer -- ask which tool they paused. Do NOT attempt Docker
-builds while the proxy is active. On stop: tell the user "Your app can't be put together on
-this network while that tool is running. Ask whoever manages your computer, or try again from
-another network." Then run the save-state step and end.
+**Wait for their answer.** A tool's name plus how long means go (note the time as `[TIME]` for
+the reminder); 'not sure', 'can't', or 'no' means stop; 'don't have one' (offered only when the
+check found nothing) means the tool wasn't the cause -- go back to the normal "If build fails"
+diagnosis in step 2 and keep fixing; a plain 'done' or 'ok', or a name without a time, is not
+an answer -- ask for what's missing. Do NOT attempt Docker builds while the proxy is active. On
+stop: tell the user "Your app can't be put together on this network [if detected: 'while [TOOL]
+is running' / otherwise: 'while something is blocking the downloads']. Ask whoever manages your
+computer, or try again from another network." Then run the save-state step and end.
 
-After all Docker builds and image pulls complete, remind the user:
-"All done with the heavy lifting! You can re-enable your security tool now."
+Once the downloading is over -- the builds and pulls worked, or you've stopped trying -- remind
+the user: "All done with the heavy lifting! You can turn [TOOL] back on now -- no need to wait
+out the [TIME] you gave it."
 
 **2. Build the containers:**
 
@@ -693,7 +703,8 @@ or 'I can't click the save button.' I'll figure out what's wrong and fix it.
 
 **After any fix the user asked for, once the re-test passes:** if their correction is a rule that
 applies beyond this one fix, offer to remember it (`learnings.md`): one message, the rule
-numbered with its evidence and what it would change; the user answers per item
+numbered with its evidence and what it would change; the user answers per item. Wait for the
+answer before going on.
 
 **If user reports a visual/UX issue:**
 - "The header looks weird" / "The colors are wrong" / "Can you make the font bigger?"
@@ -787,8 +798,11 @@ numbered with its evidence and what it would change; the user answers per item
 - If still not running: "Docker needs to be started. On your Mac, open the Docker app
   from your Applications folder (it has a whale icon). I'll continue on my own as soon as
   it's up -- no need to tell me."
-- Routine, no stop: keep running `docker info` every few seconds and continue as soon as it
-  succeeds
+- Routine, no stop: keep running `docker info` every few seconds for up to 3 minutes, posting
+  a short line about every 30 seconds ("Still waiting for Docker to start..."), and continue as
+  soon as it succeeds
+- After 3 minutes without success: "Docker still isn't up. Open it from your Applications
+  folder, then run /try-it again." Run the save-state step and end -- never wait forever
 
 **If docker-compose.yml doesn't exist:**
 "It looks like the development environment wasn't set up during the build.
@@ -815,7 +829,8 @@ Let me create it now..."
 - Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
 - Use the ask in build-and-start step 1 (with its "a build failed" evidence line) and wait for
   the same answer; a stop there is a stop here. Do NOT retry builds while the SSL proxy is active.
-- After Docker builds complete, remind user: "All done! You can re-enable your security tool now."
+- Once the downloading is over (the builds worked, or you've given up on them), remind user:
+  "All done! You can turn [TOOL] back on now -- no need to wait out the [TIME] you gave it."
 
 **If port conflicts can't be resolved:**
 - Find the next 5 available ports
