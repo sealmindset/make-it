@@ -443,19 +443,20 @@ Never show raw Python tracebacks.
 # Each scan prints its label first; the ask below goes by the label a hit sits under.
 # SKIP is matched on the line after the file tag, never on the path (lib/placeholder_image.py
 # can hold a real secret). The git flags pin the output the awk tagger reads, whatever the
-# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, unquoted names.
+# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, and names unquoted unless they hold a
+# double quote, backslash or control character (git still quotes those).
 PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
 SKIP='\(\.example\|TODO\|placeholder\|changeme\|your-.*-here\)'
 TAG='/^\+\+\+ b\//{f=substr($0,7);sub(/\t$/,"",f);next} /^\+/{print f":"$0}'
 echo "== unsaved edits =="
 git -c core.quotePath=false diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD -- . ':!.env' \
-  | awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
+  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
 echo "== new files =="
 git ls-files --others --exclude-standard -z -- . ':!.env' \
   | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "^[^:]*:.*$SKIP" || true   # one at a time, name shown
 echo "== saved, not sent =="
 git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -p --cc --format= HEAD --not --remotes \
-  | awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
+  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
@@ -466,7 +467,9 @@ the approval block: the user names what to move, a plain yes isn't an answer.
 it out of the send. Say so plainly, and what to do next; offer nothing else:
 
 "I found what looks like a password or secret key in a change you already saved but haven't sent
-yet: **[VAR_NAME] in [file]** [, one per value found]. Secrets should never be saved in code, so
+yet: **[VAR_NAME] in [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
+under the other labels: I also found **[VAR_NAME] in [file]** in changes you haven't saved yet; that
+one needs moving too.] Secrets should never be saved in code, so
 I won't send this. Because it's already in your saved history, moving the value now wouldn't take
 it out of what gets sent -- so I'm stopping here. I haven't saved or sent anything new; the small
 fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
@@ -1859,7 +1862,7 @@ If I send this to GitHub, then from now on, every time anyone sends code to this
 builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
 deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
 system watches.] [If step 2 listed saved changes other than the one step 1 just made: This also
-sends the [M] other saved changes you haven't sent yet.] Nothing goes live until your DevOps
+sends the [M] other saved changes you haven't sent yet, which touch [one line on what they touch].] Nothing goes live until your DevOps
 team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, this send goes
 live too. To undo, I'd remove these files and send again -- the pipeline stops, but whatever
 already went live stays until it's replaced. [What stands out, e.g. 'the database runs inside
