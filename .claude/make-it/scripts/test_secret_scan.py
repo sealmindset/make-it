@@ -1192,13 +1192,11 @@ class AdversarialRound1Cases(Base):
 class ReReview3Cases(Base):
     """Confirmed counterexamples from task-1-review3.md, each on its exact input."""
 
-    def _no_slice(self, res, secret, n=6, ok=()):
+    def _no_slice(self, res, secret, n=6):
         blob = res.out + b'\n' + res.err
         s = _b(secret)
         for i in range(len(s) - n + 1):
             sl = s[i:i + n]
-            if any(sl in _b(o) for o in ok):
-                continue
             self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
 
     def test_1_ternary_branches_never_print(self):
@@ -1210,7 +1208,7 @@ class ReReview3Cases(Base):
         res = r.scan()
         blob = res.out + b'\n' + res.err
         for v in ('AcmeProdPassword', 'AdminPassword', 'ghp_MySecretToken'):
-            self._no_slice(res, v, ok=('password', 'PASSWORD', 'token', 'TOKEN'))
+            self._no_slice(res, v)
             self.assertNotIn(_b(v), blob)
         self.check(res)
 
@@ -1283,13 +1281,11 @@ class ReReview3Cases(Base):
 class ReReview4Cases(Base):
     """Confirmed counterexamples from task-1-review4.md, each on its exact input."""
 
-    def _no_slice(self, res, secret, n=6, ok=()):
+    def _no_slice(self, res, secret, n=6):
         blob = res.out + b'\n' + res.err
         s = _b(secret)
         for i in range(len(s) - n + 1):
             sl = s[i:i + n]
-            if any(sl in _b(o) for o in ok):
-                continue
             self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
 
     def _one(self, rel, text, hit, secret):
@@ -1331,7 +1327,7 @@ class ReReview4Cases(Base):
             r.write(rel, text)
         res = r.scan()
         self.check(res, secrets=[secret])
-        self._no_slice(res, secret, ok=('password', 'Password'))
+        self._no_slice(res, secret)
         self.assertNotIn(_b(secret), res.out + res.err)
 
     def test_2_multiline_ternary_never_prints_the_value(self):
@@ -1381,8 +1377,6 @@ class ReReview5Cases(Base):
         s = _b(secret)
         for i in range(len(s) - 5):
             sl = s[i:i + 6]
-            if any(sl in _b(o) for o in ('password', 'Password')):
-                continue
             self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
         self.assertNotIn(s, blob)
 
@@ -1424,7 +1418,7 @@ class ReReview5Cases(Base):
 
 
 class QuotedKeyCases(Base):
-    """Owner amendment: quoted-key text is never printed. A hit is `file:line` or no hit."""
+    """Owner amendments: nothing from file contents is printed. A hit is `file:line` or no hit."""
 
     PLANT = 'AcmeProdPassword'
     VAL = 'localdevpass1'
@@ -1434,10 +1428,6 @@ class QuotedKeyCases(Base):
         s = _b(secret)
         for i in range(len(s) - 5):
             sl = s[i:i + 6]
-            if sl in (b'passwo', b'asswor', b'ssword', b'Passwo'):
-                continue
-            if any(sl in _b(o) for o in ('password', 'Password', 'token', 'Token')):
-                continue
             self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
         self.assertNotIn(s, blob)
 
@@ -1451,10 +1441,11 @@ class QuotedKeyCases(Base):
         for s in secrets:
             self._no_leak_slices(res, s)
 
-    def _untracked(self, rel, text, secrets):
+    def _untracked(self, rel, text, secrets, hit):
         r = self.fresh()
         r.write(rel, text)
         res = r.scan()
+        self.check(res, new=[hit], secrets=secrets)
         self._leak_free(res, secrets)
         return res
 
@@ -1464,15 +1455,17 @@ class QuotedKeyCases(Base):
         r.commit('t')
         r.push()
         r.write('t.js', 'const pw = isProd ?\n\n  "%s" : "%s";\n' % (self.PLANT, self.VAL))
-        self._leak_free(r.scan(), [self.PLANT, self.VAL])
+        res = r.scan()
+        self.check(res, unsaved=['t.js:3'], secrets=[self.PLANT, self.VAL])
+        self._leak_free(res, [self.PLANT, self.VAL])
 
     def test_2_block_comment_after_question_mark(self):
         self._untracked('u.js', 'const pw = isProd ? /* prod */\n  "%s" : "%s";\n' % (self.PLANT, self.VAL),
-                        [self.PLANT, self.VAL])
+                        [self.PLANT, self.VAL], 'u.js:2')
 
     def test_3_regex_with_double_slash_before_question_mark(self):
         self._untracked('v.js', 'const ok = /https?:\\/\\//.test(u) ?\n  "%s" : "%s";\n' % (self.PLANT, self.VAL),
-                        [self.PLANT, self.VAL])
+                        [self.PLANT, self.VAL], 'v.js:2')
 
     def test_4_secret_used_as_dict_key(self):
         r = self.fresh()
@@ -1481,7 +1474,7 @@ class QuotedKeyCases(Base):
         self.check(res, new=['w.py:1'], secrets=['sk_live_AcmeSecretKey', 'acme-corporation'])
         self._leak_free(res, ['sk_live_AcmeSecretKey', 'acme-corporation'])
 
-    def test_5_json_key_that_is_the_value_looking_string_hits_redacted(self):
+    def test_5_json_key_that_is_the_value_looking_string_hits_and_is_not_printed(self):
         r = self.fresh()
         r.write('x.json', '{"AcmeProdPassword": "zq9FAKEjsonX1xyz"}\n')
         res = r.scan()
@@ -1489,15 +1482,15 @@ class QuotedKeyCases(Base):
         self.assertNotIn(b'AcmeProdPassword', res.out + res.err)
 
 
-class PrintedNameCases(Base):
-    """Sorting and de-duplication use the printed NAME; blank lines must not slow the scan."""
+class OutputOrderCases(Base):
+    """Hits sort by (file, line) and de-duplicate per line; blank lines must not slow the scan."""
 
     def test_a_two_quoted_keys_on_one_line_print_once(self):
         r = self.fresh()
         r.write('t.js', 'const c = { "password": "zq9FAKEdupA1xyz9", "apiKey": "zq9FAKEdupB1xyz9" };\n')
         self.check(r.scan(), new=['t.js:1'], secrets=['zq9FAKEdupA1xyz9', 'zq9FAKEdupB1xyz9'])
 
-    def test_b_order_is_file_line_printed_name(self):
+    def test_b_order_is_file_then_line(self):
         r = self.fresh()
         r.write('a.json', '{"password": "zq9FAKEsortC1xy9"}\n')
         r.write('a.py', 'API_KEY = "zq9FAKEsortD1xy9"\n')
@@ -1512,6 +1505,38 @@ class PrintedNameCases(Base):
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
         res = Result(cp, time.time() - t)
         self.check(res, new=['big.py:10002'], secrets=['zq9FAKEspeedE1x9'])
+
+
+class ValueStringCases(Base):
+    """A string that is itself a VALUE is scanned inside too (amendment, last bullet)."""
+
+    def _one(self, rel, text, v):
+        r = self.fresh()
+        r.write(rel, text)
+        res = r.scan()
+        self.check(res, new=[rel + ':1'], secrets=[v])
+        self.assertEqual(res.code, 1)
+
+    def test_a_python_assignment_of_a_command_string(self):
+        self._one('a.py', 'cmd = \'API_KEY="zq9FAKEsecretV1xyz" ./deploy.sh\'\n', 'zq9FAKEsecretV1xyz')
+
+    def test_b_python_keyword_argument_command_string(self):
+        self._one('b.py', 'subprocess.run(args=\'API_KEY="zq9FAKEsecretV2xyz" ./deploy.sh\', shell=True)\n',
+                  'zq9FAKEsecretV2xyz')
+
+    def test_c_js_object_property_command_string(self):
+        self._one('c.js', 'const job = { cmd: \'export API_KEY="zq9FAKEsecretV3xyz"\' };\n', 'zq9FAKEsecretV3xyz')
+
+    def test_d_compose_command_string(self):
+        self._one('docker-compose.yml', '    command: "sh -c \'export PASSWORD=zq9FAKEsecretV4xyz; ./run\'"\n',
+                  'zq9FAKEsecretV4xyz')
+
+    def test_e_guard_url_with_password_equals_stays_clean(self):
+        r = self.fresh()
+        r.write('d.py', 'url = "postgres://app:MyPassword=2024xyzQ@db/app"\n')
+        res = r.scan()
+        self.check(res, secrets=['MyPassword=2024xyzQ'])
+        self.assertEqual(res.code, 0)
 
 
 class AdversarialRound2Cases(Base):
