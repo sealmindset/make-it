@@ -22,6 +22,9 @@ than the one the session started in; the transcript match keeps one session's ru
 from blocking another session. Registry: ~/.claude/sdd-runs (one path per line;
 entries whose ledger no longer exists are pruned).
 
+Waiting is not stalling: while a background agent launched in this session's transcript hasn't
+reported back (within WAIT_MAX), a stop passes without a nudge and isn't counted toward CAP.
+
 Fail-open everywhere: a bug here must never trap or block a real session.
 """
 import datetime
@@ -32,6 +35,8 @@ import subprocess
 import sys
 
 CAP = 3  # consecutive nudges with no task completed -> release to the human
+# ponytail: one fixed window. Real agents ran up to 62 min (E02-S5); past this a wait nudges again.
+WAIT_MAX = datetime.timedelta(hours=2)
 REGISTRY = os.environ.get("SDD_GATE_REGISTRY") or os.path.expanduser("~/.claude/sdd-runs")
 
 
@@ -83,16 +88,60 @@ def candidate_ledgers(data):
     return [p for p in found if os.path.isfile(p)]
 
 
+def agent_pending(transcript):
+    """True while a background agent this session launched (within WAIT_MAX) hasn't reported back.
+
+    Background Agent dispatches return at once; the controller must end its turn to receive the
+    completion notice, so that turn end is a wait, not a stall. A notice that is only queued
+    (`queue-operation` line) hasn't reached the controller yet, so it still counts as waiting.
+    """
+    launched = {}
+    try:
+        f = open(transcript, errors="replace")
+    except (OSError, TypeError):
+        return False
+    with f:
+        for line in f:
+            if "Async agent launched" not in line and "<tool-use-id>" not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if d.get("type") == "queue-operation":
+                continue
+            # launches only from `user` lines: the api-request-blob copy has no timestamp
+            content = (d.get("message") or {}).get("content") if d.get("type") == "user" else None
+            for b in content if isinstance(content, list) else []:
+                if not isinstance(b, dict) or b.get("type") != "tool_result":
+                    continue
+                c = b.get("content")
+                text = c if isinstance(c, str) else "".join(
+                    x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
+                if text.startswith("Async agent launched"):
+                    launched[b.get("tool_use_id")] = d.get("timestamp")
+            for tid in re.findall(r"<tool-use-id>(\w+)</tool-use-id>", line):
+                launched.pop(tid, None)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for ts in launched.values():
+        try:
+            if now - datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")) < WAIT_MAX:
+                return True
+        except (AttributeError, ValueError):
+            pass
+    return False
+
+
 def main():
     data = json.loads(sys.stdin.read() or "{}")
     for ledger in candidate_ledgers(data):
-        rc = check(ledger)
+        rc = check(ledger, data.get("transcript_path"))
         if rc:
             return rc
     return 0
 
 
-def check(ledger):
+def check(ledger, transcript=None):
     with open(ledger) as f:
         lines = [l.rstrip("\n") for l in f]
 
@@ -119,6 +168,8 @@ def check(ledger):
     nudges = sum(1 for l in lines[last_progress + 1:] if l.startswith("gate: nudged"))
     if nudges >= CAP:
         return 0  # cap already reached and recorded; stay released
+    if agent_pending(transcript):
+        return 0  # waiting on a background agent: no nudge, not counted toward CAP
 
     pending = [n for n in range(1, total + 1) if n not in done]
     stamp = datetime.datetime.now().isoformat(timespec="seconds")
