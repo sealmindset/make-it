@@ -958,6 +958,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.1 -- Safety update: PyJWT 2.15.0 in every app template
+
+New apps start with PyJWT 2.15.0 instead of 2.14.0, which has two published advisories
+(PYSEC-2026-4141, PYSEC-2026-4183). The pin changes in the three places it lives: the
+fastapi-nextjs backend and both scaffolds' mock-oidc. Each file installs on Python 3.12 (the
+Dockerfiles' base) with `pip check` clean, the backend's HS256 cookie and mock-oidc's RS256
+`kid`-signed token both round-trip, and `pip-audit` reports nothing. Apps already built keep
+their own pin; `/resume-it`'s dependency check picks it up there.
+
 ### v1.44.0 -- Fewer asks, no gate lost: six skills ask through the approval block
 
 `/resume-it`, `/make-it`, `/argo-it`, `/retrofit-it`, `/nemo-it`, `/try-it` and the learnings ask now
