@@ -206,18 +206,18 @@ If production indicators found, stop and ask. This is high-stakes per the approv
 
 "Hold on. This app looks like it is connected to your live system, not a test copy.
 
-What I found: [each indicator as found -- e.g. `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
-What would change: [mode full or owasp: 'I would still scan the app on this computer, but with passive checks only -- I look at what it sends back and send nothing that tries to change it or stress it.' / mode sast or deps: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
-Where it lands: [mode full or owasp: 'every request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back.' / mode sast or deps: 'nothing is sent to that live system; what I find about this project stays in the attestation on this computer.']
+What I found: [each indicator as found -- host or setting name only, never a password or key -- e.g. `DATABASE_URL` in `.env.production` points at `[host]`; `NODE_ENV=production`].
+What would change: [mode full or owasp: 'I would still scan the app on this computer, but with read-only requests only -- I look at what it sends back and skip every check that submits a form, sends a delete or update request, slips extra fields into a record, fires requests at the same time, or floods it to test its limits.'] [mode full or guardrails with AI features found: 'The AI tests normally send test prompts, including ones meant to trick it, through your app to its AI service -- that uses your AI account and shows up in its records. Here I would skip those and only check the safety controls in your code.'] [mode sast or deps, or guardrails with no AI features found: 'Nothing in the scan itself -- this mode only reads your code and the libraries it uses.'] [If START_COMMAND is pending: 'That means first starting your app here with `[START_COMMAND]`, connected to that live system -- you pick that in the next question.']
+Where it lands: [mode full or owasp: 'every read-only request I send goes through your app to that live system and shows up in its records. A request already sent cannot be taken back.' / otherwise: 'nothing is sent to that live system or its AI service; what I find about this project stays in the attestation on this computer.']
 What stands out: the usual run looks at a copy on this computer that talks to test services; this one would not.
 One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
 Pick one:
-- Go ahead with this project as it is, connected to [TARGET AS FOUND] [mode full or owasp: ', passive checks only']
-- Stop -- I will point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
+- Go ahead with this project as it is, connected to [TARGET AS FOUND -- host or setting name only, never a password or key][mode full or owasp: ', read-only requests only'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
+- Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
 - Not sure"
 
-Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written." Nothing else runs.
+Wait for the pick. Go ahead -> set `PASSIVE_ONLY=true` and continue. Stop or Not sure -> stop here and say so: "Stopped. Nothing was scanned and nothing was written. To scan a test copy: in `[FILE]`, point `[VARIABLE]` at your test database or test service instead of the live one, then run /nemo-it again." Nothing else runs.
 
 **7. Install required tools and start the app (one ask):**
 
@@ -248,25 +248,26 @@ pip show pytest-html 2>/dev/null || echo "MISSING: pytest-html"
 pip show nemoguardrails 2>/dev/null || echo "MISSING: nemoguardrails"
 ```
 
-If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block) that covers both the app start and the installs -- include only the parts that apply:
+If no tool is missing and no `START_COMMAND` is pending: say so in one line ("All scan tools are already installed.") and go on to step 8. Otherwise this step has one ask (consequential, per the approval block) with up to two picks, one for the app start and one for the installs -- include only the parts and picks that apply:
 
 "Before I scan, [one thing / two things]:
 
 [If START_COMMAND is pending:]
-**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do.
+**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], host or setting name only), and that cannot be undone.']
 
 [If tools are missing:]
-**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your project files are not touched:
+**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your code is not changed:
 - **semgrep** -- checks your code for known weak patterns (installed with pip)
 - **trivy** -- checks your Docker images and the libraries you use for known problems (installed with brew or Docker)
 - [etc., one line each, from the missing list above]
 
-What stands out: [a large download -- the Playwright browsers or the ZAP image -- or 'nothing'].
+What stands out: [production check passed with Go ahead: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
 One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out].
 
-Pick: [start the app and] install all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space), [install all but do not start the app,] install only the ones you name, or none."
+[If START_COMMAND is pending:] Start the app? -- start [not on the production path: '(Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: '(not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
+[If tools are missing:] Which tools? -- all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space) / only the ones you name / none."
 
-Wait for the pick. A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
+Wait for the pick(s). A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
 
 Install commands (run only the ones picked):
 
@@ -574,7 +575,7 @@ Update user: "Dependency and container scanning complete. Found [N] vulnerable d
 
 **Run when mode is: full, owasp**
 **Requires: Running application (detected in preflight)**
-**If PASSIVE_ONLY=true (production detected): Skip active scans, run passive only**
+**If PASSIVE_ONLY=true (production detected): read-only requests only -- skip the ZAP API scan, the XSS form submissions, the HTTP method-override DELETE/PUT tests, the race-condition concurrent requests, the mass-assignment checks, and the rate-limit burst; record each as skipped in the attestation**
 
 If the app is not running, skip this phase entirely and record in the attestation:
 "Dynamic analysis was skipped because the application was not running during the scan."
@@ -747,6 +748,7 @@ Merge all findings from ZAP, Playwright, pytest, and SQLMap. Deduplicate. Store 
 
 **Run when mode is: full, guardrails**
 **Requires: AI_FEATURES_DETECTED=true (from preflight)**
+**If PASSIVE_ONLY=true (production detected): skip every prompt sent through the live app -- the behavioral suite and the API probing (code-level check 10); run only the code-level checks that do not call the AI (1-9), marked "PASS (code-level)"**
 
 If AI features were NOT detected in preflight:
 
