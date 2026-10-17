@@ -600,7 +600,7 @@ class NameRuleCases(Base):
             v = 'val%02d-nameTbl-secret' % i
             vals.append(v)
             lines.append(tmpl.format(v=v))
-            exp.append('names.py:%d: %s' % (i + 1, name))
+            exp.append('names.py:%d: %s' % (i + 1, '(quoted key)' if tmpl[0] in '"\'' else name))
         for j, name in enumerate(self.MISSES):
             v = 'miss%02d-nameTbl-secret' % j
             vals.append(v)
@@ -1220,15 +1220,15 @@ class ReReview3Cases(Base):
 
     def test_2a_json_loads_literal_body_is_scanned(self):
         self._one('a.py', 'data = json.loads(\'{"password": "hunter2hunter2"}\')\n',
-                  'a.py:1: password', 'hunter2hunter2')
+                  'a.py:1: (quoted key)', 'hunter2hunter2')
 
     def test_2b_json_parse_literal_body_is_scanned(self):
         self._one('b.js', 'const c = JSON.parse(\'{"apiKey":"sk-live-abcdef123456"}\');\n',
-                  'b.js:1: apiKey', 'sk-live-abcdef123456')
+                  'b.js:1: (quoted key)', 'sk-live-abcdef123456')
 
     def test_2c_curl_json_body_in_shell_is_scanned(self):
         self._one('seed.sh', 'curl -d \'{"username":"admin","password":"zq9FAKEsecretSH1"}\' http://localhost/api\n',
-                  'seed.sh:1: password', 'zq9FAKEsecretSH1')
+                  'seed.sh:1: (quoted key)', 'zq9FAKEsecretSH1')
 
     def test_2d_compose_command_export_is_scanned(self):
         self._one('docker-compose.yml', '    command: sh -c "export X=1; PASSWORD=zq9FAKEcompose1"\n',
@@ -1263,7 +1263,7 @@ class ReReview3Cases(Base):
         r = self._lfs_repo()
         v = 'sk-live-lfs-secret-12345'
         r.write('settings.json', '{"apiKey": "%s"}\n' % v)
-        self.check(r.scan(), new=['settings.json:1: apiKey'], secrets=[v])
+        self.check(r.scan(), new=['settings.json:1: (quoted key)'], secrets=[v])
 
     @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
     def test_4b_missing_lfs_object_fails_closed(self):
@@ -1351,7 +1351,7 @@ class ReReview4Cases(Base):
         r.push()
         v = 'sk-live-lfs-unsaved-1234'
         r.append('s.json', '"apiKey": "%s"\n' % v)
-        self.check(r.scan(), unsaved=['s.json:2: apiKey'], secrets=[v])
+        self.check(r.scan(), unsaved=['s.json:2: (quoted key)'], secrets=[v])
 
     @unittest.skipUnless(shutil.which('git-lfs'), 'git-lfs not installed')
     def test_5b_lfs_saved_commit_hits(self):
@@ -1360,7 +1360,7 @@ class ReReview4Cases(Base):
         v = 'sk-live-lfs-saved-5678'
         r.write('t.json', '{"apiKey": "%s"}\n' % v)
         r.commit('add t')
-        self.check(r.scan(), saved=['t.json:1: apiKey'], secrets=[v])
+        self.check(r.scan(), saved=['t.json:1: (quoted key)'], secrets=[v])
 
 
 class ReReview5Cases(Base):
@@ -1388,28 +1388,28 @@ class ReReview5Cases(Base):
     def test_1a_comment_question_mark_keeps_python_dict_key(self):
         self._one('settings.py',
                   'CONFIG = {\n    "debug": False,  # needed in prod?\n    "password": "zq9FAKEdictP1xyz",\n',
-                  'settings.py:3: password', 'zq9FAKEdictP1xyz')
+                  'settings.py:3: (quoted key)', 'zq9FAKEdictP1xyz')
 
     def test_1b_comment_question_mark_keeps_js_key(self):
         self._one('cfg.js',
                   'module.exports = {\n  retries: 3, // enough?\n  "apiKey": "zq9FAKEjsP2xyz12",\n',
-                  'cfg.js:3: apiKey', 'zq9FAKEjsP2xyz12')
+                  'cfg.js:3: (quoted key)', 'zq9FAKEjsP2xyz12')
 
     def test_1c_comment_question_mark_after_open_brace(self):
         self._one('s.py', 'DB = {  # which db?\n    "password": "zq9FAKEbraceP7xy",\n',
-                  's.py:2: password', 'zq9FAKEbraceP7xy')
+                  's.py:2: (quoted key)', 'zq9FAKEbraceP7xy')
 
     def test_1d_comment_question_mark_after_yaml_parent(self):
         self._one('c.yml', 'env:  # needed?\n  "PASSWORD": "zq9FAKEyamlP6xyz"\n',
-                  'c.yml:2: PASSWORD', 'zq9FAKEyamlP6xyz')
+                  'c.yml:2: (quoted key)', 'zq9FAKEyamlP6xyz')
 
     def test_2a_comment_only_line_ending_in_question_mark_keeps_key(self):
         self._one('g.py', 'CONFIG = {\n    # rotate?\n    "password": "zq9FAKEguardG1xyz",\n',
-                  'g.py:3: password', 'zq9FAKEguardG1xyz')
+                  'g.py:3: (quoted key)', 'zq9FAKEguardG1xyz')
 
     def test_2b_yaml_parent_without_question_mark_keeps_key(self):
         self._one('g.yml', 'env:\n  "PASSWORD": "zq9FAKEguardG2xyz"\n',
-                  'g.yml:2: PASSWORD', 'zq9FAKEguardG2xyz')
+                  'g.yml:2: (quoted key)', 'zq9FAKEguardG2xyz')
 
     def test_3_ternary_with_trailing_comment_never_prints_the_value(self):
         self._clean('t1.js',
@@ -1420,6 +1420,69 @@ class ReReview5Cases(Base):
         self._clean('t2.js',
                     'const pw = isProd ?\n\n  "AcmeProdPassword" : "localdevpass1";\n',
                     'AcmeProdPassword')
+
+
+class QuotedKeyCases(Base):
+    """Owner amendment: quoted-key text is never printed. A hit is `(quoted key)` or no hit."""
+
+    PLANT = 'AcmeProdPassword'
+    VAL = 'localdevpass1'
+
+    def _no_leak_slices(self, res, secret):
+        blob = res.out + b'\n' + res.err
+        s = _b(secret)
+        for i in range(len(s) - 5):
+            sl = s[i:i + 6]
+            if sl in (b'passwo', b'asswor', b'sswor', b'Passwo', b'asswor', b'ssword', b'token', b'Token'):
+                continue
+            if any(sl in _b(o) for o in ('password', 'Password', 'token', 'Token')):
+                continue
+            self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
+        self.assertNotIn(s, blob)
+
+    def _leak_free(self, res, secrets, hit_re_lines=None):
+        self.assertIn(res.code, (0, 1), 'stderr=%r' % res.err[:300])
+        for ln in res.lines:
+            if ln.startswith('=='):
+                continue
+            self.assertTrue(ln.endswith(': (quoted key)'), 'non-redacted hit line: %r' % ln)
+        self.no_leak(res, secrets)
+        for s in secrets:
+            self._no_leak_slices(res, s)
+
+    def _untracked(self, rel, text, secrets):
+        r = self.fresh()
+        r.write(rel, text)
+        res = r.scan()
+        self._leak_free(res, secrets)
+        return res
+
+    def test_1_blank_line_then_unchanged_question_mark_line(self):
+        r = self.fresh()
+        r.write('t.js', 'const pw = isProd ?\n\n  "localdevpass1";\n')
+        r.commit('t')
+        r.push()
+        r.write('t.js', 'const pw = isProd ?\n\n  "%s" : "%s";\n' % (self.PLANT, self.VAL))
+        self._leak_free(r.scan(), [self.PLANT, self.VAL])
+
+    def test_2_block_comment_after_question_mark(self):
+        self._untracked('u.js', 'const pw = isProd ? /* prod */\n  "%s" : "%s";\n' % (self.PLANT, self.VAL),
+                        [self.PLANT, self.VAL])
+
+    def test_3_regex_with_double_slash_before_question_mark(self):
+        self._untracked('v.js', 'const ok = /https?:\\/\\//.test(u) ?\n  "%s" : "%s";\n' % (self.PLANT, self.VAL),
+                        [self.PLANT, self.VAL])
+
+    def test_4_secret_used_as_dict_key(self):
+        self._untracked('w.py', 'KEYS = {"sk_live_AcmeSecretKey": "acme-corporation"}\n',
+                        ['sk_live_AcmeSecretKey', 'acme-corporation'])
+
+    def test_5_json_key_that_is_the_value_looking_string_hits_redacted(self):
+        r = self.fresh()
+        r.write('x.json', '{"AcmeProdPassword": "zq9FAKEjsonX1xyz"}\n')
+        res = r.scan()
+        self.check(res, new=['x.json:1: (quoted key)'], secrets=['zq9FAKEjsonX1xyz'])
+        self.assertNotIn(b'AcmeProdPassword', res.out + res.err)
 
 
 if __name__ == '__main__':
