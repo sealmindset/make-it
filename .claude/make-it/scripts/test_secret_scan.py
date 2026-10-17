@@ -1363,5 +1363,64 @@ class ReReview4Cases(Base):
         self.check(r.scan(), saved=['t.json:1: apiKey'], secrets=[v])
 
 
+class ReReview5Cases(Base):
+    """Confirmed counterexamples from task-1-review5.md, each on its exact input."""
+
+    def _one(self, rel, text, hit, secret):
+        r = self.fresh()
+        r.write(rel, text)
+        self.check(r.scan(), new=[hit], secrets=[secret])
+
+    def _clean(self, rel, text, secret):
+        r = self.fresh()
+        r.write(rel, text)
+        res = r.scan()
+        self.check(res, secrets=[secret])
+        blob = res.out + b'\n' + res.err
+        s = _b(secret)
+        for i in range(len(s) - 5):
+            sl = s[i:i + 6]
+            if any(sl in _b(o) for o in ('password', 'Password')):
+                continue
+            self.assertNotIn(sl, blob, 'secret slice leaked at %d' % i)
+        self.assertNotIn(s, blob)
+
+    def test_1a_comment_question_mark_keeps_python_dict_key(self):
+        self._one('settings.py',
+                  'CONFIG = {\n    "debug": False,  # needed in prod?\n    "password": "zq9FAKEdictP1xyz",\n',
+                  'settings.py:3: password', 'zq9FAKEdictP1xyz')
+
+    def test_1b_comment_question_mark_keeps_js_key(self):
+        self._one('cfg.js',
+                  'module.exports = {\n  retries: 3, // enough?\n  "apiKey": "zq9FAKEjsP2xyz12",\n',
+                  'cfg.js:3: apiKey', 'zq9FAKEjsP2xyz12')
+
+    def test_1c_comment_question_mark_after_open_brace(self):
+        self._one('s.py', 'DB = {  # which db?\n    "password": "zq9FAKEbraceP7xy",\n',
+                  's.py:2: password', 'zq9FAKEbraceP7xy')
+
+    def test_1d_comment_question_mark_after_yaml_parent(self):
+        self._one('c.yml', 'env:  # needed?\n  "PASSWORD": "zq9FAKEyamlP6xyz"\n',
+                  'c.yml:2: PASSWORD', 'zq9FAKEyamlP6xyz')
+
+    def test_2a_comment_only_line_ending_in_question_mark_keeps_key(self):
+        self._one('g.py', 'CONFIG = {\n    # rotate?\n    "password": "zq9FAKEguardG1xyz",\n',
+                  'g.py:3: password', 'zq9FAKEguardG1xyz')
+
+    def test_2b_yaml_parent_without_question_mark_keeps_key(self):
+        self._one('g.yml', 'env:\n  "PASSWORD": "zq9FAKEguardG2xyz"\n',
+                  'g.yml:2: PASSWORD', 'zq9FAKEguardG2xyz')
+
+    def test_3_ternary_with_trailing_comment_never_prints_the_value(self):
+        self._clean('t1.js',
+                    'const pw = isProd ? // production\n  "AcmeProdPassword" : "localdevpass1";\n',
+                    'AcmeProdPassword')
+
+    def test_4_blank_line_after_question_mark_never_prints_the_value(self):
+        self._clean('t2.js',
+                    'const pw = isProd ?\n\n  "AcmeProdPassword" : "localdevpass1";\n',
+                    'AcmeProdPassword')
+
+
 if __name__ == '__main__':
     unittest.main()
