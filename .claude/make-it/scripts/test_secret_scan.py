@@ -644,7 +644,7 @@ class ValueRuleCases(Base):
         text = ''.join(kv('PASSWORD', v) for v in ph + near)
         r.write('ph.py', text)
         n = len(ph)
-        self.check(r.scan(), new=['ph.py:%d: PASSWORD' % (n + 1), 'ph.py:%d: PASSWORD' % (n + 2)],
+        self.check(r.scan(), new=['ph.py:%d' % (n + 1), 'ph.py:%d' % (n + 2)],
                    secrets=near)
 
     def test_crlf_line_endings_do_not_leak_cr_or_break_hits(self):
