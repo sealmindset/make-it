@@ -1433,7 +1433,7 @@ class QuotedKeyCases(Base):
         s = _b(secret)
         for i in range(len(s) - 5):
             sl = s[i:i + 6]
-            if sl in (b'passwo', b'asswor', b'sswor', b'Passwo', b'asswor', b'ssword', b'token', b'Token'):
+            if sl in (b'passwo', b'asswor', b'ssword', b'Passwo'):
                 continue
             if any(sl in _b(o) for o in ('password', 'Password', 'token', 'Token')):
                 continue
@@ -1474,8 +1474,11 @@ class QuotedKeyCases(Base):
                         [self.PLANT, self.VAL])
 
     def test_4_secret_used_as_dict_key(self):
-        self._untracked('w.py', 'KEYS = {"sk_live_AcmeSecretKey": "acme-corporation"}\n',
-                        ['sk_live_AcmeSecretKey', 'acme-corporation'])
+        r = self.fresh()
+        r.write('w.py', 'KEYS = {"sk_live_AcmeSecretKey": "acme-corporation"}\n')
+        res = r.scan()
+        self.check(res, new=['w.py:1: (quoted key)'], secrets=['sk_live_AcmeSecretKey', 'acme-corporation'])
+        self._leak_free(res, ['sk_live_AcmeSecretKey', 'acme-corporation'])
 
     def test_5_json_key_that_is_the_value_looking_string_hits_redacted(self):
         r = self.fresh()
@@ -1483,6 +1486,31 @@ class QuotedKeyCases(Base):
         res = r.scan()
         self.check(res, new=['x.json:1: (quoted key)'], secrets=['zq9FAKEjsonX1xyz'])
         self.assertNotIn(b'AcmeProdPassword', res.out + res.err)
+
+
+class PrintedNameCases(Base):
+    """Sorting and de-duplication use the printed NAME; blank lines must not slow the scan."""
+
+    def test_a_two_quoted_keys_on_one_line_print_once(self):
+        r = self.fresh()
+        r.write('t.js', 'const c = { "password": "zq9FAKEdupA1xyz9", "apiKey": "zq9FAKEdupB1xyz9" };\n')
+        self.check(r.scan(), new=['t.js:1: (quoted key)'], secrets=['zq9FAKEdupA1xyz9', 'zq9FAKEdupB1xyz9'])
+
+    def test_b_order_is_file_line_printed_name(self):
+        r = self.fresh()
+        r.write('a.json', '{"password": "zq9FAKEsortC1xy9"}\n')
+        r.write('a.py', 'API_KEY = "zq9FAKEsortD1xy9"\n')
+        self.check(r.scan(), new=['a.json:1: (quoted key)', 'a.py:1: API_KEY'],
+                   secrets=['zq9FAKEsortC1xy9', 'zq9FAKEsortD1xy9'])
+
+    def test_c_long_line_then_many_blank_lines_is_fast(self):
+        r = self.fresh()
+        r.write('big.py', 'x = "' + 'a' * 2000000 + '"\n' + '\n' * 10000 + 'API_KEY = "zq9FAKEspeedE1x9"\n')
+        t = time.time()
+        cp = subprocess.run([sys.executable, SCRIPT, '--repo', r.work],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        res = Result(cp, time.time() - t)
+        self.check(res, new=['big.py:10002: API_KEY'], secrets=['zq9FAKEspeedE1x9'])
 
 
 if __name__ == '__main__':
