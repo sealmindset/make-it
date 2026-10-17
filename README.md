@@ -386,7 +386,7 @@ resume-it: [scaffolds pytest + Playwright if first time, runs all tests]
 2. **Gap Analysis** -- Compares what you have against the make-it guardrails and identifies what's missing
 3. **Risk Score** -- Calculates a risk score (0-100) based on the size and complexity of changes needed. Calibrated with real-world retrofit data
 4. **Plan** -- Presents the upgrade plan in plain language with phases like "Setting up your development environment" and "Adding secure login and user permissions"
-5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) so you can always roll back
+5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) that puts your files back if you want to go back (database changes are not part of it)
 6. **Retrofit** -- Applies changes in safe, verifiable phases. Each phase is tested before moving to the next
 7. **Verify** -- Runs the same build-verify checks as `/make-it` to ensure everything works
 
@@ -912,7 +912,7 @@ Yes. The generated code is standard, well-structured code in your project direct
 Yes. The skill detects SSL-inspecting proxies during Preflight and guides you through temporarily disabling them for Docker builds. All generated apps use system fonts (no external font CDNs) to avoid proxy issues.
 
 **What if I want to change my app idea mid-build?**
-Minor changes (UI tweaks, adding a page) are handled seamlessly. Major changes (different architecture) trigger a conversation about what needs to change before proceeding.
+Minor changes (UI tweaks, adding a page) are handled seamlessly. Major changes (different architecture) trigger a conversation about what needs to change before proceeding. A change to sign-in or to who can do what is handled differently, however small: the skill first shows who can do it today, then asks you to name the specific change (the new sign-in method and who it applies to, or what changes for which user type) before redoing anything.
 
 **How does application settings management work?**
 Every web app gets a database-backed settings system. All `.env` variables are seeded into an `app_settings` table during migration. Settings follow a cascading precedence: database value wins over `.env`, which wins over code defaults. The Admin Settings page lets authorized users view, edit, and audit settings -- sensitive values (passwords, API keys) are masked unless explicitly revealed. Changes are logged in an audit trail with before/after values. An in-memory cache with 60-second TTL keeps reads fast.
@@ -930,7 +930,7 @@ When your app requires login, the skill generates a local mock identity provider
 In a standard Git repository in the directory where you ran `/make-it`. It gets pushed to GitHub when you run `/ship-it`.
 
 **I already have an app -- can I still use these skills?**
-Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first so you can always roll back.
+Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first that puts your files back if you want to go back (database changes are not part of it).
 
 **Does it support AI-powered apps?**
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
@@ -970,23 +970,38 @@ a plain yes. No bare yes/no remains in these skills.
 | Skill | Asks before | Asks after | High-stakes gates |
 |---|---|---|---|
 | resume-it | 30 | 24 | 4 kept + 1 conditional (sign-in, permissions, database changes) |
-| make-it | 14 (11 interview) | 14 | 1 kept + 1 added (sign-in / who-can-do-what changes mid-build) |
-| argo-it | 23 | 17 | 6 kept, 2 tightened |
-| retrofit-it | 11 | 9 | 7 kept |
-| nemo-it | 3 | 2 | 2 kept |
-| try-it | 6 | 4 | 1 kept |
-| learnings (learnings.md + callers) | 6 | 6 | -- (one batched, decision-ready message) |
+| make-it | 14 (10 interview) | 14 | 1 kept + 1 raised (pausing a security tool; sign-in / who-can-do-what changes mid-build) |
+| argo-it | 23 | 17 | 6 kept, 4 tightened (sends, deploys, the deploy branch, the deploy save) |
+| retrofit-it | 11 | 9 | 6 kept + 1 raised (the plan, the checkpoints, the live database) |
+| nemo-it | 3 | 2 | 1 kept + 1 added (the live-system scan, the production-path start) |
+| try-it | 6 | 4 | 1 kept (pausing a security tool) |
+| learnings (learnings.md + callers) | 6 | 6 | none (one batched, decision-ready message)[^learnings] |
 
-The card's earlier rough counts (resume-it 37, make-it 31, argo-it 16, retrofit-it 14, nemo-it 12,
-try-it 11) came from a grep with no recorded method. The table above is a line-by-line inventory:
-an ask is any point the skill stops for the user's answer, and interview questions stay word for word.
+[^learnings]: The learnings asks live in try-it and resume-it and are counted in those rows too.
+
+Gate column: *kept* = the same gate, now active confirmation; *raised* = an existing ask moved up
+to high-stakes; *added* = a new gate; *tightened* = a kept gate that now fires in more cases;
+*conditional* = fires only when a change touches sign-in, permissions or the database.
+
+The card's (E03-S5) earlier rough counts (resume-it 37, make-it 31, argo-it 16, retrofit-it 14,
+nemo-it 12, try-it 11) came from a grep with no recorded method. The table above is a line-by-line
+inventory: an ask is any point the skill stops for the user's answer, and interview questions stay
+word for word.
 
 Also fixed on the gates' own paths:
-- argo-it's secret check before a send now actually runs. It used to read an empty diff and never fired. It reads unsaved edits, new files and unsent saved changes, and a secret already in a saved change stops the send. Its inline scan is a stopgap; a tested rebuild is filed as E02-S5.
-- Deploy and snapshot saves never stage `.env` files, keys, or credential and local-database files.
-- retrofit-it's snapshot is honest about what it can undo (files, not data), and a failed save stops the run.
-- nemo-it's read-only mode for live systems is really read-only (no form submissions, no sign-in, no injection probes).
-- Declined or left-out items stay out instead of being re-added by later automatic steps.
+- argo-it's secret check before a redeploy now actually runs. It used to read an empty diff and
+  never fired. It reads unsaved edits, new files and unsent saved changes, and a secret already in
+  a saved change stops the send. Its inline scan is a stopgap; a tested rebuild is filed as E02-S5.
+- Deploy and snapshot saves never stage `.env` files, keys, SSH keys, keychains, credential files
+  or local databases, at any depth, and a failed save stops before anything is sent.
+- retrofit-it's snapshot is honest about what it can undo (files, not data), and a failed save
+  stops the run.
+- nemo-it's read-only mode for live systems is really read-only (no form submissions, no sign-in,
+  no injection probes) and fails closed: the active checks run only when the scan explicitly says
+  it is not on a live system.
+- Declined or left-out items stay out of later automatic steps (retrofit-it's verify, try-it's fix
+  step, the catch-up workflow). The next /resume-it scan mentions them again; only an answer
+  brings one back.
 
 ### v1.43.0 -- Every ask decision-ready; every weakened safeguard disclosed
 
