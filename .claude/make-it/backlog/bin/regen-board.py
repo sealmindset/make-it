@@ -22,16 +22,25 @@ def load(B):  # card path -> frontmatter, epics first
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
     return v(d, 'status') != 'done' and bool(v(d, 'decision') or v(d, 'stage') == 'Needs decision')
 def age(d):
-    try: return f" · {(datetime.date.today() - datetime.date.fromisoformat(v(d, 'updated'))).days}d"
+    try: return f" · {max(0, (datetime.date.today() - datetime.date.fromisoformat(v(d, 'updated'))).days)}d"  # UTC can be a day ahead
     except ValueError: return ''
 def blocked(s, status):  # can't start: high-stakes, waiting on you, or waiting on an unfinished card
     deps = [x.strip().upper() for x in v(s, 'dependsOn').strip('[]').split(',') if x.strip()]
     # ponytail: an id not on this board doesn't block -- it may live on another board
     return bool(warn(s)) or waiting(s) or not all(status.get(d, 'done') == 'done' for d in deps)
+DATED = r'v?(\d{4})[.-](\d{2})[.-](\d{2})(?:[.-]\d+)?'
+def due(s, T=None):  # a Live card's check can be done now: no checkAfter, or its date (a date, or a release tag named for it) has come
+    # ponytail: a release tag counts as out on the date in its name (v2026.10.17); an undated tag waits -- use a date there
+    m = re.fullmatch(DATED, v(s, 'checkAfter'))
+    if not v(s, 'checkAfter'): return True
+    try: return bool(m) and datetime.date(*map(int, m.groups())) <= (T or datetime.date.today())
+    except ValueError: return False  # not a real date (2026-02-30): it waits, and status flags it -- never a crash
+def soon(w): return (not re.fullmatch(DATED, w), w.lstrip('vV').replace('-', '.'))  # waits in date order, undated last
 def bucket(s):  # which bug-queue status line an open card sits on, if any
     if v(s, 'status') == 'done': return None
     if v(s, 'stage') in ('Reported', 'Cause found'): return 'Now fixing' if v(s, 'status') == 'in-progress' and not waiting(s) else None
-    return {'Fix ready': 'Shipping', 'Live': 'Live, to check'}.get(v(s, 'stage'))
+    if v(s, 'stage') == 'Live': return 'Live, to check' if due(s) else 'Live, waits'
+    return {'Fix ready': 'Shipping'}.get(v(s, 'stage'))
 def startable(s, status): return v(s, 'status') == 'backlog' and not blocked(s, status)  # Next up
 def next_up(stories, status):
     return next((v(s, 'id').split('-')[-1] for s in sorted(stories, key=lambda s: (v(s, 'priority') or 'P9', num(s)))
@@ -55,7 +64,9 @@ def render(B, proj):
             # The bug queue status line: Reported -> Cause found -> Fix ready -> Live -> Checked.
             def ids(pred): return ', '.join(v(s, 'id').split('-')[-1] for s in stories if pred(s)) or '—'
             nxt = next_up(stories, STATUS)
+            waits = sorted({v(s, 'checkAfter') for s in stories if bucket(s) == 'Live, waits'}, key=soon)
             out += [f'**{k}:** ' + ids(lambda s: bucket(s) == k) for k in ('Now fixing', 'Shipping', 'Live, to check')] + [
+                    '**Live, waits:** ' + ' · '.join(f"{w} → {ids(lambda s: bucket(s) == 'Live, waits' and v(s, 'checkAfter') == w)}" for w in waits)] * bool(waits) + [
                     '**Next up:** ' + nxt, '']
         big = len(stories) > BIG
         for st in ORDER:
@@ -118,6 +129,19 @@ def main(args):
             assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
             assert '\n\n**zeta** (16)\n- ' in big, 'a heading right after a list item renders glued to it'
             assert not re.search(r'^\*\*[^*:]+\*\* \(\d+\)$', b.split('## E02')[0], re.M), 'small epic grouped'
+            # Live splits by checkAfter: a date or a dated release tag that has come is due; later or undated waits
+            card('stories/S20.md', id='E01-S20', status='in-progress', type='breakfix', stage='Live', checkAfter='2099-01-01')
+            card('stories/S21.md', id='E01-S21', status='in-progress', type='breakfix', stage='Live', checkAfter='v2020.01.01')
+            card('stories/S22.md', id='E01-S22', status='in-progress', type='breakfix', stage='Live', checkAfter='v1.41.0')
+            card('stories/S23.md', id='E01-S23', status='in-progress', type='breakfix', stage='Live')
+            b = board()
+            assert re.search(r'\*\*Live, to check:\*\* S21, S23\n', b) and '**Live, waits:** 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b
+            card('stories/S24.md', id='E01-S24', status='in-progress', type='breakfix', stage='Live', checkAfter=str(datetime.date.today()))  # due on the day
+            card('stories/S25.md', id='E01-S25', status='in-progress', type='breakfix', stage='Live', checkAfter='2026-02-30')  # not a date: waits, no crash
+            card('stories/S26.md', id='E01-S26', status='in-progress', type='breakfix', stage='Live', checkAfter='v2098.12.31')
+            b = board()
+            assert re.search(r'\*\*Live, to check:\*\* S21, S23, S24\n', b), b
+            assert '**Live, waits:** 2026-02-30 → S25 · v2098.12.31 → S26 · 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b  # in date order
         print('regen-board self-test: OK'); return
     proj = None
     if '--project' in args:

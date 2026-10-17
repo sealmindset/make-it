@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Move bug cards forward from facts: every PR in a card's `pr:` closed and one merged -> Live;
+"""Move bug cards forward from facts: every PR in a card's `pr:` closed and one merged -> Live (only
+with a `signal:` -- else it waits, named);
 Checked -> done. Forward only -- never back, never past Live without the live check.
 
 Usage: sync-prs.py [board_dir] --repo PATH [--project NAME] [--dry-run]
@@ -65,6 +66,8 @@ def moves(B, look):
         blocking = [f"{name(n)} {s['state'].lower()}" + (f" ({s['why']})" if s.get('why') else '') for n, s in got.items() if s['state'] in ('OPEN', 'UNKNOWN')]
         if blocking or not any(s['state'] == 'MERGED' for s in got.values()):
             wait.append((p, ', '.join(blocking) or ', '.join(f'{name(n)} closed without merging' for n in nums))); continue
+        if not v(d, 'signal'):  # the Live gate: how the fix is proved on the live system, written before it counts as shipped
+            wait.append((p, 'merged, but no signal: -- write how the fix is checked live (card.py set <id> signal=...)')); continue
         note = f"{v(d, 'stage')} → Live · " + ', '.join(f"{name(n)} merged {s['mergedAt'][:10]}" for n, s in got.items() if s['state'] == 'MERGED')
         note += ' (deploy not checked -- the live check confirms it)'
         if v(d, 'decision'): note += ' · it still has a decision: -- clear it if that was answered'
@@ -101,15 +104,16 @@ def self_test():
             open(f'{S}/S{n}.md', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in {'id': f'E01-S{n}', 'type': 'breakfix', 'status': 'in-progress', **kv}.items()) + f'---\n{body}')
         open(f'{t}/items/EPIC-01-bugs/epic.md', 'w').write('---\nid: E01\ntitle: Bugs\nstatus: in-progress\n---\n')
         url = 'https://github.com/org2/repo1/pull/109'
-        card(1, stage='Fix ready', pr='[101]', priority='P1')                       # merged -> Live
+        card(1, stage='Fix ready', pr='[101]', priority='P1', signal='log: ok')     # merged -> Live
+        card(17, stage='Fix ready', pr='[101]')                                     # merged, no signal -> waits (the Live gate)
         card(2, stage='Fix ready', pr='[102, 103]')                                 # one still open -> waits
         card(3, stage='Cause found', pr='104')                                      # closed unmerged -> waits
         card(4, stage='Checked')                                                    # -> done
         card(5, stage='Live', pr='[105]')                                           # already Live: never past it
         card(6, '\nFixed in PR #106.\n', stage='Fix ready')                         # no pr: -> waits, never guessed
         card(8, stage='Fix ready', pr='[101]', status='done')                       # done: left alone
-        card(9, stage='Fix ready', pr=url)                                          # another repo's PR, by URL
-        card(10, stage='Fix ready', pr='[110]', decision='Ratify #110?')            # moves, flags the decision
+        card(9, stage='Fix ready', pr=url, signal='page shows it')                  # another repo's PR, by URL
+        card(10, stage='Fix ready', pr='[110]', decision='Ratify #110?', signal='x') # moves, flags the decision
         card(12, stage='Fix ready', pr='splashdown#71')                             # short form: ambiguous -> waits
         card(13, stage='Needs decision', pr='[101]')                                # older waiting form: left alone
         open(f'{S}/S11.md', 'w').write('---\nid: E01-S11\ntype: story\nstatus: in-progress\npr: [101]\n---\n')  # no stage: untouched
@@ -124,6 +128,7 @@ def self_test():
         assert v(c['E01-S4'], 'status') == 'done' and v(c['E01-S8'], 'status') == 'done' and v(c['E01-S11'], 'stage') == '', out
         assert v(c['E01-S6'], 'pr') == '' and v(c['E01-S1'], 'updated') == str(T) and v(c['E01-S1'], 'priority') == 'P1', out
         assert 'E01-S2 · #103 open' in out and 'E01-S3 · #104 closed without merging' in out and 'E01-S6 · no pr:' in out, out
+        assert 'E01-S17 · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
         assert 'E01-S9 · Fix ready → Live · repo1#109 merged' in out and 'E01-S12 · pr: names another repo by short form' in out, out
         assert not any(f'E01-S{n} ' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
         assert 'clear it if that was answered' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md').read(), out
@@ -134,7 +139,7 @@ def self_test():
         card(14, stage='Checked'); card(15, stage='Fix ready', pr='[101]')
         out = run(t, None, dry=False, proj='t', T=T)  # no gh: Checked still closes, PR cards wait
         assert 'E01-S15 · PR step skipped' in out and v(R.fm(f'{S}/S14.md'), 'status') == 'done' and v(R.fm(f'{S}/S15.md'), 'stage') == 'Fix ready', out
-        card(16, stage='Fix ready', pr='[101]')  # another session closes it while gh runs: the write is refused
+        card(16, stage='Fix ready', pr='[101]', signal='x')  # another session closes it while gh runs: the write is refused
         late = lambda n: (card(16, stage='Checked', status='done'), look(n))[1]
         out = run(t, late, dry=False, proj='t', T=T)
         assert v(R.fm(f'{S}/S16.md'), 'stage') == 'Checked' and 'E01-S16' not in out, out
