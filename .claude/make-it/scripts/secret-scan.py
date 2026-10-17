@@ -5,7 +5,7 @@ Usage:  secret-scan.py [--repo PATH]     (default: the current directory)
         secret-scan.py --self-test       (runs test_secret_scan.py next to this file)
 
 Prints three labels -- unsaved edits, new files, saved-not-sent -- with each hit under its
-label as `file:line: NAME`. Never a value: the gate must not leak what it is guarding.
+label as `file:line: NAME` (a quoted key as `(quoted key)`). Never a value: the gate must not leak what it is guarding.
 Exit 0 = no hits, 1 = hits, 2 = couldn't check (an unreadable scope must never look clean).
 Python 3.9+, stdlib only.
 """
@@ -206,7 +206,7 @@ def uncommented(s):
 
 
 def values(s, config, start=True):
-    """(NAME, VALUE) pairs on a line. A NAME only starts outside a string literal, and the search resumes after
+    """(NAME, VALUE, quoted) on a line. A NAME only starts outside a string literal, and the search resumes after
     its VALUE, never inside it -- so no part of a value (the `c2VjcmV0QPwd` in `encode(p, "Zk9/c2VjcmV0QPwd=",
     alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`) is ever read or printed as a NAME.
     A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
@@ -232,9 +232,9 @@ def values(s, config, start=True):
                 if config or body[:1] in ('{', '['):
                     yield from values(body, config)
                 continue
-            name, i = body, sep.end()
+            name, i, quoted = body, sep.end(), True
         else:
-            name = m.group(1)
+            name, quoted = m.group(1), False
         lit = literal_at(s, i)
         if lit:
             v, i = lit
@@ -245,11 +245,11 @@ def values(s, config, start=True):
         else:
             v = UNQUOTED.match(s, i).group()  # (an unclosed quote is no literal)
             i += len(v)
-        yield name, v
+        yield name, v, quoted
 
 
 def hit_names(text, config, prev=None):
-    """Secret-named NAMEs assigned a literal value on this line. Source code needs quotes.
+    """Secret-named NAMEs assigned a literal value on this line, as printed. Source code needs quotes.
     `prev` is the last non-blank line before it in the new version: if that, less a trailing comment, ends inside
     a ternary (`const pw = isProd ?`, `isProd ? // prod`, or `c1 ? c2 ? a :`), this line's start is no key
     position, so `  "AcmeProdPassword" : "dev"` isn't a quoted key. A YAML parent `env:` (no `?`) or a comment's
@@ -259,9 +259,10 @@ def hit_names(text, config, prev=None):
     c = uncommented(p.decode('utf-8', 'surrogateescape')).rstrip()
     ternary = c.endswith('?') or (c.endswith(':') and '?' in c)
     start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
-    for name, v in values(s, config, start):
+    for name, v, quoted in values(s, config, start):
         if len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v):
-            yield name
+            # A quoted key's text may itself be a value (a layout the key-position rules miss): never print it.
+            yield '(quoted key)' if quoted else name
 
 
 def is_config(path):
