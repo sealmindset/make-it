@@ -386,7 +386,7 @@ resume-it: [scaffolds pytest + Playwright if first time, runs all tests]
 2. **Gap Analysis** -- Compares what you have against the make-it guardrails and identifies what's missing
 3. **Risk Score** -- Calculates a risk score (0-100) based on the size and complexity of changes needed. Calibrated with real-world retrofit data
 4. **Plan** -- Presents the upgrade plan in plain language with phases like "Setting up your development environment" and "Adding secure login and user permissions"
-5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) that puts your files back if you want to go back (database changes are not part of it)
+5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) that puts your files back if you want to go back (your .env settings and database changes are not part of it)
 6. **Retrofit** -- Applies changes in safe, verifiable phases. Each phase is tested before moving to the next
 7. **Verify** -- Runs the same build-verify checks as `/make-it` to ensure everything works
 
@@ -912,7 +912,7 @@ Yes. The generated code is standard, well-structured code in your project direct
 Yes. The skill detects SSL-inspecting proxies during Preflight and guides you through temporarily disabling them for Docker builds. All generated apps use system fonts (no external font CDNs) to avoid proxy issues.
 
 **What if I want to change my app idea mid-build?**
-Minor changes (UI tweaks, adding a page) are handled seamlessly. Major changes (different architecture) trigger a conversation about what needs to change before proceeding. A change to sign-in or to who can do what is handled differently, however small: the skill first shows who can do it today, then asks you to name the specific change (the new sign-in method and who it applies to, or what changes for which user type) before redoing anything.
+Minor changes (UI tweaks, adding a page) are handled seamlessly. Major changes (different architecture) trigger a conversation about what needs to change before proceeding. A change to sign-in or to who can do what is handled differently, however small: the skill asks you to name the specific change (the new sign-in method and who it applies to, or what changes for which user type) before redoing anything. If your request doesn't say that yet, it first shows what is in place today.
 
 **How does application settings management work?**
 Every web app gets a database-backed settings system. All `.env` variables are seeded into an `app_settings` table during migration. Settings follow a cascading precedence: database value wins over `.env`, which wins over code defaults. The Admin Settings page lets authorized users view, edit, and audit settings -- sensitive values (passwords, API keys) are masked unless explicitly revealed. Changes are logged in an audit trail with before/after values. An in-memory cache with 60-second TTL keeps reads fast.
@@ -930,7 +930,7 @@ When your app requires login, the skill generates a local mock identity provider
 In a standard Git repository in the directory where you ran `/make-it`. It gets pushed to GitHub when you run `/ship-it`.
 
 **I already have an app -- can I still use these skills?**
-Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first that puts your files back if you want to go back (database changes are not part of it).
+Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first that puts your files back if you want to go back (your .env settings and database changes are not part of it).
 
 **Does it support AI-powered apps?**
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
@@ -971,13 +971,13 @@ a plain yes. No bare yes/no remains in these skills.
 |---|---|---|---|
 | resume-it | 30 | 24 | 4 kept + 1 conditional (sign-in, permissions, database changes) |
 | make-it | 14 (10 interview) | 14 | 1 kept + 1 raised (pausing a security tool; sign-in / who-can-do-what changes mid-build) |
-| argo-it | 23 | 17 | 6 kept, 4 tightened (sends, deploys, the deploy branch, the deploy save) |
+| argo-it | 23 | 17 | 6 kept (sends, deploys, the deploy branch), 2 tightened (the secret check before a redeploy, a troubleshooting fix's send), 2 added (the deploy save's keep-out list, its failed-save stop) |
 | retrofit-it | 11 | 9 | 6 kept + 1 raised + 1 added (the plan, the checkpoints, the live database) |
 | nemo-it | 3 | 2 | 1 kept + 1 raised (the live-system scan, the production-path start) |
 | try-it | 6 | 4 | 1 kept (pausing a security tool) |
 | learnings (learnings.md + callers) | 6 | 6 | none (one batched, decision-ready message)[^learnings] |
 
-[^learnings]: The learnings asks live in try-it and resume-it and are counted in those rows too.
+[^learnings]: learnings.md itself plus its callers in try-it (two), resume-it, wrap-it and subagent-it; the try-it and resume-it ones are counted in those rows too.
 
 Gate column: *kept* = the same gate, now active confirmation; *raised* = an existing ask moved up
 to high-stakes; *added* = a new gate; *tightened* = a kept gate that now fires in more cases;

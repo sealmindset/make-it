@@ -1139,7 +1139,8 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 **PART B: Live verification (start the app and test it)**
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
-    tools are running (this is the same ask as /try-it step 1 -- one way to ask for a pause):
+    tools are running (the pause ask below has the same wording and answers as /try-it step 1,
+    but make-it asks only after a certificate error; try-it asks as soon as it finds a tool):
     ```bash
     # Check each common SSL-inspecting proxy separately, so every running one is named.
     # Bracketed first letter: the pattern can never match its own shell's command line.
@@ -1492,8 +1493,9 @@ cards (see `backlog-board.md`); ship moves its cards to Live and Checked (`ship-
   anything, the user names the specific -- for sign-in, the new sign-in method and who it applies
   to; for permissions, what changes for which user type (e.g. "managers can also delete reports").
   A request that already names it meets the gate; a vague one ("open it up a bit", "yes, change
-  it") doesn't -- first show who can do it today (the user types and what each can do, from
-  the plan), then ask them to spell out the change.
+  it") doesn't -- first show what is in place today (for sign-in, the current sign-in method;
+  for permissions, the user types and what each can do, from the plan), then ask them to spell
+  out the change.
 - Minor: Make the change and continue
 - Major: one decision-ready ask (consequential, per the approval block), in a few plain lines:
   what changes in the plan (which pages or parts get redone, in their words); what makes it

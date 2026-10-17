@@ -1889,7 +1889,7 @@ thing to check: is **{hostname}** the right address for the dev version of your 
 
 **What would you like to do?**
 
-1. **Send it -- deploys to {hostname}** -- builds and deploys to **{hostname}** automatically
+1. **Send it -- deploys to {hostname}** -- builds it and deploys it automatically
 2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
    [only if kubectl is present AND `kubectl config current-context` is a local cluster:
    rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared

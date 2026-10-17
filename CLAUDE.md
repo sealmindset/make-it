@@ -91,7 +91,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 2. **Generate** -- Create `env/dev/` and `env/prod/` Kustomize manifests using detected patterns
 3. **CI Workflow** -- Generate build-and-push workflow (GitHub Actions, GitLab CI, Jenkins, or Azure DevOps)
 4. **Onboarding** -- Generate `ONBOARDING-K8S.md` with manual steps (secrets, Argo config) + local K8s testing instructions
-5. **Deploy** -- Offer 4 options: send it (deploys to the hostname), try it on a local Kubernetes first (Rancher Desktop/minikube/kind), show the files first, or not now; a redeploy asks "Update {hostname}" after a secret check
+5. **Deploy** -- Offer 4 options: send it (deploys to the hostname), try it on a local Kubernetes first (Rancher Desktop/minikube/kind), show the files first, or not now; a redeploy asks you to pick "Update {hostname}", then a secret check runs before anything is sent
 
 ### Key Principles
 

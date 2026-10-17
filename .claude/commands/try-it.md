@@ -536,7 +536,8 @@ Skip to Phase 4 (Report). Tell user: "Everything looks great!"
 
 Failures marked `left_out` are not fixed: the user chose to leave that item out, so fixing it
 would put it back in. Report them in Phase 4 under "Left out by your choice" and go on. If
-every failure is one of these, treat it as all passed.
+every failure is one of these, skip to Phase 4 and tell the user: "Your app works. The items you
+chose to leave out still show as missing -- that's expected."
 
 For the rest, tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
