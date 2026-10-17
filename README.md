@@ -972,8 +972,8 @@ a plain yes. No bare yes/no remains in these skills.
 | resume-it | 30 | 24 | 4 kept + 1 conditional (sign-in, permissions, database changes) |
 | make-it | 14 (10 interview) | 14 | 1 kept + 1 raised (pausing a security tool; sign-in / who-can-do-what changes mid-build) |
 | argo-it | 23 | 17 | 6 kept, 4 tightened (sends, deploys, the deploy branch, the deploy save) |
-| retrofit-it | 11 | 9 | 6 kept + 1 raised (the plan, the checkpoints, the live database) |
-| nemo-it | 3 | 2 | 1 kept + 1 added (the live-system scan, the production-path start) |
+| retrofit-it | 11 | 9 | 6 kept + 1 raised + 1 added (the plan, the checkpoints, the live database) |
+| nemo-it | 3 | 2 | 1 kept + 1 raised (the live-system scan, the production-path start) |
 | try-it | 6 | 4 | 1 kept (pausing a security tool) |
 | learnings (learnings.md + callers) | 6 | 6 | none (one batched, decision-ready message)[^learnings] |
 
