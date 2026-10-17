@@ -417,8 +417,8 @@ e.g. Stripe, SendGrid] with the keys your app already uses']. [First run (no sna
 yet): 'Before I touch anything I save a snapshot of your app's files as they are now, so I can
 put the files back exactly like this at any point.'][Re-run (a snapshot from an earlier run
 exists): 'I keep the snapshot from the earlier run: putting the files back returns to before
-that first run, not to now.'] Your settings file (.env) isn't part of the snapshot; I'll show
-you what I change in it. [If the app already has a database: 'There is no undo for
+that first run, not to now.'][If the app has a .env: ' Your settings file (.env) isn't part of the
+snapshot; I'll show you what I change in it.'] [If the app already has a database: 'There is no undo for
 [DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved changes:
 'You have unsaved changes; I'll save them first[; first run only: ' so the snapshot is
 complete'].']
@@ -442,16 +442,20 @@ for real]. Build only what they included; anything left out
 goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
 left-out item is needed by one they kept, say which in one line and ask them to pick again.
-If they say the database at [host] is the one people use for real, stop and change nothing:
+Unless they say the database at [host] is a test copy (not sure counts as not a test copy),
+stop and change nothing:
 "I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
-database your settings point at, and there is no undo for that -- so I won't run it against
-the one people use for real. What you need: a test copy of that database, with your settings
-(.env / compose) pointing at it. Then run /retrofit-it again." **Not now:** change nothing and stop. [If Very High: **fresh build** -- help migrate per
-error-handling; nothing below runs. **Step-by-step upgrade** -- continue below with the items
-they included.]
+database your settings point at, and there is no undo for that -- so I won't run it unless I
+know it is a test copy. What you need: a test copy of that database, with your app's settings
+file (.env) pointing at it. Then run /retrofit-it again."
+
+**Not now:** change nothing and stop.
+
+[If Very High: **fresh build** -- help migrate per error-handling; nothing below runs.
+**Step-by-step upgrade** -- continue below with the items they included.]
 
 **After they pick, save their unsaved changes (every run, as announced above, with .env files,
-key files, credential JSON and local database files kept out of the save, at any depth) and
+key, certificate and credential files and local databases kept out of the save, at any depth) and
 create the pre-retrofit snapshot if there is none yet** (a re-run keeps the earlier one, as
 the ask said). A folder that was not under git yet gets `git init` plus a `.gitignore` seeded
 from the scaffold (or a minimal list), so dependencies and build output are not saved either:
@@ -465,12 +469,13 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 if [ -n "$(git status --porcelain)" ]; then
   grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
-  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*' '*.db'; do
+  for p in '*.pem' '*.key' '*service-account*.json' '*.sqlite*' '*.db' 'credentials*.json' 'id_rsa*' 'id_ed25519*' '*.p12' '*.pfx'; do
     grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
   done
   { git add -A && git reset -q -- ':(glob)**/.env*' ':(glob,exclude)**/.env.example' \
     ':(glob)**/*.pem' ':(glob)**/*.key' ':(glob)**/*service-account*.json' ':(glob)**/*.sqlite*' \
-    ':(glob)**/*.db'; } || fail "could not save the unsaved changes"
+    ':(glob)**/*.db' ':(glob)**/credentials*.json' ':(glob)**/id_rsa*' ':(glob)**/id_ed25519*' \
+    ':(glob)**/*.p12' ':(glob)**/*.pfx'; } || fail "could not save the unsaved changes"
   git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
 fi
 git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
@@ -940,8 +945,9 @@ What changed: [this step's user-facing scope, one line][; if this step changed .
 your settings file (.env): [the settings added or changed, by name, values hidden]'].
 Your files are saved on this computer[; if the database lives elsewhere: ', and the data
 changes are in your database at [host]']. If anything is off, I can put the app's files back to
-how they were before this step, or before the upgrade started (your settings file, .env, isn't
-part of that -- the list above is what I changed in it). [If the app already had a
+how they were before this step, or before the upgrade started[; if this step changed .env: ' (your
+settings file, .env, isn't part of that -- the list above is what I changed in it; settings
+changed in earlier steps stay changed when going back)']. [If the app already had a
 database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
 'the new lists of roles and permissions', 'the sample records and test accounts I added']:
 putting the files back does not remove them.']
