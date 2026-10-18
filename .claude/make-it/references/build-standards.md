@@ -46,6 +46,8 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **S12** [Tier 0] [FIX] **Keep the human able to notice, in CLAUDE.md** -- `CLAUDE.md` contains the `## Keep the human able to notice — against approval fatigue and blind trust` section, after the muddy-water section and before `@LEARNINGS.md`. Fix: insert the "Section -- copy exactly" block from `human-in-the-loop.md` word for word; leave every other line untouched.
 
+**S13** [Tier 0] [FIX] **Instruction-drift canary in CLAUDE.md** -- A root `CLAUDE.md` exists and its first section is `## Canary — instruction-drift check (highest priority)`. Fix: no `CLAUDE.md` → create it with only the `# Project instructions` title and the canary section from `make-it.md` Build step h (S10-S12 add the rest); `CLAUDE.md` without the canary → insert that section right after the file's `#` title (at the very top if it has none), or move it there if it sits lower down. Fill `[BUILDER_NAME]` from `builder_name` in app-context.json; empty or absent → step h's `🐤 canary ok` fallback. Leave every other line untouched. Run it before S10-S12: all four write `CLAUDE.md`, and S11 and S12 place their sections after the canary.
+
 ---
 
 ## Version Control & Worktrees

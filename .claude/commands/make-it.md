@@ -1067,7 +1067,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S12**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify and keep-the-human-able-to-notice sections)
+- **S01-S13**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify and keep-the-human-able-to-notice sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
