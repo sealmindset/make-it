@@ -958,6 +958,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.6 -- New apps keep their dev database password out of committed files
+
+Both app templates (fastapi-nextjs and nextjs-fullstack) wrote the dev database password into
+`docker-compose.yml`, and that password was just the app's name. So every new app committed it,
+and argo-it's secret check would stop on it at the first deploy. Now:
+- `docker-compose.yml` reads `${POSTGRES_PASSWORD}` from `.env`, and the backend builds its
+  database URL from the same value. There is no fallback that puts it back in the file.
+- `/make-it` seeds a random password into `.env` at build time, alongside `JWT_SECRET`.
+  `.env.example` documents a `local-dev-only` placeholder, so `cp .env.example .env` still
+  starts.
+- The backend's fallback defaults (`config.py`, `alembic/env.py`) no longer hold the old password.
+
+Checked on a test app built from the new template: no hits in its committed files, the database
+and backend came up healthy, the migrations ran, and the old password was rejected. Apps built
+before this keep the old value in their committed files. A catch-up for them is tracked
+separately, and it must keep the value each app's database was created with.
+
 ### v1.44.5 -- The sdd-gate waits for running agents instead of nudging
 
 During a `/subagent-it` run, the sdd-gate counted every turn end as a stall. That included the
