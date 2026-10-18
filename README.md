@@ -385,7 +385,7 @@ resume-it: [scaffolds pytest + Playwright if first time, runs all tests]
 2. **Gap Analysis** -- Compares what you have against the make-it guardrails and identifies what's missing
 3. **Risk Score** -- Calculates a risk score (0-100) based on the size and complexity of changes needed. Calibrated with real-world retrofit data
 4. **Plan** -- Presents the upgrade plan in plain language with phases like "Setting up your development environment" and "Adding secure login and user permissions"
-5. **Pre-retrofit Snapshot** -- Creates a git tag (`pre-retrofit`) that puts your files back if you want to go back (your .env settings and database changes are not part of it)
+5. **Pre-retrofit Snapshot** -- Saves a snapshot before anything changes. An app in its own repo gets a git tag (`pre-retrofit-<folder>`). An app inside another repo gets a plain copy beside it, and nothing is written to the outer repo. Local file databases (`*.db`, `*.sqlite`) are copied too, so undo puts your files and that data back. Your .env settings and server databases like Postgres are not part of it.
 6. **Retrofit** -- Applies changes in safe, verifiable phases. Each phase is tested before moving to the next
 7. **Verify** -- Runs the same build-verify checks as `/make-it` to ensure everything works
 
@@ -929,7 +929,7 @@ When your app requires login, the skill generates a local mock identity provider
 In a standard Git repository in the directory where you ran `/make-it`. It gets pushed to GitHub when you run `/ship-it`.
 
 **I already have an app -- can I still use these skills?**
-Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It creates a git snapshot first that puts your files back if you want to go back (your .env settings and database changes are not part of it).
+Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your existing app, identifies what's missing (auth, RBAC, Docker, etc.), and upgrades it surgically. It saves a snapshot first that puts your files and local database files back if you want to go back (your .env settings and server databases are not part of it).
 
 **Does it support AI-powered apps?**
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
@@ -956,6 +956,26 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.44.10 -- `/retrofit-it`'s undo never writes into another repo, and puts `.db` files back
+
+The undo snapshot only checked that it was inside a git repo. When the app lived inside a bigger
+repo, the "before" commit and the fixed `pre-retrofit` tag went into that outer repo, along with
+whatever else was staged there. Two apps in one repo also shared one tag, and undo never covered
+local database files. Now:
+- **App inside another repo:** the snapshot is a plain copy beside the app, without installed
+  packages or secret files. Nothing is committed, tagged or ignored in the outer repo, and the
+  retrofit makes no branch or worktree there.
+- **App in its own repo:** the tag is named after the app folder (`pre-retrofit-<folder>`).
+- **Local databases:** `*.db` and `*.sqlite` files are copied, and a new Undo step puts files and
+  data back exactly. It compares contents, not timestamps. Journal files (`*.db-*`) are no longer
+  committed.
+- **Stop:** tells you where the upgraded app is and how to get back to it.
+- **The plan's steps:** the step names now match the checkpoints the retrofit actually runs.
+
+Checked under bash and zsh: an app with its own repo, an app inside another repo, and two apps in
+one repo. Undo restored the app folder and its database byte for byte, and the outer repo was left
+untouched.
 
 ### v1.44.9 -- `/try-it` never stops other programs, and asks about your security tool only when needed
 
