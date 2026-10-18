@@ -9,7 +9,7 @@ assistant and subagent reads it on every turn.
 
 - **New projects:** /make-it writes it during Build (step h, after the muddy-water section).
 - **Existing projects:** build-standards check **S12** -- /resume-it's catch-up scan and
-  /retrofit-it's verify add it when it is missing.
+  /retrofit-it's verify add it when it is missing, or move it into place.
 - The same text lives in the owner's global `~/.claude/CLAUDE.md`.
 - **Skills and agents** use its working form, `approval-block.md`: the ask tiers, the
   decision-ready ask, and the SAFEGUARDS disclosure line reviewers check.
@@ -51,7 +51,9 @@ Approval that has become routine is not oversight; design the loop so it never b
 
 ## The check (S12)
 
-`CLAUDE.md` contains the line `## Keep the human able to notice — against approval fatigue and
-blind trust`. Missing → insert the block above after the muddy-water section (or after the canary,
-if that is missing too) and before `@LEARNINGS.md`. Leave every other line of `CLAUDE.md`
-untouched.
+In `CLAUDE.md`, the next `## ` heading after the canary's heading, stepping past the muddy-water
+heading if it comes first, is `## Keep the human able to notice — against approval fatigue and
+blind trust`, and that section appears once. Otherwise → put the block above directly before that
+next heading (at the end of the file if there is none): insert it if it is missing, or move it
+there unchanged if it sits anywhere else. Never leave two copies. Leave every other line of
+`CLAUDE.md` untouched.

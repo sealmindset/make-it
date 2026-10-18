@@ -957,6 +957,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.8 -- Catch-up puts each `CLAUDE.md` section in one exact spot
+
+S10-S12 placed their sections in a range ("after the canary and before `@LEARNINGS.md`"),
+and their fixes could only add a section, never move one. So a literal reading depended on the
+order the checks ran in. An older project could end up with sections after its own old ones, or
+with a second copy. Now:
+- **One spot for each section.** S11 goes directly before the next heading after the canary, and
+  S12 directly before the next heading after S11. S10 writes `## Learnings` + `@LEARNINGS.md`
+  right after them. The result is canary, settle-filter-verify, keep-the-human-able-to-notice,
+  Learnings, then the project's own sections unchanged. That matches a fresh `/make-it` build.
+- **Moved, never copied.** A section that exists in the wrong place is moved. A stray
+  `@LEARNINGS.md` is moved too.
+- **The canary's fallback:** when there's no builder name, `🐤 canary ok` replaces only the
+  canary's first sentence. The explanation now reads "fails to open that way", which fits both
+  forms. Existing canaries are untouched.
+
+Checked by applying the wording literally in every order to three starting files. Each gave one
+result, byte for byte the same as a fresh build, and a second run changed nothing.
+
 ### v1.44.7 -- `/nemo-it` reports only what ran, and scans only your app
 
 A live check of v1.44.4 found more places where `/nemo-it` said a scan was complete, or a check
