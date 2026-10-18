@@ -1149,8 +1149,7 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
-    the evidence line and the stop message; and make-it asks only after a certificate error,
-    while try-it asks as soon as it finds a tool):
+    the stop message):
     ```bash
     # Check each common SSL-inspecting proxy separately, so every running one is named.
     # Bracketed first letter: the pattern can never match its own shell's command line.

@@ -122,6 +122,14 @@ docker compose ps 2>/dev/null
 
 # Is anything already using our ports?
 lsof -i :3000 -i :3007 -i :8000 2>/dev/null
+
+# Which SSL-inspecting security tools are running? (MANDATORY before any download, build or
+# pull, 3b included. Names only -- the rule for using them is build-and-start step 1.)
+# Check each common SSL-inspecting proxy separately, so every running one is named.
+# Bracketed first letter: the pattern can never match its own shell's command line.
+for p in '[Z]scaler' '[N]etskope' '[G]lobalProtect'; do
+  pgrep -f "$p" >/dev/null 2>&1 && echo "$(echo "$p" | tr -d '[]') running"
+done
 ```
 
 **3b. Check for dependency safety updates (silently -- three layers):**
@@ -221,10 +229,10 @@ This will take a minute or two -- I'll keep you posted."
 ```bash
 # Stop any existing containers from this project
 docker compose --profile dev down 2>/dev/null
-
-# Kill anything on the ports we need
-# (Only if ports are occupied by non-project processes)
 ```
+
+Never stop a program that isn't this project's, even one on a port the app needs: step 4 moves
+the app to a free port instead.
 
 **3. Check and fix .env file:**
 
@@ -255,7 +263,21 @@ lsof -i :6379 2>/dev/null  # Redis
 If any port is occupied:
 - Try to determine what's using it
 - If it's a previous instance of this project -> stop it
-- If it's something else -> find the next available port and update .env / docker-compose
+- If it's something else -> leave it running; find the next available port and update .env /
+  docker-compose
+- If no free port works for a service (moved, it still won't come up, and fixing didn't help),
+  ask before touching the other program. Stopping it is a high-stakes stop (per the approval
+  block): the user names it. `[PROGRAM]` is the name `lsof -i :[PORT]` shows (plus its folder
+  from `ps -o command= -p [PID]` when that says more). Tell user: "Your app needs a spot on your
+  computer that [PROGRAM] is using, and I couldn't get your app working in another spot. If I
+  stop [PROGRAM], anything unsaved in it may be lost; you can start it again yourself
+  afterwards. Normally I just move your app; this time no other spot worked. The one thing to
+  check: you're not using [PROGRAM] right now. To let me stop it, type its name: '[PROGRAM]'.
+  Anything else and I'll leave it alone."
+  **Wait for their answer.** Only its name means go: stop that one process ([PID]), nothing
+  else. Anything else: leave it running, tell the user "Your app can't start while [PROGRAM] is
+  using its spot. Close it whenever you like, then run /try-it again.", run the save-state step
+  and end.
 
 Tell user the port if it changed:
 "Your app will be at http://localhost:[PORT] (the usual spot was taken, so I picked a new one)."
@@ -264,30 +286,20 @@ Tell user the port if it changed:
 
 <step name="build-and-start">
 
-**1. SSL-inspecting proxy check (MANDATORY before any Docker build or pull):**
+**1. SSL-inspecting proxies (the check ran in context discovery step 3, before any download):**
 
-SSL-inspecting proxies break Docker image pulls and builds. Before building:
-
-```bash
-# Check each common SSL-inspecting proxy separately, so every running one is named.
-# Bracketed first letter: the pattern can never match its own shell's command line.
-for p in '[Z]scaler' '[N]etskope' '[G]lobalProtect'; do
-  pgrep -f "$p" >/dev/null 2>&1 && echo "$(echo "$p" | tr -d '[]') running"
-done
-```
-
-If a proxy is detected (or if a Docker build fails with TLS/certificate errors), this is a
-high-stakes stop (per the approval block): the user is turning off a security tool on their own
-computer, so they state the specifics -- never a plain "done". Fill `[TOOL]` with every name the
-check printed (Zscaler, Netskope or GlobalProtect; all of them if more than one matched). If the
-check found nothing and a build failed with a certificate error, use "your network security tool
-(often Zscaler, Netskope or GlobalProtect)", the second evidence line, and the 'don't have one'
-sentence.
+SSL-inspecting proxies can break Docker image pulls and builds. A tool the check found running is
+only a name so far: try the build (step 2) first, and ask only when a build or pull fails with a
+TLS/certificate error. Then the user has to pause the tool themselves, and this is a high-stakes
+stop (per the approval block): they are turning off a security tool on their own computer, so
+they state the specifics -- never a plain "done". Fill `[TOOL]` with every name the check printed
+(Zscaler, Netskope or GlobalProtect; all of them if more than one matched). If the check found
+nothing, use "your network security tool (often Zscaler, Netskope or GlobalProtect)" and the
+'don't have one' sentence.
 
 Tell user: "Before I can put your app together, I need you to pause [TOOL] for a little while.
-[If detected: 'I can see it running on your computer, and it blocks the downloads your app
-needs.' If a build failed: 'The download just failed in the way these tools make it fail.']
-While it's paused, that tool isn't checking your computer's internet traffic -- nothing about
+The download just failed in the way these tools make it fail[if detected: ', and I can see
+[TOOL] running on your computer']. While it's paused, that tool isn't checking your computer's internet traffic -- nothing about
 your app or your files changes. If it offers a time limit, it turns itself back on when that
 runs out; either way, I'll remind you to turn it back on as soon as I'm done downloading,
 whether or not everything worked. Normally I handle everything myself; this is the one thing I
@@ -303,19 +315,20 @@ for -- 'no time limit' is fine if it didn't offer one."
 **Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
 'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
 none was given. When `[TOOL]` names more than one tool, the answer must cover every one of them
-before any build starts; ask about the ones still missing. 'not sure', 'can't', or 'no' means
+before the build is retried; ask about the ones still missing. 'not sure', 'can't', or 'no' means
 stop; 'don't have one' (offered only when the check found nothing) means the tool wasn't the
 cause -- go back to the normal "If build fails" diagnosis in step 2 and keep fixing, and don't
 offer this pause again this run (a later certificate error gets the normal diagnosis, not this
 ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
-missing. Do NOT attempt Docker builds while the proxy is active. On stop: if they already said
+missing. Do NOT retry Docker builds while the tool is active. On stop: if they already said
 they paused any tool, give it the reminder below first; then tell the user "Your app can't be
 put together on this network [if detected: 'while [only the tools still running] is running' /
 otherwise: 'while something is blocking the downloads']. Ask whoever manages your computer, or
 try again from another network." Then run the save-state step and end.
 
 Only if the user actually paused a tool: once the downloading is over -- the builds and pulls
-worked, or you've stopped trying -- remind the user, naming every tool they said they paused:
+worked and the smoke test's installs and audits are done (its steps 1 and 2b, rebuilds
+included), or you've stopped trying -- remind the user, naming every tool they said they paused:
 "All done with the heavy lifting! You can turn [TOOL] back on now[if a time was given: ' -- no
 need to wait out the [TIME] you gave it']." No pause (never asked, or 'don't have one'), no
 reminder.
@@ -856,16 +869,17 @@ Let me create it now..."
 **If Docker build fails with TLS/certificate/SSL errors (SSL proxy interference):**
 - SSL-inspecting proxies (Zscaler, Netskope, Palo Alto, etc.) break Docker image pulls and npm/pip installs inside containers
 - Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
-- Use the ask in build-and-start step 1 (with its "a build failed" evidence line) and wait for
-  the same answer; a stop there is a stop here, and if the user already answered 'don't have one'
-  this run, don't ask again -- keep diagnosing. Do NOT retry builds while the SSL proxy is active.
-- Once the downloading is over (the builds worked, or you've given up on them), give step 1's
-  reminder, under step 1's rule (only if a tool was actually paused).
+- Use the ask in build-and-start step 1 and wait for the same answer; a stop there is a stop
+  here, and if the user already answered 'don't have one' this run, don't ask again -- keep
+  diagnosing. Do NOT retry builds while the SSL proxy is active.
+- Once the downloading is over (as step 1 defines it), give step 1's reminder, under step 1's
+  rule (only if a tool was actually paused).
 
 **If port conflicts can't be resolved:**
 - Find the next 5 available ports
 - Update docker-compose.yml and .env with new ports
 - Tell user the new URL
+- If no free port works, greet-and-start step 4's ask -- never stop the other program without it
 
 **If Playwright can't be installed:**
 - Fall back to curl-based testing for API endpoints
@@ -902,6 +916,7 @@ Let me create it now..."
 - Always use `--profile dev` to include mock services
 - Always check health before declaring a service "running"
 - Clean up orphaned containers before starting
-- Don't leave zombie processes on ports
+- Don't leave this project's zombie processes on ports (another program is never stopped
+  without greet-and-start step 4's ask)
 
 </guardrails>
