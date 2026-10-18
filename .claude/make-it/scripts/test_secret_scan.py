@@ -1659,5 +1659,47 @@ class AdversarialRound3Cases(Base):
         self.check(r.scan(), secrets=['Zk9+c2VjcmV0QPwd=abcdefgh1'])
 
 
+class ReReview6Cases(Base):
+    """Re-review 6: the widened NAME lookbehind (9f5e390) must not add false hits. All new files."""
+
+    def test_1_compose_volume_mounts_are_no_hit(self):
+        r = self.fresh()
+        r.write('docker-compose.yml', 'services:\n  backend:\n    image: app-backend\n    volumes:\n'
+                '      - ~/.git-credentials:/root/.git-credentials:ro\n'
+                '      - ./db_password:/run/secrets/db_password:ro\n'
+                '      - /client_secret:/app/client_secret:ro\n')
+        self.check(r.scan())
+
+    def test_2a_js_regex_literal_starting_with_name_is_no_hit(self):
+        r = self.fresh()
+        r.write('redact.js', 'const x = 1;\nconst TOKEN_RE = /token="([a-f0-9]{32})"/;\n')
+        self.check(r.scan())
+
+    def test_2b_yaml_pattern_regex_starting_with_name_is_no_hit(self):
+        r = self.fresh()
+        r.write('semgrep.yml', "rules:\n  - pattern-regex: '(?i)/token=([a-z0-9]{8,})'\n")
+        self.check(r.scan())
+
+    def test_3a_quoted_url_path_starting_with_name_config_is_no_hit(self):
+        r = self.fresh()
+        r.write('app.yml', 'name: demo\nurl: "/token=abcdefgh12345"\n')
+        self.check(r.scan(), secrets=['abcdefgh12345'])
+
+    def test_3b_quoted_url_path_starting_with_name_source_is_no_hit(self):
+        r = self.fresh()
+        r.write('call.js', "const x = 1;\nfetch(\"/token='abcdefgh12345'\")\n")
+        self.check(r.scan(), secrets=['abcdefgh12345'])
+
+    def test_4_base64_run_starting_with_slash_is_no_hit(self):
+        r = self.fresh()
+        r.write('app.yml', 'description: use key /c2VjcmV0QPwd=abcdefgh1\n')
+        self.check(r.scan(), secrets=['c2VjcmV0QPwd=abcdefgh1'])
+
+    def test_5_protocol_relative_url_password_is_still_a_hit(self):
+        r = self.fresh()
+        r.write('proxy.yml', 'upstream: "//app:MyPassword=2024xyzQ@db/app"\n')
+        self.check(r.scan(), new=['proxy.yml:1'], secrets=['MyPassword=2024xyzQ', '2024xyzQ'])
+
+
 if __name__ == '__main__':
     unittest.main()
