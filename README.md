@@ -957,6 +957,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.11 -- New apps' database migrations always follow the scaffold's own
+
+`/make-it` told builds to create migration `002_domain_schema.py`, then `003_domain_permissions.py` and
+`003_seed_data.py`. Those numbers date from when the scaffold had one migration. It now ships `002` and `003`,
+so every build made two migration heads, and `alembic upgrade head` failed on first start. The backend
+container died, and a fix cycle had to work out why. Now:
+- Each migration a build adds takes the next free number after the highest one in
+  `backend/alembic/versions/`, with `down_revision` set to that revision. No number is hard-coded, and the
+  chain must keep exactly one head.
+- A new fastapi-nextjs build gets `004_domain_schema.py` (after `003`). This was checked with alembic:
+  one head, and `upgrade head` runs clean.
+
 ### v1.44.10 -- `/retrofit-it`'s undo never writes into another repo, and puts `.db` files back
 
 The undo snapshot only checked that it was inside a git repo. When the app lived inside a bigger
