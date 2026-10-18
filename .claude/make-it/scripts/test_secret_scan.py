@@ -1831,5 +1831,129 @@ class ArgoItAdversarial1Cases(Base):
                          '3e does not say to move every value on a flagged line')
 
 
+class ArgoItReReview2Cases(Base):
+    """Re-review 2 on 3e: the .env check must work before step 4's ignore line exists, and close the gaps."""
+
+    def _w(self):
+        return ArgoItWiringCases('test_old_inline_scan_is_gone')
+
+    def _move(self):
+        """The move paragraph (raw, code kept): from 'Move only the ones' to the end of that paragraph."""
+        sec = self._w()._section()
+        i = sec.index('Move only the ones')
+        j = sec.find('\n\n', i)
+        return sec[i:j if j != -1 else len(sec)]
+
+    def _tail(self):
+        mv = self._move()
+        return mv[mv.index('Once it exits 0'):]
+
+    def _env_cmds(self):
+        """Inline code / fenced blocks in the move paragraph that prepare or check .env (not diagnostics)."""
+        mv = self._move()
+        spans = re.findall(r'```(?:bash|sh)?\n(.*?)```|`([^`\n]+)`', mv, re.S)
+        cmds = []
+        for blk, inl in spans:
+            c = (blk or inl).strip()
+            if '.env' not in c or not re.search(r'\b(test|git|grep|printf|find)\b', c):
+                continue
+            if re.search(r'ls-files|error-unmatch', c) or re.match(r'test -[Ll] ', c):
+                continue  # a per-reason probe that is meant to exit 1 on a good .env
+            cmds.append(c)
+        self.assertTrue(cmds, '3e move paragraph gives no .env safety command in code')
+        self.assertTrue(any('check-ignore' in c for c in cmds), 'no git check-ignore in the .env command(s)')
+        return cmds
+
+    def _run_env(self, r, shell):
+        script = '\n'.join('{ %s\n} || exit 1' % c for c in self._env_cmds())  # any failing step stops
+        cp = subprocess.run([shell, '-c', script], cwd=r.work, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=60)
+        return cp.returncode
+
+    def _ignored(self, r):
+        return subprocess.run(['git', 'check-ignore', '-q', '.env'], cwd=r.work).returncode == 0
+
+    def _both(self, mk, ok):
+        for shell in ('bash', 'zsh'):
+            r = self.fresh()
+            mk(r)
+            code = self._run_env(r, shell)
+            if ok:
+                self.assertEqual(code, 0, '%s: .env check stopped a good .env' % shell)
+                self.assertTrue(self._ignored(r), '%s: .env not ignored after the check' % shell)
+            else:
+                self.assertNotEqual(code, 0, '%s: .env check passed an unsafe .env' % shell)
+
+    def test_i1_gitignore_without_env_passes_and_adds_the_ignore(self):
+        def mk(r):
+            r.write('.gitignore', 'node_modules/\n')
+            r.commit('ignore')
+            r.write('.env', 'X=1\n')
+        self._both(mk, True)
+
+    def test_i1_no_gitignore_passes(self):
+        self._both(lambda r: r.write('.env', 'X=1\n'), True)
+
+    def test_i1_guard_tracked_env_fails(self):
+        def mk(r):
+            r.write('.gitignore', '.env\n')
+            r.write('.env', 'X=1\n')
+            r.git('add', '-f', '.env')
+            r.commit('tracked')
+            self.assertIn(b'.env', r.git('ls-files', '.env'))
+        self._both(mk, False)
+
+    def test_i1_guard_symlinked_env_fails(self):
+        def mk(r):
+            r.write('config/local.settings', 'DEBUG=1\n')
+            r.commit('t')
+            os.symlink('config/local.settings', r.path('.env'))
+        self._both(mk, False)
+
+    def test_i1_guard_negated_env_fails(self):
+        def mk(r):
+            r.write('.gitignore', '.env*\n!.env\n')
+            r.commit('neg')
+            r.write('.env', 'X=1\n')
+        self._both(mk, False)
+
+    def test_m1_hard_linked_env_fails(self):
+        def mk(r):
+            r.write('.gitignore', '.env\n')
+            r.write('config/local.settings', 'DEBUG=1\n')
+            r.commit('t')
+            os.link(r.path('config/local.settings'), r.path('.env'))
+        self._both(mk, False)
+
+    def test_m2_value_goes_to_the_project_root_env_just_checked(self):
+        t = self._tail()
+        self.assertRegex(t, r'(?is)each value goes to.{0,120}project root.{0,120}check',
+                         '3e does not say the value goes to the project-root .env that was just checked')
+
+    def test_m3_escaped_name_stop_covers_folders_and_underscores(self):
+        sec = self._w()._section()
+        i = sec.index('hidden or unusual character')
+        j = sec.index('run /argo-it again', i)
+        stop = sec[i:j]
+        self.assertRegex(stop, r'(?i)\b(folders?|director(y|ies)|path)\b',
+                         'escaped-name stop speaks only of a file, not its folders/path')
+        self.assertRegex(stop, r'(?i)underscores?', 'plain-name rule does not allow underscores')
+
+    def test_m4_rescan_after_move_and_hit_left_means_stop(self):
+        t = self._tail()
+        self.assertRegex(t, r'(?is)\b(run|re-?run)\b[^.]{0,120}\b(3e|scan)\b[^.]{0,60}\bagain\b|'
+                            r'\bagain\b[^.]{0,60}\b(3e|scan)\b', '3e does not tell the agent to run the scan again after moving')
+        self.assertRegex(t, r'(?is)\b(any|a)\s+hit\b[^.]{0,120}\bstop\b|\bstop\b[^.]{0,120}\b(any|a)\s+hit\b',
+                         '3e does not say a hit left after moving means stop')
+
+    def test_m5_stop_message_tells_the_three_reasons_apart(self):
+        mv = self._move()
+        per_reason = (re.search(r'ls-files|error-unmatch', mv) and re.search(r'test -L', mv)
+                      and re.search(r'check-ignore', mv))
+        says_which = re.search(r'(?i)which (check|one|test)[^.]{0,40}(fail|stop)|(failing|failed) check', mv)
+        self.assertTrue(per_reason or says_which,
+                        '3e gives no way to tell link / tracked / not-ignored apart')
+
+
 if __name__ == '__main__':
     unittest.main()
