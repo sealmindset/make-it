@@ -490,13 +490,15 @@ Then stop -- steps 4 and later don't run.
 
 **Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
 
-First, if any hit's file name holds `\xNN` or `\uXXXX` -- the scanner's escape for a control or
-unusual character, not a literal backslash, so that file can't be opened safely -- don't ask:
-stop, steps 4 and later don't run. Tell the user: "I found what looks like a password or secret
-key on line [N] of a file whose name has a hidden or unusual character in it ([file]), so I
-can't open it safely, and I won't send this. I haven't saved or sent anything[; the small fixes
-I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. What to do next: give
-that file a plain name (letters, numbers, dots and dashes only), then run /argo-it again."
+First, if any hit's path holds `\xNN` or `\uXXXX` -- the scanner's escape for a control or
+unusual character in a file or folder name, not a literal backslash, so that file can't be opened
+safely -- don't ask: stop, steps 4 and later don't run. Tell the user: "I found what looks like a
+password or secret key on line [N] of a file whose name, or the name of a folder it sits in, has
+a hidden or unusual character in it ([file] -- the part starting with a backslash stands for that
+character), so I can't open it safely, and I won't send this. I haven't saved or sent
+anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made
+any]. What to do next: give that file, and the folders it sits in, plain names (letters,
+numbers, dots, dashes and underscores only), then run /argo-it again."
 
 "I found what looks like a password or secret key in your changes: **line [N] of [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
@@ -511,21 +513,33 @@ Which should I move -- **line [N] of [file]** [each, by file and line] -- or **s
 can sort it out yourself?"
 
 Move only the ones they named. Before you write anything to `.env`, make sure it stays on this
-computer: from the project root (where step 4 runs), run `test ! -L .env && git check-ignore -q .env`.
+computer. From the project root (where step 4 runs), first run step 4's own `.gitignore` line,
+exactly as step 4 has it; that line stays in `.gitignore` whatever happens next:
+`grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore`
+Then run the check:
+`test ! -L .env && { test ! -e .env || test -n "$(find .env -prune -type f -links 1)"; } && git check-ignore -q .env`
 If it exits anything but 0 -- `.env` is a link to another file, git already tracks it, or git
-isn't set to leave it out -- stop: steps 4 and later don't run. Tell the user: "I can't move it
-safely: your local settings file (.env) [is a shortcut to another file / is already in your saved
-history / isn't set to stay on this computer], so the value could still be sent. I haven't moved,
-saved or sent anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b
-or 3c made any]. What to do next: ask your DevOps team to help make .env a plain file that stays
-on this computer, then run /argo-it again." Once it exits 0: open each named line yourself (from
-the top folder) to learn the setting names, and move every secret-looking value on that line,
-not just the first. Each value goes to that `.env`, the code gets an `os.getenv()` /
-`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
-nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
-your files. If any found value is still in the code (not named, or called a
-sample), stop and say which one is holding things up -- never send with a found secret still in
-the code, whatever they say.
+isn't set to leave it out -- stop: steps 4 and later don't run. To tell which, check in this
+order and use the first reason that fits: if
+`test -L .env || test -n "$(find .env -prune -type f -links +1)"` is true, `.env` is a link (a
+shortcut, or a second name for another file); if `git ls-files --error-unmatch .env` finds it,
+git tracks it; otherwise git isn't set to leave it out. Tell the user: "I can't move it safely:
+your local settings file (.env) [is a shortcut to another file / is already in your saved
+history / isn't set to stay on this computer], so the value could still be sent. I haven't
+moved, saved or sent anything; the line in .gitignore that keeps .env on this computer stays
+there[, and so do the small fixes I made a moment ago -- only if 3a, 3b or 3c made any]. What to
+do next: ask your DevOps team to help make .env a plain file that stays on this computer, then
+run /argo-it again." Once it exits 0: open each named line yourself (from the top folder) to
+learn the setting names, and move every secret-looking value on that line, not just the first.
+Each value goes to the `.env` in the project root, the one you just checked; the code gets an
+`os.getenv()` / `process.env.` reference; and tell the user the setting name(s) to pass to
+DevOps. 'Stop here': nothing is saved or sent; the small fixes already made earlier in this step
+(3a, 3b, 3c) stay in your files. After a move, run the 3e block again from the project root and
+read it the same way. Any hit left means stop, steps 4 and later don't run -- one they didn't
+name, one called a sample, or a second value on a moved line: say which one is holding things
+up, by file and line. Never send with a found secret still in the code, whatever they say. On
+any stop after a move, also tell the user the moved values stay in .env and the line in
+.gitignore that keeps .env on this computer stays too.
 
 **If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
 **If any check fails and can't be auto-fixed** (3a, 3d -- 3e has its own gate above): one ask
