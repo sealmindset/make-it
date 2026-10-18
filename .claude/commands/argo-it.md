@@ -446,7 +446,9 @@ Run it from the project root with a 120-second timeout, then read the result:
   3e passes.
 - **Exit 1**, the three labels each once, in that order, and every other line a hit: the gate
   below. A hit reads `file:line`; split it on its **last** `:` (a file name can hold one) --
-  the line number is after it, the file before it.
+  the line number is after it, the file before it, exactly as printed (spaces too). The file's
+  path starts at the repo's top folder (`git rev-parse --show-toplevel`), not at the
+  project root, so open it from there.
 - **Anything else** -- any other exit (2 means it couldn't check), a timeout, a label missing or
   repeated, a line that is neither a label nor `file:line`, or exit 1 with no hit: STOP, steps 4
   and later don't run. Tell the user:
@@ -488,6 +490,14 @@ Then stop -- steps 4 and later don't run.
 
 **Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
 
+First, if any hit's file name holds `\xNN` or `\uXXXX` -- the scanner's escape for a control or
+unusual character, not a literal backslash, so that file can't be opened safely -- don't ask:
+stop, steps 4 and later don't run. Tell the user: "I found what looks like a password or secret
+key on line [N] of a file whose name has a hidden or unusual character in it ([file]), so I
+can't open it safely, and I won't send this. I haven't saved or sent anything[; the small fixes
+I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. What to do next: give
+that file a plain name (letters, numbers, dots and dashes only), then run /argo-it again."
+
 "I found what looks like a password or secret key in your changes: **line [N] of [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
 I can move the value into your local settings file (.env) and have the code read it from there
@@ -500,9 +510,18 @@ moving it isn't enough -- it should also be changed, and **stop here** is the sa
 Which should I move -- **line [N] of [file]** [each, by file and line] -- or **stop here** so you
 can sort it out yourself?"
 
-Move only the ones they named: open that line yourself to learn the setting's name; the value
-goes to `.env`, the code gets an `os.getenv()` / `process.env.` reference, and tell the user the
-setting name(s) to pass to DevOps. 'Stop here':
+Move only the ones they named. Before you write anything to `.env`, make sure it stays on this
+computer: from the project root (where step 4 runs), run `test ! -L .env && git check-ignore -q .env`.
+If it exits anything but 0 -- `.env` is a link to another file, git already tracks it, or git
+isn't set to leave it out -- stop: steps 4 and later don't run. Tell the user: "I can't move it
+safely: your local settings file (.env) [is a shortcut to another file / is already in your saved
+history / isn't set to stay on this computer], so the value could still be sent. I haven't moved,
+saved or sent anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b
+or 3c made any]. What to do next: ask your DevOps team to help make .env a plain file that stays
+on this computer, then run /argo-it again." Once it exits 0: open each named line yourself (from
+the top folder) to learn the setting names, and move every secret-looking value on that line,
+not just the first. Each value goes to that `.env`, the code gets an `os.getenv()` /
+`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
 nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
 your files. If any found value is still in the code (not named, or called a
 sample), stop and say which one is holding things up -- never send with a found secret still in
