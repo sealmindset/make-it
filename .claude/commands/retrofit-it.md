@@ -373,13 +373,14 @@ migration, schema) to the user. Translate everything into what it MEANS for them
 
 [If phased mode:]
 **I'll do this in [STEP_COUNT] steps, checking with you between each one:**
-[Bullets, not numbers -- the item numbers above are the only numbers on this screen.]
+[Bullets, not numbers -- the item numbers above are the only numbers on this screen. These are
+5b's steps, in 5b's order and with 5b's names, so each check-in names a step the user approved.]
 - **Setting up your development environment** -- no risk to your existing features
-- **Preparing your database for users and permissions** -- I'll verify everything works before continuing
-- **Adding secure login, user permissions, and activity monitoring** -- the biggest change, I'll test thoroughly
-- **Polishing the interface** -- your app will look the same, just with a few upgrades
-- **Setting up test services** -- so you can develop without needing real external systems
+- **Adding secure login, user permissions, and activity monitoring** -- the biggest change, including your database's lists of users and permissions; I'll test thoroughly
+- **Polishing the interface and setting up test services** -- your app will look the same, just with a few upgrades, and you can develop without needing real external systems
 - **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
+- **Securing your AI features** -- protection against prompt tricks and data leaks _(only if app uses AI)_
+- **Adding automated tests** -- so problems get caught early as you keep building
 - **Final security checks and deployment prep** -- locking everything down
 
 I'll check with you after each step before moving on.
@@ -413,15 +414,24 @@ elsewhere (connection settings in .env / compose point at another host): ', exce
 database at [host] -- [DATA_CHANGES] land there'][; if the app uses AI: ', and while I
 check the AI features I send a few test prompts to [AI provider]'][; if the app calls outside
 services with real keys in its settings: ', and my checks may call [the services, by name --
-e.g. Stripe, SendGrid] with the keys your app already uses']. [First run (no snapshot
-yet): 'Before I touch anything I save a snapshot of your app's files as they are now, so I can
-put the files back exactly like this at any point.'][Re-run (a snapshot from an earlier run
-exists): 'I keep the snapshot from the earlier run: putting the files back returns to before
-that first run, not to now.'][If the app has a .env: ' Your settings file (.env) isn't part of the
-snapshot; I'll show you what I change in it.'] [If the app already has a database: 'There is no undo for
-[DATA_CHANGES]: putting the files back does not remove them.'] [If there are unsaved changes:
-'You have unsaved changes; I'll save them first[; first run only: ' so the snapshot is
-complete'].']
+e.g. Stripe, SendGrid] with the keys your app already uses']. [Check first, names only: the
+app is **nested** when `git rev-parse --show-toplevel` names a folder above the app folder;
+its **database files** are any `*.db` / `*.sqlite*` in it (skip node_modules and .venv).
+[BACKUP] = the app folder's path plus `.pre-retrofit`, a folder beside it.]
+[First run (no snapshot yet): 'Before I touch anything I save a snapshot of your app's files as
+they are now, so I can put the files back exactly like this at any point[; if it has database
+files: ' -- your database files ([their names]) too']. [If nested: 'Your app folder is part of a
+bigger project ([the top folder]) with its own history; I leave that alone, so the snapshot is a
+plain copy of your app folder in [BACKUP], without installed packages (node_modules, .venv),
+which can be reinstalled.'; else, if it has database files: 'Database files can't go in the
+snapshot itself, so I copy them to [BACKUP].']'][Re-run (a snapshot from an earlier run exists:
+the tag `pre-retrofit-<app folder name>`, or for a nested app [BACKUP]/files): 'I keep the
+snapshot from the earlier run: putting the files back returns to before that first run, not to
+now.'][If the app has a .env: ' Your settings file (.env) isn't part of the snapshot; I'll show
+you what I change in it.'] [If the app already has a database that isn't a file in its folder
+(e.g. Postgres): 'There is no undo for [DATA_CHANGES]: putting the files back does not remove
+them.'] [If there are unsaved changes and the app is not nested: 'You have unsaved changes; I'll
+save them first[; first run only: ' so the snapshot is complete'].']
 **What stands out:** [how this differs from a typical upgrade -- e.g. 'your login system gets
 replaced, not just extended', "your list of users gets a 'role' field", 'this is the biggest
 set of changes I've seen for an app this size' -- or 'nothing; this is the standard set'].
@@ -454,49 +464,115 @@ file (.env) pointing at it. Then run /retrofit-it again."
 [If Very High: **fresh build** -- help migrate per error-handling; nothing below runs.
 **Step-by-step upgrade** -- continue below with the items they included.]
 
-**After they pick, save their unsaved changes (every run, as announced above, with .env files,
-key, certificate and credential files and local databases kept out of the save, at any depth) and
-create the pre-retrofit snapshot if there is none yet** (a re-run keeps the earlier one, as
-the ask said). A folder that was not under git yet gets `git init` plus a `.gitignore` seeded
-from the scaffold (or a minimal list), so dependencies and build output are not saved either:
+**After they pick, make the snapshot if there is none yet** (a re-run keeps the earlier one, as
+the ask said). **Own repo** (the app folder is the top of its repo): first save their unsaved
+changes (every run, as announced above, with .env files, key, certificate and credential files
+and local databases kept out of the save, at any depth); the snapshot is a git tag named for the
+app folder, so two apps never share one, plus a plain copy of the database files in [BACKUP]. A
+folder that was not under git yet gets `git init` plus a `.gitignore` seeded from the scaffold
+(or a minimal list), so dependencies and build output are not saved either. **Nested** (inside
+another repo): nothing is saved, tagged, or ignored in that repo -- the snapshot is a plain copy
+of the app folder in [BACKUP]/files, without installed packages or secret files. [BACKUP] ignores
+itself (its own `.gitignore` holds `*`), so no repo shows it and no one's ignore list changes.
+Run it from the app folder:
 
 ```bash
 fail() { echo "SNAPSHOT FAILED: $1"; exit 1; }
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  git init -q || fail "could not start tracking the files"
-  [ -e .gitignore ] || cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore .gitignore 2>/dev/null ||
-    printf 'node_modules/\n__pycache__/\n.venv/\n.next/\ndist/\nbuild/\n*.log\n' > .gitignore
+app=$(pwd -P); bak="$app.pre-retrofit"   # the backup folder, beside the app
+# never copied: git's own folder, installed packages, secret files (operator-safety.md)
+skip=(--exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ --include=.env.example
+  --exclude='.env*' --exclude='*.pem' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*'
+  --exclude='id_ecdsa*' --exclude='id_dsa*' --exclude='*.keychain*' --exclude=.aws/credentials
+  --exclude=.netrc --exclude='*credentials*.json' --exclude='*service-account*.json'
+  --exclude='*.p12' --exclude='*.pfx')
+command -v rsync >/dev/null || fail "the copy tool (rsync) is missing"
+mkdir -p "$bak" && echo '*' > "$bak/.gitignore" || fail "could not make the backup folder $bak"
+top=$(git rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
+if [ -n "$top" ] && [ "$top" != "$app" ]; then
+  # Nested: the repo at $top is not the app's -- nothing is written to it.
+  [ -d "$bak/files" ] || { rsync -a --delete "${skip[@]}" ./ "$bak/files.partial/" &&
+    mv "$bak/files.partial" "$bak/files"; } || fail "could not copy your app folder"
+  echo "snapshot: copy $bak/files"
+else
+  if [ -z "$top" ]; then
+    git init -q || fail "could not start tracking the files"
+    [ -e .gitignore ] || cp ~/.claude/make-it/scaffolds/fastapi-nextjs/.gitignore .gitignore 2>/dev/null ||
+      printf 'node_modules/\n__pycache__/\n.venv/\n.next/\ndist/\nbuild/\n*.log\n' > .gitignore
+  fi
+  if [ -n "$(git status --porcelain)" ]; then
+    grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
+    for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
+             '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
+      grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
+    done
+    # :(top,...) = from the repo root, so a nested repo's pre-staged files stay out too
+    { git add -A . && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
+      ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
+      ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
+      ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+      ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
+      ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
+    git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
+  fi
+  tag="pre-retrofit-$(basename "$app" | tr -cs 'A-Za-z0-9_-' '-')"; tag=${tag%-}   # one per app folder
+  if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    # database files stay out of git (above); this plain copy of them is their undo
+    rsync -a -c --delete -m --exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ \
+      --include='*/' --include='*.db' --include='*.db-*' --include='*.sqlite*' --exclude='*' \
+      ./ "$bak/files/" || fail "could not copy your database files"
+    git tag -a "$tag" -m "Snapshot before /retrofit-it changes" || fail "could not create the snapshot"
+  fi
+  echo "snapshot: tag $tag ($(git rev-parse --short "$tag"))"
 fi
-if [ -n "$(git status --porcelain)" ]; then
-  grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
-  for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
-           '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
-    grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
-  done
-  # :(top,...) = from the repo root, so a nested repo's pre-staged files stay out too
-  { git add -A . && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
-    ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
-    ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
-    ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
-    ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
-    ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
-  git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
-fi
-git rev-parse -q --verify refs/tags/pre-retrofit >/dev/null ||
-  git tag -a pre-retrofit -m "Snapshot before /retrofit-it changes" || fail "could not create the snapshot"
-echo "snapshot: $(git rev-parse --short pre-retrofit)"
 ```
 
-**If the block prints `SNAPSHOT FAILED` (or anything but the final `snapshot: <id>` line), stop
+**If the block prints `SNAPSHOT FAILED` (or anything but the final `snapshot: ...` line), stop
 here, before any retrofit change.** Tell the user plainly: "I couldn't make the snapshot of your
 files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git doesn't know your
 name and email yet; run `git config --global user.name "Your Name"` and `git config --global
 user.email "you@example.com"`, then run /retrofit-it again.']" Never go on as if a snapshot
 exists when it does not.
 
-This gives the user a guaranteed rollback point: `git checkout pre-retrofit` restores
-the exact state of the files before any retrofit changes were made (the database is not
-part of it -- see the plan ask's undo line).
+**Undo** -- when the user asks to put the files back to before the upgrade started, run this
+(fill in the two folders). It brings back the app's files and its database files exactly as the
+snapshot has them, removes files the upgrade added, and leaves installed packages and .env
+alone (the ask said .env isn't part of the snapshot). A server database (e.g. Postgres) is not
+part of it -- see the plan ask's undo line.
+
+```bash
+fail() { echo "UNDO FAILED: $1"; exit 1; }
+app=[the app folder the snapshot ran in]; work=[the folder the retrofit work runs in: the app folder, or its worktree]
+bak="$app.pre-retrofit"
+skip=(--exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ --include=.env.example
+  --exclude='.env*' --exclude='*.pem' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*'
+  --exclude='id_ecdsa*' --exclude='id_dsa*' --exclude='*.keychain*' --exclude=.aws/credentials
+  --exclude=.netrc --exclude='*credentials*.json' --exclude='*service-account*.json'
+  --exclude='*.p12' --exclude='*.pfx')
+top=$(git -C "$app" rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
+if [ -n "$top" ] && [ "$top" != "$app" ]; then
+  # Nested: copy the files back (-c compares contents, not dates); files the upgrade added go
+  rsync -a -c --delete "${skip[@]}" "$bak/files/" "$app/" || fail "could not copy your files back"
+else
+  tag="pre-retrofit-$(basename "$app" | tr -cs 'A-Za-z0-9_-' '-')"; tag=${tag%-}
+  cd "$work" && git restore --source="$tag" --staged --worktree -- . &&
+    git clean -fdq -e '.env*' -e .make-it/ -- . &&   # new files the upgrade never saved
+    { git diff --cached --quiet || git commit -qm "Undo /retrofit-it: back to $tag"; } ||
+    fail "could not put the files back"
+  rsync -a -c "$bak/files/" "$app/" || fail "could not put your database files back"
+  # a database file the upgrade added goes too (a leftover -wal journal would be replayed into it)
+  cd "$app" && find . \( -name .git -o -name node_modules -o -name .venv -o -name venv \) -prune -o \
+    -type f \( -name '*.db' -o -name '*.db-*' -o -name '*.sqlite*' \) -print |
+    while IFS= read -r f; do [ -e "$bak/files/$f" ] || rm -f -- "$f"; done
+fi
+echo "undone: back to the snapshot"
+```
+
+The upgrade's own commits stay in the branch history (the undo is a new commit on top), so the
+undo can itself be taken back. On a nested app, a `cannot delete` warning names a folder the
+upgrade added that still holds installed packages or a settings file: it stays -- name it to the
+user. **Before this step** (5b, own repo only): the same `git restore` / `git clean` / `git
+commit` lines with the commit the step started from as the source; database files and a nested
+app's files go back only to before the upgrade started.
 
 </step>
 
@@ -510,6 +586,10 @@ part of it -- see the plan ask's undo line).
 (`/subagent-it`, see `subagent-driven-development.md`) -- a fresh implementer subagent per
 retrofit step + per-step review (spec + quality + safeguards) + a final whole-branch review -- on a
 branch/worktree, never main. Keep steps sequential (independent parallel problems → `/dispatch-it`).
+Each step ends committed, so its check-in can undo to the commit it started from. **Nested app**
+(the snapshot printed `snapshot: copy`): the repo around it is not the app's, so make no branch,
+worktree, commit, tag, or SDD ledger there. Run the same steps, in order, in the app folder
+itself, each reviewed the same way on the files it changed; the copy is the undo.
 
 **Strategy selection based on risk score:**
 
@@ -908,12 +988,12 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Tell user: "Your interface got a few upgrades, and I set up test services so you can develop without needing real external systems."
 
 **Step 4: "Making your AI prompts editable" (if app uses AI)**
-- Internal: Step 10 (AI prompt management)
+- Internal: Step 11 (AI prompt management)
 - Verify: prompts load from DB, admin UI works
 - Tell user: "Your AI prompts can now be edited through the admin panel without changing any code."
 - Skip this step entirely if the app doesn't use AI/LLM features.
 
-**Step 4.5: "Securing your AI features" (if app uses AI)**
+**Step 5: "Securing your AI features" (if app uses AI)**
 - Internal: Step 12 (AI operational safety)
 - Verify: sanitizePromptInput() called by BaseAgent, validateAgentOutput() runs after
   every AI response, rate limiting returns 429, prompt size limits enforced, AI errors
@@ -927,12 +1007,12 @@ The internal labels (Phase A, Phase B...) and step numbers are for the skill's u
 - Run NeMo Guardrails basic test suite (18 tests) after this step to confirm the safety
   controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
 
-**Step 5: "Adding automated tests" (low risk)**
+**Step 6: "Adding automated tests" (low risk)**
 - Internal: Step 10 (test infrastructure)
 - Verify: pytest runs, Playwright config exists, existing tests still pass
 - Tell user: "Automated tests are set up. They'll catch problems early as you keep building."
 
-**Step 6: "Final security checks and deployment prep" (low risk)**
+**Step 7: "Final security checks and deployment prep" (low risk)**
 - Internal: Steps 9, 13 (security hardening, Terraform)
 - Verify: final build-verify pass
 - Tell user: "Security is locked down and your deployment files are ready for your DevOps team."
@@ -949,20 +1029,21 @@ What changed: [this step's user-facing scope, one line][; if this step changed .
 your settings file (.env): [the settings added or changed, by name, values hidden]'].
 Your files are saved on this computer[; if the database lives elsewhere: ', and the data
 changes are in your database at [host]']. If anything is off, I can put the app's files back to
-how they were before this step, or before the upgrade started[; if this step or an earlier step changed .env: ' (your
+how they were [if not nested: 'before this step, or '] before the upgrade started[; if the app has
+database files: ' (your database files go back only to before the upgrade started)'][; if this step or an earlier step changed .env: ' (your
 settings file, .env, isn't part of that, so the settings I changed stay changed[; if this step changed it: " -- the list above is what I changed in it"])']. [If the app already had a
-database and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
+server database (not a .db/.sqlite file in its folder) and this step changed it: 'There is no undo for [DATA_CHANGES of this step -- e.g.
 'the new lists of roles and permissions', 'the sample records and test accounts I added']:
 putting the files back does not remove them.']
 What stands out: [anything that differs from a typical upgrade of this kind -- or 'nothing'].
 One thing to check: [open [URL] and try [the feature this step touched most]; for a step with
-nothing on screen (Step 5, tests): 'nothing new to look at -- the tests ran and passed'].
+nothing on screen (Step 6, tests): 'nothing new to look at -- the tests ran and passed'].
 
 Next up: **[next step name]** -- [what it changes, one line; for the login step: 'this adds
 secure login and changes who can see what -- the biggest change in the plan[; if the app had a
-database before Step 2: '; it also adds a role field to your existing list of users -- no
+server database before Step 2: '; it also adds a role field to your existing list of users -- no
 undo']'; for the interface-and-test-services step (Step 3, seed data), if the app had a
-database before Step 2: 'this also adds sample records and test accounts to your existing
+server database before Step 2: 'this also adds sample records and test accounts to your existing
 data -- no undo'].
 
 Tell me: **Continue with [next step name]**, **Fix something first** (tell me what you saw), or
@@ -971,7 +1052,14 @@ Tell me: **Continue with [next step name]**, **Fix something first** (tell me wh
 Wait for their pick. A plain yes is not an answer -- ask which. **Fix something first:** fix or
 undo the breaking change (guardrails rule 1), re-verify, and ask again. **Stop here:** leave the
 app as it is now (it passed this step's checks), list the remaining steps in TODO.md with what
-each would have added, and stop -- running /retrofit-it again later finds what is still missing.
+each would have added, tell the user where that app is, and stop -- running /retrofit-it again
+later finds what is still missing. Where it is: [work on a branch in their own folder: 'Your app
+folder ([APP_DIR]) has the upgrade so far, saved on the branch [BRANCH]. If the folder ever shows
+the old version, `git switch [BRANCH]` there brings this one back.'][work in a worktree: 'The
+upgrade so far is in [WORKTREE_DIR], saved on the branch [BRANCH]. Your own folder ([APP_DIR])
+still has your app as it was before the upgrade -- open [WORKTREE_DIR] to use the upgraded one;
+/resume-it and /ship-it work there too.'][nested: 'Your app folder ([APP_DIR]) has the upgrade
+so far; the copy from before it is in [BACKUP].']
 [After the last step there is no pick: go straight to Phase 6.]
 
 **Adaptation rules for existing code:**
