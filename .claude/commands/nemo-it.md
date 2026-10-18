@@ -218,7 +218,7 @@ What stands out: the usual run looks at a copy on this computer that talks to te
 One thing to check: look at where I found it ([`[FILE]` line / the `[VARIABLE]` setting]) and see whether it really is your live system, or a test copy that just has "production" in its name.
 
 Pick one:
-- Go ahead with this project as it is, connected to [TARGET AS FOUND -- setting name and file only, never its value][mode full or owasp: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
+- Go ahead with this project as it is, connected to [TARGET AS FOUND -- setting name and file only, never its value][mode full or owasp, and the app is running or START_COMMAND is pending: ', read-only requests only -- nothing that submits data or changes anything'][AI features found in mode full or guardrails: ', no prompts sent to its AI service']
 - Stop -- you'll point it at a test copy first (Recommended; the catch: no attestation today, and a test copy can differ from what is live)
 - Not sure"
 
@@ -682,7 +682,7 @@ cd /tmp/nemo-it-playwright
 npx playwright test --reporter=json > /tmp/nemo-it-playwright-results.json 2>/dev/null
 ```
 
-Update user: "Browser-based security testing complete. Tested authentication, authorization, input handling, and error responses."
+Update user: "Browser-based security testing complete. [PASSIVE_ONLY=false: 'Tested authentication, authorization, input handling, and error responses.' / PASSIVE_ONLY=true: 'Read-only, so I only looked at what your app sends back to plain page visits: [each check that ran, such as security headers and error pages]. Skipped because this is your live system: signing in and the session tests, the access tests, and every test that types into a form or sends data.']"
 
 **3. pytest-based API security tests:**
 
@@ -720,7 +720,7 @@ cd /tmp/nemo-it-pytest
 python -m pytest --json-report --json-report-file=/tmp/nemo-it-pytest-results.json -v 2>/dev/null
 ```
 
-Update user: "API security testing complete. Tested [N] endpoints for authentication bypass, parameter tampering, and rate limiting."
+Update user: "API security testing complete. [PASSIVE_ONLY=false: 'Tested [N] endpoints for authentication bypass, parameter tampering, and rate limiting.' / PASSIVE_ONLY=true: 'Read-only, so I only sent plain read requests to [N] endpoints and looked at what came back: [each check that ran, such as CORS settings and error messages]. Skipped because this is your live system: calls without a login or with a fake one, changed IDs and extra fields, the business-logic tests, and the rate-limit test.']"
 
 **4. SQLMap passive detection:**
 
@@ -743,7 +743,7 @@ Update user: "API security testing complete. Tested [N] endpoints for authentica
 
 Note: SQLMap is run in the most conservative mode. It sends minimal test payloads to detect whether SQL injection might be possible, but does NOT attempt to extract data or gain system access.
 
-Update user: "SQL injection detection complete. [Results summary]."
+Update user: "[PASSIVE_ONLY=false: 'SQL injection detection complete. [Results summary].' / PASSIVE_ONLY=true: 'SQL injection probes skipped -- they send test inputs to the app, and this is your live system.']"
 
 **5. Consolidate dynamic analysis findings:**
 
@@ -769,7 +769,7 @@ Mark all categories as "N/A -- no AI features detected" and skip to Phase 4.
 
 If AI features WERE detected:
 
-Tell the user: "I detected AI features in your project. I am now running NeMo Guardrails AI safety tests across six categories. These tests check whether your AI integration can be manipulated, tricked, or misused."
+Tell the user: "I detected AI features in your project. [PASSIVE_ONLY=false: 'I am now running NeMo Guardrails AI safety tests across six categories. These tests check whether your AI integration can be manipulated, tricked, or misused.' / PASSIVE_ONLY=true: 'This is your live system, so I send no prompts to its AI service: I only check the safety controls in your code, and the six behavioral test categories are skipped.']"
 
 **0. Determine AI testing mode (code-level vs behavioral):**
 
@@ -938,13 +938,13 @@ For each category, record:
 - Individual test case details (input, expected, actual, pass/fail)
 - Overall category risk rating
 
-Update user: "AI safety testing complete. Results:
+Update user: [behavioral tests ran: "AI safety testing complete. Results:
 - Prompt Injection: [X/10 passed]
 - Jailbreak Resistance: [X/10 passed]
 - Toxicity/Bias: [X/10 passed]
 - Topic Boundaries: [X/10 passed]
 - PII Leakage: [X/10 passed]
-- Hallucination: [X/10 passed]"
+- Hallucination: [X/10 passed]" / code-level only: "AI safety check complete, code-level only[PASSIVE_ONLY=true: ' -- this is your live system, so no prompts went to its AI service']: [N] of [M] code-level checks passed. The six behavioral test categories were not run."]
 
 </step>
 
@@ -1289,6 +1289,8 @@ If AI features were detected, show which AI operational safety controls would ap
 - Safe testing constraints: All tests were non-destructive. No exploits were executed.
 ```
 
+**If PASSIVE_ONLY=true, the attestation says what did not run.** In Scan Coverage, a phase that ran with checks skipped is `Partial (read-only)`, never `Completed`. Under that table add **Skipped -- production detected:** every check Phase 2 and Phase 3 skipped, one line each. A category or OWASP Top 10 row is PASS only if none of its checks was skipped: some skipped and nothing found is `NO FINDINGS (read-only)`; all skipped is `NOT RUN (production detected)`. The AI categories are recorded the code-level way (Phase 3), with the behavioral tests listed as skipped. Label the posture rating "based on a read-only scan". JSON carries the same; in JUnit each skipped check is `<skipped/>`, never a pass.
+
 **2. Generate optional output formats:**
 
 If `--format json` was specified:
@@ -1324,7 +1326,7 @@ rm -rf /tmp/nemo-it-* 2>/dev/null
 
 Here is the summary:
 
-Overall Security Posture: [RATING]
+Overall Security Posture: [RATING][PASSIVE_ONLY=true: ' -- based on a read-only scan']
 
 Findings:
   [X] Critical -- [one-line description of most critical]
@@ -1337,6 +1339,8 @@ Top 3 actions to take:
 1. [Most important remediation in plain language]
 2. [Second most important]
 3. [Third most important]
+
+[PASSIVE_ONLY=true: 'This was a read-only scan of your live system. Not run, so not passed: [each group of skipped checks in plain words, such as the sign-in and session tests, the form and input tests, the SQL injection probes, the rate-limit test, the AI prompt tests]. The attestation lists each one. To cover them, run /nemo-it against a test copy.']
 
 The full attestation has detailed analysis for every finding, including what it means, why it matters, and how to address it.
 
