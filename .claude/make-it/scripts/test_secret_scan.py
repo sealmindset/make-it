@@ -1785,5 +1785,51 @@ class ArgoItWiringCases(Base):
         self.assertTrue('secret-scan.py' in doc[i:i + 3000], 'pre-push rules do not name the script')
 
 
+class ArgoItAdversarial1Cases(Base):
+    """Adversarial round 1 on 3e: following it to the letter must not still send a secret."""
+
+    def _prose(self):
+        w = ArgoItWiringCases('test_old_inline_scan_is_gone')
+        return re.sub(r'^```bash\n.*?^```', '', w._section(), flags=re.M | re.S)
+
+    def test_hit_paths_are_from_the_repo_top_folder(self):
+        # project is web/ inside the repo; hits print top-folder paths, so 3e must say where to open them
+        p = self._prose()
+        self.assertRegex(p, r'git rev-parse --show-toplevel', '3e never names the top folder command')
+        self.assertRegex(p, r'(?is)(top[- ]?(level )?folder|top level|repo(sitory)?.s top|show-toplevel)'
+                            r'[^.]{0,200}(file|path|hit)|(file|path|hit)[^.]{0,200}'
+                            r'(top[- ]?(level )?folder|top level|show-toplevel)',
+                         '3e does not tie the hit path to the top folder')
+        self.assertRegex(p, r'(?is)\bnot\b[^.]{0,60}(project (root|folder)|working (folder|directory))',
+                         '3e does not say the path is NOT from the project folder')
+
+    def test_refuses_env_that_is_a_link_or_tracked(self):
+        p = self._prose()
+        i = p.index('Move only the ones')
+        mv = p[i - 1500:i + 1500]
+        self.assertRegex(mv, r'(?i)(symlink|symbolic link|\bis a link\b|-L \.env)',
+                         '3e never tells the agent to refuse a linked .env')
+        self.assertRegex(mv, r'git ls-files|git check-ignore', '3e gives no tracked/ignored check for .env')
+        self.assertRegex(mv, r'(?is)(link|tracked|ignore)[^.]{0,300}\bstop\b|\bstop\b[^.]{0,300}(link|tracked|ignore)',
+                         '3e does not say to stop when .env is linked or tracked')
+        self.assertRegex(mv, r'(?i)before[^.]{0,80}(writ|mov|put)[^.]{0,80}\.env|'
+                             r'\.env[^.]{0,80}before', 'the .env check is not placed before the write')
+
+    def test_escaped_names_are_not_literal(self):
+        p = self._prose()
+        self.assertTrue('\\x' in p and '\\u' in p, '3e names neither \\xNN nor \\uXXXX escapes')
+        self.assertRegex(p, r'(?is)\\x[^.]{0,200}(escape|control)[^.]{0,300}\bstop\b|'
+                            r'(escape|control)[^.]{0,200}\\x[^.]{0,300}\bstop\b',
+                         '3e does not say to stop on an escaped name')
+        self.assertRegex(p, r'(?i)not (a )?literal|isn.t literal|never (a )?literal',
+                         '3e does not say the escape is not the literal file name')
+
+    def test_move_every_value_on_a_flagged_line(self):
+        p = self._prose()
+        self.assertRegex(p, r'(?i)\bevery\s+(secret[- ]looking\s+|such\s+|found\s+)?value\b[^.\n]{0,60}\bline|'
+                            r'\bline\b[^.\n]{0,60}\bevery\s+(secret[- ]looking\s+|such\s+|found\s+)?value\b',
+                         '3e does not say to move every value on a flagged line')
+
+
 if __name__ == '__main__':
     unittest.main()
