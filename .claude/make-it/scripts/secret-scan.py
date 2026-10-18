@@ -49,15 +49,20 @@ QUOTE = '|'.join(q * n for q, n in QUOTES)  # longest first
 OPENER = re.compile(QUOTE)
 # A literal opener or a trailing comment (` #` needs the space: `x#y`, `$#`, `this.#f` aren't comments).
 COMMENT = re.compile(r'%s|(?<=[ \t])#|//' % QUOTE)
-# The next literal opener or NAME sep, so a NAME only ever starts outside a literal -- and never inside a
-# base64 / base64url / hex run: not after a word char, nor after one or two of `.+/` that follow one, nor after
-# three of them. So a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME, but a NAME may start after
-# member access (`f().key`, `a[0].key`, `x!.key`; `obj.key` is one dotted NAME), a `//key` comment or a patch's
-# `+KEY` line. Not after `://`: a URL's `user:` would swallow `MyPassword=...` as its value. Not after `-`
-# (`--password=` stays a known limit).
-# Not `=`: base64 pads only at the end, and a NAME follows one in `--from-literal=JWT_SECRET='...'`.
-TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_-])(?<![A-Za-z0-9_-][.+/])(?<![A-Za-z0-9_.+/:-][.+/]{2})(%s)%s'
-                   % (QUOTE, NAME, SEP))
+# The next literal opener or NAME sep, so a NAME only ever starts outside a literal. A NAME starts only:
+# - at the start, or after anything but a word char or one of `.+/-`. So never inside a base64 / base64url / hex
+#   run (a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME), a path (`./db_password:`,
+#   `~/.git-credentials:`), a regex (`/token="(...)"/`) or a URL (`://user:` would swallow `MyPassword=...` as
+#   its value). `=` is fine: base64 pads only at the end, and a NAME follows one in `--from-literal=JWT_SECRET=`.
+#   `-` isn't (`--password=` stays a known limit);
+# - after member access on a closer: `).` `].` `!.` `?.` or a quote then `.` (`f().key`, `a[0].key`, `x!.key`;
+#   `obj.key` is one dotted NAME);
+# - LINE_TOKEN only (a whole line, not a literal's body, which values() scans as its own string, so there
+#   `"//app:MyPassword=..."` stays a URL): after `//` at the start or after a space or tab (a `//key` comment),
+#   or after `+` at the start (a patch's `+KEY` line).
+AFTER = r'(?<![A-Za-z0-9_.+/-])|(?<=[)\]!?"\'`]\.)'
+TOKEN = re.compile(r'%s|(?:%s)(%s)%s' % (QUOTE, AFTER, NAME, SEP))
+LINE_TOKEN = re.compile(r'%s|(?:%s|(?<=^//)|(?<=[ \t]//)|(?<=^\+))(%s)%s' % (QUOTE, AFTER, NAME, SEP))
 # One literal (backslash escapes; a triple quote may hold single quotes), unrolled so it can't backtrack.
 LITERAL = {q * n: re.compile(r'{e}[^{q}\\]*(?:(?:\\.{t})[^{q}\\]*)*{e}'.format(
     e=q * n, q=q, t='' if n == 1 else '|%s(?!%s)' % (q, q * 2))) for q, n in QUOTES}
@@ -210,7 +215,7 @@ def uncommented(s):
             return s  # a ` or triple-quoted literal runs on past this line
 
 
-def values(s, config, start=True):
+def values(s, config, start=True, token=TOKEN):
     """(NAME, VALUE) on a line. A NAME only starts outside a string literal, and the search resumes after its
     VALUE, never inside it as a NAME -- so a matched NAME's VALUE is skipped as a VALUE (the `c2VjcmV0QPwd` in
     `encode(p, "Zk9/c2VjcmV0QPwd=", alg="HS256")`, the `MyPassword` in `URL=postgres://app:MyPassword=...`),
@@ -218,10 +223,11 @@ def values(s, config, start=True):
     A literal in key position followed by sep is a quoted key (`"password": ...`); `x ? "AcmePwd" : ...` isn't.
     Any other literal that isn't a VALUE is scanned inside by the same rules (`json.loads('{...}')`,
     `ssh host 'export PASSWORD="..."'`, compose's `- "PASSWORD=..."`).
-    `start`: line start is a key position (not when the line goes on a ternary from the line before)."""
+    `start`: line start is a key position (not when the line goes on a ternary from the line before).
+    `token`: LINE_TOKEN for a whole line, TOKEN (the default) for a literal's body."""
     i, dead = 0, set()
     while True:
-        m = TOKEN.search(s, i)
+        m = token.search(s, i)
         if not m:
             return
         i = m.end()
@@ -271,7 +277,7 @@ def hit(text, config, prev=None):
         ternary = c.endswith('?') or (c.endswith(':') and '?' in c)
         start = not ternary or p.startswith((b'#', b'//', b'/*', b'*'))
     return any(len(v) >= 8 and secret_named(name) and not REFERENCE.fullmatch(v) and not placeholder(v)
-               for name, v in values(s, config, start))
+               for name, v in values(s, config, start, LINE_TOKEN))
 
 
 def is_config(path):
