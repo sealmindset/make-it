@@ -1857,7 +1857,7 @@ class ArgoItReReview2Cases(Base):
             c = (blk or inl).strip()
             if '.env' not in c or not re.search(r'\b(test|git|grep|printf|find)\b', c):
                 continue
-            if re.search(r'ls-files|error-unmatch', c) or re.match(r'test -[Ll] ', c):
+            if (re.search(r'ls-files|error-unmatch', c) and 'check-ignore' not in c) or re.match(r'test -[Lld] ', c):
                 continue  # a per-reason probe that is meant to exit 1 on a good .env
             cmds.append(c)
         self.assertTrue(cmds, '3e move paragraph gives no .env safety command in code')
@@ -1953,6 +1953,120 @@ class ArgoItReReview2Cases(Base):
         says_which = re.search(r'(?i)which (check|one|test)[^.]{0,40}(fail|stop)|(failing|failed) check', mv)
         self.assertTrue(per_reason or says_which,
                         '3e gives no way to tell link / tracked / not-ignored apart')
+
+
+class ArgoItReReview3Cases(Base):
+    """Re-review 3 on 3e: a tracked .Env/.ENV (case-insensitive disk), a .env folder, re-scan wording."""
+
+    def _w(self):
+        return ArgoItWiringCases('test_old_inline_scan_is_gone')
+
+    def _move(self):
+        return ArgoItReReview2Cases('test_m2_value_goes_to_the_project_root_env_just_checked')._move()
+
+    def _tail(self):
+        mv = self._move()
+        return mv[mv.index('Once it exits 0'):]
+
+    def _env_cmds(self):
+        """The ignore line and the check, as 3e gives them (probes that pick a reason are left out)."""
+        spans = re.findall(r'```(?:bash|sh)?\n(.*?)```|`([^`\n]+)`', self._move(), re.S)
+        cmds = [(b or i).strip() for b, i in spans]
+        cmds = [c for c in cmds if '.env' in c and ('check-ignore' in c or 'printf' in c)
+                and not re.match(r'test -[Ll] \.env \|\|', c)]
+        self.assertTrue(any('check-ignore' in c for c in cmds), 'no .env check (git check-ignore) in 3e')
+        return cmds
+
+    def _run(self, r, shell):
+        script = '\n'.join('{ %s\n} || exit 1' % c for c in self._env_cmds())
+        return subprocess.run([shell, '-c', script], cwd=r.work, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=60).returncode
+
+    def _both(self, mk, ok, what):
+        for shell in ('bash', 'zsh'):
+            r = self.fresh()
+            mk(r)
+            code = self._run(r, shell)
+            if ok:
+                self.assertEqual(code, 0, '%s: %s: the check stopped a good .env' % (shell, what))
+            else:
+                self.assertNotEqual(code, 0, '%s: %s: the check passed an unsafe .env' % (shell, what))
+
+    def _tracked_odd_case(self, name):
+        def mk(r):
+            r.write('.gitignore', 'node_modules/\n')
+            r.write(name, 'X=1\n')
+            r.commit('tracked ' + name)
+            r.push()
+            if not os.path.exists(r.path('.eNv')):
+                self.fail('this disk is case-sensitive, so the %s case cannot be reproduced here; '
+                          'run the tests on a case-insensitive disk (macOS/Windows default)' % name)
+            self.assertIn(name.encode(), r.git('ls-files'))
+        self._both(mk, False, 'tracked %s' % name)
+
+    def test_ia_tracked_dot_Env_fails(self):
+        self._tracked_odd_case('.Env')
+
+    def test_ia_tracked_dot_ENV_fails(self):
+        self._tracked_odd_case('.ENV')
+
+    def test_ia_guard_env_beside_tracked_env_example_passes(self):
+        def mk(r):
+            r.write('.gitignore', 'node_modules/\n')
+            r.write('.env.example', 'X=\n')
+            r.commit('example')
+            r.write('.env', 'X=1\n')
+        self._both(mk, True, '.env beside tracked .env.example')
+
+    def test_ia_guard_env_beside_tracked_envrc_passes(self):
+        def mk(r):
+            r.write('.gitignore', 'node_modules/\n')
+            r.write('.envrc', 'export X=1\n')
+            r.commit('envrc')
+            r.write('.env', 'X=1\n')
+        self._both(mk, True, '.env beside tracked .envrc')
+
+    def test_m1_env_folder_is_named_as_a_folder(self):
+        mv = self._move()
+        self.assertRegex(mv, r'test -d \.env', '3e has no probe for a .env that is a folder')
+        self.assertRegex(mv, r'\[[^\]]*\bfolder\b[^\]]*\]',
+                         '3e stop reason list has no "folder" reason for .env')
+
+    def test_m2_stop_messages_do_not_claim_gitignore_keeps_a_tracked_env_local(self):
+        mv = self._move()
+        self.assertNotRegex(mv, r'(?is)\.gitignore\s+that\s+keeps\s+\.env\s+on\s+this\s+computer',
+                            'a stop message still says .gitignore keeps .env on this computer')
+
+    def test_m2_stop_messages_say_in_plain_words_what_was_added(self):
+        mv = self._move()
+        self.assertRegex(mv, r'(?is)\b(if|when|only)\b[^.\]]{0,60}\badded\b|\badded\b[^.\]]{0,80}\bonly (if|when)\b',
+                         'the stop message does not say the .gitignore line is mentioned only when something was added')
+        self.assertRegex(mv, r'(?is)\badded\b[^.\]]{0,60}\.env[^.\]]{0,60}\.gitignore',
+                         'the stop message does not say what was added to .gitignore')
+        self.assertRegex(mv, r'(?is)\.gitignore\b[^.\]]{0,40}(file|list)[^.\]]{0,60}(leaves?|ignores?|skips?)\b',
+                         'the stop message does not gloss what .gitignore is')
+
+    def test_m3a_rescan_runs_once_after_all_named_values_are_moved(self):
+        self.assertRegex(self._tail(), r'(?is)\bafter\s+(all|every)\b[^.]{0,60}\b(move|moved|moves|named|values?)\b',
+                         '3e does not say to re-scan once, after all the named values are moved')
+
+    def test_m3b_rescan_exit_1_means_stop_not_a_new_ask(self):
+        t = self._tail()
+        self.assertRegex(t, r'(?is)exit(s|ing)?\s+1[^.]{0,100}\bstop\b', '3e does not say exit 1 on the re-scan means stop')
+        self.assertRegex(t, r'(?i)(don.t|do not|not)\s+ask\s+again|no\s+(new|second|another)\s+ask|not\s+(a\s+)?new\s+ask',
+                         '3e does not say the re-scan exit 1 is not a new ask')
+
+    def test_m3c_user_names_nothing_means_stop_and_say_which_values(self):
+        self.assertRegex(self._move(), r'(?is)(names?\s+(nothing|none|no\s+\w+)|doesn.t\s+name\s+any|nothing\s+is\s+named)'
+                                       r'[^.]{0,200}\bstop\b[^.]{0,200}\b(which|values?|holding)\b',
+                         '3e does not say to stop, and say which values hold things up, when the user names nothing')
+
+    def test_m3d_rescan_stop_gives_a_next_step(self):
+        t = self._tail()
+        m = re.search(r'3e (block|scan)\b[^.]{0,30}\bagain', t)
+        self.assertTrue(m, 'no re-scan sentence found')
+        self.assertRegex(t[m.start():], r'(?i)what to do next',
+                         'the re-scan stop gives no next step')
 
 
 if __name__ == '__main__':
