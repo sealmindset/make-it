@@ -708,7 +708,7 @@ The skill automatically classifies your project during the Design phase based on
     templates/
       app-context.md              # Template for tracking user answers (includes AI provider config)
       ai-safety-attestation.md    # AI safety attestation report template
-      nemo-it-attestation.md      # Security attestation report template (v1.1.0, includes Secure-by-Design cross-ref)
+      nemo-it-attestation.md      # Security attestation report template (v1.2.0, includes Secure-by-Design cross-ref)
     scaffolds/
       fastapi-nextjs/             # Pre-built scaffold (61 files) -- Python backend
         backend/                  # FastAPI: auth, RBAC, models, routers, Alembic
@@ -956,6 +956,28 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.44.7 -- `/nemo-it` reports only what ran, and scans only your app
+
+A live check of v1.44.4 found more places where `/nemo-it` said a scan was complete, or a check
+passed, when it never ran. It also found that it could point its requests at another project's
+server. Now:
+- **Only what ran is reported as run** (new guardrail 11). Browser tests, ZAP, the API tests,
+  Semgrep, Bandit/ESLint, the dependency and container scans and SQLMap each print "did not run
+  … NOT RUN" when they didn't run. Each decides from its actual result (a missing or empty report
+  counts as not run), never from the tool merely being installed. "All scans are complete" is
+  printed only when they all ran.
+- **Only your app is scanned** (new guardrail 12). Step 5 checks that the server on a port was
+  started from this project's folder before it sends anything. If the port belongs to another
+  project, nemo-it says so and leaves it alone. If it can't tell, it asks. The container scan
+  covers only this project's containers.
+- **AI results:** code-level results read `NO FINDINGS (code-level)`, never PASS.
+- **The attestation template (1.2.0)** adds NO FINDINGS and NOT RUN, and Key Metrics rows for
+  them.
+- **Nothing downloads without asking:** `npx --no-install` and `docker run --pull=never`.
+  Preflight checks for the pytest plugin the run actually uses, and clears old results so a
+  stale report can't count.
+- The OWASP guide import is gone. It never shipped with a normal install, so it never loaded.
 
 ### v1.44.6 -- New apps keep their dev database password out of committed files
 
