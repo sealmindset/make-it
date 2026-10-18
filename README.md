@@ -957,6 +957,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.12 -- Only a practice script may plant a practice item; subagents never plant flaws
+
+Rule 4 of "Keep the human able to notice" told agents to now and then plant a harmless flaw in a
+review. That rule is in every project's `CLAUDE.md`, and every subagent reads it, so an
+implementer or reviewer could take it as permission to plant a flaw in code, tests, a review or a
+report. Now:
+- **Every subagent prompt says never.** The implementer, test-writer, task-reviewer and
+  adversarial-reviewer templates, and the dispatch prompt rule, all say: never plant a deliberate
+  flaw in code, tests, a review, a report or a commit.
+- **Rule 4 is narrowed.** Only the coordinator's practice script may plant a practice item. It
+  goes only in chat, and only if the user turned practice items on (they are off by default). It
+  is revealed right after the answer, and never goes in code, tests, reviews, reports or commits.
+- **Existing projects are updated.** On the next catch-up, check S12 replaces an old copy of rule
+  4 in place.
+
 ### v1.44.11 -- New apps' database migrations always follow the scaffold's own
 
 `/make-it` told builds to create migration `002_domain_schema.py`, then `003_domain_permissions.py` and
