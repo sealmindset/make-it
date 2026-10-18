@@ -38,5 +38,27 @@ rm -rf "$T/repo/.make-it"
 expect "deleted ledger: no-op" 0 "{\"cwd\":\"$T/elsewhere\",\"transcript_path\":\"$T/this-session.jsonl\"}"
 grep -q . "$SDD_GATE_REGISTRY" && { echo "FAIL deleted ledger not pruned from registry"; fail=1; } || echo "ok   deleted ledger pruned from registry"
 
+# E02-S4: ending the turn to wait for a background agent is not a stall. Fixture lines copy
+# the transcript's real shapes: the Agent tool_result, then the completion notice (queued,
+# then delivered).
+ago() { python3 -c 'import datetime as d,sys; print((d.datetime.now(d.timezone.utc)-d.timedelta(minutes=int(sys.argv[1]))).strftime("%Y-%m-%dT%H:%M:%S.000Z"))' "$1"; }
+RESULT='{"role":"user","content":[{"tool_use_id":"toolu_A","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully.\\nagentId: a1"}]}]}'
+# the transcript also stores an untimestamped api-request-blob copy of the same result
+launch() { printf '{"type":"user","timestamp":"%s","message":%s}\n{"type":"api-request-blob","message":%s}\n' "$(ago "$1")" "$RESULT" "$RESULT"; }
+NOTE='<task-notification>\\n<task-id>a1</task-id>\\n<tool-use-id>toolu_A</tool-use-id>\\n<status>completed</status>\\n</task-notification>'
+queued() { printf '{"type":"queue-operation","operation":"enqueue","timestamp":"%s","content":"%s"}\n' "$(ago 0)" "$NOTE"; }
+delivered() { printf '{"type":"user","timestamp":"%s","message":{"role":"user","content":"%s"}}\n' "$(ago 0)" "$NOTE"; }
+git init -q "$T/wait" && W="$T/wait/.make-it/sdd/progress.md"
+wait_case() { # wait_case <label> <want-exit> <transcript lines...>
+  arm "$T/wait"; printf '%s' "$3" > "$T/wait.jsonl"
+  expect "$1" "$2" "{\"cwd\":\"$T/wait\",\"transcript_path\":\"$T/wait.jsonl\"}"
+}
+wait_case "background agent still running: no nudge" 0 "$(launch 5)"
+grep -q "gate: nudged" "$W" && { echo "FAIL a wait counted toward the cap"; fail=1; } || echo "ok   a wait is not counted toward the cap"
+wait_case "agent finished, notice queued but not delivered: no nudge" 0 "$(launch 5; queued)"
+wait_case "agent's notice delivered, nothing else running: nudges" 2 "$(launch 5; queued; delivered)"
+wait_case "agent launched past the wait window (stale): nudges" 2 "$(launch 180)"
+wait_case "garbage transcript line: still nudges" 2 "$(launch 5 | cut -c1-40)"
+
 expect "garbage stdin: no-op (fail open)" 0 "not json"
 [ "$fail" = 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
