@@ -957,6 +957,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.9 -- `/try-it` never stops other programs, and asks about your security tool only when needed
+
+`/try-it` stopped whatever program was on the ports it needed, without asking. It started
+downloads before checking for a corporate proxy, and it asked you to pause a security tool as
+soon as it saw one, before anything had failed. Now:
+- **Other programs keep running.** If a port is taken, the app moves to a free one and you get a
+  new address. If no free port works, it asks first, naming the program. Only typing that
+  program's name stops it.
+- **Proxy check first.** The security-tool and proxy check runs before any download or build.
+- **Try first, ask on error** (same as `/make-it` step 21). `/try-it` builds first. It asks to
+  pause a security tool only after a real certificate error, once, in the same words as
+  `/make-it`. The reminder to turn the tool back on comes after the smoke test's downloads have
+  finished.
+
 ### v1.44.8 -- Catch-up puts each `CLAUDE.md` section in one exact spot
 
 S10-S12 placed their sections in a range ("after the canary and before `@LEARNINGS.md`"),
