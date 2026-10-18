@@ -958,6 +958,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.4 -- `/nemo-it` read-only mode says what it actually ran
+
+When `/nemo-it` sees your live system, it switches to read-only mode, but its messages still
+described a full run. It said it had tested logins, endpoints and SQL injection that it had
+skipped on purpose, and the attestation marked those checks Completed or PASS. Now:
+- **Go ahead** only offers read-only requests when the app is running, or is about to start.
+- Completion lines name the checks that ran and list what was skipped. "SQL injection probes
+  skipped" replaces "detection complete".
+- The attestation marks a phase that skipped checks as `Partial (read-only)`, with a "Skipped --
+  production detected" list. A category is PASS only when none of its checks was skipped. The
+  posture rating says it is based on a read-only scan, and JUnit reports a skipped check as
+  skipped, never as a pass.
+- The closing summary adds a "Not run, so not passed" line.
+- The AI behavioral results show `[X/10 passed]` only when those tests actually ran. This
+  applies in every mode, so a run with no AI service set up no longer claims them either.
+
 ### v1.44.3 -- Catch-up adds the `CLAUDE.md` canary (new check S13)
 
 Every project's `CLAUDE.md` should open with the instruction-drift canary (guardrail 16), but no
