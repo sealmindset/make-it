@@ -129,6 +129,13 @@ class Base(unittest.TestCase):
         self.script_exists()
 
 
+def need_shell(shell):
+    """Fail (not skip, not FileNotFoundError) when a shell the 3e legs run under is missing."""
+    if shutil.which(shell) is None:
+        raise AssertionError('%s is required to run the 3e checks under %s and was not found on PATH '
+                             '(CI installs zsh in .github/workflows/secret-scan.yml)' % (shell, shell))
+
+
 def kv(name, value, sep=' = ', q='"'):
     return '%s%s%s%s%s\n' % (name, sep, q, value, q)
 
@@ -1865,6 +1872,7 @@ class ArgoItReReview2Cases(Base):
         return cmds
 
     def _run_env(self, r, shell):
+        need_shell(shell)
         script = '\n'.join('{ %s\n} || exit 1' % c for c in self._env_cmds())  # any failing step stops
         cp = subprocess.run([shell, '-c', script], cwd=r.work, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, timeout=60)
@@ -1978,6 +1986,7 @@ class ArgoItReReview3Cases(Base):
         return cmds
 
     def _run(self, r, shell):
+        need_shell(shell)
         script = '\n'.join('{ %s\n} || exit 1' % c for c in self._env_cmds())
         return subprocess.run([shell, '-c', script], cwd=r.work, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, timeout=60).returncode
@@ -1998,9 +2007,6 @@ class ArgoItReReview3Cases(Base):
             r.write(name, 'X=1\n')
             r.commit('tracked ' + name)
             r.push()
-            if not os.path.exists(r.path('.eNv')):
-                self.fail('this disk is case-sensitive, so the %s case cannot be reproduced here; '
-                          'run the tests on a case-insensitive disk (macOS/Windows default)' % name)
             self.assertIn(name.encode(), r.git('ls-files'))
         self._both(mk, False, 'tracked %s' % name)
 
@@ -2067,6 +2073,53 @@ class ArgoItReReview3Cases(Base):
         self.assertTrue(m, 'no re-scan sentence found')
         self.assertRegex(t[m.start():], r'(?i)what to do next',
                          'the re-scan stop gives no next step')
+
+
+class ArgoItReReview4Cases(Base):
+    """Re-review 4 on 3e: case-folding corners (n-2) and the small-fixes bracket on every stop (n-1)."""
+
+    def _env_cmds(self):
+        return ArgoItReReview3Cases('test_m1_env_folder_is_named_as_a_folder')._env_cmds()
+
+    def _run(self, cwd, shell):
+        need_shell(shell)
+        script = '\n'.join('{ %s\n} || exit 1' % c for c in self._env_cmds())
+        return subprocess.run([shell, '-c', script], cwd=cwd, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=60).returncode
+
+    def test_n2i_mis_set_ignorecase_false_untracked_dot_ENV_fails(self):
+        for shell in ('bash', 'zsh'):
+            r = self.fresh()
+            r.git('config', 'core.ignorecase', 'false')
+            r.write('.ENV', 'X=1\n')
+            self.assertNotEqual(self._run(r.work, shell), 0,
+                                '%s: core.ignorecase=false + untracked .ENV: the check passed' % shell)
+
+    def test_n2i_guard_ignorecase_false_plain_untracked_env_passes(self):
+        for shell in ('bash', 'zsh'):
+            r = self.fresh()
+            r.git('config', 'core.ignorecase', 'false')
+            r.write('.env', 'X=1\n')
+            self.assertEqual(self._run(r.work, shell), 0, '%s: the check stopped a plain .env' % shell)
+
+    def test_n2ii_tracked_Web_env_folder_renamed_to_web_fails(self):
+        for shell in ('bash', 'zsh'):
+            r = self.fresh()
+            r.write('Web/.env', 'X=1\n')
+            r.commit('tracked Web/.env')
+            os.rename(r.path('Web'), r.path('web'))  # case-only rename on disk; git's index still says Web/
+            self.assertIn(b'Web/.env', r.git('ls-files'))
+            self.assertNotEqual(self._run(r.path('web'), shell), 0,
+                                '%s: tracked Web/.env, run from web/: the check passed' % shell)
+
+    def test_n1_every_stop_after_3a_3c_carries_the_small_fixes_bracket(self):
+        sec = ArgoItWiringCases('test_old_inline_scan_is_gone')._section()
+        parts = sec.split('"')[1::2]  # the quoted messages
+        stops = [' '.join(m.split()) for m in parts if re.search(r"haven't (moved, )?(saved or )?sent anything", m)]
+        self.assertGreaterEqual(len(stops), 4, 'expected the 4 3e stop messages, found %d' % len(stops))
+        for m in stops:
+            self.assertRegex(m, r'small\s+fixes.{0,80}3a, 3b(,| or) 3c',
+                             'a 3e stop message lacks the small-fixes bracket: %r' % m[:90])
 
 
 if __name__ == '__main__':
