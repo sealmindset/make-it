@@ -50,9 +50,14 @@ OPENER = re.compile(QUOTE)
 # A literal opener or a trailing comment (` #` needs the space: `x#y`, `$#`, `this.#f` aren't comments).
 COMMENT = re.compile(r'%s|(?<=[ \t])#|//' % QUOTE)
 # The next literal opener or NAME sep, so a NAME only ever starts outside a literal -- and never inside a
-# base64 / base64url / hex run, so a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME.
+# base64 / base64url / hex run: not after a word char, nor after one or two of `.+/` that follow one, nor after
+# three of them. So a misread literal end can't turn `Zk9/c2VjcmV0QPwd=` into a NAME, but a NAME may start after
+# member access (`f().key`, `a[0].key`, `x!.key`; `obj.key` is one dotted NAME), a `//key` comment or a patch's
+# `+KEY` line. Not after `://`: a URL's `user:` would swallow `MyPassword=...` as its value. Not after `-`
+# (`--password=` stays a known limit).
 # Not `=`: base64 pads only at the end, and a NAME follows one in `--from-literal=JWT_SECRET='...'`.
-TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_.+/-])(%s)%s' % (QUOTE, NAME, SEP))
+TOKEN = re.compile(r'%s|(?<![A-Za-z0-9_-])(?<![A-Za-z0-9_-][.+/])(?<![A-Za-z0-9_.+/:-][.+/]{2})(%s)%s'
+                   % (QUOTE, NAME, SEP))
 # One literal (backslash escapes; a triple quote may hold single quotes), unrolled so it can't backtrack.
 LITERAL = {q * n: re.compile(r'{e}[^{q}\\]*(?:(?:\\.{t})[^{q}\\]*)*{e}'.format(
     e=q * n, q=q, t='' if n == 1 else '|%s(?!%s)' % (q, q * 2))) for q, n in QUOTES}
@@ -341,7 +346,9 @@ def staged(top, untracked):
     with tempfile.TemporaryDirectory() as tmp:
         env = dict(os.environ, GIT_INDEX_FILE=os.path.join(tmp, 'index'))
         try:
-            shutil.copyfile(real, env['GIT_INDEX_FILE'])
+            # copy2, not copyfile: git re-reads ("racily clean") an entry whose mtime isn't older than the index
+            # file's own. A fresh mtime would make the copy trust stat where step 4's add (real index) re-reads.
+            shutil.copy2(real, env['GIT_INDEX_FILE'])
         except FileNotFoundError:
             pass  # no index yet: git starts an empty one, as it would for step 4
         git_out(top, 'add', '-u', env=env)  # = the tracked half of `git add -A`
