@@ -142,7 +142,6 @@ cp ~/.claude/make-it-repo/.claude/commands/fix-it.md ~/.claude/commands/
 
 # Copy the references, templates, and scaffolds
 cp -r ~/.claude/make-it-repo/.claude/make-it ~/.claude/make-it
-cp -r ~/.claude/make-it-repo/.claude/nemo-it ~/.claude/nemo-it
 ```
 
 ### Verify Installation
