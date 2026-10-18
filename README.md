@@ -958,6 +958,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.3 -- Catch-up adds the `CLAUDE.md` canary (new check S13)
+
+Every project's `CLAUDE.md` should open with the instruction-drift canary (guardrail 16), but no
+check enforced it, so `/resume-it` never added it to a project that lacked it. New check **S13**
+(Tier 0, auto-fix) does:
+- No `CLAUDE.md`: it creates one that opens with the canary, filled from `builder_name`, or the
+  `🐤 canary ok` fallback when there's no name.
+- A `CLAUDE.md` without the canary: it puts the canary right under the title, or moves it there.
+- S13 runs before S10-S12. All four write `CLAUDE.md`, so they run together as one change, and S11
+  and S12 now land right after the canary instead of at the end of the file.
+
+The build-verify summaries in `/make-it` and `/retrofit-it` now say S01-S13. Apps put through
+`/retrofit-it` get the canary too, since its verify step runs every check.
+
 ### v1.44.2 -- `/nemo-it` never shows a secret value
 
 `/nemo-it` reported secrets by printing them. Its production check printed whole `.env` lines,
