@@ -434,42 +434,52 @@ Never show raw Python tracebacks.
 
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
-# Nothing is staged yet, so scan what step 4 will actually send: unsaved edits, new files
-# (ignored ones excluded), and saved changes not sent yet (step 1's range). Three separate
-# scans: a binary new file can't hide the others, and the ask below treats a hit in a saved
-# change differently. .env is left out of the first two -- its values live there on purpose.
-# The two diff scans read added (+) lines only -- a removed line never adds a secret -- and
-# awk tags each line with its file from the "+++ b/" header, so every hit reads file:+line.
-# Each scan prints its label first; the ask below goes by the label a hit sits under.
-# SKIP is matched on the line after the file tag, never on the path (lib/placeholder_image.py
-# can hold a real secret). The git flags pin the output the awk tagger reads, whatever the
-# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, and names unquoted unless they hold a
-# double quote, backslash or control character (git still quotes those).
-PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
-SKIP='\(\.example\|TODO\|placeholder\|changeme\|your-.*-here\)'
-TAG='/^\+\+\+ b\//{f=substr($0,7);sub(/\t$/,"",f);next} /^\+/{print f":"$0}'
-echo "== unsaved edits =="
-git -c core.quotePath=false diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD -- . ':!.env' \
-  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
-echo "== new files =="
-git ls-files --others --exclude-standard -z -- . ':!.env' \
-  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "^[^:]*:.*$SKIP" || true   # one at a time, name shown
-echo "== saved, not sent =="
-git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -p --cc --format= HEAD --not --remotes \
-  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
+# Scans what step 4 will send, under three labels: == unsaved edits == and == new files ==
+# (as step 4 will stage them), then == saved, not sent == (every unsent commit). Each hit is
+# printed under its label as file:line -- never a value or any other part of the line.
+# Exit 0 = clean, 1 = hits, 2 = couldn't check. Needs git 2.25 or later.
+python3 ~/.claude/make-it/scripts/secret-scan.py
 ```
 
-If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
-the approval block: the user names what to move, a plain yes isn't an answer.
+Run it from the project root with a 120-second timeout, then read the result:
+- **Exit 0**, the three labels each once, in that order, and nothing else: no secrets found;
+  3e passes.
+- **Exit 1**, the three labels each once, in that order, and every other line a hit: the gate
+  below. A hit reads `file:line`; split it on its **last** `:` (a file name can hold one) --
+  the line number is after it, the file before it, exactly as printed (spaces too). The file's
+  path starts at the repo's top folder (`git rev-parse --show-toplevel`), not at the
+  project root, so open it from there.
+- **Anything else** -- any other exit (2 means it couldn't check), a timeout, a label missing or
+  repeated, a line that is neither a label nor `file:line`, or exit 1 with no hit: STOP, steps 4
+  and later don't run. Tell the user:
+
+  "I couldn't check your changes for secrets, so I haven't saved or sent anything[; the small
+  fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. [the reason
+  and what to do, in plain words]"
+
+  The reason, by what you find (never the raw output): `python3` not found -- "This check needs
+  Python 3, which isn't on this computer. Install it from python.org, then run /argo-it again."
+  The script not found -- "The tool that does this check is missing. Type /make-it update, then
+  run /argo-it again." `git --version` older than 2.25 -- "This check needs a newer version of
+  Git (2.25 or later). Update Git, then run /argo-it again." A timeout -- "The check took too
+  long to finish." Anything else -- "The check stopped before it finished." For those last two,
+  add: "Run /argo-it again; if it happens again, ask your DevOps team for help."
+
+Name each hit only by its file and line number. Nothing from a hit's line -- not a value, not
+part of one, not the rest of the line -- goes into anything you tell the user; the one exception
+is the setting name you give for DevOps after a move.
+
+If potential secrets are found (exit 1): STOP. A secret is involved, so this is active
+confirmation, per the approval block: the user names what to move, a plain yes isn't an answer.
 
 **If any hit sits under `== saved, not sent ==`: the only option is stop here.** Step
 4 sends the saved change that holds the value, so moving it out of the current files can't keep
 it out of the send. Say so plainly, and what to do next; offer nothing else:
 
 "I found what looks like a password or secret key in a change you already saved but haven't sent
-yet: **[VAR_NAME] in [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
-under the other labels: I also found **[VAR_NAME] in [file]** in changes you haven't saved yet; that
-one needs moving too.] Secrets should never be saved in code, so
+yet: **line [N] of [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
+under the other labels: I also found one on **line [N] of [file]** in changes you haven't saved yet;
+that one needs moving too.] Secrets should never be saved in code, so
 I won't send this. Because it's already in your saved history, moving the value now wouldn't take
 it out of what gets sent -- so I'm stopping here. I haven't saved or sent anything new; the small
 fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
@@ -480,7 +490,17 @@ Then stop -- steps 4 and later don't run.
 
 **Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
 
-"I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
+First, if any hit's path holds `\xNN` or `\uXXXX` -- the scanner's escape for a control or
+unusual character in a file or folder name, not a literal backslash, so that file can't be opened
+safely -- don't ask: stop, steps 4 and later don't run. Tell the user: "I found what looks like a
+password or secret key on line [N] of a file whose name, or the name of a folder it sits in, has
+a hidden or unusual character in it ([file] -- the part starting with a backslash stands for that
+character), so I can't open it safely, and I won't send this. I haven't saved or sent
+anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made
+any]. What to do next: give that file, and the folders it sits in, plain names (letters,
+numbers, dots, dashes and underscores only), then run /argo-it again."
+
+"I found what looks like a password or secret key in your changes: **line [N] of [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
 I can move the value into your local settings file (.env) and have the code read it from there
 -- those lines change, and your project history keeps the old version. Your deployed app will
@@ -489,15 +509,62 @@ send them. This isn't part of a normal send -- it only comes up when something l
 secret. The one thing to check: has this value already been shared or used anywhere? If it has,
 moving it isn't enough -- it should also be changed, and **stop here** is the safer pick.
 
-Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
-out yourself?"
+Which should I move -- **line [N] of [file]** [each, by file and line] -- or **stop here** so you
+can sort it out yourself?"
 
-Move only the ones they named: the value goes to `.env`, the code gets an `os.getenv()` /
-`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
-nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
-your files. If any found value is still in the code (not named, or called a
-sample), stop and say which one is holding things up -- never send with a found secret still in
-the code, whatever they say.
+Move only the ones they named. If they pick **stop here**, or name none of them (they call them
+samples, or just say yes), move nothing: stop, steps 4 and later don't run, and tell the user
+which values are holding the send up: "I won't send this while what looks like a password or
+secret key is still in the code: **line [N] of [file]** [, one per value found]. I haven't saved
+or sent anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b or
+3c made any]. What to do next: run /argo-it again and pick which to move, or take them out of the
+code yourself." Before you write anything to `.env`, make sure it stays on this computer. From
+the project root (where step 4 runs), first run step 4's own `.gitignore` line, exactly as step
+4 has it; that line stays in `.gitignore` whatever happens next. Its `grep -qxF` part (before
+the `||`) decides whether it adds `.env*` and `!.env.example`: exit 0 means a line that reads
+exactly `.env*` is there and nothing is added. So run that part alone first, and remember its
+exit:
+`grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore`
+Then run the check below. If it exits anything but 0 -- `.env` is a folder, is a link to another
+file, or git tracks it or doesn't leave it out (`git ls-files`, `git check-ignore`: under any mix
+of capital and small letters, in its name or its folders') -- stop: steps 4 and later don't run.
+`test ! -L .env && { test ! -e .env || test -n "$(find .env -prune -type f -links 1)"; } && test -z "$(git ls-files -co --exclude-standard -- ":(top,icase)$(git rev-parse --show-prefix).env")" && git check-ignore -q .env`
+To tell which, check in this order and use the first reason
+that fits: if `test -L .env || test -n "$(find .env -prune -type f -links +1)"` is true, `.env`
+is a link (a shortcut, or a second name for another file); if `test -d .env` is true, it's a
+folder; if `git ls-files --error-unmatch ":(top,icase)$(git rev-parse --show-prefix).env"` finds
+it, git tracks it, under the name(s) it prints; otherwise git isn't set to leave it out, and
+`git ls-files -o --exclude-standard -- ":(top,icase)$(git rev-parse --show-prefix).env"` prints
+its name, if the file exists. If a name was printed and none of them is `.env` itself, the file
+is a look-alike: use the look-alike wording below. Tell the user: "I can't move it safely: [your
+local settings file (.env) / for a look-alike: a file named [the name printed], which matches your
+local settings file (.env) apart from capital letters,] [is a shortcut to another file / is a
+folder, not a settings file / is already in your saved history / isn't set to stay on this
+computer], so [the value could still be sent / for a folder: there's no file to put the value
+in]. I haven't moved, saved or sent anything[; I added .env to your .gitignore file -- the list
+of files git leaves out -- and that change stays: only if the line just added it][; the small
+fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. What to do next:
+ask your DevOps team to help [make .env a plain file that stays on this computer / for a
+look-alike: keep [the name printed] out of what gets sent / for a folder: free up the name .env
+(if that folder is a Python virtual environment, make a new one named .venv and remove this one
+-- a renamed one stops working)], then run /argo-it again." Once it exits 0: open each named
+line yourself (from the top folder) to learn the setting names, and move every secret-looking
+value on that line, not just the first. Each value goes to the `.env` in the project root, the
+one you just checked; the code gets an `os.getenv()` / `process.env.` reference; and tell the
+user the setting name(s) to pass to DevOps. After all the named values are moved, run the 3e block
+again from the project root, once, and read the result as above, except that exit 1 -- any hit
+left -- means stop, not a new ask: steps 4 and later don't run. A hit left is one they
+didn't name, one called a sample, or a second value on a moved line. Tell the user: "I moved
+what you picked, but I still found what looks like a password or secret key on **line [N] of
+[file]** [, one per hit left], so I won't send this. I haven't saved or sent anything; the values
+I moved stay in .env, which stays on this computer[; I added .env to your .gitignore file -- the
+list of files git leaves out -- and that change stays: only if the line just added it][; the
+small fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any].
+What to do next: run /argo-it again and pick [that line / those lines] to move too, or take the
+value out of the code yourself." Never send with a found secret still in the code, whatever they
+say. On any other stop after a move, also tell the user the moved values stay in .env, which
+stays on this computer[, and that I added .env to your .gitignore file -- only if the line just
+added it].
 
 **If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
 **If any check fails and can't be auto-fixed** (3a, 3d -- 3e has its own gate above): one ask
@@ -2368,7 +2435,7 @@ existing pattern.
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
 - The user NEVER sees linter names, tool output, or raw error messages
-- Auto-fix what's fixable (lint --fix, auto-add untracked migrations); secrets move only through the 3e gate -- the user names which
+- Auto-fix what's fixable (lint --fix, auto-add untracked migrations); secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user names which
 - STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
 - If env vars in docker-compose.yml don't match K8s manifests, auto-add them to manifests
 - Maximum effort: if a check fails and can't be auto-fixed, explain in plain language and offer to help
