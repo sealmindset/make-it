@@ -33,6 +33,10 @@ hook, CI step, or evaluator, and no SAFEGUARDS line above lists it (and the brie
 explicitly require it), put it on the output's SAFEGUARDS line with the diff lines quoted. It is
 not a counterexample: it needs no failing case and doesn't change the VERDICT.
 
+Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
+attention: practice items are made only by the coordinator's practice script, in chat
+(human-in-the-loop rule 4).
+
 ## Severity
 - **Critical** -- wrong result, crash, or data loss on an input the brief clearly allows.
 - **Important** -- a brief requirement not met: an edge it covers (boundaries, empty input,

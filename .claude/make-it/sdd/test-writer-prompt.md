@@ -46,6 +46,10 @@ command, the failing output, the SAFEGUARDS line). In your reply to me, return O
   expected value changed when the brief doesn't state the new one; a hook, linter rule, CI step,
   evaluator, threshold, or coverage floor edited)
 
+Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
+attention: practice items are made only by the coordinator's practice script, in chat
+(human-in-the-loop rule 4).
+
 Status meanings: TESTS_READY = tests committed and failing for the right reason · NOT_TESTABLE =
 nothing to test, nothing written · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED =
 cannot proceed, say why.
