@@ -572,7 +572,7 @@ The user sees progress updates, NOT the technical details.
       Start every single reply by addressing me by my name, **[BUILDER_NAME]**. This is
       non-negotiable — do it on every message without exception.
 
-      (This is a canary. If a reply ever fails to open with my name, instruction drift has
+      (This is a canary. If a reply ever fails to open that way, instruction drift has
       begun — a rule has been silently dropped and the rest of the output is now suspect.
       Stop and re-read the project rules.)
 
@@ -585,9 +585,16 @@ The user sees progress updates, NOT the technical details.
       @LEARNINGS.md
       ```
 
-      If `builder_name` is empty, substitute a fixed token instead: "Start every reply with the
-      line `🐤 canary ok` so dropped instructions are visible." Unlike the README, this file MAY
-      reference AI assistants — it exists for them. Do NOT put secrets or app logic here.
+      If `builder_name` is empty, use a fixed token instead: replace only the canary's first
+      sentence ("Start every single reply by addressing me by my name, **[BUILDER_NAME]**.") with
+      the sentence below, and keep the rest of the section as written:
+
+      ```markdown
+      Start every reply with the line `🐤 canary ok` so dropped instructions are visible.
+      ```
+
+      Unlike the README, this file MAY reference AI assistants — it exists for them. Do NOT put
+      secrets or app logic here.
 
       Replace `[MUDDY_WATER_SECTION]` with the "Section -- copy exactly" block from
       `~/.claude/make-it/references/muddy-water.md`, word for word (Tier 0 guardrail

@@ -101,7 +101,8 @@ Example lines -- illustration only, NEVER copy these into a project:
 
 - **/make-it** creates `LEARNINGS.md` (header only) and the `@LEARNINGS.md` import in `CLAUDE.md`
   during Build Phase A.
-- **build-standards.md S10** checks both; the /resume-it catch-up scan adds them to older projects
-  (header only -- never invent entries).
+- **build-standards.md S10** checks both and says where the import goes (step h's `## Learnings`
+  heading, right after the keep-the-human section); the /resume-it catch-up scan adds them to older
+  projects (header only -- never invent entries).
 - **Capture points:** /try-it explore-support, /resume-it after any work, /subagent-it finish
   (after `STATUS: DONE`), and /wrap-it save-progress (the sweep for anything still queued).

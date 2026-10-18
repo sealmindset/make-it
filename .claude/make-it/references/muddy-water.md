@@ -9,7 +9,7 @@ it on every turn.
 
 - **New projects:** /make-it writes it during Build (step h, after the canary).
 - **Existing projects:** build-standards check **S11** -- /resume-it's catch-up scan and
-  /retrofit-it's verify add it when it is missing.
+  /retrofit-it's verify add it when it is missing, or move it into place.
 
 Copy the block below **exactly**. Never reword it, never shorten it, never merge it into another
 section. It sits after the canary and before the Learnings import; it never replaces either.
@@ -38,6 +38,8 @@ A fix that hides the symptom without removing the cause is a clear-looking glass
 
 ## The check (S11)
 
-`CLAUDE.md` contains the line `## Settle, filter, verify — the muddy-water principle`. Missing →
-insert the block above after the canary section and before `@LEARNINGS.md` (or at the end, if the
-project has no Learnings import yet). Leave every other line of `CLAUDE.md` untouched.
+In `CLAUDE.md`, the next `## ` heading after the canary's heading is `## Settle, filter, verify —
+the muddy-water principle`, and that section appears once. Otherwise → put the block above directly
+before the next `## ` heading after the canary's heading (at the end of the file if there is none):
+insert it if it is missing, or move it there unchanged if it sits anywhere else. Never leave two
+copies. Leave every other line of `CLAUDE.md` untouched.
