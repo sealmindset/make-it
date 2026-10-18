@@ -958,6 +958,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.5 -- The sdd-gate waits for running agents instead of nudging
+
+During a `/subagent-it` run, the sdd-gate counted every turn end as a stall. That included the
+turns spent waiting for a background agent to report. So it nudged while work was running, and
+after 3 nudges it let the run go, even though nothing had stalled. Now:
+- A background agent that is still running doesn't trigger a nudge, and the wait doesn't count
+  toward the cap. That holds for up to 2 hours after launch, because real implementers ran for
+  up to an hour. An agent whose finished notice is queued but not yet delivered still counts as
+  running.
+- A real stall, a turn that ends with no agent running, is nudged 1-3 times and then capped, as
+  before.
+- If the session transcript can't be read in the expected format, the gate goes back to the old
+  strict nudging. It never traps a session.
+
+Checks: 6 new fixture cases in `scripts/test-sdd-gate.sh`, and a replay of a real 114-nudge
+transcript, where all 114 are now held.
+
 ### v1.44.4 -- `/nemo-it` read-only mode says what it actually ran
 
 When `/nemo-it` sees your live system, it switches to read-only mode, but its messages still
