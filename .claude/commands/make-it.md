@@ -631,9 +631,15 @@ whole-branch review, keeping your own context for coordination. Stay sequential 
    - Read the scaffold's `backend/app/models/` and `backend/alembic/versions/001_rbac_schema.py`
      to understand the pattern (Base, UUID PKs, timestamps, relationships)
    - Create new model files in `backend/app/models/` for each domain entity from ideation
-   - Create `backend/alembic/versions/002_domain_schema.py` migration for domain tables
+   - Create the domain-table migration as the next link in the scaffold's chain: find the
+     highest-numbered file in `backend/alembic/versions/` (the scaffold already ships several --
+     never assume a number), name the new file the next free number (`NNN_domain_schema.py`,
+     `revision = "NNN"`), and set `down_revision` to that highest file's `revision`. Every later
+     migration in this build is numbered the same way, after the one before it. The chain must
+     keep exactly one head (`alembic heads`)
    - Update `backend/app/models/__init__.py` to export new models
-   - Add domain-specific permissions to the 001 RBAC seed data (or create 003_domain_permissions.py)
+   - Add domain-specific permissions to the 001 RBAC seed data (or create a
+     `NNN_domain_permissions.py` migration, numbered as above)
 
 2. **Domain API Routes**
    - Tell user: "Building your API..."
@@ -854,7 +860,8 @@ whole-branch review, keeping your own context for coordination. Stay sequential 
 
 11. **Seed Data**
     - Tell user: "Adding sample data so you can explore the app right away..."
-    - Generate `backend/alembic/versions/003_seed_data.py` (or next available number)
+    - Generate `backend/alembic/versions/NNN_seed_data.py`, numbered as in step 1 (the next free
+      number, `down_revision` = the highest existing revision)
     - Seed data MUST include:
       a. **Users** -- one per role, with oidc_subject matching mock-oidc test users
          (e.g., `mock-admin`, `mock-manager`, `mock-user`, `mock-viewer`)
