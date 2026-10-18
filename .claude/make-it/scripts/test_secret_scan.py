@@ -1701,5 +1701,89 @@ class ReReview6Cases(Base):
         self.check(r.scan(), new=['proxy.yml:1'], secrets=['MyPassword=2024xyzQ', '2024xyzQ'])
 
 
+ARGO_IT = os.path.normpath(os.path.join(HERE, '..', '..', 'commands', 'argo-it.md'))
+INSTALLED = '~/.claude/make-it/scripts/secret-scan.py'
+
+
+class ArgoItWiringCases(Base):
+    """argo-it.md step 3e: the shell block calls the scanner, as written, and fails closed."""
+
+    def _doc(self):
+        with open(ARGO_IT, encoding='utf-8') as f:
+            return f.read()
+
+    def _section(self):
+        doc = self._doc()
+        m = re.search(r'^\*\*3e\.[^\n]*\n', doc, re.M)
+        self.assertTrue(m, 'argo-it.md: no "**3e." heading found')
+        end = re.search(r'^\*\*4\. ', doc[m.end():], re.M)
+        self.assertTrue(end, 'argo-it.md: no "**4." heading after 3e')
+        return doc[m.end():m.end() + end.start()]
+
+    def _block(self):
+        m = re.search(r'^```bash\n(.*?)^```', self._section(), re.M | re.S)
+        self.assertTrue(m, 'argo-it.md: no ```bash block found after the 3e heading')
+        return m.group(1)
+
+    def _run(self, cwd):
+        block = self._block()
+        self.assertTrue(INSTALLED in block, '3e block does not call %s' % INSTALLED)
+        block = block.replace(INSTALLED, SCRIPT)
+        cp = subprocess.run(['bash', '-c', block], cwd=cwd, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=180)
+        return Result(cp, 0)
+
+    def _code(self):
+        return '\n'.join(l for l in self._block().splitlines() if not l.lstrip().startswith('#'))
+
+    def test_old_inline_scan_is_gone(self):
+        code = self._code()
+        for old in ('PATTERN=', 'SKIP=', 'TAG=', 'awk', 'grep', 'xargs'):
+            self.assertTrue(old not in code, 'old inline scan still in 3e: %r' % old)
+
+    def test_block_runs_scanner_and_prints_its_output(self):
+        r = self.fresh()
+        r.branch()
+        r.append('app.py', kv('API_KEY', 'zq9FAKEcommitted1234'))
+        r.commit('key')
+        r.append('app.py', kv('PASSWORD', 'zq9FAKEunsaved5678'))
+        res = self._run(r.work)
+        self.check(res, unsaved=['app.py:3'], saved=['app.py:2'],
+                   secrets=['zq9FAKEcommitted1234', 'zq9FAKEunsaved5678'])
+
+    def test_block_clean_repo_prints_labels_exit_0(self):
+        r = self.fresh()
+        self.check(self._run(r.work))
+
+    def test_block_surfaces_exit_2_outside_a_repo(self):
+        with tempfile.TemporaryDirectory() as td:
+            res = self._run(os.path.realpath(td))
+        self.assertEqual(res.code, 2, 'exit code swallowed: out=%r err=%r' % (res.out, res.err[:200]))
+
+    def test_scanner_call_has_no_exit_masking(self):
+        for ln in self._code().splitlines():
+            if 'secret-scan.py' in ln:
+                self.assertNotRegex(ln, r'\|\||;\s*true|\|\s*\w|\bset \+e', 'masks the exit: %r' % ln)
+        self.assertNotRegex(self._code(), r'(?m)^\s*set \+e|\|\|\s*(true|:)\b')
+
+    def test_gate_text_no_var_name_and_no_quoting_of_hits(self):
+        sec = re.sub(r'^```bash\n.*?^```', '', self._section(), flags=re.M | re.S)
+        self.assertTrue('VAR_NAME' not in sec, 'scanner prints no NAME; gate must say line N of [file]')
+        self.assertNotRegex(sec, r'(?i)\b(quote|quoting|repeat|echo|print|display|show)\b[^.\n]{0,40}'
+                                 r'\b(hit|line|value|contents?)\b',
+                            '3e tells the agent to quote a hit line or value')
+
+    def test_gate_fails_closed_wording(self):
+        sec = self._section()
+        self.assertTrue("I couldn't check your changes for secrets, so I haven't saved or sent anything" in sec,
+                        '3e lacks the could-not-check stop message')
+        self.assertRegex(sec, r'(?i)exit')
+
+    def test_pre_push_rules_name_the_script(self):
+        doc = self._doc()
+        i = doc.index('**Pre-push self-review rules')
+        self.assertTrue('secret-scan.py' in doc[i:i + 3000], 'pre-push rules do not name the script')
+
+
 if __name__ == '__main__':
     unittest.main()
