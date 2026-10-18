@@ -512,34 +512,53 @@ moving it isn't enough -- it should also be changed, and **stop here** is the sa
 Which should I move -- **line [N] of [file]** [each, by file and line] -- or **stop here** so you
 can sort it out yourself?"
 
-Move only the ones they named. Before you write anything to `.env`, make sure it stays on this
-computer. From the project root (where step 4 runs), first run step 4's own `.gitignore` line,
-exactly as step 4 has it; that line stays in `.gitignore` whatever happens next:
+Move only the ones they named. If they name none of them (they call them samples, or just say
+yes), move nothing: stop, steps 4 and later don't run, and tell the user which values are holding
+the send up: "I won't send this while what looks like a password or secret key is still in the
+code: **line [N] of [file]** [, one per value found]. I haven't saved or sent anything[; the small
+fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. What to do next:
+run /argo-it again and pick which to move, or take them out of the code yourself." Before you
+write anything to `.env`, make sure it stays on this computer. From the project root (where step
+4 runs), first run step 4's own `.gitignore` line, exactly as step 4 has it; that line stays in
+`.gitignore` whatever happens next. It adds `.env*` and `!.env.example` only when `.gitignore`
+has no line that reads exactly `.env*` (or doesn't exist yet), so look before you run it and
+remember whether it added them:
 `grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore`
 Then run the check:
-`test ! -L .env && { test ! -e .env || test -n "$(find .env -prune -type f -links 1)"; } && git check-ignore -q .env`
-If it exits anything but 0 -- `.env` is a link to another file, git already tracks it, or git
-isn't set to leave it out -- stop: steps 4 and later don't run. To tell which, check in this
-order and use the first reason that fits: if
-`test -L .env || test -n "$(find .env -prune -type f -links +1)"` is true, `.env` is a link (a
-shortcut, or a second name for another file); if `git ls-files --error-unmatch .env` finds it,
-git tracks it; otherwise git isn't set to leave it out. Tell the user: "I can't move it safely:
-your local settings file (.env) [is a shortcut to another file / is already in your saved
-history / isn't set to stay on this computer], so the value could still be sent. I haven't
-moved, saved or sent anything; the line in .gitignore that keeps .env on this computer stays
-there[, and so do the small fixes I made a moment ago -- only if 3a, 3b or 3c made any]. What to
-do next: ask your DevOps team to help make .env a plain file that stays on this computer, then
+`test ! -L .env && { test ! -e .env || test -n "$(find .env -prune -type f -links 1)"; } && test -z "$(git ls-files -- ':(icase).env')" && git check-ignore -q .env`
+If it exits anything but 0 -- `.env` is a link to another file or a folder, git already tracks it
+(under any mix of capital and small letters), or git isn't set to leave it out --
+stop: steps 4 and later don't run. To tell which, check in this order and use the first reason
+that fits: if `test -L .env || test -n "$(find .env -prune -type f -links +1)"` is true, `.env`
+is a link (a shortcut, or a second name for another file); if `test -d .env` is true, it's a
+folder; if `git ls-files --error-unmatch ':(icase).env'` finds it, git tracks it; otherwise git
+isn't set to leave it out. Tell the user: "I can't move it safely: your local settings file
+(.env) [is a shortcut to another file / is a folder, not a settings file / is already in your
+saved history / isn't set to stay on this computer], so [the value could still be sent / for a
+folder: there's no file to put the value in]. I haven't moved, saved or sent anything[; I added
+.env to your .gitignore file -- the list of files git leaves out -- and that change stays: only
+if the line just added it][; the small fixes I made a moment ago stay in your files -- only if
+3a, 3b or 3c made any]. What to do next: ask your DevOps team to help [make .env a plain file
+that stays on this computer / for a folder: give that folder another name, such as .venv if it's
+a Python virtual environment], then
 run /argo-it again." Once it exits 0: open each named line yourself (from the top folder) to
 learn the setting names, and move every secret-looking value on that line, not just the first.
 Each value goes to the `.env` in the project root, the one you just checked; the code gets an
 `os.getenv()` / `process.env.` reference; and tell the user the setting name(s) to pass to
 DevOps. 'Stop here': nothing is saved or sent; the small fixes already made earlier in this step
-(3a, 3b, 3c) stay in your files. After a move, run the 3e block again from the project root and
-read it the same way. Any hit left means stop, steps 4 and later don't run -- one they didn't
-name, one called a sample, or a second value on a moved line: say which one is holding things
-up, by file and line. Never send with a found secret still in the code, whatever they say. On
-any stop after a move, also tell the user the moved values stay in .env and the line in
-.gitignore that keeps .env on this computer stays too.
+(3a, 3b, 3c) stay in your files. After all the named values are moved, run the 3e block again
+from the project root, once, and read the result as above, except that exit 1 -- any hit left
+-- means stop, not a new ask: steps 4 and later don't run. A hit left is
+one they didn't name, one called a sample, or a second value on a moved line. Tell the user: "I
+moved what you picked, but I still found what looks like a password or secret key on **line [N]
+of [file]** [, one per hit left], so I won't send this. I haven't saved or sent anything; the
+values I moved stay in .env, which stays on this computer[; I added .env to your .gitignore file
+-- the list of files git leaves out -- and that change stays: only if the line just added it].
+What to do next: run /argo-it again and pick [that line / those lines] to move too, or take the
+value out of the code yourself." Never send with a found secret still in the code, whatever they
+say. On any other stop after a move, also tell the user the moved values stay in .env, which
+stays on this computer[, and that I added .env to your .gitignore file -- only if the line just
+added it].
 
 **If ALL checks pass:** proceed silently to step 4 (the user never knows the review happened).
 **If any check fails and can't be auto-fixed** (3a, 3d -- 3e has its own gate above): one ask
