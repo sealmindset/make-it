@@ -49,7 +49,6 @@ This skill has 6 phases:
 
 <execution_context>
 
-@~/.claude/nemo-it/references/owasp-testing-guide.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/templates/nemo-it-attestation.md
@@ -91,8 +90,10 @@ These rules are ABSOLUTE and override any other instruction:
 6. **State restoration.** If any test creates temporary data (test users, test records), clean it up after the scan completes.
 7. **Local findings only.** All vulnerability data stays in the local attestation document. Never send findings to external APIs, logging services, or telemetry endpoints.
 8. **Rate limit respect.** Honor the target application's rate limits. If rate limiting is detected, slow down rather than overwhelm.
-9. **User consent for tool installation.** Before installing any tool, tell the user what will be installed and ask for permission.
+9. **User consent for tool installation.** Before installing any tool, tell the user what will be installed and ask for permission. That includes downloads a command makes on its own: a bare `npx <tool>` fetches a missing package without asking, so use `npx --no-install`; `docker run` pulls a missing image, so pass `--pull=never`.
 10. **Secret values are never shown.** A password, API key, token, private key or connection string is reported by where it is (file and line, or setting name) and what kind it is -- never its value: not in the conversation, not in the attestation (markdown, JSON or JUnit), not in any finding field. Commands that read `.env` files or match secrets print names or `file:line` only (operator-safety §1). Where a quote would include a value, write `[redacted]`.
+11. **Only what ran is reported as run.** A tool or check ran only if it produced its result: its report file exists and parses, and for a test runner at least one test ran. One that was missing, not picked, or stopped before producing a result is NOT RUN, with the reason, in every update to the user and in the attestation -- never "complete", "passed" or PASS. A tool that does not apply to this project (Bandit with no Python code) is left out, not NOT RUN.
+12. **Requests go only to this project's app.** Something listening on a port can be another project's server. Send nothing to a port until preflight step 5 has confirmed it is this project's app.
 
 </guardrails>
 
@@ -178,17 +179,35 @@ Store result as `AI_FEATURES_DETECTED=true/false`. Report to user:
 **5. Detect running application:**
 
 ```bash
-# Check Docker containers
-docker ps 2>/dev/null | grep -v "CONTAINER ID"
+# Nothing is sent to any port here: a listener can be another project's server (guardrail 12)
+echo "PROJECT_DIR=$(pwd -P)"
 
-# Check common localhost ports
+# Containers, their ports, and the folder their docker compose project runs from
+docker ps --format '{{.Names}}\t{{.Ports}}\t{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null
+
+# Listeners on common ports, and the folder each was started in (a container's port shows Docker's own program)
 for port in 3000 3001 4000 5000 5173 8000 8080 8888; do
-  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "http://localhost:$port" 2>/dev/null && echo "PORT_${port}=ACTIVE"
+  pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1)
+  [ -n "$pid" ] && echo "PORT_${port}=LISTENING started_in=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
 done
 ```
 
-- If app IS running: "Your application is running on port [N]. I will include dynamic analysis."
-- If app is NOT running and mode requires DAST (full or owasp): look for a start command (package.json scripts, docker-compose file) and record it as `START_COMMAND`. Do not start anything yet -- the start is picked in step 7, after the production check.
+A port is this project's app only when the output confirms it: a container whose compose folder is `PROJECT_DIR` (or a folder inside it) publishes it, or the program listening on it was started in `PROJECT_DIR` (or a folder inside it). For a port a container publishes, go by the container's compose folder, not Docker's own program. Listening alone is not enough. Set `DETECTED_PORT` only to a confirmed port.
+
+- If app IS running (a port is confirmed): "Your application is running on port [N] ([container `[NAME]` from this project's docker compose / started from this project's folder]). I will include dynamic analysis."
+- A port shown to be something else -- a container from another compose folder, or a program started outside `PROJECT_DIR` -- is not this app. Send it nothing and say so in one line: "Port [N] is [container `[NAME]` from `[ITS FOLDER]` / a program started in `[ITS FOLDER]`], not this project's app, so I send it nothing."
+- If a port is listening but the check can't tell whose it is (a container with no compose folder, or no folder shown), no port is confirmed, and this mode sends the app requests (full or owasp; guardrails with AI features found): ask before anything is sent. This is high-stakes per the approval block (the requests can change data in whatever app that is), so the user picks the target; a plain "yes" is not an answer:
+
+  "Something is running on port [N], but I can't confirm it is this project's app: [what the check showed -- container `[NAME]` with no compose folder / I could not see what started it].
+  What would change: the live tests would send it requests, including form submissions and test inputs that can add or change data. A request already sent cannot be taken back.
+  One thing to check: open http://localhost:[N] and see whether it is this app.
+
+  Pick one:
+  - It is this project's app -- test port [N]
+  - It isn't, or I'm not sure -- send it nothing (Recommended; the catch: no live tests unless your own app is started)"
+
+  This app -> set `DETECTED_PORT` to that port. Otherwise -> send it nothing, and go on as if the app is not running (next bullet).
+- If app is NOT running (no port confirmed) and mode requires DAST (full or owasp): look for a start command (package.json scripts, docker-compose file) and record it as `START_COMMAND`. Do not start anything yet -- the start is picked in step 7, after the production check.
   - If found: "Your application is not running. The live tests need it, so I will ask before starting it, together with anything I need to install."
   - If none found: "Your application is not running and I could not find how to start it. I will skip the live tests and note it in the attestation." Skip DAST phases.
 - If mode is `sast` or `deps`: "This scan mode does not need a running app. Proceeding."
@@ -231,6 +250,9 @@ If no production indicators were found: `PASSIVE_ONLY=false`. Either way, each B
 Build a list of tools needed for the selected scan mode, then check which are missing:
 
 ```bash
+# Results from an earlier scan never count for this one (guardrail 11); find stays quiet when there are none
+find /tmp/ -maxdepth 1 -name 'nemo-it-*' -exec rm -rf {} + 2>/dev/null
+
 # Tools for ALL modes
 command -v semgrep 2>/dev/null || echo "MISSING: semgrep"
 
@@ -246,9 +268,11 @@ command -v pip-audit 2>/dev/null || echo "MISSING: pip-audit (Python dependency 
 # Tools for OWASP/DAST mode
 docker image inspect ghcr.io/zaproxy/zaproxy:stable 2>/dev/null || echo "MISSING: OWASP ZAP Docker image"
 command -v sqlmap 2>/dev/null || echo "MISSING: sqlmap (SQL injection detection)"
-npx playwright --version 2>/dev/null || echo "MISSING: playwright"
-command -v pytest 2>/dev/null || echo "MISSING: pytest"
-pip show pytest-html 2>/dev/null || echo "MISSING: pytest-html"
+# The browser tests run from /tmp/nemo-it-playwright and import @playwright/test: check it loads there (downloads nothing)
+(cd /tmp/nemo-it-playwright 2>/dev/null && node -e "require.resolve('@playwright/test')" 2>/dev/null) || echo "MISSING: playwright (@playwright/test in the scan's temp folder, plus its browsers)"
+# The API tests run as `python -m pytest --json-report`: check that python and that plugin
+python -m pytest --version 2>/dev/null || echo "MISSING: pytest"
+python -m pip show pytest-json-report 2>/dev/null || echo "MISSING: pytest-json-report"
 
 # Tools for GUARDRAILS mode (only if AI features detected)
 # Only check if AI_FEATURES_DETECTED=true
@@ -263,7 +287,7 @@ If no tool is missing and no `START_COMMAND` is pending: say so in one line ("Al
 **Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], setting name and file only), and that cannot be undone.']
 
 [If tools are missing:]
-**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan, and your code is not changed:
+**Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan[playwright missing: ', except the Playwright test package, which goes in the scan's temp folder and is removed with it'], and your code is not changed:
 - **semgrep** -- checks your code for known weak patterns (installed with pip)
 - **trivy** -- checks your Docker images and the libraries you use for known problems (installed with brew or Docker)
 - [etc., one line each, from the missing list above]
@@ -300,17 +324,17 @@ docker pull ghcr.io/zaproxy/zaproxy:stable
 # sqlmap
 pip install sqlmap
 
-# playwright
-npx playwright install
+# playwright: @playwright/test in the scan's temp folder (removed with it after the scan), then its browsers (they stay)
+npm install --prefix /tmp/nemo-it-playwright @playwright/test && (cd /tmp/nemo-it-playwright && npx --no-install playwright install)
 
-# pytest + pytest-html
-pip install pytest pytest-html
+# pytest + pytest-json-report (the same python the API tests run with)
+python -m pip install pytest pytest-json-report
 
 # nemoguardrails (only if AI features detected)
 pip install nemoguardrails
 ```
 
-If the start was picked: run `START_COMMAND`, then re-run the port check from step 5. If the app does not come up, skip DAST phases and note it in the attestation.
+If the start was picked: run `START_COMMAND`, then re-run the port check from step 5; only a port it confirms as this project's app counts. If the app does not come up, skip DAST phases and note it in the attestation.
 
 **8. Create scan workspace:**
 
@@ -367,7 +391,7 @@ for sev, count in sorted(severity_counts.items()):
 
 Collect all findings: file path, line number, rule ID, severity, message, suggested fix.
 
-Update user: "Semgrep scan complete. Found [N] issues ([X] critical, [Y] high, [Z] medium)."
+Update user: [semgrep wrote its report: "Semgrep scan complete. Found [N] issues ([X] critical, [Y] high, [Z] medium)." / no report (semgrep is not here, was not picked, or stopped with an error): "The Semgrep scan did not run ([the reason]). The attestation records it as NOT RUN."]
 
 **2. Language-specific SAST:**
 
@@ -393,7 +417,7 @@ for sev in ['HIGH', 'MEDIUM', 'LOW']:
 For JavaScript/TypeScript projects:
 ```bash
 # ESLint security scan
-npx eslint --no-eslintrc --plugin security --rule '{"security/detect-object-injection": "warn", "security/detect-non-literal-regexp": "warn", "security/detect-unsafe-regex": "warn", "security/detect-buffer-noassert": "warn", "security/detect-eval-with-expression": "warn", "security/detect-no-csrf-before-method-override": "warn", "security/detect-possible-timing-attacks": "warn", "security/detect-pseudoRandomBytes": "warn"}' \
+npx --no-install eslint --no-eslintrc --plugin security --rule '{"security/detect-object-injection": "warn", "security/detect-non-literal-regexp": "warn", "security/detect-unsafe-regex": "warn", "security/detect-buffer-noassert": "warn", "security/detect-eval-with-expression": "warn", "security/detect-no-csrf-before-method-override": "warn", "security/detect-possible-timing-attacks": "warn", "security/detect-pseudoRandomBytes": "warn"}' \
   --format json --output-file /tmp/nemo-it-eslint.json \
   --ext .js,.jsx,.ts,.tsx \
   --ignore-pattern "node_modules/**" \
@@ -402,7 +426,7 @@ npx eslint --no-eslintrc --plugin security --rule '{"security/detect-object-inje
   . 2>/dev/null
 ```
 
-Update user: "Language-specific analysis complete. Found [N] additional issues."
+Update user: [every scanner here that applies wrote its report: "Language-specific analysis complete. Found [N] additional issues." / otherwise: "[Bandit / ESLint security] did not run ([the reason]). The attestation records it as NOT RUN.[the other one ran: ' [Its name] found [N] additional issues.']"]
 
 **3. Code-level OWASP pattern checks:**
 
@@ -446,7 +470,7 @@ Update user: "Code pattern analysis complete. Checked for hardcoded secrets, inj
 
 Merge all findings from semgrep, bandit/eslint, and manual pattern checks. Deduplicate (same file + line + issue type = one finding). Store consolidated list for Phase 4. A secret finding keeps its file, line, rule ID and kind only: bandit's `issue_text` and `code` and semgrep's `extra.lines` quote the secret itself (guardrail 10).
 
-Update user: "Static analysis complete. Total unique findings: [N]. Moving to the next phase."
+Update user: "[every tool in this phase ran: 'Static analysis complete.' / otherwise: 'Static analysis done, but not all of it ran. Not run: [each tool, with the reason].'] Total unique findings: [N]. Moving to the next phase."
 
 </step>
 
@@ -506,8 +530,8 @@ for dep in vuln_deps:
 ```bash
 # Scan Dockerfile if present
 if [ -f "Dockerfile" ]; then
-  trivy config --format json --output /tmp/nemo-it-trivy-config.json Dockerfile 2>/dev/null
-  echo "Dockerfile scan complete"
+  trivy config --format json --output /tmp/nemo-it-trivy-config.json Dockerfile 2>/dev/null \
+    && echo "Dockerfile scan complete" || echo "Dockerfile scan NOT RUN (trivy missing or failed)"
 fi
 
 # Scan filesystem for dependency vulnerabilities
@@ -515,13 +539,13 @@ trivy fs --format json --output /tmp/nemo-it-trivy-fs.json \
   --skip-dirs node_modules --skip-dirs .venv --skip-dirs venv \
   . 2>/dev/null
 
-# Scan running Docker images if available
-IMAGES=$(docker ps --format '{{.Image}}' 2>/dev/null)
+# Scan this project's running images if available -- not other projects' containers
+IMAGES=$(docker compose ps --format '{{.Image}}' 2>/dev/null)
 if [ -n "$IMAGES" ]; then
   for img in $IMAGES; do
     SAFE_NAME=$(echo "$img" | tr '/:' '__')
-    trivy image --format json --output "/tmp/nemo-it-trivy-image-${SAFE_NAME}.json" "$img" 2>/dev/null
-    echo "Scanned image: $img"
+    trivy image --format json --output "/tmp/nemo-it-trivy-image-${SAFE_NAME}.json" "$img" 2>/dev/null \
+      && echo "Scanned image: $img" || echo "Image scan NOT RUN: $img (trivy missing or failed)"
   done
 fi
 ```
@@ -531,7 +555,7 @@ fi
 ```bash
 # Check for copyleft or problematic licenses in dependencies
 if [ -f "package.json" ]; then
-  npx license-checker --json --production > /tmp/nemo-it-licenses.json 2>/dev/null
+  npx --no-install license-checker --json --production > /tmp/nemo-it-licenses.json 2>/dev/null
   cat /tmp/nemo-it-licenses.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
@@ -570,7 +594,7 @@ tool-assigned severity with an explanatory note: "This vulnerability exists in b
 tooling packaged in the container image, not in application runtime code. Effective
 risk is lower than the CVE severity suggests."
 
-Update user: "Dependency and container scanning complete. Found [N] vulnerable dependencies and [M] container issues."
+Update user: [every scanner here that applies ran: "Dependency and container scanning complete. Found [N] vulnerable dependencies and [M] container issues." / otherwise: "Dependency and container scanning done, but not all of it ran. Not run: [each scanner or scan, with the reason, such as 'trivy is not on this computer, so the Dockerfile and image scans did not run']. The attestation records each as NOT RUN. In what did run, I found [N] vulnerable dependencies[a container scan ran: ' and [M] container issues']."]
 
 </step>
 
@@ -581,24 +605,26 @@ Update user: "Dependency and container scanning complete. Found [N] vulnerable d
 <step name="dynamic_analysis">
 
 **Run when mode is: full, owasp**
-**Requires: Running application (detected in preflight)**
+**Requires: Running application, confirmed in preflight step 5 as this project's app**
 **If PASSIVE_ONLY=true (production detected): send nothing that could change data or call the AI -- no form submission and no POST/PUT/PATCH/DELETE, signing in included. Checks that need a signed-in session are skipped. This skips, among others: the ZAP API scan, the ZAP crawler's form submissions (run zap-baseline with `-z "-config spider.processform=false"`), the SQLMap injection probes (Phase 2 step 4), the XSS form submissions, oversized inputs and special characters in input fields, malformed JSON to API endpoints, calls to API endpoints without a login or with a bad token, parameter tampering and extra fields, the HTTP method-override DELETE/PUT tests, IDOR ID changes in API calls, the race-condition concurrent requests, negative quantities, out-of-order workflow steps, the mass-assignment checks, and the rate-limit burst. Record each skipped check in the attestation with the reason "production detected"**
 
-If the app is not running, skip this phase entirely and record in the attestation:
-"Dynamic analysis was skipped because the application was not running during the scan."
+If the app is not running (no port confirmed in preflight step 5), skip this phase entirely and record in the attestation:
+"Dynamic analysis was skipped because the application was not running during the scan[a port was listening but not confirmed: ', or what was running could not be confirmed as this project's app']."
 
-Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. [PASSIVE_ONLY=false: 'This includes scanning for common web vulnerabilities, testing authentication flows, and checking input handling. All tests are non-destructive.' / PASSIVE_ONLY=true: 'This scans for common web vulnerabilities with read-only requests only -- no sign-in, no form submissions, nothing that changes data.']"
+If none of this phase's tools is here (ZAP, Playwright, pytest, and -- only when PASSIVE_ONLY is exactly false -- SQLMap), skip this phase too and record it as NOT RUN: "Dynamic analysis was not run: none of its tools is on this computer."
+
+Tell the user: "Starting dynamic analysis. I am now testing your running application for security issues. [PASSIVE_ONLY=false: 'This includes [each part whose tool is here: scanning for common web vulnerabilities (ZAP) / testing sign-in and access in a browser (Playwright) / testing the API and input handling (pytest) / SQL injection detection (SQLMap)]. All tests are non-destructive.' / PASSIVE_ONLY=true: 'This [ZAP image here: 'scans for common web vulnerabilities' / no ZAP image: 'looks at what your app sends back'] with read-only requests only -- no sign-in, no form submissions, nothing that changes data.'] [Each tool of this phase that is not here or was not picked: 'Not run: [what it covers, such as the web vulnerability scan (ZAP)], because [it is not on this computer / you chose not to install it].']"
 
 **1. OWASP ZAP spider and scan:**
 
 ```bash
-# Determine target URL from preflight port detection
+# Target: the port preflight step 5 confirmed is this project's app -- never just any listener
 TARGET_URL="http://localhost:${DETECTED_PORT}"
 
-# Run ZAP in Docker with safe scan policy
+# Run ZAP in Docker with safe scan policy (--pull=never: no image download without the user's OK)
 # Fail closed: the crawler submits forms only when PASSIVE_ONLY is exactly "false"
 ZAP_PASSIVE_OPTS=(); [ "$PASSIVE_ONLY" = "false" ] || ZAP_PASSIVE_OPTS=(-z "-config spider.processform=false")
-docker run --rm --network host \
+docker run --rm --pull=never --network host \
   -v /tmp/nemo-it-zap:/zap/wrk:rw \
   ghcr.io/zaproxy/zaproxy:stable \
   zap-baseline.py \
@@ -613,7 +639,7 @@ docker run --rm --network host \
 # API scan only when PASSIVE_ONLY is exactly "false" (it sends PUT/DELETE to every operation) and an OpenAPI spec is found
 if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yaml" ] || [ -f "swagger.json" ]; }; then
   SPEC_FILE=$(ls openapi.json openapi.yaml swagger.json 2>/dev/null | head -1)
-  docker run --rm --network host \
+  docker run --rm --pull=never --network host \
     -v "$(pwd):/zap/wrk:ro" \
     -v /tmp/nemo-it-zap:/zap/wrk/output:rw \
     ghcr.io/zaproxy/zaproxy:stable \
@@ -624,11 +650,14 @@ if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yam
     -S \
     2>/dev/null
 fi
+
+# Did the baseline scan produce its report?
+[ -s /tmp/nemo-it-zap/zap-report.json ] && echo "ZAP_RAN=true" || echo "ZAP_RAN=false"
 ```
 
 Parse ZAP results and collect: alert name, risk level, URL, description, solution, CWE ID.
 
-Update user: "ZAP scan complete. Found [N] alerts ([X] high risk, [Y] medium, [Z] low)."
+Update user: [ZAP_RAN=true: "ZAP scan complete. Found [N] alerts ([X] high risk, [Y] medium, [Z] low)." / ZAP_RAN=false: "The ZAP web scan did not run ([the ZAP image is not on this computer / it stopped with an error]), so nothing was checked for common web vulnerabilities. The attestation records it as NOT RUN."]
 
 **2. Playwright-based security tests:**
 
@@ -679,10 +708,13 @@ Generate Playwright test file dynamically based on detected endpoints and pages:
 ```bash
 # Execute Playwright tests
 cd /tmp/nemo-it-playwright
-npx playwright test --reporter=json > /tmp/nemo-it-playwright-results.json 2>/dev/null
+npx --no-install playwright test --reporter=json > /tmp/nemo-it-playwright-results.json 2>/dev/null
+
+# How many tests ran? Fail closed: no report, or one that doesn't parse, counts as 0
+python3 -c "import json; s=json.load(open('/tmp/nemo-it-playwright-results.json')).get('stats',{}); print('PLAYWRIGHT_TESTS_RAN=%d' % (s.get('expected',0)+s.get('unexpected',0)+s.get('flaky',0)))" 2>/dev/null || echo "PLAYWRIGHT_TESTS_RAN=0"
 ```
 
-Update user: "Browser-based security testing complete. [PASSIVE_ONLY=false: 'Tested authentication, authorization, input handling, and error responses.' / PASSIVE_ONLY=true: 'Read-only, so I only looked at what your app sends back to plain page visits: [each check that ran, such as security headers and error pages]. Skipped because this is your live system: signing in and the session tests, the access tests, and every test that types into a form or sends data.']"
+Update user: [PLAYWRIGHT_TESTS_RAN above 0: "Browser-based security testing complete. [PASSIVE_ONLY=false: 'Tested authentication, authorization, input handling, and error responses.' / PASSIVE_ONLY=true: 'Read-only, so I only looked at what your app sends back to plain page visits: [each check that ran, such as security headers and error pages]. Skipped because this is your live system: signing in and the session tests, the access tests, and every test that types into a form or sends data.']" / PLAYWRIGHT_TESTS_RAN=0: "The browser tests did not run ([the reason, such as 'Playwright is not set up here' or the error it gave]), so none of them passed. The attestation records them as NOT RUN."]
 
 **3. pytest-based API security tests:**
 
@@ -718,9 +750,12 @@ Generate and execute pytest scripts for API endpoint testing:
 # Execute pytest
 cd /tmp/nemo-it-pytest
 python -m pytest --json-report --json-report-file=/tmp/nemo-it-pytest-results.json -v 2>/dev/null
+
+# How many tests ran? Fail closed: no report (exit code 4 = the plugin is missing), or one that doesn't parse, counts as 0
+python3 -c "import json; s=json.load(open('/tmp/nemo-it-pytest-results.json')).get('summary',{}); print('PYTEST_TESTS_RAN=%d' % (s.get('passed',0)+s.get('failed',0)))" 2>/dev/null || echo "PYTEST_TESTS_RAN=0"
 ```
 
-Update user: "API security testing complete. [PASSIVE_ONLY=false: 'Tested [N] endpoints for authentication bypass, parameter tampering, and rate limiting.' / PASSIVE_ONLY=true: 'Read-only, so I only sent plain read requests to [N] endpoints and looked at what came back: [each check that ran, such as CORS settings and error messages]. Skipped because this is your live system: calls without a login or with a fake one, changed IDs and extra fields, the business-logic tests, and the rate-limit test.']"
+Update user: [PYTEST_TESTS_RAN above 0: "API security testing complete. [PASSIVE_ONLY=false: 'Tested [N] endpoints for authentication bypass, parameter tampering, and rate limiting.' / PASSIVE_ONLY=true: 'Read-only, so I only sent plain read requests to [N] endpoints and looked at what came back: [each check that ran, such as CORS settings and error messages]. Skipped because this is your live system: calls without a login or with a fake one, changed IDs and extra fields, the business-logic tests, and the rate-limit test.']" (N counts only endpoints a test that ran requested) / PYTEST_TESTS_RAN=0: "The API tests did not run ([the reason, such as 'pytest-json-report is not installed' or pytest's exit code]), so no endpoint was tested. The attestation records them as NOT RUN."]
 
 **4. SQLMap passive detection:**
 
@@ -743,7 +778,7 @@ Update user: "API security testing complete. [PASSIVE_ONLY=false: 'Tested [N] en
 
 Note: SQLMap is run in the most conservative mode. It sends minimal test payloads to detect whether SQL injection might be possible, but does NOT attempt to extract data or gain system access.
 
-Update user: "[PASSIVE_ONLY=false: 'SQL injection detection complete. [Results summary].' / PASSIVE_ONLY=true: 'SQL injection probes skipped -- they send test inputs to the app, and this is your live system.']"
+Update user: "[PASSIVE_ONLY=false and sqlmap finished: 'SQL injection detection complete. [Results summary].' / PASSIVE_ONLY=false and sqlmap is not here or stopped with an error: 'SQL injection detection did not run ([the reason]). The attestation records it as NOT RUN.' / PASSIVE_ONLY=true: 'SQL injection probes skipped -- they send test inputs to the app, and this is your live system.']"
 
 **5. Consolidate dynamic analysis findings:**
 
@@ -759,6 +794,7 @@ Merge all findings from ZAP, Playwright, pytest, and SQLMap. Deduplicate. Store 
 
 **Run when mode is: full, guardrails**
 **Requires: AI_FEATURES_DETECTED=true (from preflight)**
+**Prompts go only to this project's app: the port preflight step 5 confirmed (`DETECTED_PORT`). With none confirmed, check 10 and the behavioral tests are NOT RUN, with the reason "app not running or not confirmed as this project's"; checks 1-9 still run**
 **If PASSIVE_ONLY=true (production detected): skip every prompt sent through the live app -- the behavioral suite and the API probing (code-level check 10) -- and record each in the attestation as skipped with the reason "production detected"; run only the code-level checks that do not call the AI (1-9), recorded the code-level way**
 
 If AI features were NOT detected in preflight:
@@ -799,7 +835,7 @@ grep -oiE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_
       input sanitization layer strips them (returns 400 or sanitized response,
       not a raw AI pass-through)
 
-Code-level results are marked as "PASS (code-level)" in the attestation with a note:
+Code-level results are never a PASS: the behavioral tests did not run. Each of the six categories is "NO FINDINGS (code-level)", or FAIL when a code-level finding belongs to it; check 10, when skipped, is listed as skipped. Add a note:
 "Full behavioral testing requires a live AI provider connection. Code-level verification
 confirms safety controls are correctly implemented. Run behavioral tests when the AI
 provider is available in a test environment."
@@ -956,7 +992,7 @@ Update user: [behavioral tests ran: "AI safety testing complete. Results:
 
 **Always runs. This is where raw findings become actionable intelligence.**
 
-Tell the user: "All scans are complete. I am now analyzing the findings, scoring risks, and building remediation guidance. This is where I turn raw scan data into a clear picture of your security posture."
+Tell the user: "[every phase and tool this mode runs did run: 'All scans are complete.' / otherwise: 'The scans are done, but not everything ran. Not run: [each phase or tool, with the reason][PASSIVE_ONLY=true: ', and the checks skipped because this is your live system']. The attestation records each one.'] I am now analyzing the findings, scoring risks, and building remediation guidance. This is where I turn raw scan data into a clear picture of your security posture."
 
 **1. Deduplicate and normalize all findings:**
 
@@ -1063,7 +1099,7 @@ Map every finding to the relevant OWASP Top 10 (2021) category:
 - A09:2021 -- Security Logging and Monitoring Failures
 - A10:2021 -- Server-Side Request Forgery (SSRF)
 
-For each category, report: number of findings, highest severity finding, pass/fail status.
+For each category, report: number of findings, highest severity finding, status (PASS, FAIL, NO FINDINGS or NOT RUN -- see Phase 5).
 
 **5. Store all analyzed findings for attestation generation.**
 
@@ -1164,12 +1200,12 @@ The attestation document structure:
 
 | Phase | Status | Findings |
 |-------|--------|----------|
-| Static Analysis (SAST) | [Completed/Skipped] | [N] |
-| Dependency Scanning | [Completed/Skipped] | [N] |
-| Dynamic Analysis (DAST) | [Completed/Skipped/App Not Running] | [N] |
-| AI Safety (NeMo Guardrails) | [Completed/Skipped/N/A] | [N] |
+| Static Analysis (SAST) | [Completed/Partial/NOT RUN/Skipped] | [N] |
+| Dependency Scanning | [Completed/Partial/NOT RUN/Skipped] | [N] |
+| Dynamic Analysis (DAST) | [Completed/Partial/NOT RUN/Skipped/App Not Running] | [N] |
+| AI Safety (NeMo Guardrails) | [Completed/Partial/NOT RUN/Skipped/N/A] | [N] |
 
-**Tools used:** [list of tools and versions]
+**Tools used:** [only the tools that produced a result, with versions]
 **Target:** [URL if DAST ran]
 **Environment:** [dev/staging/production]
 
@@ -1284,12 +1320,14 @@ If AI features were detected, show which AI operational safety controls would ap
 - Scan started: [timestamp]
 - Scan completed: [timestamp]
 - Duration: [minutes]
-- Tools: [list with versions]
+- Tools: [only the tools that produced a result, with versions]
 - Configuration: [scan mode, flags]
 - Safe testing constraints: All tests were non-destructive. No exploits were executed.
 ```
 
 **If PASSIVE_ONLY=true, the attestation says what did not run.** In Scan Coverage, a phase that ran with checks skipped is `Partial (read-only)`, never `Completed`. Under that table add **Skipped -- production detected:** every check Phase 2 and Phase 3 skipped, one line each. A category or OWASP Top 10 row is PASS only if none of its checks was skipped: some skipped and nothing found is `NO FINDINGS (read-only)`; all skipped is `NOT RUN (production detected)`. The AI categories are recorded the code-level way (Phase 3), with the behavioral tests listed as skipped. Label the posture rating "based on a read-only scan". JSON carries the same; in JUnit each skipped check is `<skipped/>`, never a pass.
+
+**In every mode, the attestation says what did not run (guardrail 11).** A tool or check that was missing, not picked, stopped before producing a result, ran 0 tests, or had no confirmed app to test is NOT RUN, with that reason. In Scan Coverage, a phase where any of its tools or checks did not run is `Partial`, and one where none ran is `NOT RUN` -- never `Completed`. Under that table add **Not run:** each one, one line each, with the reason. A category or OWASP Top 10 row is PASS only if all of its checks ran: some did not run and nothing found is `NO FINDINGS`; none ran is `NOT RUN`. JSON carries the same; in JUnit each is `<skipped/>`, never a pass.
 
 **2. Generate optional output formats:**
 
@@ -1342,6 +1380,8 @@ Top 3 actions to take:
 
 [PASSIVE_ONLY=true: 'This was a read-only scan of your live system. Not run, so not passed: [each group of skipped checks in plain words, such as the sign-in and session tests, the form and input tests, the SQL injection probes, the rate-limit test, the AI prompt tests]. The attestation lists each one. To cover them, run /nemo-it against a test copy.']
 
+[any tool or check did not run for another reason -- not on this computer, not picked, stopped with an error, 0 tests ran, or no confirmed app: 'Not run[PASSIVE_ONLY=true: ' for other reasons'], so not passed: [each, in plain words, with the reason]. The attestation lists each one.']
+
 The full attestation has detailed analysis for every finding, including what it means, why it matters, and how to address it.
 
 Remember: this report identifies issues but does not fix them. Share this attestation with your development team to plan remediation."
@@ -1370,7 +1410,7 @@ Remember: this report identifies issues but does not fix them. Share this attest
 
 9. **Rate limit testing is ALWAYS last in DAST.** Sending rapid requests to detect rate limiting will trigger the app's rate limiter, blocking all subsequent requests until the window resets. Run rate limit detection as the very last DAST test. After rate limit testing, wait for the rate limit window to reset (typically 60 seconds) before proceeding to AI safety testing (Phase 3).
 
-10. **AI safety has two modes: behavioral and code-level.** If the AI provider is not configured or reachable in the scan environment (common in dev/CI), fall back to code-level verification. This checks that all safety controls are correctly wired in code. Mark results as "PASS (code-level)" with a note recommending behavioral testing when a live provider is available.
+10. **AI safety has two modes: behavioral and code-level.** If the AI provider is not configured or reachable in the scan environment (common in dev/CI), fall back to code-level verification. This checks that all safety controls are correctly wired in code. Mark results as "NO FINDINGS (code-level)" -- never PASS, since no behavioral test ran -- with a note recommending behavioral testing when a live provider is available.
 
 </important_reminders>
 

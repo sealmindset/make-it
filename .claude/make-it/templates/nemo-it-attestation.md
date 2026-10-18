@@ -27,6 +27,8 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 | Categories passed             | [CATEGORIES_PASSED]  |
 | Categories failed             | [CATEGORIES_FAILED]  |
 | Categories N/A                | [CATEGORIES_NA]      |
+| Categories with no findings, not all checks run | [CATEGORIES_NO_FINDINGS] |
+| Categories not run            | [CATEGORIES_NOT_RUN] |
 | Total findings                | [TOTAL_FINDINGS]     |
 | Critical findings             | [CRITICAL_COUNT]     |
 | High findings                 | [HIGH_COUNT]         |
@@ -45,30 +47,30 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 
 ### Category Breakdown
 
-| #  | Suite                              | Category                              | ID            | Status         | Findings | Highest Severity |
-|----|------------------------------------|---------------------------------------|---------------|----------------|----------|------------------|
-| 1  | NeMo Guardrails AI Safety          | Prompt Injection Resistance           | NEMO-PIR      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 2  | NeMo Guardrails AI Safety          | Jailbreak Resistance                  | NEMO-JBR      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 3  | NeMo Guardrails AI Safety          | Toxicity / Bias Detection             | NEMO-TBD      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 4  | NeMo Guardrails AI Safety          | Topic Boundary Enforcement            | NEMO-TBE      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 5  | NeMo Guardrails AI Safety          | PII Leakage Prevention                | NEMO-PII      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 6  | NeMo Guardrails AI Safety          | Hallucination Detection               | NEMO-HAL      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 7  | OWASP Testing Guide                | Information Gathering                 | OTG-INFO      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 8  | OWASP Testing Guide                | Configuration & Deployment Management | OTG-CONFIG    | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 9  | OWASP Testing Guide                | Identity Management                   | OTG-IDENT     | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 10 | OWASP Testing Guide                | Authentication                        | OTG-AUTHN     | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 11 | OWASP Testing Guide                | Authorization                         | OTG-AUTHZ     | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 12 | OWASP Testing Guide                | Session Management                    | OTG-SESS      | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 13 | OWASP Testing Guide                | Input Validation                      | OTG-INPVAL    | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 14 | OWASP Testing Guide                | Error Handling                        | OTG-ERR       | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 15 | OWASP Testing Guide                | Cryptography                          | OTG-CRYPST    | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 16 | OWASP Testing Guide                | Business Logic                        | OTG-BUSLOGIC  | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 17 | OWASP Testing Guide                | Client-Side                           | OTG-CLIENT    | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 18 | Dependency & Container Security    | npm audit                             | DEP-NPM       | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 19 | Dependency & Container Security    | pip-audit                             | DEP-PIP       | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 20 | Dependency & Container Security    | Trivy Container Scan                  | DEP-TRIVY     | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 21 | Static Analysis                    | Semgrep                               | SAST-SEMGREP  | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
-| 22 | Static Analysis                    | Bandit / ESLint Security              | SAST-LINT     | [PASS/FAIL/NA] | [COUNT]  | [SEVERITY]       |
+| #  | Suite                              | Category                              | ID            | Status                             | Findings | Highest Severity |
+|----|------------------------------------|---------------------------------------|---------------|------------------------------------|----------|------------------|
+| 1  | NeMo Guardrails AI Safety          | Prompt Injection Resistance           | NEMO-PIR      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 2  | NeMo Guardrails AI Safety          | Jailbreak Resistance                  | NEMO-JBR      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 3  | NeMo Guardrails AI Safety          | Toxicity / Bias Detection             | NEMO-TBD      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 4  | NeMo Guardrails AI Safety          | Topic Boundary Enforcement            | NEMO-TBE      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 5  | NeMo Guardrails AI Safety          | PII Leakage Prevention                | NEMO-PII      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 6  | NeMo Guardrails AI Safety          | Hallucination Detection               | NEMO-HAL      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 7  | OWASP Testing Guide                | Information Gathering                 | OTG-INFO      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 8  | OWASP Testing Guide                | Configuration & Deployment Management | OTG-CONFIG    | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 9  | OWASP Testing Guide                | Identity Management                   | OTG-IDENT     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 10 | OWASP Testing Guide                | Authentication                        | OTG-AUTHN     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 11 | OWASP Testing Guide                | Authorization                         | OTG-AUTHZ     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 12 | OWASP Testing Guide                | Session Management                    | OTG-SESS      | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 13 | OWASP Testing Guide                | Input Validation                      | OTG-INPVAL    | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 14 | OWASP Testing Guide                | Error Handling                        | OTG-ERR       | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 15 | OWASP Testing Guide                | Cryptography                          | OTG-CRYPST    | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 16 | OWASP Testing Guide                | Business Logic                        | OTG-BUSLOGIC  | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 17 | OWASP Testing Guide                | Client-Side                           | OTG-CLIENT    | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 18 | Dependency & Container Security    | npm audit                             | DEP-NPM       | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 19 | Dependency & Container Security    | pip-audit                             | DEP-PIP       | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 20 | Dependency & Container Security    | Trivy Container Scan                  | DEP-TRIVY     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 21 | Static Analysis                    | Semgrep                               | SAST-SEMGREP  | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 22 | Static Analysis                    | Bandit / ESLint Security              | SAST-LINT     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 
 ### Severity Distribution
 
@@ -121,7 +123,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.1 Prompt Injection Resistance (NEMO-PIR)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -151,7 +153,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.2 Jailbreak Resistance (NEMO-JBR)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -181,7 +183,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.3 Toxicity / Bias Detection (NEMO-TBD)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -211,7 +213,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.4 Topic Boundary Enforcement (NEMO-TBE)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -241,7 +243,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.5 PII Leakage Prevention (NEMO-PII)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -271,7 +273,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 1.6 Hallucination Detection (NEMO-HAL)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -303,7 +305,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.1 Information Gathering (OTG-INFO)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -333,7 +335,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.2 Configuration & Deployment Management (OTG-CONFIG)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -363,7 +365,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.3 Identity Management (OTG-IDENT)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -393,7 +395,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.4 Authentication (OTG-AUTHN)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -423,7 +425,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.5 Authorization (OTG-AUTHZ)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -453,7 +455,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.6 Session Management (OTG-SESS)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -483,7 +485,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.7 Input Validation (OTG-INPVAL)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -513,7 +515,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.8 Error Handling (OTG-ERR)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -543,7 +545,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.9 Cryptography (OTG-CRYPST)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -573,7 +575,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.10 Business Logic (OTG-BUSLOGIC)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -603,7 +605,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 2.11 Client-Side (OTG-CLIENT)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tests Run:** [TEST_COUNT]
 - **Tests Passed:** [TESTS_PASSED]
@@ -635,7 +637,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 3.1 npm audit (DEP-NPM)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tool Version:** [NPM_AUDIT_VERSION]
 - **Total Dependencies Scanned:** [DEP_COUNT]
@@ -665,7 +667,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 3.2 pip-audit (DEP-PIP)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tool Version:** [PIP_AUDIT_VERSION]
 - **Total Dependencies Scanned:** [DEP_COUNT]
@@ -695,7 +697,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 3.3 Trivy Container Scan (DEP-TRIVY)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tool Version:** [TRIVY_VERSION]
 - **Image Scanned:** [CONTAINER_IMAGE]
@@ -729,7 +731,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 4.1 Semgrep (SAST-SEMGREP)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tool Version:** [SEMGREP_VERSION]
 - **Rulesets Used:** [RULESET_LIST]
@@ -761,7 +763,7 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 
 ### 4.2 Bandit / ESLint Security (SAST-LINT)
 
-- **Status:** [PASS / FAIL / NA]
+- **Status:** [PASS / FAIL / NO FINDINGS / NOT RUN / NA]
 - **Date Tested:** [TEST_DATE]
 - **Tool Version:** [BANDIT_OR_ESLINT_VERSION]
 - **Plugins / Configs:** [PLUGIN_LIST -- e.g., eslint-plugin-security, bandit default profile]
@@ -892,6 +894,8 @@ understand the value of secure-by-design practices vs. post-hoc scanning.
 | Bandit          | [BANDIT_VERSION]     | [BANDIT_PROFILE]                          |
 | ESLint          | [ESLINT_VERSION]     | [ESLINT_CONFIG_PATH]                      |
 
+A tool that did not run shows **not run** and the reason in place of its version.
+
 ## Appendix B: Glossary
 
 | Term                    | Definition                                                                                          |
@@ -901,10 +905,13 @@ understand the value of secure-by-design practices vs. post-hoc scanning.
 | Technological Control   | An infrastructure or platform-level control (WAF, DLP, RASP) that mitigates the risk               |
 | Process Control         | An organizational procedure (review cadence, manual check) that reduces likelihood or impact        |
 | Accept Risk             | Formal acknowledgment that the residual risk is within tolerance and no further action is planned    |
+| PASS                    | Every check in the category ran, and none failed                                                    |
+| NO FINDINGS             | Some checks in the category did not run; the ones that ran found nothing. Not a pass                |
+| NOT RUN                 | No check in the category ran (tool missing or not picked, app not running, read-only scan); the reason is stated. Not a pass |
 | N/A                     | Category is not applicable to this application (e.g., no AI features for NeMo suite)                |
 
 ---
 
 *This attestation is informational only and does not constitute a release gate. It is intended to support GRC oversight and continuous risk monitoring. Findings should be triaged through the organization's standard vulnerability management process.*
 
-*Template version: 1.1.0 | Skill: /nemo-it | Added: Secure-by-Design Coverage cross-reference*
+*Template version: 1.2.0 | Skill: /nemo-it | Added: NO FINDINGS and NOT RUN statuses*

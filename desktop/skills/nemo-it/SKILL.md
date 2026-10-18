@@ -61,7 +61,7 @@ Say which mode you are running and what it leaves out before you start.
 | preflight 7 (tools) | Tools go in the sandbox, not on the user's machine. The consent rule still holds. Never install ZAP, SQLMap, Playwright, NeMo Guardrails, or anything with `brew` or `docker pull`: they only serve checks that cannot run here. |
 | Phase 1.5 item 2 (pip-audit) | Always pass the requirements file. Plain `pip-audit` audits the sandbox's own packages, not the project's. |
 | Phase 2 (dynamic analysis) | NOT RUN, all of it. Record: "Dynamic analysis was not run: this is a static attestation made in a Claude Desktop sandbox. It needs a running app." You may still review the code for the same concern (for example, cookie flags set in code). Record a missing control as a finding with file and line. Record a present control as "present in code, not verified live". |
-| Phase 3 check 0 and important reminder 10 | Code-level mode only, whatever keys the `.env` holds. Do not run the `grep` as written: it prints secret values. Check only whether each key name is present (for example `grep -oE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_URL)=' .env`, which prints the names only), and never print or quote a value. Replace the "PASS (code-level)" label with **CONTROLS PRESENT IN CODE (static; not behavior-tested)**, and replace its note with: "Behavioral testing was not run. It needs a live AI provider and a running app." |
+| Phase 3 check 0 and important reminder 10 | Code-level mode only, whatever keys the `.env` holds. Do not run the `grep` as written: it prints secret values. Check only whether each key name is present (for example `grep -oE '^(AZURE_OPENAI_ENDPOINT|ANTHROPIC_API_KEY|OPENAI_API_KEY|OLLAMA_BASE_URL)=' .env`, which prints the names only), and never print or quote a value. Replace the "NO FINDINGS (code-level)" label with **CONTROLS PRESENT IN CODE (static; not behavior-tested)**, and replace its note with: "Behavioral testing was not run. It needs a live AI provider and a running app." |
 | Phase 3 test categories 1-6 and step 8 | Do not send any of the test prompts anywhere. Each category is NOT RUN (or N/A when no AI features were found). Do not use the "[X/10 passed]" update. |
 | Phase 4 item 3 (executive summary) | Label the posture rating "based on static review only". |
 | Phase 4 item 4 (OWASP Top 10 mapping) | Status is FAIL, NO FINDINGS (static only), or NOT RUN. Never PASS for a category that depends on live testing. |
@@ -85,12 +85,12 @@ Use Phase 5 and `references/nemo-it-attestation.md` as written, except:
    only if every one of its tests ran here and none failed. If only some ran and found
    nothing, write NO FINDINGS (static only).
 4. **Phase 5 "Scan Coverage" table:** use `Completed (static)`, `Partial (static only)`, or
-   `NOT RUN (sandbox)` instead of `Completed/Skipped/App Not Running`. Set Target to "none
+   `NOT RUN (sandbox)` instead of the table's own status values. Set Target to "none
    (no live target)" and Environment to "Claude Desktop sandbox (static)". "Tools used" lists
    only the tools that actually ran, with versions.
 5. **Template header, Summary Dashboard, Test Environment Details:** Environment and Assessed By
-   say "Claude Desktop sandbox (static)" and "nemo-it (make-it-desktop)". Add a "Categories not
-   run" row to Key Metrics, and count only fully run categories as passed. Dashboard rows 1-6
+   say "Claude Desktop sandbox (static)" and "nemo-it (make-it-desktop)". Fill the "Categories not
+   run" row in Key Metrics, and count only fully run categories as passed. Dashboard rows 1-6
    (NeMo behavioral) are NOT RUN, or N/A if no AI features were found. Target URL, Container
    Image, Image Digest, and CI Pipeline Run are "none (static scan)". "OS / Platform" and
    "Runtime Version" describe the app's declared runtime from its manifests (for example
