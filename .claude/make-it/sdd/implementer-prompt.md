@@ -50,5 +50,9 @@ self-review notes, and the SAFEGUARDS line below). In your reply to me, return O
   step, evaluator, threshold, or coverage floor edited; wider permissions for an agent, tool, or
   CI). Mentioning it elsewhere doesn't count.
 
+Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
+attention: practice items are made only by the coordinator's practice script, in chat
+(human-in-the-loop rule 4).
+
 Status meanings: DONE = complete & verified · DONE_WITH_CONCERNS = done but you have doubts
 (state them) · NEEDS_CONTEXT = missing info, say exactly what · BLOCKED = cannot proceed, say why.

@@ -38,8 +38,9 @@ is at the moment it can't.
    counter-argument.
 4. **Keep the human in practice.** Show what was handled automatically, with a small sample to
    inspect. Escalate with a situation brief (what happened, what's known, what isn't, the
-   options), never a dump. Now and then, plant a known harmless flaw in a review to check that
-   attention is real, and reveal it right after.
+   options), never a dump. Only the coordinator's practice script may plant a harmless practice
+   item, in chat and only if the user turned practice items on (off by default), revealed right
+   after the answer. Never in code, tests, reviews, reports or commits.
 5. **Hide nothing.** Any safeguard bypassed, weakened, or worked around (a skipped or edited
    test, a disabled hook, a changed evaluator, a widened permission) is disclosed in the report,
    and reviewers check for it.
@@ -57,3 +58,9 @@ blind trust`, and that section appears once. Otherwise → put the block above d
 next heading (at the end of the file if there is none): insert it if it is missing, or move it
 there unchanged if it sits anywhere else. Never leave two copies. Leave every other line of
 `CLAUDE.md` untouched.
+
+**Old rule 4.** A section whose rule 4 still has the old sentence, "Now and then, plant a known
+harmless flaw in a review to check that attention is real, and reveal it right after." (it may
+wrap across lines), is out of date. Replace that rule 4 item, from `4. **Keep the human in
+practice.**` up to the `5.` line, with rule 4 from the block above, word for word, where it
+stands. This fix moves and copies nothing, and no other line of the section or the file changes.

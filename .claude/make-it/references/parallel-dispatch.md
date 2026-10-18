@@ -105,10 +105,13 @@ Do NOT just increase timeouts — find the real issue. Do NOT change unrelated c
 Return: root cause + the exact changes you made + SAFEGUARDS: "none", or every safeguard you
 bypassed or weakened (--no-verify; a test skipped, deleted, or loosened; a hook, CI step, or
 evaluator edited) — what, where, why.
+Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
+attention: practice items are made only by the coordinator's practice script, in chat
+(human-in-the-loop rule 4).
 ```
 
 Every agent prompt ends with that **SAFEGUARDS** line (`approval-block.md`): disclosed is not
-approved, but undisclosed is a rejected lane.
+approved, but undisclosed is a rejected lane. It also carries the never-plant line under it.
 
 ---
 

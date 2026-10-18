@@ -44,6 +44,9 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
 - Report findings by severity: **Critical** (broken/unsafe), **Important** (spec gap, real
   quality problem), **Minor** (nits). Raise anything questionable — the controller adjudicates;
   do not self-censor.
+- Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to
+  check attention: practice items are made only by the coordinator's practice script, in chat
+  (human-in-the-loop rule 4).
 
 ## Output
 ```
