@@ -14,7 +14,7 @@ config = context.config
 # Override sqlalchemy.url with DATABASE_URL from environment
 # Strip +asyncpg for sync fallback, but we use async below
 database_url = os.environ.get(
-    "DATABASE_URL", "postgresql+asyncpg://[APP_SLUG]:[APP_SLUG]@db:5432/[APP_SLUG]"
+    "DATABASE_URL", "postgresql+asyncpg://[APP_SLUG]@db:5432/[APP_SLUG]"
 )
 config.set_main_option("sqlalchemy.url", database_url)
 

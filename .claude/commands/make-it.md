@@ -552,6 +552,8 @@ The user sees progress updates, NOT the technical details.
       cp .env.example .env
       # Fill in JWT_SECRET
       JWT_SECRET=$(openssl rand -hex 32)
+      # Replace the .env.example placeholder so the app's DB password is in no committed file
+      POSTGRES_PASSWORD=$(openssl rand -hex 32)
       # Fill in local dev URLs, ports, OIDC config
       ```
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).

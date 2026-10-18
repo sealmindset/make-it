@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = "change-me-in-production"
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://[APP_SLUG]:[APP_SLUG]@db:5432/[APP_SLUG]"
+    DATABASE_URL: str = "postgresql+asyncpg://[APP_SLUG]@db:5432/[APP_SLUG]"
     # URLs
     FRONTEND_URL: str = "http://localhost:[FRONTEND_PORT]"
     BACKEND_URL: str = "http://localhost:[BACKEND_PORT]"
