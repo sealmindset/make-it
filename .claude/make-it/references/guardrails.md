@@ -132,7 +132,8 @@ These apply to every project /make-it builds, no exceptions.
      muddy-water section: ask less and ask better; make every ask decision-ready (what changes, the
      evidence, the blast radius and undo, what is unusual, the one thing to check); evaluate rather
      than confirm on high-stakes decisions; keep the human in practice (a digest of what ran
-     automatically, situation briefs, occasional planted harmless flaws revealed right after); hide
+     automatically, situation briefs, and practice items planted only by the coordinator's
+     practice script, in chat, when the user turned them on, revealed right after); hide
      nothing (disclose any bypassed or weakened safeguard); and alerts earn their noise (an owner,
      closed only on a positive re-check). Written at Build (step h) for new projects;
      build-standards check S12 adds it to existing ones through /resume-it and /retrofit-it.
