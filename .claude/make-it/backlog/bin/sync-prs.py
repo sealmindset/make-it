@@ -70,7 +70,7 @@ def moves(B, look):
             wait.append((p, 'merged, but no signal: -- write how the fix is checked live (card.py set <id> signal=...)')); continue
         note = f"{v(d, 'stage')} → Live · " + ', '.join(f"{name(n)} merged {s['mergedAt'][:10]}" for n, s in got.items() if s['state'] == 'MERGED')
         note += ' (deploy not checked -- the live check confirms it)'
-        if v(d, 'decision'): note += ' · it still has a decision: -- clear it if that was answered'
+        if v(d, 'decision'): note += ' · it still has a decision: -- if that was answered, clear decision: and answers:'
         out.append((p, {'stage': 'Live'}, note))
     return out, wait
 
@@ -131,7 +131,7 @@ def self_test():
         assert 'E01-S17 · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
         assert 'E01-S9 · Fix ready → Live · repo1#109 merged' in out and 'E01-S12 · pr: names another repo by short form' in out, out
         assert not any(f'E01-S{n} ' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
-        assert 'clear it if that was answered' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md').read(), out
+        assert 'clear decision: and answers:' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md').read(), out
         assert '**Live, to check:** S1, S5, S9, S10' in open(f'{t}/BOARD.md').read(), open(f'{t}/BOARD.md').read()
         assert not [f for f in os.listdir(S) if f.endswith('.tmp')], os.listdir(S)
         out = run(t, look, dry=False, proj='t', T=T)  # nothing left to move: idempotent

@@ -130,6 +130,7 @@ def main(args):
         t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'
     elif verb == 'set' and len(rest) >= 2 and all('=' in a for a in rest[1:]):
         fields = dict(a.split('=', 1) for a in rest[1:])
+        if 'decision' in fields: fields.setdefault('answers', '')  # answers belong to their question: a new or cleared one drops the old
         if 'id' in fields: sys.exit('card: id is not settable')
         if any(not re.fullmatch(r'[A-Za-z_][\w-]*', k) or re.search(r'[\r\n]', x) for k, x in fields.items()): sys.exit('card: bad key or a newline in a value')
         lock(B); pull(B); p = find(B, rest[0]); write(p, {k: (x or None) for k, x in fields.items()})
@@ -152,7 +153,7 @@ def self_test():
         A = f'{t}/a'; subprocess.run(['git', 'clone', '-q', f'{t}/remote.git', A], check=True, capture_output=True)
         os.makedirs(f'{A}/items/EPIC-01-x/stories')
         open(f'{A}/items/EPIC-01-x/epic.md', 'w').write('---\nid: E01\ntitle: X\nstatus: in-progress\n---\n')
-        open(f'{A}/items/EPIC-01-x/stories/S1-one.md', 'w').write('---\nid: E01-S1\ntitle: One\nstatus: in-progress\npriority: P2\nstage: Fix ready\ndecision: Ship it?\n---\n\n## Answers\n- old\n\n## Notes\nkeep\n')
+        open(f'{A}/items/EPIC-01-x/stories/S1-one.md', 'w').write('---\nid: E01-S1\ntitle: One\nstatus: in-progress\npriority: P2\nstage: Fix ready\ndecision: Ship it?\nanswers: Go -- ship | Wait -- hold\n---\n\n## Answers\n- old\n\n## Notes\nkeep\n')
         g(A, 'add', '-A'); g(A, 'commit', '-qm', 'seed'); g(A, 'push', '-q', 'origin', 'HEAD')
         S1 = f'{A}/items/EPIC-01-x/stories/S1-one.md'
         tricky = '- 50% done, *.md kept, $HOME and `x` -- é ✓\n'  # what printf, globs and shells mangle
@@ -166,7 +167,12 @@ def self_test():
         assert open(S1).read().count('## Done (today)') == 1 and open(S1).read().rstrip().endswith('- shipped\n- again'), open(S1).read()
         run('--board', A, 'set', 'E01-S1', 'status=done', 'decision=', 'stage=Checked', 'pr=[12]')
         d = R.fm(S1)
-        assert (v(d, 'status'), v(d, 'stage'), v(d, 'pr'), 'decision' in d, v(d, 'priority')) == ('done', 'Checked', '[12]', False, 'P2'), d
+        assert (v(d, 'status'), v(d, 'stage'), v(d, 'pr'), 'decision' in d, 'answers' in d, v(d, 'priority')) == ('done', 'Checked', '[12]', False, False, 'P2'), d
+        run('--board', A, 'set', 'E01-S1', 'decision=Old question?', 'answers=Go -- a | Wait -- b')
+        run('--board', A, 'set', 'E01-S1', 'decision=New question?')  # a new question never inherits the old answers
+        assert (v(R.fm(S1), 'decision'), 'answers' in R.fm(S1)) == ('New question?', False), R.fm(S1)
+        run('--board', A, 'set', 'E01-S1', 'answers=Go -- a | Wait -- b'); run('--board', A, 'set', 'E01-S1', 'decision=')
+        assert not {'decision', 'answers'} & set(R.fm(S1)), R.fm(S1)
         before = open(S1).read()
         assert 'matches 0 cards' in run('--board', A, 'set', 'E01-S9', 'status=done', ok=False).stderr
         assert 'not settable' in run('--board', A, 'set', 'E01-S1', 'id=E01-S7', ok=False).stderr and open(S1).read() == before

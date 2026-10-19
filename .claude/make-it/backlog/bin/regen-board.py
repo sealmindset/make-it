@@ -132,14 +132,16 @@ def main(args):
             assert 'no context' in item('E01-S7') and 'answers not on card' in item('E01-S4') and 'no context' in item('E01-S4'), b  # an id, shorthand
             assert '(question not on card' in item('E01-S6') and 'Old question' not in b, b
             assert '**Now fixing:** —' in b and '**Next up:** —' in b, b
-            for bad, gap in (('Retry -- runs it', '2-4 answers'), (A + ' | Wait | Drop -- x', '2-4 answers'), (A.replace('; against:', ','), 'against:'), ('Retry: runs it | Refile: by hand', '2-4 answers')):
+            for bad, gap in (('Retry -- runs it', '2-4 answers'), (A + ' | Wait -- x | Drop -- y | Ask -- z', '2-4 answers'), (A.replace('; against:', ','), 'against:'), ('Retry: runs it | Refile: by hand', '2-4 answers')):
                 card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision=Q, answers=bad)
                 b = board(); assert gap in item('E01-S7'), (bad, b)
+            card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision='PR1611 PR897 GH12 INC4 CVE2024 merge?', answers=A)
+            b = board(); assert 'no context' in item('E01-S7'), b  # letter-prefixed ids are ids, not words
             card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision=Q, answers=A.replace(' -- ', ' — ', 1))  # once present: no gap
             b = board(); assert '(' not in item('E01-S7').replace('(Recommended', ''), b
-            card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2')  # answered
+            card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2')  # answered
             b = board()
-            assert '**Next up:** S3' in b and 'Import skips rows' not in b and '## Waiting on you (3)' in b, b
+            assert '**Next up:** S3' in b and 'Import skips rows' not in b.split('## E01')[0] and '## Waiting on you (3)' in b, b
             card('stories/S9.md', id='E01-S9', status='backlog', type='story', priority='P1')  # Next up is a bug
             assert '**Next up:** S3' in board()
             # A big epic (over 30 cards): done cards as a count, open cards grouped by category; small epics unchanged
