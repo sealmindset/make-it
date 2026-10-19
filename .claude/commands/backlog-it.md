@@ -93,8 +93,9 @@ Ids are case-insensitive (`e02` → `E02`). Next id = highest existing + 1. `gro
   and its place in line ("✓ Filed E07-S3 (breakfix, S) under Bugs -- #2 in line"), and **every**
   open question batched in one AskUserQuestion -- only questions whose answer changes
   the fix or its order. Check what you can check yourself instead of asking. Answers go under
-  `## Answers`. A question that blocks a card goes on it as one line in `decision:` (the
-  board's **Waiting on you** block); the write that adds the answer removes it.
+  `## Answers`. A question that blocks a card goes on it as `decision:` (plain context, then the
+  question) and `answers:` (2-4 named options) -- the board's **Waiting on you** block; the write that
+  adds the answer removes both.
 
 ## Step 4 -- Lanes and dispatch
 
@@ -105,7 +106,7 @@ agent per card, each in its own worktree, each running the `/debug-it` method an
 as `pr:` and how the fix is proved live as `signal:`. Dispatch starts with `reconcile --prs`. With no bug
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, no unfinished `dependsOn`,
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
-Announce each pick before it starts. Gather every lane's questions into one message. Shipping
+Announce each pick before it starts. Gather every lane's questions into one message, each item in `approval-block.md`'s list shape. Shipping
 stays serial: one PR through CI and deploy at a time.
 
 ## Step 4b -- Plan: how, and in what order

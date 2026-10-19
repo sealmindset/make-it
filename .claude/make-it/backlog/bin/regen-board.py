@@ -21,6 +21,17 @@ def load(B):  # card path -> frontmatter, epics first
     return {p: fm(p) for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md')}
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
     return v(d, 'status') != 'done' and bool(v(d, 'decision') or v(d, 'stage') == 'Needs decision')
+def ask(d):
+    """(question, lines under it): `decision:` (plain context, then the question) and its 2-4 `answers:`
+    (`Name -- what it does`, split by `|`), or the gap flagged -- the same shape on BOARD.md and in status."""
+    q, opts = v(d, 'decision'), [a.strip() for a in v(d, 'answers').split('|') if a.strip()]
+    if not q: return '(question not on card -- add `decision:` and `answers:`)', []
+    # ponytail: a word count catches a bare id or a few words, not shorthand ("fold", "apply-day") -- the doctrine bans that
+    gap = ['no context -- say in plain words what waits and why'] * (len(re.findall(r'[A-Za-z]{2,}', re.sub(r'#\d+|\b[A-Z]+\d+(?:-S\d+)?\b', ' ', q))) < 6)
+    if not opts: gap.append('answers not on card -- add `answers:`')
+    elif not 2 <= len(opts) <= 4 or not all(re.search(' (--|—) ', a) for a in opts): gap.append('needs 2-4 answers, each `Name -- what it does`, split by `|`')
+    elif any('recommended' in a.lower() and 'against:' not in a.lower() for a in opts): gap.append('the Recommended answer needs `against:` its strongest counter-argument')
+    return q, opts + [f"({'; '.join(gap)})"] * bool(gap)
 def age(d):
     try: return f" · {max(0, (datetime.date.today() - datetime.date.fromisoformat(v(d, 'updated'))).days)}d"  # UTC can be a day ahead
     except ValueError: return ''
@@ -52,8 +63,12 @@ def render(B, proj):
     out = [f'# BACKLOG BOARD — {proj}', '']
     wait = sorted(filter(waiting, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
     if wait:
-        out += [f'## Waiting on you ({len(wait)})', '_the question each card waits on · days since the card last changed_', '']
-        out += [f"- {warn(d)}{v(d,'id')} · {v(d,'decision') or '(question not on card -- add `decision:`)'}{age(d)}" for d in wait] + ['']
+        out += [f'## Waiting on you ({len(wait)})', '_each card · days since it last changed, then what waits and why, and the answers to pick from_', '']
+        for d in wait:
+            q, under = ask(d)
+            t = v(d, 'title').strip('"')
+            out += [f"- {warn(d)}{v(d,'id')}{' · ' * bool(t)}{t}{age(d)}", f'  - {q}'] + [f'    - {x}' for x in under]
+        out.append('')
     for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
         e = fm(ep)
         stories = [fm(s) for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md'))]
@@ -104,18 +119,27 @@ def main(args):
             card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2', dependsOn='[e01-s4]')
             assert '**Next up:** —' in board()
             # Waiting on you: any open card with a decision (or the older stage), skipped by Now fixing / Next up
-            card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2', decision='Retry, or refile?')
+            # each item answerable cold: the title, plain context + the question, 2-4 named answers -- or the gap flagged
+            Q = 'The nightly import skipped 3 rows that failed twice; nothing else waits on them. Retry them, or refile by hand?'
+            A = 'Retry -- runs the import again tonight (Recommended; against: a third failure costs another day) | Refile -- you re-enter the 3 rows'
+            card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2', decision=Q, answers=A)
             card('stories/S4.md', id='E01-S4', status='in-progress', type='breakfix', stage='Cause found', decision='Narrow fix or wide?')
             card('stories/S6.md', id='E01-S6', status='in-progress', type='breakfix', stage='Needs decision')
-            card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision='Which tier?')
+            card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision='E68-S7 / #1628 go?', answers=A)
             card('stories/S8.md', id='E01-S8', status='done', type='story', decision='Old question')
-            b = board()
-            assert '## Waiting on you (4)' in b and '- E01-S3 · Retry, or refile?' in b and '- E01-S7 · Which tier?' in b, b
-            assert '- E01-S6 · (question not on card' in b and 'Old question' not in b, b
+            b = board(); item = lambda i: re.search(rf'^- {i}\b.*?\n(?=- |\n)', b, re.M | re.S).group(0)
+            assert '## Waiting on you (4)' in b and item('E01-S3') == f'- E01-S3 · Import skips rows\n  - {Q}\n    - {A.split(" | ")[0]}\n    - {A.split(" | ")[1]}\n', b
+            assert 'no context' in item('E01-S7') and 'answers not on card' in item('E01-S4') and 'no context' in item('E01-S4'), b  # an id, shorthand
+            assert '(question not on card' in item('E01-S6') and 'Old question' not in b, b
             assert '**Now fixing:** —' in b and '**Next up:** —' in b, b
+            for bad, gap in (('Retry -- runs it', '2-4 answers'), (A + ' | Wait | Drop -- x', '2-4 answers'), (A.replace('; against:', ','), 'against:'), ('Retry: runs it | Refile: by hand', '2-4 answers')):
+                card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision=Q, answers=bad)
+                b = board(); assert gap in item('E01-S7'), (bad, b)
+            card('stories/S7.md', id='E01-S7', status='backlog', type='story', decision=Q, answers=A.replace(' -- ', ' — ', 1))  # once present: no gap
+            b = board(); assert '(' not in item('E01-S7').replace('(Recommended', ''), b
             card('stories/S3.md', id='E01-S3', status='backlog', type='breakfix', priority='P2')  # answered
             b = board()
-            assert '**Next up:** S3' in b and 'Retry, or refile?' not in b and '## Waiting on you (3)' in b, b
+            assert '**Next up:** S3' in b and 'Import skips rows' not in b and '## Waiting on you (3)' in b, b
             card('stories/S9.md', id='E01-S9', status='backlog', type='story', priority='P1')  # Next up is a bug
             assert '**Next up:** S3' in board()
             # A big epic (over 30 cards): done cards as a count, open cards grouped by category; small epics unchanged
