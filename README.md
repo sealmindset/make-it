@@ -957,6 +957,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.13 -- Every "Waiting on you" item makes sense on its own
+
+The board's "Waiting on you" list, and the lists agents write at the end of a reply, showed bare
+card ids, PR numbers and shorthand ("batch leftovers", "apply-day", "fold"), so the owner could not
+answer an item without digging. Now:
+- **Each item reads cold.** The board and `/backlog-it status` show each waiting item with its
+  title, one or two plain sentences on what waits and why, and the expected answers.
+- **Cards carry their answers.** A card's new `answers:` field holds 2-4 named choices, each with
+  what it does; a recommended one also gives its strongest reason against. The board flags an item
+  that is only an id, has no answers, has too few or too many, or recommends without a reason
+  against. Older cards still show, flagged "answers not on card".
+- **Old answers never carry over.** Writing or clearing a card's question also clears its old
+  answers, unless the same write sets new ones.
+- **Chat lists follow the same shape.** `approval-block.md` gains "A list of asks": the title, what
+  waits and why, the named answers, a batch as one grouped line, and a high-stakes item never
+  batched. The dispatch, subagent and backlog skills point at it.
+
 ### v1.44.12 -- Only a practice script may plant a practice item; subagents never plant flaws
 
 Rule 4 of "Keep the human able to notice" told agents to now and then plant a harmless flaw in a
