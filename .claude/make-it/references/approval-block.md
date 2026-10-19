@@ -29,6 +29,21 @@ No bare "approve? (y/n)" or "OK to proceed?". An option marked **Recommended** c
 strongest counter-argument beside it. For a high-stakes ask, the options are the specifics (which
 rows, which environment) or the human types them.
 
+## A list of asks ("Waiting on you")
+
+When a reply, a run summary, or a lane's closing message lists what waits on the human, each item
+is a decision-ready ask in a few lines, answerable by someone with no prior context:
+- **What it is**, in plain words: the card's or PR's title, never a bare id or number; an internal
+  term ("apply-day", "fold") only with a gloss.
+- **What waits, and why** -- one or two plain sentences, then the question.
+- **The answers** -- 2-4, each named with what happens if picked (`Go -- deploys today`); a
+  Recommended one carries its strongest counter-argument.
+- **A batch is one item**: one line per group saying what it is and what to do with it ("5
+  dependency upgrades that only touch CI -- take them through one at a time?"), never a list of numbers.
+
+An item you can't explain in two plain sentences isn't ready to ask. On a backlog board the item
+is the card's `decision:` and `answers:` (`backlog-board.md`, Waiting on you).
+
 ## Agents disclose every safeguard they bypassed or weakened
 
 Every agent that changes files -- a test-writer, implementer, fixer, or dispatch lane -- ends its

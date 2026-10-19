@@ -77,7 +77,9 @@ other or the working tree:
    cause + exactly what you changed").
 3. **Dispatch in parallel** — issue ALL the Agent calls in ONE response.
 4. **Review & integrate** — read each summary, check for conflicts (did two agents touch the
-   same file?), run the FULL test suite, and spot-check (agents make systematic errors).
+   same file?), run the FULL test suite, and spot-check (agents make systematic errors). What the
+   lanes leave for the human goes in one list, each item in `approval-block.md`'s list shape -- never
+   a lane's ids or shorthand passed on as-is.
 
 ---
 
