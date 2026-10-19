@@ -62,7 +62,7 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    repo/worktree that holds it: `python3 ~/.claude/make-it/sdd/scripts/sdd-gate register
    "$(git rev-parse --show-toplevel)/.make-it/sdd/progress.md"`. A Stop hook (`sdd-gate`)
    then refuses to let the run end until you append `STATUS: DONE | BLOCKED <why> |
-   AWAITING_HUMAN <what>` — write AWAITING_HUMAN before asking the user anything, and ask it readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line (`approval-block.md`, A list of asks).
+   AWAITING_HUMAN <what>` — write AWAITING_HUMAN before asking the user anything, and ask it readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
 2. **Read the plan once** — note global constraints, create todos, ensure you're on a branch/worktree.
 3. **Pre-flight review (once)** — scan for tasks that contradict each other/the constraints or
    that mandate something the review rubric treats as a defect; present all findings as ONE

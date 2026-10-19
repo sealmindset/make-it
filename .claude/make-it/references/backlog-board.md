@@ -261,7 +261,8 @@ waits on the human's answer, each readable cold (`approval-block.md`, A list of 
     only rehearsed on a copy) | Wait -- does the rollback, E68-S4, first`).
 - `BOARD.md` and `status --needs-you` flag a gap under the item: no context (only an id or a few
   words), answers not on card, not 2-4 answers each with ` -- `, or a Recommended with no `against:`.
-  Fix the card before asking.
+  Fix the card before asking; to reword a decision, rewrite `decision=` and `answers=` in one write
+  (a `decision=` alone drops the old answers).
 - The write that records the answer under `## Answers` removes both (`card.py append <id>
   Answers`, then `card.py set <id> decision=`, which clears `answers:` too). A stale one keeps the
   card out of Next up, so never leave it behind.
@@ -524,7 +525,7 @@ green gate or the harm gate** in the standing preamble.
 5. **End with what needs you** -- `status.py <board> --needs-you`, every time (also under
    `--dry-run`): the decisions waiting on you, and every held P1, oldest first, so a high-stakes
    card that dispatch rightly never takes still comes back to you. Anything else the reply lists for
-   the human is readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line (`approval-block.md`, A list of asks).
+   the human is readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
 
 Armed by default; `--dry-run` prints the picks without starting anything; everything is logged
 and reversible.

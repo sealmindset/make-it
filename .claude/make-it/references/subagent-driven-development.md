@@ -232,7 +232,7 @@ re-dispatched entire completed sequences — the most expensive failure observed
 - **Release the run** by appending exactly one of: `STATUS: DONE` (final review clean),
   `STATUS: BLOCKED <why>` (cannot proceed), or `STATUS: AWAITING_HUMAN <what you need>` (a
   question only the user can answer — write it BEFORE you ask, and ask it
-  readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line (`approval-block.md`, A list of asks)). When the user has answered,
+  readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks)). When the user has answered,
   append `RUN: resume` to re-arm.
 - The ledger is the recovery map — trust it and `git log` over recollection after compaction.
 - `git clean -fdx` destroys the ledger (git-ignored scratch); recover from `git log`.
