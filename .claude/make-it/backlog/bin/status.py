@@ -168,7 +168,9 @@ def render(f, proj, needs_only=False):
     out.append('  Forecast: ' + forecast([(o, cl) for _, o, cl, _ in f['rows']], f['open'], T))
     needs = ['NEEDS YOU']
     needs.append(f"  Waiting on you ({len(f['waiting'])})" + ('' if f['waiting'] else ': nothing'))
-    needs += [f"    {cid(p)} · {cut(v(c[p], 'decision') or '(question not on card -- add `decision:`)', 70)} · idle {idle(p)}d" for p in f['waiting'][:TOP]]
+    for p in f['waiting'][:TOP]:  # BOARD.md's shape: the title, then what waits and why, then the answers
+        q, under = R.ask(c[p])
+        needs += [f"    {name(p, 60)} · idle {idle(p)}d", f'      {q}'] + [f'        {x}' for x in under]
     needs += [f"    +{len(f['waiting']) - TOP} more (BOARD.md lists all)"] * (len(f['waiting']) > TOP)
     p1 = [p for p in f['held'] if v(c[p], 'priority') == 'P1']  # every P1, oldest first: none may drop out of sight
     needs.append(f"  Held, high-stakes ({len(f['held'])})" + ('' if f['held'] else ': none'))
@@ -234,7 +236,8 @@ def self_test():
             card(f'stories/S{n}.md', d(30), id=f'E01-S{n}', type='story', status='blocked', priority='P1', stakes='critical', created=d(40),
                  **({'updated': str(T + D(days=1))} if n == 30 else {}))  # S30: updated: a day ahead, as a UTC stamp can be
         card('stories/S24.md', d(30), id='E01-S24', **bug, stage='Live', checkAfter='v1.41.0', created=d(40))  # an undated tag: waits forever unless flagged
-        card('stories/S3.md', d(2), id='E01-S3', **dict(bug, status='backlog'), stage='Reported', decision='Retry, or refile?', created=d(2))
+        Q, A = 'The retry job gave up on 3 filings after two tries; nothing else waits on them. Retry, or refile by hand?', 'Retry -- runs them again tonight | Refile -- you re-enter the 3 by hand'
+        card('stories/S3.md', d(2), id='E01-S3', title='Filings give up', **dict(bug, status='backlog'), stage='Reported', decision=Q, answers=A, created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
         open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(5)}  (scope: all)\n\n## Waves\n1. **solo** · E01-S1 · done -- unblocks E01-S11\n2. **solo** · E01-S8 · next\n\n## Held\n- ⚠️ E01-S20 · held\n')
@@ -265,6 +268,8 @@ def self_test():
         assert f['r2l'][''] == [3, 4] and f['r2l']['P1'] == [3] and f['l2c'][''] == [6], (f['r2l'], f['l2c'])  # S7 entered at Checked
         n = render(f, 't', needs_only=True)  # dispatch's closing list: every held P1 shown, the rest counted, nothing twice
         assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '⚠️ E01-S4' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
+        assert f'    E01-S3 · Filings give up · idle 2d\n      {Q}\n        Retry -- runs them again tonight\n        Refile -- you re-enter the 3 by hand\n' in n, n
+        assert '        (no context' in n.split('E01-S21')[1].split('E01-S3')[0] and 'answers not on card' in n, n  # BOARD.md's shape, gaps flagged
         assert 'growing +3.5/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
         open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n')  # every wave merged
         g = facts(t, T); assert g['plan'][3] is None and 'PLAN.md ran out' in render(g, 't'), g['plan']

@@ -97,7 +97,8 @@ pin:       1              # optional rank override set by `groom move`; dropped 
 stakes:    critical       # optional -- never auto-started (see the High-stakes gate)
 dependsOn: [E02]          # optional -- not dispatched until these are done
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
-decision:  Retry or refile?   # optional -- the one question this card waits on (see Waiting on you)
+decision:  3 import rows failed twice; the rest went in. Retry them, or refile by hand?   # optional -- plain context, then the one question this card waits on (see Waiting on you)
+answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
 checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
@@ -212,7 +213,7 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
    behind E09-S1 · /backlog-it undo to revert` -- then **every** open question batched in one
    AskUserQuestion, in plain words, only those whose answer changes the fix or its place in line.
    Anything checkable (logs, data, the screen, the code) is checked, not asked. Answers go on the
-   card under `## Answers` (the same write clears any `decision:`). Before a bug moves to Cause found, any remaining question that would
+   card under `## Answers` (the same write clears any `decision:` and `answers:`). Before a bug moves to Cause found, any remaining question that would
    change the fix is asked then.
 
 ---
@@ -249,15 +250,25 @@ reporter per finished card.
   `dependsOn`, not waiting on you), by priority, then age
 
 **Waiting on you** -- one block at the top of `BOARD.md`: every open card, of any type, that
-waits on the human's answer, as `id · the question · days since the card last changed`.
-- Whoever asks (a lane, `/debug-it`, capture, a ship gate) writes the exact question as one line
-  in `decision:` (`card.py set <id> decision=…`), in the same write that asks it. The card keeps its stage.
-- The write that records the answer under `## Answers` removes `decision:` (`card.py append <id>
-  Answers`, then `card.py set <id> decision=`). A stale one keeps the
+waits on the human's answer, each readable cold (`approval-block.md`, A list of asks): `id · title
+· days since the card last changed`, then its `decision:`, then its `answers:`.
+- Whoever asks (a lane, `/debug-it`, capture, a ship gate) writes both in the same write that asks
+  (`card.py set <id> decision="…" answers="…"`). The card keeps its stage.
+  - `decision:` -- one or two plain sentences on what waits and why, then the question. No bare
+    card or PR number, no internal term without a gloss.
+  - `answers:` -- 2-4, split by `|`, each `Name -- what happens if picked`; a Recommended one
+    carries `against:` its strongest counter-argument (`Go -- deploys today (Recommended; against:
+    only rehearsed on a copy) | Wait -- does the rollback, E68-S4, first`).
+- `BOARD.md` and `status --needs-you` flag a gap under the item: no context (only an id or a few
+  words), answers not on card, not 2-4 answers each with ` -- `, or a Recommended with no `against:`.
+  Fix the card before asking; to reword a decision, rewrite `decision=` and `answers=` in one write
+  (a `decision=` alone drops the old answers).
+- The write that records the answer under `## Answers` removes both (`card.py append <id>
+  Answers`, then `card.py set <id> decision=`, which clears `answers:` too). A stale one keeps the
   card out of Next up, so never leave it behind.
 - Now fixing and Next up skip a waiting card; `plan` and `dispatch` treat it as waiting on you.
 - An older card with `stage: Needs decision` is listed too, flagged "question not on card" until
-  its question moves into `decision:`.
+  its question moves into `decision:` and its answers into `answers:`.
 
 ## Parallel lanes
 
@@ -269,13 +280,13 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **Serial categories stay one at a time.** A card whose `category:` is in settings `serial`
   never shares the floor with another lane of the same category.
 - **The ship queue is serial.** One PR through CI and deploy at a time, whatever the lane count.
-- **Questions are batched.** Collect every lane's open questions into one message. A question that
-  blocks a card also goes on it as `decision:`.
+- **Questions are batched.** Collect every lane's open questions into one message, each item
+  readable cold (`approval-block.md`, A list of asks). A question that blocks a card also goes on it as `decision:` + `answers:`.
 - Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one, with
   how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr="[N]" signal="…"`);
   the status line lists every lane.
 - **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
-  `decision:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
+  `decision:` with its `answers:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
   behind looks like a running lane; `status` flags a Now fixing card idle 2+ days as "lane stopped?".
 
 ---
@@ -513,7 +524,8 @@ green gate or the harm gate** in the standing preamble.
 
 5. **End with what needs you** -- `status.py <board> --needs-you`, every time (also under
    `--dry-run`): the decisions waiting on you, and every held P1, oldest first, so a high-stakes
-   card that dispatch rightly never takes still comes back to you.
+   card that dispatch rightly never takes still comes back to you. Anything else the reply lists for
+   the human is readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
 
 Armed by default; `--dry-run` prints the picks without starting anything; everything is logged
 and reversible.
@@ -812,8 +824,8 @@ and runs it regardless.
 Write cards only through `card.py`, never `printf`, `sed`, or a shell glob:
 - `card.py append <id> <section>` -- text on **stdin** (so `%`, `*`, `$` and quotes arrive intact)
   goes under `## <section>`; an existing section grows, else a new one is added at the end.
-- `card.py set <id> key=value …` -- sets frontmatter fields; `key=` removes one (`decision=`). `id` is
-  never settable.
+- `card.py set <id> key=value …` -- sets frontmatter fields; `key=` removes one (`decision=`). Writing or clearing
+  `decision` also clears `answers:` unless the same write sets `answers=`. `id` is never settable.
 - `card.py new <epic>` -- a whole card on stdin with `id: NEW`; it gets the next id **after a pull**,
   a slugged file name, and `parent:` / `created:` if missing. Prints the new id.
 

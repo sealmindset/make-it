@@ -96,7 +96,8 @@ stages, use the Workflow tool instead.
 
 Read each summary → check for conflicts (same file touched twice?) → run the FULL test suite →
 spot-check (agents make systematic errors) → match every weakened safeguard in each lane's diff to
-its SAFEGUARDS line (Verification step 5 in the reference). Then integrate.
+its SAFEGUARDS line (Verification step 5 in the reference). Then integrate. What the lanes leave
+for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
 
 ---
 
