@@ -130,10 +130,11 @@ def main(args):
         t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'
     elif verb == 'set' and len(rest) >= 2 and all('=' in a for a in rest[1:]):
         fields = dict(a.split('=', 1) for a in rest[1:])
-        if 'decision' in fields: fields.setdefault('answers', '')  # answers belong to their question: a new or cleared one drops the old
         if 'id' in fields: sys.exit('card: id is not settable')
         if any(not re.fullmatch(r'[A-Za-z_][\w-]*', k) or re.search(r'[\r\n]', x) for k, x in fields.items()): sys.exit('card: bad key or a newline in a value')
-        lock(B); pull(B); p = find(B, rest[0]); write(p, {k: (x or None) for k, x in fields.items()})
+        lock(B); pull(B); p = find(B, rest[0])
+        if 'decision' in fields and v(R.fm(p), 'answers'): fields.setdefault('answers', '')  # answers belong to their question: a new or cleared one drops the old
+        write(p, {k: (x or None) for k, x in fields.items()})
         what = f'{v(R.fm(p), "id")}: ' + ', '.join(f'{k}={x}' if x else f'-{k}' for k, x in fields.items())
     elif verb == 'new' and len(rest) == 1:
         t = stdin(); lock(B); pull(B); cid, p = new(B, rest[0], t); what = f'new {cid}: {v(R.fm(p), "title")}'
@@ -169,10 +170,14 @@ def self_test():
         d = R.fm(S1)
         assert (v(d, 'status'), v(d, 'stage'), v(d, 'pr'), 'decision' in d, 'answers' in d, v(d, 'priority')) == ('done', 'Checked', '[12]', False, False, 'P2'), d
         run('--board', A, 'set', 'E01-S1', 'decision=Old question?', 'answers=Go -- a | Wait -- b')
+        assert v(R.fm(S1), 'answers') == 'Go -- a | Wait -- b', R.fm(S1)  # the same write's answers stay
+        run('--board', A, 'set', 'E01-S1', 'stage=Fix ready', 'pr=[13]', 'signal=x')  # a lane's PR write, not touching decision
+        assert v(R.fm(S1), 'answers') == 'Go -- a | Wait -- b', R.fm(S1)
         run('--board', A, 'set', 'E01-S1', 'decision=New question?')  # a new question never inherits the old answers
         assert (v(R.fm(S1), 'decision'), 'answers' in R.fm(S1)) == ('New question?', False), R.fm(S1)
         run('--board', A, 'set', 'E01-S1', 'answers=Go -- a | Wait -- b'); run('--board', A, 'set', 'E01-S1', 'decision=')
         assert not {'decision', 'answers'} & set(R.fm(S1)), R.fm(S1)
+        assert '-answers' not in run('--board', A, 'set', 'E01-S1', 'decision=').stdout  # the card had none: none logged
         before = open(S1).read()
         assert 'matches 0 cards' in run('--board', A, 'set', 'E01-S9', 'status=done', ok=False).stderr
         assert 'not settable' in run('--board', A, 'set', 'E01-S1', 'id=E01-S7', ok=False).stderr and open(S1).read() == before
