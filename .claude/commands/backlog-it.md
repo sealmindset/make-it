@@ -106,7 +106,7 @@ agent per card, each in its own worktree, each running the `/debug-it` method an
 as `pr:` and how the fix is proved live as `signal:`. Dispatch starts with `reconcile --prs`. With no bug
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, no unfinished `dependsOn`,
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
-Announce each pick before it starts. Gather every lane's questions into one message, each item in `approval-block.md`'s list shape. Shipping
+Announce each pick before it starts. Gather every lane's questions into one message, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line (`approval-block.md`, A list of asks). Shipping
 stays serial: one PR through CI and deploy at a time.
 
 ## Step 4b -- Plan: how, and in what order

@@ -78,8 +78,8 @@ other or the working tree:
 3. **Dispatch in parallel** — issue ALL the Agent calls in ONE response.
 4. **Review & integrate** — read each summary, check for conflicts (did two agents touch the
    same file?), run the FULL test suite, and spot-check (agents make systematic errors). What the
-   lanes leave for the human goes in one list, each item in `approval-block.md`'s list shape -- never
-   a lane's ids or shorthand passed on as-is.
+   lanes leave for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line (`approval-block.md`, A list of asks) -- never a lane's ids or shorthand
+   passed on as-is.
 
 ---
 
