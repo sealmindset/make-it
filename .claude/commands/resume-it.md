@@ -35,6 +35,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/learnings.md
 @~/.claude/make-it/references/ui-gate.md
 @~/.claude/make-it/references/approval-block.md
+@~/.claude/make-it/references/left-out-record.md
 
 </execution_context>
 
@@ -66,6 +67,15 @@ You are the same friendly guide from /make-it. The user already built their app 
 <step name="discover-context">
 
 **MANDATORY FIRST STEP -- Gather project context before interacting with the user.**
+
+**Items left out by your choice, everywhere in this skill:** follow
+`~/.claude/make-it/references/left-out-record.md`, and read the record with it before step 6b.
+When the user brings a left-out item back, all of it or only part (which narrows its line), follow
+its read step 4; when they say "take it out", write its line as that file's **Where** says.
+Nothing in this skill puts a left-out item back on its own (step 6b's dependency auto-fix, step
+8b's auto-fixes, the security-scanner fixes, test setup's scaffolding and tests, catch-up work,
+and the test phase's fixes included), and the test phase's pass/fail report reads a left-out
+item's tests as `left-out-record.md` says.
 
 **0. Look for a /clear-it handoff (highest-priority context):**
 
@@ -412,6 +422,12 @@ c. **Categorize results:**
    - **PASS:** Check is satisfied
    - **GAP:** Check fails -- this is a pattern the project is missing
    - **N/A:** Check doesn't apply (wrong tier, or feature not present)
+   - **LEFT OUT:** Check belongs to an item the user left out. Read `## Left out by your choice`
+     in `.make-it-state.md`, and which checks belong to each item, with the read steps in
+     `~/.claude/make-it/references/left-out-record.md` before building the gaps list; a left-out
+     check never goes in it, so never in the must-do or improvements groups or their ask. Move
+     each left-out item those steps read outside the section (from TODO.md, for example) into it
+     now, as that file's **Where** says.
 
 d. **Build a gaps list** with check IDs and plain-language descriptions.
    Only include GAP items -- don't report passing checks.
@@ -453,11 +469,14 @@ From all of the above, build a mental model of:
 "Here's what I see:
 - **Last activity:** [date and description from git log]
 - **Current state:** [e.g., 'The app builds and runs locally' or 'There are some uncommitted changes']
-- **Outstanding items:** [count from TODO.md if it exists]"
+- **Outstanding items:** [count from TODO.md if it exists, not counting items left out by your choice]"
+
+Then one plain line for each item left out by your choice (step 8):
+"[item] -- left out by your choice -- tell me if you want it added."
 
 **3. Generate suggested actions based on what you found:**
 
-Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant:
+Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant. No suggestion offers an item left out by your choice (step 8).
 
 | Context Signal | Suggested Action |
 |---------------|-----------------|
@@ -465,7 +484,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Security scanner findings (medium) | (Do NOT suggest -- interleave fixes with user work, invisibly) |
 | step 0 read a handoff.md with Next Steps (the file itself is archived by step 0e) | "Last time you stopped at [first Next Step] -- pick up there?" (the default starting point from step 0) |
 | Board has Now fixing / Next up | "You were fixing [card] -- want to carry on? Next in line is [card]." |
-| TODO.md has items | "I found [N] items in your to-do list -- want to tackle one?" |
+| TODO.md has items | "I found [N] items in your to-do list -- want to tackle one?" (not counting items left out by your choice) |
 | Tests don't exist yet | "Your app doesn't have automated tests yet -- want me to set that up?" |
 | Tests exist but some fail | "Some tests are failing -- want me to look into that?" |
 | Uncommitted changes | "You have some unsaved changes -- want to review and commit them?" |
@@ -504,8 +523,8 @@ that can be improved:
 Everything is built in a separate copy we can throw away if you don't like it. Before you
 decide, look down the must-do list: check that none of the sign-in or permission changes is
 something you set up that way on purpose. If one of these was set up that way on purpose, tell
-me which and I'll leave it out (and note it in your to-do file; the next scan will mention it
-again).
+me which and I'll leave it out and note it in your to-do file -- next time I'll only mention it,
+not ask; before it goes live, I'll name it so you can decide.
 
 Which should I apply -- the must-do updates, the improvements, both, or not now? (I'd start with
 the must-do updates -- the catch is some of them change how sign-in behaves, so plan to try the
@@ -515,23 +534,35 @@ Show only the groups that have items: no "0 must-do updates", and never recommen
 group. With one group, ask about that group alone, with named options: "Say 'apply the [must-do
 updates / improvements]' or 'not now'."
 
+Items left out by your choice (step 8) are not in [N] or the other counts, the must-do or
+improvements groups, or the ask; the status summary (2) already mentions each one.
+
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
 plain "yes" isn't an answer -- ask which before doing anything.
 
+Whatever the answer, "not now" included, skip every item the user tells you to leave out (an item
+they only put off -- "later", "for now" -- is put off, not recorded), in either group (a must-do
+update or an improvement). Write each under `## Left out by your choice`
+in `.make-it-state.md` (one line: the item, its checks, and today's date, as
+`~/.claude/make-it/references/left-out-record.md` defines), and file it in TODO.md as "left out
+by your choice". A group the user didn't pick is only put off, so it isn't recorded. On "not now"
+with items left out, name each one as step 6 below does.
+
 **If the user accepts the catch-up work:**
 
-Route to a dedicated catch-up workflow, applying only the group(s) the user named (steps 1-2):
-1. Apply all critical gaps first (BLOCK items from build-standards.md), skipping every item the
-   user told me to leave out; file each in TODO.md as "left out by your choice"
+Route to a dedicated catch-up workflow, applying only the group(s) the user named (steps 1-2),
+minus the items left out above:
+1. Apply all critical gaps first (BLOCK items from build-standards.md)
 2. Apply important gaps next (FIX items)
 3. Note nice-to-have gaps in TODO.md (WARN items)
 4. After each batch, run existing tests to verify nothing broke
 5. Update CHANGELOG.md with what was added
 6. Report results: what was applied (by group, naming each change) and what is left (the group
-   the user didn't name, if any; the items left out by their choice, with a line that the next
-   catch-up scan will raise them again; plus the optional items filed in TODO.md). Say "up to
-   date with the latest standards" only when both groups were applied with nothing left out.
+   the user didn't name, if any; each item left out this time, as one line,
+   "[item] -- left out by your choice -- tell me if you want it added."; plus the optional
+   items filed in TODO.md). Say "up to date with the latest standards" only when both groups
+   were applied with nothing left out.
 
 This is effectively a mini-retrofit that runs within /resume-it, using the
 same check IDs and fix patterns from build-standards.md.
@@ -599,7 +630,7 @@ unless they ask. Full spec: `worktree-workflow.md`.
 - Update CHANGELOG.md
 
 **C. Work on TODO items:**
-- Show the TODO.md contents in plain language
+- Show the TODO.md contents in plain language, without the items left out by your choice
 - Let the user pick which item(s) to tackle
 - Execute one at a time, saying in one line when each is done (routine -- no stop between items)
 
@@ -729,7 +760,7 @@ For each item, determine its status:
 - [ ] [Blocked item -- what to request, where to submit, what to say]
 
 **What's next after blockers are cleared:**
-- [Next work item from TODO.md or logical next step]"
+- [Next work item from TODO.md or logical next step, never one left out by your choice]"
 
 **6. Generate the shareable checklist file:**
 
@@ -818,6 +849,11 @@ This runs BEFORE any user-requested work. The user does not initiate this -- it 
 | Medium | Fix during this session | No -- can interleave with user work |
 | Low | Add to TODO.md | No -- defer |
 
+A finding that belongs to a left-out item (`~/.claude/make-it/references/left-out-record.md`,
+read step 3) is not fixed, whatever its severity, and doesn't hold up the user's work. Tell the
+user once per session, one plain line per item, with no scan detail: "[N] safety warning(s)[ --
+one is serious] are about [item], which you left out, so I didn't change it."
+
 **2. For each finding (critical/high first):**
 
 **If scanner API is available** (`SECURITY_SCANNER_API_KEY` set in `.env`):
@@ -857,13 +893,14 @@ This runs BEFORE any user-requested work. The user does not initiate this -- it 
 4. If tests pass: commit, push, update CHANGELOG.md
 5. Do NOT close the GitHub Issue manually -- scanner will auto-close after rescan confirms the fix
 
-**3. After all critical/high findings are resolved:**
+**3. After all critical/high findings are resolved (a left-out item's findings aside):**
 
 - Continue to the user's requested work (greet-and-suggest or execute-work)
 
 **What the user sees:**
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
+- If a finding belongs to a left-out item: the one plain line above.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>
@@ -1390,6 +1427,9 @@ Update `.make-it-state.md` in the project root with:
 
 ## Outstanding Items
 [Items from TODO.md + anything discovered during this session]
+
+## Left out by your choice
+[exactly as it is in the file now; if the file has no such section yet, the older left-out lines that read step 2 of `left-out-record.md` finds, moved in as its entries; with nothing left out anywhere, nothing under the heading -- never "- None" or any filler line]
 
 ## Test Status
 - Unit tests: [X passing, Y failing]

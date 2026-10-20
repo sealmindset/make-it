@@ -56,14 +56,15 @@ that default is **local-individual only** and must NOT carry into a shared/produ
 8. Creates a branch, commits changes (including security fixes + attestation), pushes
 9. Generates a caller workflow referencing the org's shared reusable workflow
 10. Creates a PR with labels, reviewers, description, security audit summary, AI safety
-   attestation summary, and go-live checklist
+   attestation summary, and go-live checklist (its left-out lines: see Left-out items before
+   production)
 11. Reports back: "Done! The team will take it from here."
 
 **Two modes:**
 | Command | What it does |
 |---------|-------------|
 | `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
-| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No review. |
+| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No reviewers; the pre-push checks (the secret leak scan among them) still run. |
 
 ### Git hygiene on the way to merge (see `git-operations.md`)
 
@@ -98,7 +99,7 @@ tool output.
 | 2 | **Env var cross-check** | Compare .env/.env.example against docker-compose.yml, K8s manifests, and .ship-it.yml | Warn if new env vars aren't documented in .env.example. Auto-add missing entries to .env.example with TODO values |
 | 3 | **Schema & migration alignment** | Check for untracked migration files (Alembic, Django, Prisma). Verify migration chain integrity (every down_revision exists as a revision) | Auto-add untracked migrations. If chain is broken: pause, explain "a database update file is missing" |
 | 4 | **Import & dependency check** | Parse changed Python files with `ast.parse()`. Check requirements.txt/package.json against lockfiles | If syntax error: pause, explain in plain language. If dependency mismatch: warn |
-| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys — including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code subscription tokens. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a secret in your changes." Move to .env (gitignored), replace with env var reference. A personal Claude Code token must never be committed or shipped. |
+| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys — including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code subscription tokens. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a secret in your changes." Move to .env (gitignored), replace with env var reference. A personal Claude Code token must never be committed or shipped. A secret that belongs to a left-out item is never moved here: see Left-out items before production. |
 | 6 | **Build verification** | Run `docker compose build` to verify images build successfully | If build fails: diagnose, attempt auto-fix (missing dependency, syntax error), retry. If unfixable: pause, explain |
 
 **If ALL checks pass:** proceed silently (user never knows the review happened).
@@ -119,6 +120,9 @@ Watch CI status (poll every 30s, up to 10 minutes)
   |
   +-- All checks pass?
   |     -> Report success: "Your app passed all checks and is ready for review!"
+  |        (with a left-out item: "... except [item], left out by your choice,
+  |        which could not be checked"; if one of its checks ran and found something, say
+  |        what it found instead. For a secret, say where it is, never its value.)
   |
   +-- Check fails?
   |     -> Read failure details (workflow logs, PR check annotations)
@@ -158,7 +162,9 @@ Watch CI status (poll every 30s, up to 10 minutes)
 **What /ship-it tells the user during monitoring:**
 - "Your changes are being checked now. This usually takes a few minutes."
 - (On auto-fix) "One of the checks found a small issue. I've fixed it and resubmitted."
-- (On success) "All checks passed! Your app is ready for review."
+- (On success) "All checks passed! Your app is ready for review." With a left-out item, add:
+  "[item] wasn't checked: you left it out." If one of its checks ran and found something, say
+  what it found instead. For a secret, say where it is, never its value.
 - (On failure requiring user) "There's an issue I need your help with: [plain description]"
 
 **What /ship-it does NOT do during monitoring:**
@@ -211,7 +217,8 @@ DEVOPS PREFLIGHT (automated, DevOps-owned)
                               v
 DEV ENVIRONMENT
   User tests in dev environment
-  User confirms: "This is ready for production"
+  User confirms via /ship-it: "This is ready for production"
+  (see Left-out items before production)
                      |
                      v
 PRODUCTION GATE (DevOps-owned)
@@ -221,6 +228,61 @@ PRODUCTION GATE (DevOps-owned)
                      +-- Passes -> Deploy to prod
                      +-- Fails  -> Remediate, loop back to user verification
 ```
+
+### Left-out items before production
+
+/ship-it itself asks about each left-out `[BLOCK]` item, never the DevOps-owned gate or CI: the
+user never talks to DevOps. It asks at its Intent Classification, as soon as the user picks
+`intent:prod-ready`, before anything goes to the production gate. The dev environment's "This is
+ready for production" comes through /ship-it the same way.
+
+/ship-it reads the left-out record on every ship, through `left-out-record.md` (its read
+steps, the rule every reader follows, and what makes an item `[BLOCK]`). So its own auto-fixes --
+the package upgrades, the NeMo (AI-safety) remediation, the pre-push review and CI monitoring --
+never put a left-out item back, and never report one of its checks as FAIL. A left-out `[BLOCK]`
+item is neither silently blocked nor silently passed: no production check fails the ship on it,
+or skips it, without the production ask below.
+
+One guard holds for a left-out item on every push, whatever the intent, /ship-it save included
+(the secret leak scan runs on save too): a found secret is never sent, whatever is left out.
+When the secret leak scan (pre-push check 5) finds a secret that belongs to a left-out item
+(for example "Move the passwords and keys out of your code", check X01), /ship-it stops before
+the push and sends nothing. It names the left-out item and
+the `file:line` where the secret is (never its value), and gives the same next step as the
+production ask's **Add [item] first**: "Run /resume-it and say 'add [item]'; it checks with you
+before it adds it. Then type /ship-it again." Before that, it says why in plain words: "I found
+what looks like a key there. Once a key is sent, anyone who can see your code can use it, and that
+can't be taken back." /ship-it never moves the secret itself here (not to `.env`, not anywhere),
+never offers "Ship with [item] left out" once a secret is found, and that check is never reported
+as "not checked" (`left-out-record.md`).
+
+The production ask is high-stakes, so it is active confirmation (`approval-block.md`). It is
+never a plain yes. It names each left-out `[BLOCK]` item, says what it guards in plain
+words (for sign-in: "only the people you let in can open your app"), and says that the user
+left it out by their choice. It also says why it comes up now: each one should be in place
+before an app goes live. Each item gets its own pick, never one answer for all of them. For
+each one, the user picks:
+- **Ship with [item] left out** -- say what that means while the app is live (for sign-in:
+  "anyone with the link can open your app"), and the undo: "You can add it later with /resume-it
+  and ship again, but what people saw meanwhile can't be taken back."
+- **Add [item] first** -- say: "/ship-it stops here: nothing is sent, and nothing goes live until
+  it is in. Run /resume-it and say 'add [item]'; it checks with you before it adds it. Then type
+  /ship-it again." (`left-out-record.md`)
+
+/ship-it records each "Ship with [item] left out" pick in the PR's go-live checklist, by name:
+the item, what it guards, and "left out by the user's choice, confirmed at ship". Each /ship-it,
+before it pushes, rewrites those lines from the record and the picks as they stand then: an item
+the user has since added comes off the checklist, and its checks count like any `[BLOCK]` item's.
+A change of mind at the dev environment's confirmation updates its line too. DevOps can still hold
+the ship on it at the final review; then the automation tells the user which item, by name, in a
+PR comment that gives the next step: "Run /resume-it and say 'add [item]', then type /ship-it
+again." When the DevOps team fixes an item the user chose to ship with, the automation tells the
+user which item, by name, in a PR comment that asks them to keep it or take it out again, with the
+next step: "Run /resume-it and say which you mean: 'keep the team's fix for [item]' or 'take [item]
+out again', then type /ship-it again."
+Their answer updates the record (`left-out-record.md`).
+
+A left-out item that is not `[BLOCK]` doesn't add to this ask.
 
 ---
 
@@ -236,7 +298,7 @@ PRODUCTION GATE (DevOps-owned)
 | Preflight remediation | CI/CD automation + DevOps team | Verify app still works after fixes |
 | Deploy to dev | DevOps | None (wait) |
 | Dev environment testing | User | "Does it work how I want?" |
-| Production gate | CI/CD automation + DevOps team | Confirm prod-ready |
+| Production gate | CI/CD automation + DevOps team | Confirm prod-ready via /ship-it (see Left-out items before production) |
 | Deploy to prod | DevOps | None (notified when live) |
 
 ---
@@ -458,7 +520,9 @@ Automation scans PR
 **Automation -> User notifications** (via GitHub PR comments, plain language):
 - "Your app is being reviewed by our automation. You don't need to do anything -- we'll let you know when it's ready."
 - "We made a few updates to keep your app secure. Please check that everything still works by running `/try-it` in your project."
-- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test."
+- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test." With a left-out item, it adds: "[item] wasn't checked: you left it out."
+- When DevOps holds the ship at the final review on an item the user left out, the automation tells the user which item, by name, with the next step: "Run /resume-it and say 'add [item]', then type /ship-it again."
+- When the DevOps team fixes an item the user chose to ship with, the automation tells the user which item, by name, in a PR comment that asks them to keep it or take it out again (Left-out items before production).
 
 **Automation -> DevOps team notifications** (via internal channels):
 - PR scan results with detailed findings
@@ -475,6 +539,9 @@ Automation scans PR
 - Deploy without passing all checks
 - Deploy to production without explicit DevOps team approval
 - Communicate in technical jargon to the user
+- Block the gate on a left-out item the user chose to ship with, remediate it, or put it back.
+  It is reported to DevOps by name, and its checks don't count against "all checks" above.
+  The automation reads which items the user chose from the PR's go-live checklist.
 
 ---
 
@@ -573,7 +640,7 @@ When /ship-it runs on a project built by /make-it, it reads:
 | Source | What It Provides |
 |--------|-----------------|
 | `.make-it/app-context.json` | App name, slug, stack, services, database, auth |
-| `.make-it-state.md` | Build-verify status (confirms app works locally) |
+| `.make-it-state.md` | Build-verify status (confirms app works locally), and the left-out record (read through `left-out-record.md`) |
 | Project files | Stack auto-detection (fallback if app-context missing) |
 
 /ship-it auto-generates the `app` section of `.ship-it.yml` from app-context.json. The `infra` section starts empty -- DevOps fills it in after the first PR.
@@ -589,6 +656,8 @@ When /ship-it runs on a project built by /make-it, it reads:
 | Prod-ready | `intent:prod-ready` | Dev + Prod |
 
 With a /make-it project, most questions are skipped (stack, services, auth already known).
+
+On `intent:prod-ready`, if the record has a left-out `[BLOCK]` item (`left-out-record.md` says how to tell), /ship-it's left-out ask comes next -- see Left-out items before production.
 
 ### Workflow Generation
 

@@ -50,6 +50,7 @@ This skill has 7 phases:
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
 @~/.claude/make-it/references/approval-block.md
+@~/.claude/make-it/references/left-out-record.md
 @~/.claude/make-it/templates/app-context.md
 
 </execution_context>
@@ -203,6 +204,11 @@ If stack has issues but is workable, note concerns but proceed.
 
 Reference guardrails.md for the complete checklist.
 
+**Leave the record's items out:** read `.make-it-state.md` by the read steps of `left-out-record.md`
+first. A gap that belongs to a left-out item is not in the gap inventory or the risk score, so work
+already left out never changes the Risk Level or the route (one they bring back at the plan ask
+counts again: see **Read the record first** in the plan).
+
 **Calculate the Retrofit Risk Score:**
 
 For each gap, assign a risk weight:
@@ -333,7 +339,8 @@ Potential clarification questions (ask only if needed):
 
 4. **If the app purpose is unclear:** "I can see the features, but I want to make sure I understand the big picture. In one sentence, what's this app for?"
 
-5. **If there's partial /make-it state:** "I found a .make-it-state.md file. It looks like this was started with /make-it but may not have completed. Should I pick up from that state, or start the retrofit fresh?"
+5. **If there's partial /make-it state** (a `.make-it-state.md` holding only
+   `## Left out by your choice`, the record in `left-out-record.md`, is not partial state: don't ask): "I found a .make-it-state.md file. It looks like this was started with /make-it but may not have completed. Should I pick up from that state, or start the retrofit fresh?"
 
 **Maximum 3-5 questions. Never more.**
 
@@ -350,6 +357,12 @@ Potential clarification questions (ask only if needed):
 CRITICAL: Use the user-facing phase names from the gap-analysis table. NEVER show
 internal labels (Phase A, Phase B...) or technical jargon (OIDC, RBAC, middleware,
 migration, schema) to the user. Translate everything into what it MEANS for them.
+
+**Read the record first** (it may hold items from an earlier run or from /resume-it): read
+`.make-it-state.md` by the read steps of `left-out-record.md`. A left-out item (one in the record)
+stays out of the numbered plan and out of **all [ITEM_COUNT] items**: it gets only the one line
+below the plan. If they ask for it, follow read step 4. An item they bring back at the plan ask
+counts again: recompute the score and the route with it before they pick.
 
 "Here's what I'd like to add to make your app production-ready:
 
@@ -371,10 +384,15 @@ migration, schema) to the user. Translate everything into what it MEANS for them
   sorting and filtering built in" NOT "Replace HTML tables with DataTable component"]
 5. ...
 
+[If the record holds any item: one line each, never numbered --]
+**Left out by your choice earlier:**
+- [the item, in the words the user saw] -- left out by your choice -- tell me if you want it added.
+
 [If phased mode:]
 **I'll do this in [STEP_COUNT] steps, checking with you between each one:**
 [Bullets, not numbers -- the item numbers above are the only numbers on this screen. These are
-5b's steps, in 5b's order and with 5b's names, so each check-in names a step the user approved.]
+5b's steps, in 5b's order and with 5b's names, so each check-in names a step the user approved.
+Leave out of each step's name any item in the record.]
 - **Setting up your development environment** -- no risk to your existing features
 - **Adding secure login, user permissions, and activity monitoring** -- the biggest change, including your database's lists of users and permissions; I'll test thoroughly
 - **Polishing the interface and setting up test services** -- your app will look the same, just with a few upgrades, and you can develop without needing real external systems
@@ -388,7 +406,8 @@ I'll check with you after each step before moving on.
 [If single-pass mode:]
 **I'll do all of this in one pass, then verify everything works.**
 
-[If the app already has a login system -- guardrails rule 7:]
+[If the app already has a login system and secure login is not left out (the record; one they
+bring back at this ask is not) -- guardrails rule 7:]
 **Your login:** I can keep your current login and add the new secure sign-in alongside it
 (touches about [N_WRAP] files), or replace it with the new one (touches about [N_REPLACE]
 files). Recommended: [keep / replace] -- [why, one line]. The catch: [the strongest reason
@@ -440,18 +459,19 @@ whether it is the one people use for real today or a test copy; I ask you below.
 'look at 'What stays the same' -- is anything your app does today missing from that list?']
 
 Tell me what to include: **all [ITEM_COUNT] items**, or the item numbers to leave out[; and,
-if your app has a login: keep it or replace it][; and, if very high risk: step-by-step upgrade
+if your app has a login and secure login is not left out: keep it or replace it][; and, if very high risk: step-by-step upgrade
 or fresh build][; and, if the database lives elsewhere: is [host] a test copy or the one
 people use for real] -- or **Not now**."
 
 **Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
 what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
-item number)[; and, if the app has a login, keep or replace][; and, if Very High, which
+item number)[; and, if the app has a login and secure login is not left out, keep or replace][; and, if Very High, which
 route][; and, if the database lives elsewhere: is [host] a test copy or the one people use
 for real]. Build only what they included; anything left out
-goes to TODO.md as "left out by your choice" with what they'll need to handle themselves (see
+goes to TODO.md (with the record, in the same folder: **Then write the record**) as "left out by your choice" with what they'll need to handle themselves (see
 error-handling), and its checks are skipped in Phase 6 -- never auto-fixed back in. If a
-left-out item is needed by one they kept, say which in one line and ask them to pick again.
+left-out item is needed by one they kept, say which in one line and ask them to pick again (one
+already in the record that they want back follows read step 4).
 If the database lives elsewhere and they picked anything other than Not now or the fresh build: unless they say the database at [host] is a test copy (not sure counts as not a test copy),
 stop and change nothing:
 "I'm stopping here and haven't changed anything. The upgrade adds [DATA_CHANGES] to whatever
@@ -533,10 +553,22 @@ name and email yet; run `git config --global user.name "Your Name"` and `git con
 user.email "you@example.com"`, then run /retrofit-it again.']" Never go on as if a snapshot
 exists when it does not.
 
+**Then write the record** (`left-out-record.md`) in the folder the work runs in (`work`: the app
+folder, or its worktree; the app folder for a nested app), right after Phase 5 makes its branch or
+worktree and before Phase 5's first step, so the snapshot stays clean and a check-in's "Stop here"
+leaves it where the user is told to open the app: each item they left out goes in `.make-it-state.md` (and its TODO.md line, as the plan pick says)
+as one line under `## Left out by your choice`, starting the file, or the section as that file's
+**Where** says (older lines and TODO.md items moved in), if there is none. On a re-run, add the new leave-outs below
+the lines already there and keep every earlier line exactly as it is (an item they asked for
+follows read step 4). When the record has older-form items (read step 2: older state-file lines, or
+TODO.md items with no section), start the section with them moved in, as **Where** says, even when
+nothing new is left out, so an undo keeps them.
+
 **Undo** -- when the user asks to put the files back to before the upgrade started, run this
 (fill in the two folders). It brings back the app's files and its database files exactly as the
-snapshot has them, removes files the upgrade added, and leaves installed packages and .env
-alone (the ask said .env isn't part of the snapshot). A server database (e.g. Postgres) is not
+snapshot has them, removes files the upgrade added, and leaves installed packages, .env and
+`.make-it-state.md` alone (the ask said .env isn't part of the snapshot; the state file holds the
+left-out record, `left-out-record.md`, which a check-in may have changed since). A server database (e.g. Postgres) is not
 part of it -- see the plan ask's undo line.
 
 ```bash
@@ -551,11 +583,11 @@ skip=(--exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ --
 top=$(git -C "$app" rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
 if [ -n "$top" ] && [ "$top" != "$app" ]; then
   # Nested: copy the files back (-c compares contents, not dates); files the upgrade added go
-  rsync -a -c --delete "${skip[@]}" "$bak/files/" "$app/" || fail "could not copy your files back"
+  rsync -a -c --delete --exclude=.make-it-state.md "${skip[@]}" "$bak/files/" "$app/" || fail "could not copy your files back"
 else
   tag="pre-retrofit-$(basename "$app" | tr -cs 'A-Za-z0-9_-' '-')"; tag=${tag%-}
-  cd "$work" && git restore --source="$tag" --staged --worktree -- . &&
-    git clean -fdq -e '.env*' -e .make-it/ -- . &&   # new files the upgrade never saved
+  cd "$work" && git restore --source="$tag" --staged --worktree -- . ':(exclude).make-it-state.md' &&
+    git clean -fdq -e '.env*' -e .make-it/ -e .make-it-state.md -- . &&   # new files the upgrade never saved
     { git diff --cached --quiet || git commit -qm "Undo /retrofit-it: back to $tag"; } ||
     fail "could not put the files back"
   rsync -a -c "$bak/files/" "$app/" || fail "could not put your database files back"
@@ -572,7 +604,10 @@ undo can itself be taken back. On a nested app, a `cannot delete` warning names 
 upgrade added that still holds installed packages or a settings file: it stays -- name it to the
 user. **Before this step** (5b, own repo only): the same `git restore` / `git clean` / `git
 commit` lines with the commit the step started from as the source; database files and a nested
-app's files go back only to before the upgrade started.
+app's files go back only to before the upgrade started. After either undo, in `work`, write each
+left-out item's missing TODO.md line back from the record (`left-out-record.md`), since TODO.md goes
+back with the files, and note in `.make-it-state.md` that the files went back (to before this step,
+or before the upgrade started), keeping `## Left out by your choice` exactly as it is.
 
 </step>
 
@@ -585,7 +620,11 @@ app's files go back only to before the upgrade started.
 **Execution model:** for a multi-step retrofit plan, drive it via Subagent-Driven Development
 (`/subagent-it`, see `subagent-driven-development.md`) -- a fresh implementer subagent per
 retrofit step + per-step review (spec + quality + safeguards) + a final whole-branch review -- on a
-branch/worktree, never main. Keep steps sequential (independent parallel problems → `/dispatch-it`).
+branch/worktree, never main. Make the branch or worktree from the current HEAD (on a first run,
+the snapshot; on a re-run, where "Stop here" left the upgrade so far, in a worktree too), never
+fresh off main. Once the branch or worktree is made (a nested app: before the first step), write
+the record and its TODO.md lines there first (**Then write the record**, in the plan step). Keep
+steps sequential (independent parallel problems → `/dispatch-it`).
 Each step ends committed, so its check-in can undo to the commit it started from. **Nested app**
 (the snapshot printed `snapshot: copy`): the repo around it is not the app's, so make no branch,
 worktree, commit, tag, or SDD ledger there. Run the same steps, in order, in the app folder
@@ -680,6 +719,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - Generate seed migration with 4 system roles + permissions for discovered pages
 
 4. **Auth (Prompt #8 adapted):**
+   - **Secure login left out** (`left-out-record.md`): there is no pick; skip this whole step,
+     mock-oidc included.
    - Target pattern: design-blueprint.md section 1 (OIDC flow diagram + critical auth rules)
    - The auth implementation must match the reference patterns in Prompt #8 and #9 exactly:
      require_permission middleware, permission service with cache, JWT with flat payload,
@@ -801,7 +842,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
    - PRESERVE existing page designs and layouts -- only add framework components
 
 7. **Mock Services (Prompt #12 adapted):**
-   - **mock-oidc:** Copy from `~/.claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/`
+   - **mock-oidc** (only when secure login is not left out): Copy from
+     `~/.claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/`
      as-is (never regenerate -- it's the most stable, battle-tested component). Add to
      docker-compose.yml with `profile: dev`. Configure internal/external URL split:
      - `MOCK_OIDC_EXTERNAL_BASE_URL=http://localhost:[PORT]` (browser navigates here)
@@ -846,7 +888,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
      - 10-20 items per list page with varied statuses and dates
      - **Dashboard data:** Enough records for charts/metrics to show non-zero values
      - Recent timestamps so the app looks active, not stale
-   - Ensure seed users match mock-oidc test users by `oidc_subject`:
+   - Ensure seed users match mock-oidc test users by `oidc_subject` (only when secure login is not
+     left out):
      - `mock-admin` → admin@[app].local (Super Admin role)
      - `mock-manager` → manager@[app].local (Manager role)
      - `mock-user` → user@[app].local (User role)
@@ -970,6 +1013,8 @@ Same changes as 5a, but grouped into phases with user verification between each.
 
 CRITICAL: When communicating with the user, use the plain-language phase names below.
 The internal labels (Phase A, Phase B...) and step numbers are for the skill's use only.
+In each step's name and its "Tell user" line, leave out any item in the record
+(`left-out-record.md`): with secure login left out, never "Secure login is working!".
 
 **Step 1: "Setting up your development environment" (risk-free)**
 - Internal: Steps 1-2 (foundation + Docker)
@@ -1050,7 +1095,10 @@ Tell me: **Continue with [next step name]**, **Fix something first** (tell me wh
 **Stop here**."
 
 Wait for their pick. A plain yes is not an answer -- ask which. **Fix something first:** fix or
-undo the breaking change (guardrails rule 1), re-verify, and ask again. **Stop here:** leave the
+undo the breaking change (guardrails rule 1), re-verify, and ask again. If what they tell you
+brings back a left-out item, follow read step 4 of `left-out-record.md` in `work`, then build it with the
+step it belongs to (now, if that step is done); if they take an item out, follow error-handling
+(a change they disagree with). **Stop here:** leave the
 app as it is now (it passed this step's checks), list the remaining steps in TODO.md with what
 each would have added, tell the user where that app is, and stop -- running /retrofit-it again
 later finds what is still missing. Where it is: [work on a branch in their own folder: 'Your app
@@ -1058,8 +1106,9 @@ folder ([APP_DIR]) has the upgrade so far, saved on the branch [BRANCH]. If the 
 the old version, `git switch [BRANCH]` there brings this one back.'][work in a worktree: 'The
 upgrade so far is in [WORKTREE_DIR], saved on the branch [BRANCH]. Your own folder ([APP_DIR])
 still has your app as it was before the upgrade -- open [WORKTREE_DIR] to use the upgraded one;
-/resume-it and /ship-it work there too.'][nested: 'Your app folder ([APP_DIR]) has the upgrade
-so far; the copy from before it is in [BACKUP].']
+run /retrofit-it, /resume-it, /try-it, /wrap-it and /ship-it there too.']
+[nested: 'Your app folder ([APP_DIR]) has the upgrade so far; the copy from before it is in
+[BACKUP].']
 [After the last step there is no pick: go straight to Phase 6.]
 
 **Adaptation rules for existing code:**
@@ -1086,10 +1135,12 @@ so far; the copy from before it is in [BACKUP].']
 **Build-verify is a SILENT QUALITY GATE** identical to /make-it's. The user sees
 "Making sure everything works..." but NOT the technical details.
 
-**Left-out items (the user's plan pick, Phase 4) stay out through Parts A-D:** any static
-check, live test, retrofit-specific check, or fix-cycle fix that belongs to an item they left
-out is skipped -- no auto-fix, no block, no fix in app code. TODO.md already lists it as
-"left out by your choice".
+**Left-out items (the user's current record in `work`, as the read steps of `left-out-record.md` read it,
+so an older file's lines count too) stay out through Parts A-D:** any static check, live test,
+retrofit-specific check, or fix-cycle fix that belongs to an item in the record (read step 3 of
+`~/.claude/make-it/references/left-out-record.md`) is skipped, as that file's rule says. An item
+they brought back at a check-in has no line there any more, so its checks run like any other.
+TODO.md already lists each left-out item as "left out by your choice".
 
 **PART A: Static code verification (before starting the app)**
 
@@ -1162,18 +1213,22 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 **PART E: Declare success and hand off**
 
-**Save project state** -- Write `.make-it-state.md` with:
+**Save project state** -- Write `work`'s `.make-it-state.md` with:
 - Retrofit completed (not initial build)
 - What was retrofitted (gap inventory summary)
 - Risk score and strategy used
 - Verification results (all Part A-D results)
-- Items the user left out at the plan ask, as "left out by your choice" (so /try-it and
-  /resume-it see them and don't add them back)
+- Items the user left out, under `## Left out by your choice` (`left-out-record.md`): the plan
+  pick and any take-out after it already wrote their lines there, so keep that section exactly as it is
+  (so /try-it and /resume-it see them and don't add them back); with none yet, start it as
+  `left-out-record.md`'s **Where** says (the older lines and TODO.md items moved in); with nothing
+  left out at all, nothing goes under the heading -- never "- None" or any other filler line. An item they brought back at a
+  check-in is not left out: read step 4 already took its line out.
 - Any remaining TODOs
 
 **Generate app-context.json** -- So /resume-it and /ship-it work going forward.
 
-**Automatically invoke /try-it** -- Same as /make-it, seamless handoff.
+**Automatically invoke /try-it** in `work` -- Same as /make-it, seamless handoff.
 
 </step>
 
@@ -1187,7 +1242,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 "Your app has been upgraded and is ready to deploy! Everything that was working before still works, plus you now have:
 
-[Only what they included at the plan ask -- drop the line for any item they left out.]
+[Only what is built and not in the record now (`work`'s `.make-it-state.md`) -- drop the line for
+any item in it.]
 - Secure login with [OIDC provider]
 - Role-based permissions ([N] roles, [N] permissions)
 - A proper development environment with Docker
@@ -1195,8 +1251,12 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 - Security hardening throughout
 [If .env was changed: 'Your settings file (.env) now has [the settings added or changed, by
 name, values hidden].']
+[work in a worktree: 'Your upgraded app is in [WORKTREE_DIR], on the branch [BRANCH]; your own
+folder ([APP_DIR]) still has it as it was before -- open [WORKTREE_DIR] and run /ship-it,
+/resume-it, /retrofit-it, /try-it and /wrap-it there.']
 
-When you're ready to deploy, just type: **/ship-it**"
+When you're ready to deploy, just type: **/ship-it**[work in a worktree: ' -- in this
+conversation (I run it in [WORKTREE_DIR]), or in [WORKTREE_DIR] next time']"
 
 </step>
 
@@ -1223,11 +1283,36 @@ When you're ready to deploy, just type: **/ship-it**"
 **If the user disagrees with a proposed change:**
 - Respect their decision
 - Skip that change and note it in TODO.md
+- When they take a plan item out (at a check-in, or any time after the plan pick), also write its
+  line under `## Left out by your choice` in `work`'s `.make-it-state.md` then, as `left-out-record.md`
+  says for a take-out (starting the section as its **Where** says: older lines and TODO.md items moved in first),
+  so Part A never auto-fixes it or forces it back in
 - Explain what they'll need to handle manually if they skip it
 
 **If the risk score is Very High (61+):**
 - Present the phased plan AND a migration recommendation
 - Let the user choose at the plan ask (Phase 4, one stop): phased retrofit or fresh /make-it build with data migration
+- If they choose fresh build and any item is left out -- at this pick, or already in the record
+  (read step 2 of `left-out-record.md`) -- stop and ask before building
+  anything: a new /make-it project gets its whole foundation, so it can't keep those items out.
+  Name each item from both, in the words the user saw, and ask per the approval block
+  (high-stakes: active confirmation -- they pick one of the three by name; a plain yes is not an
+  answer):
+  "You picked a fresh build, and you left out [each item, in the words you saw it -- this time or
+  earlier]. A fresh build starts a new project with my whole standard setup, so it
+  would add those back -- I can't build it with them left out. Pick one: **Fresh build with them
+  added** -- the new project gets everything, [the items] included; your app here isn't changed,
+  so there's nothing to undo. **Step-by-step upgrade without them** -- I upgrade this app in
+  steps and [the items] stay left out; [first run: 'I save a snapshot first, so I can put your
+  files back'; re-run: 'I keep the snapshot from your earlier run: putting the files back returns
+  to before that run'].
+  **Not now** -- I change nothing and stop. One thing to check: do you want any of [the items]
+  kept out for good? Then step-by-step is the route that keeps it out."
+  Adding them brings them back (read step 4 of `left-out-record.md`). On **step-by-step upgrade
+  without them**, go on from the plan step as for that route: its database stop if it applies,
+  then the snapshot, then the record write (**Then write the record**). A partial
+  answer (some of them added, the rest kept out) can't go into a fresh build either: ask again,
+  with the same two routes and **Not now**.
 - If they choose fresh build, help migrate their data model and business logic into a new /make-it project
 
 </error-handling>
@@ -1248,6 +1333,6 @@ When you're ready to deploy, just type: **/ship-it**"
 
 6. **Stack migration is a last resort** -- Only recommend migration if the existing stack literally cannot support a required foundation (e.g., no OIDC library exists for the framework, or the framework is abandoned/EOL).
 
-7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate at the plan ask (Phase 4, "Your login" -- one stop); the user picks keep or replace there.
+7. **Auth wrapping vs replacing decision:** Calculate the effort for each approach. If wrapping requires modifying more than 60% of auth-related files compared to a clean replace, recommend replace. Present both options to the user with the effort estimate at the plan ask (Phase 4, "Your login" -- one stop); the user picks keep or replace there, unless secure login is left out (the record, `left-out-record.md`; one they bring back at the plan ask is not): then neither, and nothing adds the new sign-in unless they bring it back (read step 4).
 
 </guardrails>
