@@ -957,6 +957,26 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.14 -- What you leave out stays out, and every skill knows it
+
+When a first-time builder left something out "by their choice" (secure sign-in, say), each skill
+read that choice its own way: some offered it again, some counted its checks as failures, /ship-it
+never named it, and a rewrite of `.make-it-state.md` or a retrofit re-run could lose it. Now:
+- **One record, one reading.** The new `left-out-record.md` says where the choice lives
+  (`## Left out by your choice` in `.make-it-state.md`) and how every skill reads it. A left-out
+  item is mentioned once, never offered, never counted as a failure, and never put back without
+  the user's own answer. Older projects are read only in the shapes older skills wrote.
+- **/resume-it and /try-it** show "Left out (your choice)" instead of a failure, say what could not
+  be checked, and never call an app "up and running" when a left-out item kept it from starting.
+- **/ship-it names each left-out item that matters before going live** and asks per item: ship
+  with it left out, or add it first. The picks go on the PR's go-live checklist, and the automation
+  never blocks on, fixes, or puts back a left-out item. A secret found in a left-out item still
+  stops the ship: it is never moved and never sent.
+- **The record survives.** Every skill that rewrites the state file keeps the section as it is,
+  and /retrofit-it's undo keeps it. A /retrofit-it re-run reads it first, keeps left-out items out
+  of its plan, writes it where the work runs (a worktree included), and asks before a fresh build.
+- **Checked.** `scripts/test-left-out-record.sh`: 456 checks; any error output fails the run.
+
 ### v1.44.13 -- Every "Waiting on you" item makes sense on its own
 
 The board's "Waiting on you" list, and the lists agents write at the end of a reply, showed bare
