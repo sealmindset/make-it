@@ -532,8 +532,9 @@ AI features mentioned?
     -> No provider names hardcoded in business logic -- only in the provider abstraction layer
 
   *** ON SHIP: the subscription default is local-individual ONLY ***
-    When a claude_agent app later ships to others / production / multi-user, FLIP the
-    recommended provider to anthropic (API key) or the org's enterprise provider, and
+    When a claude_agent app later ships to others / production / multi-user, ASK before
+    moving it to anthropic (API key) or the org's enterprise provider: the user picks the
+    billing mode by name (make-it ship-handoff), and nothing switches before the pick. And
     WARN never to commit or ship the personal CLAUDE_CODE_OAUTH_TOKEN (it is single-identity,
     has subscription usage limits, and is not a deployment credential). See ship-it-guide.md.
 ```

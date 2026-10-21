@@ -24,12 +24,15 @@ that default is **local-individual only** and must NOT carry into a shared/produ
 
 - A `CLAUDE_CODE_OAUTH_TOKEN` is single-identity, has subscription usage limits, and is not a
   deployment credential. The secret-leak scan (below) already blocks it from being committed;
-  in addition, when shipping to others/production /ship-it should flip the recommended provider
-  to `anthropic` (API key) or the org's enterprise provider and tell the user to set the
-  appropriate key in the deployment environment.
+  in addition, moving off it changes who pays for the AI, so nothing switches until the user
+  picks the billing mode by name -- the high-stakes ask in make-it's ship-handoff step
+  (`approval-block.md`): an Anthropic API key (pay per use), the org's enterprise provider, or
+  keep it local. After the pick, tell the user to set the matching key in the deployment
+  environment.
 - Intent classification: `intent:experiment` may keep claude_agent (still local); `intent:shareable`
-  and `intent:prod-ready` should switch off claude_agent. Never write the personal token into
-  `.ship-it.yml`, workflows, or any committed file.
+  and `intent:prod-ready` move off claude_agent only through that pick ("keep it local" means
+  they don't ship to others yet). Never write the personal token into `.ship-it.yml`, workflows,
+  or any committed file.
 
 ## What /ship-it Does
 

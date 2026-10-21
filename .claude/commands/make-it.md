@@ -424,8 +424,9 @@ reviewed, and hardened behind the scenes.
        Claude Code CLI in the backend Dockerfile, and wire CLAUDE_CODE_OAUTH_TOKEN through
        .env / .env.example / docker-compose (see design-blueprint.md + build-standards AI01d).
   - Enterprise/corporate -> "anthropic_foundry". Multi-user/shared/team -> "anthropic".
-  - On ship to others/production, flip claude_agent -> "anthropic"/enterprise and warn never
-    to commit/ship the personal CLAUDE_CODE_OAUTH_TOKEN (see ship-handoff + ship-it-guide.md).
+  - On ship to others/production, nothing moves off claude_agent until the user picks the
+    billing mode by name (the high-stakes ask in ship-handoff), and warn never to
+    commit/ship the personal CLAUDE_CODE_OAUTH_TOKEN (see ship-handoff + ship-it-guide.md).
 - AI Prompt Management: Classify usage level and set tier
   - No AI features -> tier 0 (skip)
   - 1-3 prompts, devs only -> tier 1 (code + config)
@@ -1460,10 +1461,41 @@ Reference ship-it-guide.md for this phase.
 4. Check if /ship-it skill is available
 
 **If the app uses the claude_agent provider (Claude Code subscription):**
-- This default is local-individual only. Before shipping to others/production, flip
-  ai_providers.primary to "anthropic" (API key) or the org's enterprise provider, and warn
-  the user NEVER to commit or ship their personal CLAUDE_CODE_OAUTH_TOKEN (single-identity,
-  subscription usage limits, not a deployment credential). Confirm it's only in .env (gitignored).
+- This default is local-individual only, and moving off it changes who pays for the AI: a
+  high-stakes ask (money, per the approval block). Before shipping to others/production, ask
+  once -- fill the evidence from what you saw (`AI_PROVIDER=claude_agent` in `.env`, or
+  `ai_providers.primary` in app-context.json):
+  "Before other people use your app, one money decision is yours. Its AI features run on your
+  own Claude Code subscription (I saw [`AI_PROVIDER=claude_agent` in `.env`]). That sign-in is
+  just for you: it can't be shared with other people or put on a server, and it has your plan's
+  usage limits.
+  What changes: who pays for the AI, and how. With an Anthropic API key, every AI request is
+  billed per use to whoever owns the key -- the more people use it, the more it costs. With your
+  organization's AI provider, your organization's account pays, under its own rules.
+  Undo: switching back is one line in your settings (`AI_PROVIDER=claude_agent`), but AI use
+  already billed can't be taken back.
+  What's unusual: until now the AI cost nothing beyond your plan.
+  The one thing to check: who will pay once others use it -- you, or your organization? Not
+  sure? Pick 'Keep it local'.
+  Pick one by name:
+  - **Use an Anthropic API key (pay per use)** -- billed per use to the key's owner; you add
+    the key where the app runs, never in your code.
+  - **Use my organization's provider** -- billed to your organization's account; your IT team
+    gives you its address and key.
+  - **Keep it local, don't ship to others yet** -- nothing changes; it stays on your
+    subscription, just for you."
+- **Wait for their pick.** Nothing switches before the pick. A plain yes, "ok" or "go ahead"
+  is not a pick -- ask them to pick one by name. Then:
+  - **Use an Anthropic API key** -> set ai_providers.primary to "anthropic" and
+    `AI_PROVIDER=anthropic`; they put the key in ANTHROPIC_API_KEY where the app runs.
+  - **Use my organization's provider** -> the same with "anthropic_foundry" (or the provider
+    their organization names) and its endpoint and key.
+  - **Keep it local, don't ship to others yet** -> change nothing. Skip the go-live text
+    below; tell them `/ship-it save` saves their work without sharing it, and that this
+    question comes first when they want others to use it.
+- Whatever they pick, warn the user NEVER to commit or ship their personal
+  CLAUDE_CODE_OAUTH_TOKEN (single-identity, subscription usage limits, not a deployment
+  credential). Confirm it's only in .env (gitignored).
 
 **If prerequisites are missing, guide the user through setup:**
 - gh not installed: "Before we can deploy, I need you to install one tool. Run: `brew install gh`"
