@@ -60,5 +60,21 @@ wait_case "agent's notice delivered, nothing else running: nudges" 2 "$(launch 5
 wait_case "agent launched past the wait window (stale): nudges" 2 "$(launch 180)"
 wait_case "garbage transcript line: still nudges" 2 "$(launch 5 | cut -c1-40)"
 
+# E02-S37: an interim notice ("is waiting on its own background work", status still completed)
+# is not the agent reporting back; only its final notice is. Later notices for the same task may
+# carry only <task-id>, which the launch result's agentId ties back to the launch.
+notice() { # notice <tool-use-id or ""> <summary>
+  tu=""; [ -n "$1" ] && tu="<tool-use-id>$1</tool-use-id>\\n"
+  printf '{"type":"user","timestamp":"%s","message":{"role":"user","content":"<task-notification>\\n<task-id>a1</task-id>\\n%s<status>completed</status>\\n<summary>%s</summary>\\n</task-notification>"}}\n' "$(ago 0)" "$tu" "$2"
+}
+INTERIM='Agent \"impl\" is waiting on its own background work'
+FINAL='Agent \"impl\" finished'
+wait_case "interim notice: still waiting, no nudge" 0 "$(launch 5; notice toolu_A "$INTERIM")"
+grep -q "gate: nudged" "$W" && { echo "FAIL an interim wait counted toward the cap"; fail=1; } || echo "ok   an interim wait is not counted toward the cap"
+wait_case "interim, then task-id-only interim: still waiting" 0 "$(launch 5; notice toolu_A "$INTERIM"; notice "" "$INTERIM")"
+wait_case "interim, then final notice: nudges" 2 "$(launch 5; notice toolu_A "$INTERIM"; notice toolu_A "$FINAL")"
+wait_case "final notice carrying only task-id: nudges" 2 "$(launch 5; notice "" "$FINAL")"
+wait_case "interim past the wait window (stale): nudges" 2 "$(launch 180; notice toolu_A "$INTERIM")"
+
 expect "garbage stdin: no-op (fail open)" 0 "not json"
 [ "$fail" = 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
