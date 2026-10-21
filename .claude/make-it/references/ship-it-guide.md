@@ -114,11 +114,14 @@ text, while the app uses claude_agent.
    with pass/fail per category, test details, and any unresolved findings. This attestation
    is the GRC-required acceptance qualification for production deployment.
 8. Creates a branch, commits changes (including security fixes + attestation), pushes
-9. Generates a caller workflow referencing the org's shared reusable workflow
-10. Creates a PR with labels, reviewers, description, security audit summary, AI safety
-   attestation summary, and go-live checklist (its left-out lines: see Left-out items before
+9. Generates a workflow if the repo has none yet (it never overwrites one): a thin caller of the
+   org's shared reusable workflow when `.ship-it.yml` names one (see Workflow Generation)
+10. Creates a PR with labels, reviewers, description, a "Pending safety updates" list of the
+   dependency alerts it could not fix, AI safety attestation summary, and, for
+   `intent:prod-ready`, the go-live checklist (its left-out lines: see Left-out items before
    production)
-11. Reports back: "Done! The team will take it from here."
+11. Reports back: "Done! Your code is on its way." with the PR link, and "The team will review
+   it and let you know when it's live."
 
 **Two modes:**
 | Command | What it does |
@@ -128,7 +131,8 @@ text, while the app uses claude_agent.
 
 ### Git hygiene on the way to merge (see `git-operations.md`)
 
-Before merging any PR, apply the `/git-it` rules so nothing lands stale or conflicting:
+/ship-it itself never merges a PR. Whoever merges one applies the `/git-it` rules so nothing
+lands stale or conflicting:
 - **Branch off the latest `origin/main`**, commit atomically (Conventional Commits), stage only
   your own paths, and push feature branches with `--force-with-lease` (never plain `--force`).
 - **Fresh CI before merge.** If `main` moved since the last green run, **rebase onto `main` and
@@ -715,20 +719,23 @@ When /ship-it runs on a project built by /make-it, it reads:
 | Shareable | `intent:shareable` | Dev only |
 | Prod-ready | `intent:prod-ready` | Dev + Prod |
 
-With a /make-it project, most questions are skipped (stack, services, auth already known).
+With a /make-it project, the questions about the app are skipped (stack, services, auth already
+known); the 3 intent questions are still asked, unless `.make-it-state.md` shows the app was
+verified with /try-it and the user said it is ready for production (then it is `intent:prod-ready`).
 
 On `intent:prod-ready`, if the record has a left-out `[BLOCK]` item (`left-out-record.md` says how to tell), /ship-it's left-out ask comes next -- see Left-out items before production.
 
 ### Workflow Generation
 
-/ship-it generates a GitHub Actions workflow based on the `infra` section:
+If the repo has no workflow yet, /ship-it generates a GitHub Actions workflow (it never
+overwrites one). A `deployment.reusable_workflow` comes first; otherwise the `infra` section decides:
 
 | Infra State | Workflow Generated |
 |-------------|-------------------|
 | `infra.provider: aws` | ECR login, Docker build per service, ECS update-service |
 | `infra.provider: azure` | ACR login, Docker build, kubectl set image |
 | `infra.provider: ""` (empty) | Placeholder with "Deployment pending DevOps configuration" |
-| `deployment.reusableWorkflow` set | Thin caller referencing the shared workflow |
+| `deployment.reusable_workflow` set | Thin caller referencing the shared workflow |
 
 ---
 
