@@ -957,6 +957,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.16 -- The run gate waits for a subagent's final word
+
+The Stop hook that keeps a `/subagent-it` run going counted a background agent's interim notice
+("waiting on its own background work") as the agent reporting back, so the next wait nudged as if
+the run had stalled. Now:
+- **Only a final notice ends the wait.** An interim notice keeps it open; a final notice ends it
+  whether it carries the launch's tool-use id or only the agent's task id.
+- **The two-hour limit stays.** An agent that never sends a final notice is waited on for at most
+  two hours after its launch, as before.
+- **Checked.** `scripts/test-sdd-gate.sh` gains six cases (four failed on the old hook); a replay on
+  two real session transcripts keeps every interim wait open and ends every final one.
+
 ### v1.44.15 -- Subagent runs carry four lessons the owner approved
 
 The last two long `/subagent-it` runs taught four things the run instructions didn't say yet. Now:
