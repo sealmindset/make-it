@@ -26,6 +26,7 @@ The user just types /wrap-it when they're done. Everything else is automatic.
 @~/.claude/make-it/references/build-standards.md
 @~/.claude/make-it/references/git-operations.md
 @~/.claude/make-it/references/learnings.md
+@~/.claude/make-it/references/left-out-record.md
 
 </execution_context>
 
@@ -169,6 +170,9 @@ Write or update the state breadcrumb:
 
 ## Outstanding Items
 [Items from TODO.md -- prioritized, actionable]
+
+## Left out by your choice
+[exactly as it is in the file now; if the file has no such section yet, the older left-out lines that read step 2 of `left-out-record.md` finds, moved in as its entries; with nothing left out anywhere, nothing under the heading -- never "- None" or any filler line]
 
 ## Test Status
 - Unit tests: [X passing, Y failing, or "not yet set up"]

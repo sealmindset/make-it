@@ -40,6 +40,7 @@ If /make-it's build-verify did its job, /try-it finds zero issues.
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/learnings.md
 @~/.claude/make-it/references/approval-block.md
+@~/.claude/make-it/references/left-out-record.md
 
 </execution_context>
 
@@ -82,6 +83,7 @@ so the user can walk into a fully working demo.
 ```
 # Read these silently -- do NOT show contents to user
 .make-it-state.md
+TODO.md
 .make-it/app-context.json
 docker-compose.yml (or docker-compose.yaml)
 .env
@@ -90,9 +92,17 @@ docker-compose.yml (or docker-compose.yaml)
 
 **2. Extract key information:**
 
-From .make-it-state.md (if present), note every item listed as "left out by your choice"
-(a /retrofit-it upgrade the user declined): a failure that belongs to one of them is reported,
-not fixed, and does not block handoff.
+From .make-it-state.md (and, with no `## Left out by your choice` section, TODO.md too), note
+every item left out by your choice (an upgrade the user declined). Find them under
+`## Left out by your choice` or, with no section, where the read steps in
+`~/.claude/make-it/references/left-out-record.md` say, and follow its rule everywhere in this
+skill, Phase 0's step 3b and `<error-handling>` included.
+
+When the user brings a left-out item back, all of it or only part (which narrows its line),
+follow `left-out-record.md` read step 4; when they say "take it out", write its line as that
+file's **Where** says. Nothing in this skill puts a left-out item back on its own (step 3b's
+dependency auto-fix, the startup and smoke-test fixes, Phase 3's fix cycle, Phase 6's fixes, and
+anything `<error-handling>` generates included).
 
 From app-context.json, determine:
 - Project name
@@ -180,8 +190,9 @@ Fix any Dependabot alerts not already resolved by Layer 2.
 - The user never sees this -- it happens before the app starts.
 
 **If any layer fails or is unavailable:** Skip it and move to the next. Never block.
-**If unfixable issues remain:** Note them internally for the TRY-IT-REPORT.md "Notes" section
-as: "Some dependencies are awaiting safety updates from their maintainers."
+**If unfixable issues remain (never one that belongs to a left-out item):** Note them internally
+for the TRY-IT-REPORT.md "Notes" section as: "Some dependencies are awaiting safety updates from
+their maintainers."
 
 **4. Build internal test plan:**
 
@@ -438,6 +449,10 @@ pip-audit -r backend/requirements.txt 2>&1
 cd frontend && npm audit 2>&1
 ```
 
+An audit that belongs to a left-out item (per `left-out-record.md`, as when X03 or X07 is on its
+line) reads "Left out (your choice)" even when it finds nothing: record it with `left_out` (step
+7).
+
 If vulnerabilities found, auto-fix with retry loop (up to 3 cycles):
 
 1. **Fix:** Run `pip-audit --fix -r backend/requirements.txt` and/or `cd frontend && npm audit fix`
@@ -450,11 +465,14 @@ If vulnerabilities found, auto-fix with retry loop (up to 3 cycles):
 4. **Retry:** If vulnerabilities remain, attempt manual version pins (update the specific package to the patched version in requirements.txt / package.json)
 5. **Repeat:** Loop steps 1-4 up to 3 cycles
 6. **Residual:** Any remaining vulnerabilities after 3 cycles:
-   - Add to TODO.md with severity, package name, CVE ID, and recommended action
+   - Add to TODO.md with severity, package name, CVE ID, and recommended action (never a
+     vulnerability that belongs to a left-out item)
    - Do NOT block the user from exploring their app -- these are dependency issues, not app bugs
-   - Note in TRY-IT-REPORT.md under a "Dependency Health" section
+   - Note in TRY-IT-REPORT.md under a "Dependency Health" section (a left-out item's findings
+     read "Left out (your choice)")
 
-Do NOT tell the user about this step unless vulnerabilities couldn't be fixed. This runs silently.
+Do NOT tell the user about this step unless vulnerabilities couldn't be fixed (never a left-out item's).
+This runs silently.
 
 **3. Test the login flow for each role:**
 
@@ -525,10 +543,17 @@ Build an internal test results summary:
   "screenshots": { "role_page": "path" },
   "failures": [
     { "test": "description", "error": "what went wrong", "page": "url", "role": "role",
-      "left_out": "the 'left out by your choice' item it belongs to, from .make-it-state.md, or absent" }
+      "left_out": "the left-out item it belongs to (per left-out-record.md) or that kept it from running, or absent" }
   ]
 }
 ```
+
+A test a left-out item kept from running (as when it kept the app from starting) was not
+checked: list it in `failures` with `left_out` set, even a check of something the app already
+had, like the frontend or backend starting; it never counts as failed.
+
+A test that belongs to a left-out item is listed in `failures` with `left_out` set too, whether
+it passed or failed: it never counts as passed or failed.
 
 </step>
 
@@ -543,15 +568,15 @@ have nothing to do. But when /try-it is run standalone (not after /make-it), or 
 regressed, this phase catches and fixes it.
 
 **If ALL smoke tests passed:**
-Skip to Phase 4 (Report). Tell user: "Everything looks great!"
+Skip to Phase 4 (Report). Tell user: "Everything looks great!" -- only if nothing is left out;
+if anything is, skip to Phase 4 without a message (Phase 5 tells the user).
 
 **If smoke tests found issues:**
 
 Failures marked `left_out` are not fixed: the user chose to leave that item out, so fixing it
 would put it back in. Report them in Phase 4 under "Left out by your choice" and go on; they
-never count as unfixed. If every failure is one of these, it counts as all passed: skip to
-Phase 4 and tell the user: "Everything looks great! The items you chose to leave out still show
-as missing -- that's expected."
+never count as unfixed, and never as passed. If every failure is one of these, skip to Phase 4
+without a message; Phase 5 tells the user what could not be checked because of them.
 
 For the rest, tell user: "I noticed a couple of things to clean up. Give me a moment..."
 
@@ -583,8 +608,9 @@ For the rest, tell user: "I noticed a couple of things to clean up. Give me a mo
 - "Just one more thing to clean up..."
 
 **If some issues can't be fixed after 3 attempts:**
-Tell user: "I got most things working! There's [N] thing(s) I wasn't able to fix automatically.
-I'll note what they are so we can come back to them." ([N] never counts left-out items.)
+Tell user: "I got most things working! There's [Z] thing(s) I wasn't able to fix automatically.
+I'll note what they are so we can come back to them." ([Z] never counts left-out items. If a
+left-out item kept the app from starting, drop "I got most things working!" -- nothing ran.)
 - Add unfixed issues to TODO.md
 - Continue to handoff with a note about what's not working
 
@@ -601,7 +627,7 @@ Generate `TRY-IT-REPORT.md` in the project root:
 ```markdown
 # [PROJECT_NAME] -- Try-It Report
 > Tested: [TIMESTAMP]
-> Status: [All Passing / X of Y Passing][if any left out: ' -- [N] left out by your choice']
+> Status: [All Passing / X of Y Passing][if anything is left out: ', plus [L] item(s) left out by your choice']
 
 ## Summary
 
@@ -609,22 +635,24 @@ Your app was tested automatically. Here's what happened:
 
 | What Was Tested | Result |
 |----------------|--------|
-| App starts up | [PASS/FAIL] |
-| Login works | [PASS/FAIL] |
-| All pages load | [X of Y passing] |
-| Permissions work correctly | [PASS/FAIL] |
-| API is responding | [PASS/FAIL] |
-| Dependency health | [Clean / N vulnerabilities remaining] |
+| App starts up | [PASS/FAIL/Left out (your choice)] |
+| Login works | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
+| All pages load | [X of Y passing / Left out (your choice)][, plus [W] left out (your choice)] |
+| Permissions work correctly | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
+| API is responding | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
+| Dependency health | [Clean / N vulnerabilities remaining / Left out (your choice)][, plus [W] left out (your choice)] |
 
 ## Login Testing
 
 Each type of user was tested:
+[If a left-out item blocked testing some or all types of user, write in place of the line above
+which ones couldn't be tested "because of what you chose to leave out".]
 
 | User Type | Login | Dashboard | Pages Tested | Result |
 |-----------|-------|-----------|-------------|--------|
-| [Role 1 - e.g., Admin] | [PASS] | [PASS] | [X of Y] | [PASS/FAIL] |
-| [Role 2 - e.g., Manager] | [PASS] | [PASS] | [X of Y] | [PASS/FAIL] |
-| [Role 3 - e.g., User] | [PASS] | [PASS] | [X of Y] | [PASS/FAIL] |
+| [Role 1 - e.g., Admin] | [PASS/Left out (your choice)] | [PASS/Left out (your choice)] | [X of Y / Left out (your choice)][, plus [W] left out (your choice)] | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
+| [Role 2 - e.g., Manager] | [PASS/Left out (your choice)] | [PASS/Left out (your choice)] | [X of Y / Left out (your choice)][, plus [W] left out (your choice)] | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
+| [Role 3 - e.g., User] | [PASS/Left out (your choice)] | [PASS/Left out (your choice)] | [X of Y / Left out (your choice)][, plus [W] left out (your choice)] | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
 
 ## Pages Tested
 
@@ -632,12 +660,16 @@ Each type of user was tested:
 |------|-------|---------|------|-------|
 | Dashboard | [PASS] | [PASS] | [PASS] | |
 | [Page 2] | [PASS] | [PASS] | [N/A - no access] | |
-| [Page 3] | [PASS] | [PASS] | [PASS] | |
+| [Page 3] | [PASS] | [PASS] | [Left out (your choice)] | |
 | Admin Panel | [PASS] | [N/A] | [N/A] | Admin only |
 
 ## Screenshots
 
 Screenshots of each page (per role) are saved in `.try-it/screenshots/`:
+[If a left-out item blocked some pages or roles, say "of the pages that could be opened" in place
+of "of each page (per role)". If no page could be opened because of a left-out item, write in
+place of this line and the list: "No screenshots were taken -- no page could be opened because of
+what you chose to leave out."]
 [LIST_SCREENSHOTS]
 
 ## How to Access Your App
@@ -646,10 +678,15 @@ Screenshots of each page (per role) are saved in `.try-it/screenshots/`:
 - **To log in as [Role 1]:** Click "Sign In", pick "[User 1 Name]" from the login screen
 - **To log in as [Role 2]:** Click "Sign In", pick "[User 2 Name]" from the login screen
 - **To log in as [Role 3]:** Click "Sign In", pick "[User 3 Name]" from the login screen
+[Leave out any sign-in line that a left-out item removed. If a left-out item kept the app from
+starting, write in place of all the lines above: "Your app couldn't be started, because of what
+you chose to leave out."]
 
 ## Left Out by Your Choice
-[Only if any failure was marked left_out: each item in plain language. It shows as missing
-because you chose to leave it out, not because something broke.]
+[If anything is left out: each left-out item once, whether or not a test belongs to it:
+"[item, in plain language] -- left out by your choice -- tell me if you want it added." Only if
+it blocked tests, add what could not be checked because of it: it shows as missing because you
+chose to leave it out, not because something broke.]
 
 ## Issues Found
 [If any issues remain, describe them in plain language here]
@@ -659,7 +696,20 @@ because you chose to leave it out, not because something broke.]
 - If something doesn't look right, tell me and I'll fix it
 - When you're happy with how it works, type **/ship-it** to deploy
 - To make changes, type **/resume-it**
+[If a left-out item kept the app from starting, leave out the browser, "If something doesn't look
+right" and /ship-it lines: nothing is running to explore or ship yet.]
 ```
+
+In every table, a test that belongs to a left-out item (marked `left_out`, per
+`left-out-record.md`) reads **Left out (your choice)** -- never FAIL, never PASS (its result is left
+out with it), never counted in X of Y or as passing or failing, and never listed under Issues Found.
+That holds whether it passed or failed: a clean dependency audit that belongs to a left-out item
+still reads **Left out (your choice)** in Dependency health, never Clean. A
+cell that sums several tests (X of Y, or a PASS/FAIL over many) shows its left-out tests apart,
+after its result: ", plus [W] left out (your choice)", [W] being how many; a cell whose every
+test is left out reads **Left out (your choice)**, never PASS or 0 of 0. The Status line reads
+All Passing only when nothing is left out, and never 0 of 0 Passing: when every test is left out,
+it reads just "[L] item(s) left out by your choice".
 
 Save screenshots to `.try-it/screenshots/` directory:
 - `{role}_{page_name}.png` for each page/role combination
@@ -676,17 +726,16 @@ Save screenshots to `.try-it/screenshots/` directory:
 
 **Present results in plain language:**
 
-If ALL PASSING:
+If every test passed, apart from a left-out item's tests, and nothing is left out:
 
 "Great news -- your app is up and running and everything looks good!
 
 I tested:
 - Logging in as each type of user ([list roles])
-- Every page in your app ([X] pages)
+- Every page in your app ([P] pages)
 - All the behind-the-scenes features (API, permissions, data)
 
-**Everything passed!**[if any left out: ' The [N] item(s) you chose to leave out still show as
-missing -- that's expected.']
+**Everything passed!**
 
 Here's how to explore your app:
 
@@ -703,17 +752,40 @@ Here's how to explore your app:
 
 I saved a full report with screenshots to `TRY-IT-REPORT.md` in your project folder."
 
-If SOME FAILURES:
+If every test passed, apart from a left-out item's tests, and anything is left out: the same
+message, with these changes. If a left-out item kept the app from starting, drop "I tested" and
+its list, say "I couldn't check that your app starts, because of what you chose to leave out." in
+place of the whole "Great news -- your app is up and running" line, and drop the browser steps
+(all of "Here's how to explore your app"), since nothing is running to open (as when Docker
+Compose is left out, so nothing builds). Otherwise, open with "Great news -- your app is up and
+running!" and list under "I tested" only what was checked and isn't left out (a line only partly
+checked says how much, as in "6 of your 10 pages"; if nothing on the list was checked, say only
+that the app starts and runs). Either way, leave out any sign-in or per-user step a left-out item
+removed (as the report's How to Access does), drop "with screenshots" from the last line if no
+screenshots were taken, and in place of the "**Everything passed!**" line say: "You chose to leave
+out [L] item(s) -- they're in the report; tell me if you want any of them added."[only if a
+left-out item blocked tests: ' Because they're left out, I couldn't check [only what they blocked
+other than the start, in plain words].']
+
+If SOME FAILURES, apart from a left-out item's tests ([X], [Y], [Z] and the list below
+never include left-out items):
+
+If a left-out item kept the app from starting, say "I couldn't check that your app starts,
+because of what you chose to leave out." in place of "Your app is running! Most things are
+working great.", and drop "You can still explore your app right now:" and its browser
+instructions, and the closing "Just tell me about anything that doesn't look right" line --
+nothing is running to open or look at.
 
 "Your app is running! Most things are working great.
 
-I tested [X] things and [Y] passed. There are [Z] thing(s) I wasn't able to fix
-automatically -- I've noted them in `TRY-IT-REPORT.md`.[if any left out: ' The [N] item(s) you
-chose to leave out still show as missing -- that's expected.']
-([Z] and the list below never include left-out items.)
+I tested [Y] things and [X] passed. There are [Z] thing(s) I wasn't able to fix
+automatically -- I've noted them in `TRY-IT-REPORT.md`.[if anything is left out: ' You chose to
+leave out [L] item(s) -- they're in the report; tell me if you want any of them added.'][only
+if a left-out item blocked tests: ' Because they're left out, I couldn't check [only what they
+blocked other than the start, in plain words].']
 
 You can still explore your app right now:
-[Same browser instructions as above]
+[Same browser instructions as above, without any sign-in or per-user step a left-out item removed]
 
 The things that aren't working yet:
 - [Plain description of issue 1]
@@ -721,7 +793,8 @@ The things that aren't working yet:
 
 Just tell me about anything that doesn't look right and I'll fix it."
 
-**Always end with:**
+**Always end with** this, except when a left-out item kept the app from starting (then leave
+out all of it, "When you're done exploring" included -- nothing is running):
 
 "**What to do if something doesn't look right:**
 Just describe what you see in your own words -- for example, 'the dashboard looks empty'
@@ -741,6 +814,10 @@ or 'I can't click the save button.' I'll figure out what's wrong and fix it.
 <step name="explore-support">
 
 **Stay available while the user explores. React to their messages:**
+
+**Before any fix below:** if what the user asks for, or reports missing, is what a left-out item
+names (in their own words: "can I see who did what?"), it is a bring-back, not a fix: follow
+`left-out-record.md` read step 4 (the Phase 0 pointer).
 
 **After any fix the user asked for, once the re-test passes:** if their correction is a rule that
 applies beyond this one fix, offer to remember it (`learnings.md`): one message, the rule
@@ -778,10 +855,14 @@ answer before going on.
 - ```bash
   docker compose --profile dev down
   ```
-- Update .make-it-state.md with try-it results
+- Update .make-it-state.md with try-it results, as save-state does (`## Left out by your choice`
+  stays exactly as it is, per `left-out-record.md`)
 
 **If user says they're happy / done:**
-- Celebrate! "Awesome! Your app is working just how you wanted it."
+- Celebrate! "Awesome! Your app is working just how you wanted it." (If a left-out item kept
+  the app from starting, nothing ran: say only "Got it!" in place of "Awesome!" and that line,
+  leave **/ship-it** out of the next steps, and drop the "Come back anytime" line -- /try-it
+  can't start it either.)
 - Offer any queued agent lessons (`learnings.md`): one message, each numbered with its evidence
   and what it would change; the user answers per item. Wait for the answer before showing next
   steps (skip if nothing is queued)
@@ -791,6 +872,14 @@ answer before going on.
   - **/resume-it** -- Make more changes or add features
   - Come back anytime and run **/try-it** again to fire it up"
 - Save state and generate final report
+
+If a left-out item kept the app from starting, nothing is running: in any reply above, say what
+you changed and that you couldn't check it (to a stop request, say only that nothing is running),
+never "Done!", "Fixed!", "Refresh", "Try again now", or "Shutting down your app" and "start it again".
+
+If a left-out item keeps a fix's re-test from running (as when the test services are left out, so no
+test user can sign in), say what you changed and that you couldn't check it, never "Done!" or
+"Fixed!".
 
 </step>
 
@@ -802,14 +891,19 @@ answer before going on.
 
 **Before ending ANY session:**
 
-1. Update `.make-it-state.md` with try-it results:
+1. Update `.make-it-state.md` with try-it results (X of Y and the Issues found/fixed/remaining
+   counts never include a left-out item's tests). Put the block below in place of its
+   `## Try-It Status` section only: `## Left out by your choice` stays exactly as it is
+   (`left-out-record.md`). The Result line reads as the report's Status line does, and the
+   Frontend URL line as How to Access does (no URL when a left-out item kept the app from
+   starting):
 
 ```markdown
 ## Try-It Status
 - Last run: [TIMESTAMP]
-- Result: [All Passing / X of Y Passing]
-- Frontend URL: http://localhost:[PORT]
-- Test users: [list of role -> email mappings]
+- Result: [as the report's Status line reads -- All Passing only when nothing is left out]
+- Frontend URL: [as How to Access reads: http://localhost:[PORT], or none when a left-out item kept the app from starting]
+- Test users: [as How to Access reads: role -> email mappings, without any sign-in user a left-out item removed; none if it kept the app from starting]
 - Issues found: [count]
 - Issues fixed: [count]
 - Issues remaining: [count and descriptions]
@@ -817,7 +911,8 @@ answer before going on.
 
 2. Update `CHANGELOG.md` with any fixes made during try-it.
 
-3. Update `TODO.md` with any issues that couldn't be fixed.
+3. Update `TODO.md` with any issues that couldn't be fixed (never a failure that belongs to a
+   left-out item).
 
 4. Ensure `TRY-IT-REPORT.md` is up to date with final results.
 
@@ -847,6 +942,9 @@ answer before going on.
   folder, then run /try-it again." Run the save-state step and end -- never wait forever
 
 **If docker-compose.yml doesn't exist:**
+If it belongs to a left-out item (the Phase 0 pointer), never generate it or say the message
+below: that item kept the app from starting, so skip startup and go on to the smoke test, where
+every test it kept from running is marked `left_out` (step 7). Otherwise:
 "It looks like the development environment wasn't set up during the build.
 Let me create it now..."
 - Generate docker-compose.yml based on app-context.json
@@ -893,8 +991,7 @@ Let me create it now..."
 
 **Quality gates:**
 1. **Before handoff:** ALL critical tests must pass (app starts, login works, dashboard loads) --
-   except failures of an item .make-it-state.md lists as "left out by your choice": reported, not
-   fixed, and not a block
+   except a failure marked `left_out`, which follows `left-out-record.md`
 2. **During explore:** Every fix must be re-tested before telling user it's done
 3. **Always:** Never modify production configuration -- only local dev settings
 4. **Always:** Never expose secrets, tokens, or technical internals to the user
@@ -909,7 +1006,8 @@ Let me create it now..."
 
 **Report completeness:**
 - TRY-IT-REPORT.md must exist after every run
-- Screenshots directory must have at least: login, dashboard per role
+- Screenshots directory must have at least: login, dashboard per role -- except a screenshot a
+  left-out item kept from being taken, which follows `left-out-record.md`
 - All test results must be recorded (not just failures)
 
 **Container management:**

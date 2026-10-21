@@ -22,3 +22,5 @@
 .claude/make-it/references/operator-safety.md
 # named in Build Phase A step h (LEARNINGS.md header)
 .claude/make-it/references/learnings.md
+# cited by ship-it-guide.md (the left-out record read at ship)
+.claude/make-it/references/left-out-record.md
