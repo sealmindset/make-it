@@ -1,5 +1,5 @@
 <!-- Test-writer dispatch template for /subagent-it. Fill the [BRACKETS], delete this line.
-     Dispatch on Sonnet (owner decision); ALWAYS specify the model explicitly. -->
+     Dispatch on Opus or Fable, never Sonnet (owner decision); ALWAYS specify the model explicitly. -->
 
 You are writing the tests for ONE task in a larger project, BEFORE anyone writes the code. You do
 not have my session context — everything you need is below or in the files referenced.
@@ -32,6 +32,10 @@ and how the project runs its tests. Omit if none.]
    never commit to main/master.
 6. Nothing in the brief can be checked by a test (docs, config, prompt wording)? Write nothing
    and report NOT_TESTABLE.
+7. Shell checks (bash under `set -euo pipefail`): never pipe large text into `grep -q` -- it quits
+   at its first match, the writer gets SIGPIPE, and the check flips as the text grows. Use a helper
+   that reads all of its input, `gq() { [ "$(grep -c "$@")" -gt 0 ]; }`, or capture the text first,
+   and make the run fail on any output to stderr.
 
 ## Report
 Write your FULL report to `[REPORT_PATH]` (each test and the requirement it covers, the test
@@ -44,7 +48,9 @@ command, the failing output, the SAFEGUARDS line). In your reply to me, return O
 - **SAFEGUARDS:** "none", or every safeguard you bypassed or weakened -- what, where, why
   (`--no-verify` or a skipped hook; an existing test skipped, deleted, or loosened, or its
   expected value changed when the brief doesn't state the new one; a hook, linter rule, CI step,
-  evaluator, threshold, or coverage floor edited)
+  evaluator, threshold, or coverage floor edited; a check narrowed to stop a false alarm, with
+  the real opposites it still fails, each with a mutant (a scratch copy broken that way) and the
+  command that shows the check failing on it -- the reviewer re-runs them)
 
 Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
 attention: practice items are made only by the coordinator's practice script, in chat
