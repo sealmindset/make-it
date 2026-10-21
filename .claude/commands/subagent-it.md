@@ -68,7 +68,7 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    that mandate something the review rubric treats as a defect; present all findings as ONE
    batched question (finding beside plan text, "which governs?"). Clean → proceed silently.
 4. **Per task (sequential):** `task-brief` → record BASE → dispatch the **test-writer**
-   (template, Sonnet) → **red check**: run its tests, they must fail for the missing behavior
+   (template, Opus or Fable) → **red check**: run its tests, they must fail for the missing behavior
    (NOT_TESTABLE: skip to the implementer with no Tests section) → dispatch implementer
    (template, cheapest fitting model, ALWAYS specify it; it may not change the tests; a test it
    says is wrong goes back to the test-writer) → answer its questions → on DONE, **tests
@@ -78,7 +78,9 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
    fix-subagent loop for Critical/Important until spec ✅, quality approved, and safeguards ✅ (an
    undisclosed weakening is undone; a disclosed one is undone too, unless that changes behavior
    the plan didn't decide -- then the human's call; log each as `Task N: safeguards undone|accepted:
-   <item>`) → **adversarial review** (tasks with tests, at most 3 rounds per task; the
+   <item>`; three consecutive rounds on the same root cause: stop patching and write
+   `STATUS: AWAITING_HUMAN` with a decision-ready design choice) → **adversarial review** (tasks
+   with tests, at most 3 rounds per task; the
    repo must be untouched after each): confirmed counterexamples only (its SAFEGUARDS
    line is separate: an `undisclosed` one is undone, in any round), which you adjudicate
    (ungrounded or plan-conflicting → the human; unsure severity → Important); in rounds 1–2 each

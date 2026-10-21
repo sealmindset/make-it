@@ -57,7 +57,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
    governs) before execution. If clean, proceed silently.
 3. **Per task** (sequential):
    a. `task-brief PLAN_FILE N`, record BASE, then dispatch a fresh **test-writer** (template, on
-      **Sonnet**) with the brief path, the test framework, and the report-file path. It writes
+      **Opus** or Fable) with the brief path, the test framework, and the report-file path. It writes
       and commits tests only, and returns TESTS_READY with its commit, files, command, and SAFEGUARDS line -- or
       NOT_TESTABLE for a task with nothing to test (docs, config, prompt wording; then skip to b
       with no Tests section). Answer its questions before it proceeds.
@@ -97,6 +97,10 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
       (`STATUS: AWAITING_HUMAN`). Log each as `Task N: safeguards undone: <item>` or `Task N:
       safeguards accepted: <item>`; every later review gets those as settled, and an accepted one
       is never asked about again. Repeat until spec ✅, quality approved, and safeguards ✅.
+      **Same root cause three rounds running:** when three consecutive review rounds on this task
+      trace to the same root cause, stop patching -- append `STATUS: AWAITING_HUMAN task N: <the
+      cause>` and give the human a decision-ready design choice (`approval-block.md`, Every ask is
+      decision-ready) instead of another patch.
    e2. **Adversarial review (tasks with tests; NOT_TESTABLE skips to f) -- at most 3 rounds.**
       Note `git status --porcelain` and HEAD, then dispatch the **adversarial reviewer**
       (template) with the brief, the verbatim global constraints, a fresh `review-package BASE
@@ -142,7 +146,7 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
 Use the least powerful model that can do each role — an omitted model inherits your (expensive)
 session model and silently defeats this.
 
-- **Test-writer:** Sonnet (owner decision).
+- **Test-writer:** Opus or Fable, never Sonnet (owner decision, 2026-10-20).
 - **Adversarial reviewer:** standard tier or above -- finding a real break takes reasoning.
 - **Transcription implementer** (plan text contains the complete code): cheapest tier.
 - **Mechanical implementer** (1–2 files, complete spec) / single-file fix: cheap–mid tier.
@@ -167,8 +171,8 @@ Map to the Agent tool's `model` / `effort` params (or Workflow's per-agent `mode
 - **BLOCKED:** assess — context problem → add context, same model; needs more reasoning →
   re-dispatch on a more capable model; too large → split; plan is wrong → escalate to human.
   **Never** ignore an escalation or retry the same model with no change.
-- **The test-writer** gets the same handling for NEEDS_CONTEXT and BLOCKED, but stays on Sonnet:
-  if Sonnet still can't write the tests with more context or a smaller task, escalate to the human.
+- **The test-writer** gets the same handling for NEEDS_CONTEXT and BLOCKED, but stays on Opus (or
+  Fable): if it still can't write the tests with more context or a smaller task, escalate to the human.
 
 ## Reviewer ⚠️ "cannot verify from diff" items
 

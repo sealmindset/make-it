@@ -3,7 +3,8 @@
      NEVER pre-judge findings or tell the reviewer what not to flag. -->
 
 You are reviewing ONE completed task. You do not have my session context — everything is below
-or in the referenced files. Review the diff as written; do not run the implementer's tests again.
+or in the referenced files. Review the diff as written; do not run the implementer's tests again
+(except a narrowed check's mutants, under Safeguards).
 
 ## Inputs
 - Requirements (the spec for this task): `[BRIEF_PATH]`
@@ -31,6 +32,9 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
    it removes, the app's own roles, permissions, or limits it specifies): quote the brief line.
    Compare the rest with the SAFEGUARDS lines above. Settled items: an accepted one is done; an
    undone one must be gone from the diff (still there → it counts again).
+   A check narrowed to stop a false alarm: before you accept it, re-run each mutant its
+   SAFEGUARDS line lists -- the check still fails on every one. A narrowing with no mutants, or
+   a mutant the check now passes, is a **Critical** finding.
    ✅ = no unsettled weakening, and no line lists one. ⚠️ = every weakening is on a line, or a
    line lists one the diff can't show (a skipped hook): list them for the controller to decide.
    ❌ = a weakening on no line, however the report describes it ("tidied", "flaky") — list each

@@ -957,6 +957,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.15 -- Subagent runs carry four lessons the owner approved
+
+The last two long `/subagent-it` runs taught four things the run instructions didn't say yet. Now:
+- **Test-writers run on Opus (or Fable), never Sonnet.** Sonnet test-writers kept writing checks
+  that passed on the rule's exact opposite.
+- **Shell checks never pipe big text into `grep -q`.** Under `pipefail` that can flip a check as
+  files grow; the templates give a helper that reads all input, and a run fails on any stderr.
+- **A narrowed check must prove what it still catches.** A check narrowed to stop a false alarm
+  lists the real opposites it still fails, each with a mutant, and the reviewer re-runs them.
+- **A cause that keeps coming back goes to the owner.** Three review rounds in a row on the same
+  root cause stop the patching: the run waits for a decision-ready design choice.
+- **Checked.** `scripts/test-sdd-lessons.sh` pins each rule.
+
 ### v1.44.14 -- What you leave out stays out, and every skill knows it
 
 When a first-time builder left something out "by their choice" (secure sign-in, say), each skill

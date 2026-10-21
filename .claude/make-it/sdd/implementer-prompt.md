@@ -37,6 +37,10 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
    loosening any other test (this task's tests you may not touch at all — see Tests). A change
    the brief explicitly requires isn't a weakening. If you truly had to weaken one, name it
    under SAFEGUARDS; the reviewer checks the diff against that line, and an undisclosed one fails.
+8. Any shell check you write (bash under `set -euo pipefail`): never pipe large text into
+   `grep -q` -- it quits at its first match, the writer gets SIGPIPE, and the check flips as the
+   text grows. Use a helper that reads all of its input, `gq() { [ "$(grep -c "$@")" -gt 0 ]; }`,
+   or capture the text first, and make the run fail on any output to stderr.
 
 ## Report
 Write your FULL report to `[REPORT_PATH]` (what you built, decisions, test command + output,
