@@ -957,6 +957,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.17 -- You choose who pays for your app's AI before it's shared
+
+An app that uses AI through the builder's own Claude Code subscription can't be shared that way:
+the subscription is for one person. The ship hand-off used to switch the app to pay-per-use
+billing on its own, with only a warning. Now:
+- **You pick, by name.** Before an app goes to anyone else, /make-it, /resume-it and /retrofit-it
+  all reach one question in the ship-it guide: use an Anthropic API key (pay per use), use your
+  organization's provider, or keep it local and don't share it yet. A plain yes isn't an answer,
+  and nothing switches before you pick.
+- **Your own copy stays on your plan.** A pick changes the shared app's settings
+  (`app-context.json`, `.env.example`, and the key where the app runs), never your local `.env`,
+  and you're told which files changed. The undo says plainly what to change back, and that
+  deleting the key is what stops the charges.
+- **"Keep it local" is remembered.** It's noted under `## Before sharing` in `.make-it-state.md`,
+  so the next hand-off asks first; /wrap-it and /resume-it keep that note when they rewrite the file.
+- **Checked.** `scripts/test-billing-ask.sh`: 50 checks, including that no other skill or reference
+  switches billing on its own.
+
 ### v1.44.16 -- The run gate waits for a subagent's final word
 
 The Stop hook that keeps a `/subagent-it` run going counted a background agent's interim notice
