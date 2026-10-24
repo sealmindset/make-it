@@ -161,6 +161,35 @@ check "other mentions: each \"go-live checklist\" elsewhere in the guide (the PR
 check "only the guide names .ship-it-go-live.json among the skills and references (resume-it.md reads it through the guide)" \
   '[ "$(grep -rlF --exclude-dir=worktrees ".ship-it-go-live.json" .claude | grep -vxF .claude/commands/resume-it.md | sort)" = ".claude/make-it/references/ship-it-guide.md" ]'
 
+# ---- fix round 1: the coordinator's four calls (task-1-fix1-brief.md); the guide stays true to /ship-it v1.3.0 ----
+# call 1: ship-it v1.3.0 doesn't run the checklist yet, so the not-yet list names it in a bullet of its own
+NOTYET_SEC="$(awk '/^#/{on=(index($0,"### Safety steps /ship-it doesn")==1)} on' "$G" | units)"
+check "fix 1 (not-yet list): \"Safety steps /ship-it doesn't run yet\" lists the go-live checklist in its own bullet, pointing at Go-live checklist" \
+  'printf "%s\n" "$NOTYET_SEC" | grep -E "^- \*\*[^*]*[Gg]o-live checklist[^*]*\*\*" | gq -E "\((see )?(the )?Go-live checklist\b"'
+# call 2: VLF may commit the record (owner, 2026-10-21), but VLF's allowed list doesn't hold it today (Task 3 adds it),
+# so no sentence anywhere in the guide says, in the present tense, that the list holds it
+GPAIRS="$(units < "$G" | sents | pair)"
+gsays() { local PAIRS="$GPAIRS"; says "$@"; }
+VLFNOW='\b(is|are|sits|stays|already)\b[^.;:]{0,40}\b(on|in)( the| its| VLF.s| the VLF)? allow(ed)?[- ]list\b|\ballow(ed)?[- ]list\b[^.;:]{0,20}\b(holds|has|includes|lists|admits|contains|already|covers)\b'
+check "fix 2 (VLF): VLF mode still commits the record, and no sentence says VLF's allowed list already holds it" \
+  'says "+\bVLF\b[^.;:]{0,30}\b(commits?|may (also )?commit|can commit|will commit|is allowed to commit)\b[^.;:]{0,12}\.?(\bit\b|\bthe record\b|ship-it-go-live)" && ! gsays "+$VLFNOW"'
+# call 3: a go-live item that belongs to a left-out item is quiet only while the item is left out; brought back, it is
+# asked; and the asked-again sentence itself names both kinds it doesn't ask
+check "fix 3 (left-out bound): a go-live item of a left-out item isn't asked while the item is left out; once brought back it is asked; the asked-again rule names its two exceptions (coming soon, Left out (your choice))" \
+  'says "\b(isn.t|is not|not|never) asked\b[^.;]{0,40}\bwhile\b[^.;]{0,40}\bleft out\b" && says "\bbr(ing|ings|ought)\b[^.;]{0,25}\bback\b|\badd(s|ed)?\b[^.;]{0,25}\bback\b" "+\basked\b" && says "${AGAIN[@]}" "\b(except|but not|other than|apart from|unless)\b" "coming soon" "Left out \(your choice\)"'
+# call 4: the .ship-it.yml example documents deployment.dev_url -- an empty or placeholder value (never a host), with a
+# comment (on its line or right above it) that DevOps fills it in and the go-live checklist reads it
+YML="$(awk '/^## /{on=($0=="## .ship-it.yml Configuration")} on' "$G" | awk '/^```/{if(f)exit; f=1; next} f')"
+DEVL="$(printf '%s\n' "$YML" | awk '/^[^ #]/{d=($0 ~ /^deployment:/)} d && /^ +dev_url:/{print; exit}')"
+DEVC="$(printf '%s\n' "$YML" | awk '/^[^ #]/{d=($0 ~ /^deployment:/)} d && /^ +dev_url:/{print c; exit} {c=($0 ~ /^ *#/)?c" "$0:""}')"
+devurl_ok() { local v c; [ -n "$DEVL" ] || return 1
+  v="$(printf '%s' "$DEVL" | sed -E 's/^ *dev_url:[[:space:]]*//; s/[[:space:]]*#.*$//' | tr -d "\"'")"
+  { [ -z "$v" ] || printf '%s' "$v" | gq -E '^[[<{].*[]>}]$'; } && ! printf '%s' "$v" | gq -iE '://|\.[a-z]{2,}|localhost|[0-9]\.[0-9]' || return 1
+  c="$DEVC $(printf '%s' "$DEVL" | sed -n 's/^[^#]*#//p')"
+  printf '%s' "$c" | gq -F DevOps && printf '%s' "$c" | gq -iE '\bfill' && printf '%s' "$c" | gq -iE 'go-live'; }
+check "fix 4 (dev URL): the .ship-it.yml example has deployment.dev_url, empty or a placeholder (no host), with a comment that DevOps fills it in and the go-live checklist reads it" \
+  'devurl_ok'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
