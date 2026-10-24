@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # E02-S21 (the owner's Split, 2026-10-21): ship-it-guide.md describes as /ship-it steps only what ship-it's SKILL.md runs,
-# plus the safety steps it keeps for /ship-it, said once to be not run yet (card E02-S39 adds them).
+# plus the safety steps it keeps for /ship-it, said once to be not run yet (card E02-S39 adds them; the shipped text says "a
+# later ship-it release adds them", since the board is private).
 # Contract these checks pin:
 #   - The guide names each kept safety step: the secret leak scan before every push, /ship-it save included; the switch off
 #     the builder's personal Claude token on a shareable or prod-ready ship; the billing ask; the left-out rules (the
 #     production ask with a pick per item, auto-fixes that never put a left-out item back or report it as FAIL, the
 #     left-out secret stop on every push, the left-out lines in the go-live checklist).
-#   - One statement, once, says /ship-it doesn't run them yet and that card E02-S39 adds them.
+#   - One statement, once, says /ship-it doesn't run them yet, that a later ship-it release adds them (no card id: the board
+#     is private), and what guards a push against a leaked secret until then (checks Q05, Q08, Q12, Q13).
+#   - The "never does" list is scoped to the guide's two modes: SKILL.md's --vlf and --aws modes push the deploy branch and
+#     deploy to production.
 #   - The dropped steps are no /ship-it steps: the NeMo run, the prompt-safety flag, the attestation and its PR summary,
 #     the pre-push lint / env-var / migration / import / build checks, the CI watch, its auto-fix loop and its messages.
 #     They are named only in "What make-it runs before /ship-it", which gives them to build-verify and /nemo-it, or says
@@ -45,12 +49,16 @@ check "kept: the billing ask has its section, with a pick by name" \
 check "kept: the left-out rules -- the production ask with a pick per item, the auto-fix rule, the secret stop on every push, the go-live lines" \
   'printf "%s" "$LEFT" | gq -F "Each item gets its own pick" && printf "%s" "$LEFT" | gq -F "never put a left-out item back, and never report one of its checks as FAIL" && printf "%s" "$LEFT" | gq -E "on every push, whatever the intent, /ship-it save included.*stops before the push and sends nothing" && printf "%s" "$LEFT" | gq -F "records each \"Ship with [item] left out\" pick in the PR'"'"'s go-live checklist"'
 
-# 2. one plain statement, once: /ship-it doesn't run them yet, and card E02-S39 adds them
+# 2. one plain statement, once: /ship-it doesn't run them yet, and a later ship-it release adds them (PR #62 review Minor:
+# no card id in the shipped text; the board is private)
 NOTYET='\b(doesn.t|does not) run\b[^.]{0,40}\byet\b'
-STMT="$(paras < "$G" | grep -F E02-S39 || true)"
+LATER='a later ship-it release adds them'
+STMT="$(paras < "$G" | grep -F "$LATER" || true)"
+# PR #62 review Minor (GM1): no sentence says /ship-it runs one of them now ("/ship-it runs the secret leak scan today")
+NOWX='/ship-it (already|now|today|currently) (runs?|asks?|does|switches|stops)\b|/ship-it (runs|asks|does|switches|stops)\b[^.]{0,80}\b(today|already|currently|now)\b'
 STMTSEC="$(awk '/^#/{on=0} /^#/ && /\/ship-it doesn.t run yet/{on=1} on' "$G" | flat)"
-check "stated once: one paragraph names card E02-S39 and says /ship-it doesn't run these yet (its SKILL.md has none of them)" \
-  '[ "$(grep -o E02-S39 "$G" | wc -l | tr -d " ")" = 1 ] && printf "%s\n" "$STMT" | gq -iE "^/ship-it $NOTYET" && printf "%s\n" "$STMT" | gq -F "SKILL.md" && [ "$(sents < "$G" | grep -v "^#" | grep -ciE "$NOTYET")" = 1 ] && ! sents < "$G" | gq -iE "/ship-it (already|now) runs?\b"'
+check "stated once: one paragraph says /ship-it doesn't run these yet (its SKILL.md has none of them), that a later ship-it release adds them (no card id anywhere), and what guards a push until then; no sentence says /ship-it runs one now" \
+  '[ "$(flat < "$G" | grep -oF "$LATER" | wc -l | tr -d " ")" = 1 ] && ! gq -E "\bE[0-9]{2}-S[0-9]+\b" "$G" && printf "%s\n" "$STMT" | gq -iE "^/ship-it $NOTYET" && printf "%s\n" "$STMT" | gq -F "SKILL.md" && printf "%s\n" "$STMT" | gq -F "gitleaks pre-commit hook (checks Q05, Q08, Q12)" && printf "%s\n" "$STMT" | gq -F "(check Q13)" && ( for q in Q05 Q08 Q12 Q13; do gq -E "^\*\*$q\*\* " .claude/make-it/references/build-standards.md || exit 1; done ) && [ "$(sents < "$G" | grep -v "^#" | grep -ciE "$NOTYET")" = 1 ] && ! sents < "$G" | gq -iE "$NOWX"'
 check "the statement lists each kept step, pointing at its section" \
   '( for p in "**The secret leak scan before every push**" "(Pre-push secret leak scan" "personal Claude token" "(AI Provider on Ship)" "**The billing ask**" "(The billing ask" "**The left-out rules** (Left-out items before production)"; do printf "%s" "$STMTSEC" | gq -F "$p" || exit 1; done )'
 
@@ -60,6 +68,11 @@ check "dropped: outside \"What make-it runs before /ship-it\", the guide never n
   '! printf "%s\n" "$NOTMAKEIT" | gq -iE "$DROPPED"'
 check "dropped: /ship-it's numbered steps are the 8 that ship-it's SKILL.md runs, ending in its done message" \
   's=$(awk "/^\*\*Behind the scenes, \/ship-it:\*\*/{on=1;next} on&&/^$/{exit} on" "$G" | grep -E "^[0-9]+\. "); [ "$(printf "%s\n" "$s" | wc -l | tr -d " ")" = 8 ] && printf "%s\n" "$s" | gq -E "^8\. Reports back:"'
+# PR #62 review Important 2: SKILL.md's --vlf and --aws modes push the deploy branch and deploy to production, so the "never
+# does" list is scoped to the guide's two modes; no sentence says /ship-it never does either, unscoped
+NEVER="$(awk '/^\*\*/{l=$0} /^- Push to the deploy branch/{print l}' "$G")"
+check "the \"never does\" list (no deploy-branch push, no production deploy) is scoped to the two modes above, never all of /ship-it (SKILL.md's --vlf and --aws modes do both)" \
+  '[ "$NEVER" = "**What /ship-it never does in the two modes above:**" ] && ! gq -F "**What /ship-it never does:**" "$G" && ! sents < "$G" | gq -iE "/ship-it (never|doesn.t|does not) (push(es)? to the deploy branch|triggers? production deploy)"'
 
 # 4. the make-it section gives each dropped step to build-verify or /nemo-it, or says no skill does it; never to /ship-it
 check "make-it section: build-verify runs the NeMo basic suite; the attestation GRC asks for before production comes from /nemo-it" \
@@ -80,6 +93,12 @@ if [ -z "${1:-}" ]; then
     'opp "s/^5\. Creates a branch/5. **Runs NeMo Guardrails full test suite** (if AI features exist)\n6. Creates a branch/m"'
   check "(control) fails with a kept step gone (the secret leak scan section)" \
     'opp "s/### Pre-push secret leak scan.*?(?=### What make-it)//s"'
+  check "(control) fails with a sentence saying /ship-it runs one today (\"/ship-it runs the secret leak scan today.\", review GM1)" \
+    'opp "s/^(### Safety steps \/ship-it doesn.t run yet\n)/\$1\n\/ship-it runs the secret leak scan today.\n/m"'
+  check "(control) fails with the card id back in the shipped text" \
+    'opp "s/a\s+later\s+ship-it\s+release\s+adds\s+them/card E02-S39 adds them/"'
+  check "(control) fails with the \"never does\" list unscoped again" \
+    'opp "s/never does in the two modes above:/never does:/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \

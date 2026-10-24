@@ -1321,9 +1321,12 @@ check "try-it: the Status line's every-test-left-out case, \"I tested\" (checked
   'printf "%s\n" "$AFTS" | gq -F "never 0 of 0 Passing: when every test is left out" && printf "%s\n" "$ALLLO" | gq -E "only what was checked and isn.t left out" && awk "/^<guardrails>/{on=1} on" $TRY | flat | gq -F "except a failure marked \`left_out\`, which follows"'
 
 # S1: the secret stop's "not checked" rule is that check's. E02-S21 (the owner's Split): /ship-it's CI-time success line is gone
-# with its CI watch; its success line is the done message, which claims no check passed (none of /ship-it's says so)
-check "ship-it-guide: the secret stop's \"not checked\" rule is scoped to that check (never \"a check that ran and found something\"), and /ship-it's success line is its done message, which claims no check passed" \
-  't5_secs | grep -F NOTCHECKED | gq -iE "\band that check is never reported as .?NOTCHECKED" && ! grep -qiE "\ba check that ran and found something\b" $SHIP && t4_units | grep -E "^[0-9]+\. Reports back:" | gq -F "\"Done! Your code is on its way.\"" && ! awk "BEGIN{on=1} /^## /{on=(index(\$0,\"## CI/CD Automation Contract\")!=1)} on" $SHIP | gq -iE "passed all checks|all checks pass(ed)?\b"'
+# with its CI watch; its success line is the done message, which claims no check passed (none of /ship-it's says so).
+# PR #62 review Important 1: the found-something rule left with those lines, but it is a left-out rule (left-out-record.md's
+# reader rule), and the CI/CD contract's success line still says "[item] wasn't checked": that line carries it, right after
+# the quote (what a check that ran found instead; for a secret, where it is, never its value)
+check "ship-it-guide: the secret stop's \"not checked\" rule is scoped to that check (never \"a check that ran and found something\"), /ship-it's success line is its done message, which claims no check passed, and the CI/CD contract's success line says what a left-out item's check that ran found instead (for a secret: where it is, never its value)" \
+  't5_secs | grep -F NOTCHECKED | gq -iE "\band that check is never reported as .?NOTCHECKED" && ! grep -qiE "\ba check that ran and found something\b" $SHIP && t4_units | grep -E "^[0-9]+\. Reports back:" | gq -F "\"Done! Your code is on its way.\"" && ! awk "BEGIN{on=1} /^## /{on=(index(\$0,\"## CI/CD Automation Contract\")!=1)} on" $SHIP | gq -iE "passed all checks|all checks pass(ed)?\b" && t4_units | awk "/^## /{on=(index(\$0,\"## CI/CD Automation Contract\")==1)} on" | grep -F "All checks passed!" | tr -s " " | gq -E "\"\[item\] wasn.t checked: you left it out\.\" If one of that item.s checks ran and found something, it says what that check found instead; for a secret, where it is \(\`file:line\`\), never its value \(\`left-out-record\.md\`\)\."'
 # S2: the stop says why, in plain words
 check "the secret stop says why in plain words: what was found, and that a sent key can be used by anyone who sees the code and can't be taken back" \
   's=$(t5_secs); printf "%s\n" "$s" | t4_aff | gq -iE "\bsays why in plain words\b" && printf "%s\n" "$s" | gq -iE "anyone who can see your code can use it" && printf "%s\n" "$s" | gq -iE "can.t be taken back" && ! printf "%s\n" "$s" | gq -iE "$T4_NEGW[^.;:]{0,20}\bsays? why\b"'
@@ -1357,9 +1360,11 @@ check "/ship-it's two CI-time success lines are gone (no monitoring flow, no \"(
   '[ -z "$(fr_succ2 | tr -d " \n")" ] && ! grep -qiE "Report success:|^- \(On success\)|passed all checks and is ready for review|Your app is ready for review" $SHIP'
 # Minor 6: the guard says the secret leak scan runs on /ship-it save too (its "No review." is not "no pre-push checks").
 # Re-review Minor 2: the modes table's save row says so too, and never that save skips the pre-push checks or the scan
-check "the secret guard says the secret leak scan runs on /ship-it save too, and the modes table's save row says the pre-push checks still run (never that save skips them)" \
+# PR #62 review Minor: since E02-S21's Split the pre-push checks are two, so the save row names them (was "the pre-push checks
+# (the secret leak scan among them) still run")
+check "the secret guard says the secret leak scan runs on /ship-it save too, and the modes table's save row says the dependency scan and the secret leak scan still run (never that save skips them)" \
   't5_secs | t4_aff | gq -F "/ship-it save included (the secret leak scan runs on save too):" && ! t5_secs | gq -iE "\b(skips?|skipped|without)\b[^.;:]{0,30}\b(scan|pre-push|check)[^.;:]{0,20}\bsave\b|\bsave\b[^.;:]{0,30}\b(skips?|skipped|without)\b" &&
-   r=$(grep -E "^\| *./ship-it save. *\|" $SHIP || true) && printf "%s\n" "$r" | gq -F "No reviewers; the pre-push checks (the secret leak scan among them) still run." && ! printf "%s\n" "$r" | gq -iE "\b(skips?|skipped|skipping|without|bypass(es|ed)?|no)\b[^.;:|]{0,30}\b(scans?|pre-push|checks?)\b|\b(pre-push checks?|scan)\b[^.;:|]{0,20}\b(don.t|do not|doesn.t|does not|never|aren.t|are not|isn.t|is not)\b"'
+   r=$(grep -E "^\| *./ship-it save. *\|" $SHIP || true) && printf "%s\n" "$r" | gq -F "No reviewers; the dependency scan and the secret leak scan still run." && ! printf "%s\n" "$r" | gq -iE "\b(skips?|skipped|skipping|without|bypass(es|ed)?|no)\b[^.;:|]{0,30}\b(scans?|pre-push|checks?)\b|\b(pre-push checks?|scan)\b[^.;:|]{0,20}\b(don.t|do not|doesn.t|does not|never|aren.t|are not|isn.t|is not)\b"'
 
 # ---- Task 5: the record survives ----
 # Every skill that rewrites .make-it-state.md keeps "## Left out by your choice" exactly as it is, by following
