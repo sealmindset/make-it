@@ -389,9 +389,10 @@ asked again, and an `evidence` that matches is written empty.
 ### Asking
 
 An item that is `skipped` or missing is asked again on every production /ship-it, except an item
-skipped with the reason `coming soon` or "Left out (your choice)". A `done` or `na` item is not
-asked: it stays quiet and gets one PR line. An `na` is remembered. A `done` or
-`na` item changes only when the user asks for it; then it is asked like a missing one.
+skipped with the reason `coming soon`, or "Left out (your choice)" while its item is still left
+out (The record). A `done` or `na` item is not asked: it stays quiet and gets one PR line. An
+`na` is remembered. A `done` or `na` item changes only when the user asks for it; then it is asked
+like a missing one.
 
 Each ask is high-stakes, so it is active confirmation (`approval-block.md`). Each item gets its
 own pick, never one answer for all of them. A skip needs a reason the user types: there is no
