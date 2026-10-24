@@ -199,6 +199,121 @@ devurl_ok() { local v c; [ -n "$DEVL" ] || return 1
 check "fix 4 (dev URL): the .ship-it.yml example has deployment.dev_url, empty or a placeholder (no host), with a comment that DevOps fills it in and the go-live checklist reads it" \
   'devurl_ok'
 
+# ---- adversarial round 1: ten counterexamples on their exact inputs (task-1-adv1.md; calls in task-1-adv1-fix-brief.md) ----
+# Behaviour checks read the rule's operative words from the guide, then run that rule on the counterexample's input.
+PY2='
+import json, re, sys
+from urllib.parse import urlsplit
+m = sys.argv[1]
+if m == "evidence":                        # the components the guide keeps, applied to a URL with user:pass, query, fragment
+    t = sys.argv[2].lower(); u = urlsplit(sys.argv[3]); pw = sys.argv[4]
+    has = lambda *w: any(re.search(r"\b" + x + r"\b", t) for x in w)
+    out = u.scheme + "://" if has("scheme", "protocol") else ""
+    if has("user", "username", "credentials", "login"):
+        out += (u.username or "") + (":" + u.password if has("password") and u.password else "") + "@"
+    out += (u.hostname or "") if has("host", "hostname", "domain") else ""
+    out += ":" + str(u.port) if has("port") and u.port else ""
+    out += u.path if has("path") else ""
+    out += "?" + u.query if has("query") and u.query else ""
+    out += "#" + u.fragment if has("fragment") and u.fragment else ""
+    ok = out == "https://dev.example.com/terms" and pw not in out
+elif m == "served":                        # served = final path is /terms (a trailing slash allowed?, query/fragment ignored?)
+    s, q = sys.argv[2] == "1", sys.argv[3] == "1"
+    def served(url):
+        u = urlsplit(url); p = u.path if q else u.path + ("?" + u.query if u.query else "") + ("#" + u.fragment if u.fragment else "")
+        return p == "/terms" or (s and p == "/terms/")
+    ok = all(served(x) == e for x, e in [("http://localhost:3000/terms/", True), ("http://localhost:3000/terms?lang=en", True),
+             ("http://localhost:3000/terms/#top", True), ("http://localhost:3000/login?next=/terms", False), ("http://localhost:3000/terms//", False)])
+elif m == "join":                          # dev_url + /terms (trailing slash not doubled?, a path in dev_url kept?)
+    nd, pk = sys.argv[2] == "1", sys.argv[3] == "1"
+    def join(b):
+        b = b.rstrip("/") if nd else b
+        if not pk: u = urlsplit(b); b = u.scheme + "://" + u.netloc
+        return b + "/terms"
+    ok = all(join(x) == e for x, e in [("https://dev.example.com/app/", "https://dev.example.com/app/terms"),
+             ("https://dev.example.com/app", "https://dev.example.com/app/terms"), ("https://dev.example.com/", "https://dev.example.com/terms")])
+elif m == "unreadable":                    # the definition of "unreadable" in the guide, applied to an empty, a truncated, a schema-2 file
+    t = " ".join(x.group(1) for x in re.finditer(r"unreadable\b[^.;]{0,15}?\b(?:when|if|means)\b([^.;]*)", sys.argv[2].lower()))
+    E = "empty" in t; J = re.search(r"valid json|not json|isn.t json|pars", t) is not None
+    O = "object" in t; S = re.search(r"schema[^.;]{0,30}\b1\b", t) is not None
+    def bad(x):
+        if x.strip() == "": return E or J
+        try: d = json.loads(x)
+        except ValueError: return J
+        if not isinstance(d, dict): return O
+        return S and d.get("schema") != 1
+    ok = all(bad(x) for x in ["", "{\"schema\": 1, \"items\": [", "{\"schema\": 2, \"items\": {}}", "[]"]) and not bad("{\"schema\": 1, \"items\": {}}")
+sys.exit(0 if ok else 1)
+'
+py2() { python3 -I -c "$PY2" "$@" 2>/dev/null; }
+AFF="$(printf '%s\n' "$PAIRS" | cut -d $'\x1f' -f2)"
+
+# call 1: topics are read from the visible text -- tags AND the contents of <script>, <style>, <noscript> removed -- so a page
+# whose words sit only in a client payload (the scaffold's "use client" sign-in layout) finds no topics and isn't done
+C1E="$(printf '%s\n' "$AFF" | perl -ne 'print "$1\n" while /(?:remov|strip|drop|delet)\w*\b[^.;:]{0,20}?\bcontents?\s+of\s+([^.;:]*)/gi; print "$1\n" while /([^.;:]*?)\bcontents?\b[^.;:]{0,15}\b(?:removed|stripped|dropped|deleted)\b/gi' | grep -oE '<[a-z]+>' | tr -d '<>' | sort -u || true)"
+c1_strip() { local e x; x="$(cat)"; for e in $C1E; do x="$(printf '%s' "$x" | perl -0pe "s/<$e\\b[^>]*>.*?<\\/$e\\s*>//gis")"; done; printf '%s' "$x" | perl -0pe 's/<[^>]*>/ /g'; }
+c1_done() { local t p; t="$(printf '%s' "$1" | c1_strip)"; p="$(printf '%s' "$2" | c1_strip)"
+  printf '%s' "$t" | gq -iE 'user content' && printf '%s' "$t" | gq -iE 'arbitration' && printf '%s' "$p" | gq -iE 'personal data'; }
+T_AUTH='<html><head><style>.s{}</style></head><body><div class="spinner">Loading</div><script>self.__next_f.push([1,"Terms. By posting user content you agree to arbitration."])</script></body></html>'
+P_AUTH='<html><body><div class="spinner">Loading</div><script>self.__next_f.push([1,"Privacy. How we use personal data."])</script></body></html>'
+T_PUB='<html><body><main><h1>Terms</h1><p>Your user content stays yours. Disputes go to arbitration.</p></main><script>boot()</script></body></html>'
+P_PUB='<html><body><main><h1>Privacy</h1><p>How we use personal data.</p></main></body></html>'
+check "adv 1 (client payload): the topic rule removes tags and the contents of <script>, <style> and <noscript>; on pages whose words sit only in a <script> payload it finds no topics (not done), on public pages it finds all three" \
+  '( for e in script style noscript; do printf "%s\n" "$C1E" | gq -xF "$e" || exit 1; done ) && ! c1_done "$T_AUTH" "$P_AUTH" && c1_done "$T_PUB" "$P_PUB"'
+
+# call 2: a re-run whose PR has no "## Go-live checklist" never asked, so it runs the checklist as a new request does
+# (the draft that /ship-it save opened, shipped later); the re-run rule itself stays
+c2_ok() { local s; s="$(sel '\bRE-?RUN\b|\bre-?runs?\b' 'no `?## Go-live checklist|without (a |the )?`?## Go-live checklist|never asked|hasn.t been asked' '\b(as|like) (a |any )?(new|first) request\b' | cut -d $'\x1f' -f1)"
+  [ -n "$s" ] && ! printf '%s\n' "$s" | gq -iE '\b(doesn.t|does not|never|won.t) (run|ask)\b' && usays '/ship-it save|\bSAVE\b' '\bdraft\b' '+\b(runs?|asks?)\b'; }
+check "adv 2 (save, then ship): a re-run whose PR has no ## Go-live checklist runs the checklist as a new request does (the /ship-it save draft is the example)" 'c2_ok'
+
+# call 3: "coming soon" is recorded only on items 2-5 that are missing or skipped; a done or na the user set stays as it is;
+# the one line names only what it recorded this time; the PR line shows each item as the record holds it
+check "adv 3 (hand-set done/na on items 2-5): coming soon only for missing or skipped ones, a done or na stays as it is, the one line names only those recorded this time, the PR line shows the record" \
+  'says "\bitems? 2.{1,4}5\b" "\brecorded\b" "\`coming soon\`" "\b(that|which|when|if|while|only)\b[^.;:]{0,25}\bmissing\b|\bmissing or \`?skipped\`?" && ! says "\bitems? 2.{1,4}5\b" "\`coming soon\`" "\bmissing\b" "\b(whether|regardless|even (if|when|a|an|the))\b" && { says "\`done\`" "\`na\`" "+\b(stays?|kept|left|remains?) (as (it is|they are|set)|unchanged)\b" || says "\`done\`" "\`na\`" "\b(isn.t|is not|never|aren.t|are not) (overwritten|changed|replaced|touched)\b"; } && says "+\bonly\b[^.;]{0,50}\b(recorded|marked)\b" "+\bthis (time|run)\b|\bon this run\b|\bjust now\b" && says "\bPR\b" "+\bas the record holds (it|them)\b|\bas (it is|they are) (in|on) the record\b|\bas recorded\b"'
+
+# call 4: evidence keeps scheme, host and path only -- applied to the dev.example.com terms URL with a basic-auth user and
+# password, a query and a fragment (the URL and password are built at run time: no credential literal in this file), the query and the fragment never reach the record
+C4K="$(printf '%s\n' "$AFF" | grep -iE 'evidence' | perl -ne 'print "$1\n" while /\b(?:written|recorded|kept|stored|saved)\s+as\s+([^.;:]*?)\s+only\b/gi' || true)"
+C4PW="$(printf '%s%s' Sta9 ing-pw)"
+C4U="$(printf '%s://%s%s%s@%s/terms?x-vercel-protection-bypass=%s#top' https preview : "$C4PW" dev.example.com abc123)"
+check "adv 4 (credentials in evidence): evidence URLs are written as scheme, host and path only (user:pass@, query and fragment removed, never shown); on the dev.example.com terms URL with a basic-auth user and password, a query and a fragment, the record gets https://dev.example.com/terms" \
+  '[ -n "$C4K" ] && py2 evidence "$C4K" "$C4U" "$C4PW" && says "user:pass@" "+\bquery\b" "+\bfragment\b" "+\b(removed|stripped|dropped)\b" && says "user:pass@|credentials" "\bnever (shown|shows?|displayed|said)\b"'
+
+# call 5: "Skip for now" (or "skip") with no reason typed gets a request for the reason; nothing is recorded until one is
+# typed; the pick's label, an empty string or a default reason is never recorded
+c5_ok() { local s; s="$(sel 'Skip for now|\bskip\b' '\b(no|without( a| any)?) reason\b|\breason (isn.t|is not|wasn.t) typed' '\bask(s|ed)? (them |the user )?for (the|a|their) reason\b|\brequest(s)? for (the|a|their) reason\b|\basks? (them |the user )?to type (the|a|their) reason\b' | cut -d $'\x1f' -f1)"
+  [ -n "$s" ] && ! printf '%s\n' "$s" | gq -iE '\b(never|not|doesn.t|does not|won.t|isn.t)\b[^.;]{0,20}\b(ask|asks|asked|request|requests|answered)\b' && says '\bnothing\b[^.;]{0,20}\b(recorded|written|saved)\b[^.;]{0,30}\buntil\b' && says '\b(label|Skip for now)\b' '\bempty\b' '\bdefault\b' '\bnever\b[^.;]{0,40}\b(recorded|written|used|stored|saved)\b'; }
+check "adv 5 (skip without a reason): a skip pick with no reason typed is answered with a request for the reason; nothing is recorded until one is typed; the label, empty or a default is never recorded" 'c5_ok'
+
+# call 6: with no production signal the checklist doesn't run, but the left-out lines still go in the PR under
+# ## Go-live checklist, with one line that the five items weren't asked because the request doesn't deploy to production
+check "adv 6 (left-out lines, no checklist): when the checklist doesn't run, the left-out lines still go under ## Go-live checklist, with one line saying the five items weren't asked (the request doesn't deploy to production)" \
+  'gsays "(checklist|it) (doesn.t|does not) run|no production signal|(doesn.t|does not) deploy to production" "left-out lines" "+\bleft-out lines\b[^.;]{0,20}\b(still )?(go|goes|are put|are listed)\b" "## Go-live checklist" && gsays "\bfive\b[^.;]{0,40}\b(weren.t|were not|aren.t|are not|not) asked\b" "\b(doesn.t|does not|won.t) deploy to production\b"'
+
+# call 7: "that path" allows one trailing slash and ignores a query or fragment the server adds; joining dev_url and /terms
+# never doubles a slash and keeps a path in dev_url -- both run on the counterexamples' URLs
+SLASH=0; QF=0; ND=0; PK=0
+{ says 'trailing slash' '\bpath\b' '\bwith or without\b' || says 'trailing slash' '\bpath\b' '+\ballowed\b|\beither\b'; } && SLASH=1
+says '\b(query|fragment)\b' '\b(doesn.t|does not|don.t|do not|never) change the path\b|\bpath\b[^.;]{0,30}\bignor' && QF=1
+says 'trailing slash' 'dev_url|dev URL' '\b(isn.t|is not|never|not|no) doubled\b|\bnever doubles?\b' && ND=1
+says '\bpath\b' 'dev_url|dev URL' '+\b(kept|keeps?)\b' && PK=1
+check "adv 7 (trailing slash): /terms -> /terms/ (and ?lang=en, #top) is served, /terms// and /login?next=/terms are not; dev_url + /terms keeps dev_url's path and never doubles a slash (https://dev.example.com/app/ -> .../app/terms)" \
+  'py2 served "$SLASH" "$QF" && py2 join "$ND" "$PK"'
+
+# call 8: the local app is asked at the host port Docker publishes for the frontend (docker compose port), never at
+# .ship-it.yml's port (the container port); nothing published -> nothing answered, asked as today; .env is never read
+check "adv 8 (local port): the host port comes from docker compose port for the frontend service, .ship-it.yml's port is the container port, nothing published means nothing answered (asked as today), .env is never read" \
+  'infl "docker compose port" && says "app\.services" "+\`port\`[^.;]{0,30}\b(is|means)\b[^.;]{0,15}\bcontainer port\b|\bcontainer port\b[^.;]{0,30}\`port\`" && says "+\bhost port\b|\bpublish" "docker compose port|\bDocker\b" && says "nothing (is )?published|no published port|(isn.t|is not) published" "\basks?\b" && says "\bnever\b[^.;]{0,20}\breads?\b[^.;]{0,10}\.env|(doesn.t|does not) read \`?\.env" && ! says "+\bport from \`?\.ship-it\.yml\`?[^;]{0,60}\belse\b"'
+
+# call 9: a typed reason over 200 characters is asked again, shorter, never cut; a stored one over 200 is treated as missing
+check "adv 9 (reason over 200): a typed reason over 200 characters gets a request for a shorter one and is never cut; a stored reason over 200 is treated as missing, so it is asked" \
+  'says "\b200\b" "+\bshorter\b" && says "\b200\b" "\bnever\b[^.;]{0,15}\b(cut|truncated|shortened|trimmed)\b|\b(isn.t|is not) (cut|truncated|shortened)\b" && says "\bstored\b|\bin the record\b|\bon file\b" "\b200\b" "+\btreated as missing\b|\bas (if|though) (it were )?missing\b|\bis asked\b"'
+
+# call 10: "unreadable" means empty, not valid JSON, not an object, or schema not 1 -- run on the three counterexample files
+check "adv 10 (what unreadable means): by the guide's own definition an empty file, truncated JSON, a non-object and schema 2 are unreadable; a valid schema-1 record is not" \
+  'py2 unreadable "$FLAT"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
