@@ -325,8 +325,10 @@ any of these:
 
 AWS and VLF modes (`/ship-it --aws`, `/ship-it --vlf`) always run it. SAVE mode (`/ship-it save`)
 never runs it. A re-run (RE-RUN: the branch has an open request) asks nothing: only a new request
-asks, and the PR's five go-live lines stay as written. Each run that goes through the checklist is
-a production /ship-it.
+asks, and the PR's five go-live lines stay as written. The one exception is a re-run whose PR has
+no `## Go-live checklist` section: it never asked, so it runs the checklist as a new request does,
+for example on the draft PR that `/ship-it save` opened, shipped later. Each run that goes through
+the checklist is a production /ship-it.
 
 In SHIP MODE it runs after intent classification and the left-out ask (when there is one), before
 the first commit, so the record goes out in the same push. AWS and VLF modes run it before their
@@ -362,7 +364,8 @@ on VLF's allowed list. It can't go in `.ship-it.yml`, since DevOps owns that fil
 - `evidence`: what the check looked at; empty when there is none.
 
 There is no history array: the git log is the history. No file means every item is missing. An
-unknown key is ignored. A missing item or an item with an unknown state is asked. If the file is
+unknown key is ignored. A missing item or an item with an unknown state is asked. The file is
+unreadable when it is empty, isn't valid JSON, isn't an object, or its `schema` isn't 1. If it is
 unreadable, /ship-it says so in one line ("I couldn't read your go-live record, so I'm going
 through it again."), treats all five items as missing, and rewrites the file (git keeps the old
 one).
@@ -377,12 +380,16 @@ other and asked at the next production /ship-it.
 ### No secret in the record
 
 The record has fixed fields only, and it never holds a secret. A `reason` the user types is the
-user's own words, at most 200 characters. A reason that matches a secret pattern is refused and
+user's own words, at most 200 characters. A typed reason over 200 characters is answered with a
+request for a shorter one, and it is never cut. A stored reason over 200 characters is treated as
+missing, so its item is asked. A reason that matches a secret pattern is refused and
 asked again without the secret: "That looks like a password or key, and this answer goes into
 your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`, `AKIA`,
 `ghp_`, `github_pat_`, `-----BEGIN`, `password=`, `token=`, `secret=`, and a hex or base64 run of
 32 or more characters. `evidence` is a URL with no query string and no `user:pass@`, or a
-repo-relative path. The record never holds amounts, card, bank or account details, or row data.
+repo-relative path. Every `evidence` URL is written as scheme, host and path only: any
+`user:pass@`, query and fragment are removed before it is written, and they are never shown
+either. The record never holds amounts, card, bank or account details, or row data.
 /ship-it runs this check on the whole record itself, before the commit: a reason that matches is
 asked again, and an `evidence` that matches is written empty.
 
@@ -400,26 +407,35 @@ default reason, and a plain yes is not a pick. Each ask is decision-ready, in pl
 changes, the evidence, the blast radius and undo, what is unusual, and the one thing to check. A
 reply that is not one of the picks gets the ask again.
 
-Items 2-5 are not asked: each is recorded `skipped` with the reason `coming soon`, and /ship-it
-says so in one line: "Four more go-live checks aren't built yet (security audit, backup restore
-test, load test, live payment walk-through); I marked them coming soon."
+Items 2-5 are not asked: each one that is missing or `skipped` is recorded `skipped` with the
+reason `coming soon`, and /ship-it says so in one line: "[N] more go-live checks aren't built yet
+([their names]); I marked them coming soon." A `done` or `na` the user set on one of them isn't
+overwritten. The one line names only the items it recorded `coming soon` this time.
 
 ### Item 1: terms and privacy pages
 
 /ship-it looks at `deployment.dev_url` in `.ship-it.yml` when DevOps has filled it in; otherwise
-at the local app, `http://localhost:[port]`, with the frontend's port from `.ship-it.yml`
-`app.services`, else the port docker-compose publishes for the frontend. /ship-it never starts
-the app.
+at the local app. The frontend is the service named in `.ship-it.yml` `app.services`, and its
+`port` is the container port. The local app is at `http://localhost:[host port]`, the host port
+Docker publishes for the frontend, as `docker compose port <frontend service> <its container port>`
+reports it. /ship-it never starts the app and never reads `.env`.
 
-It sends a GET to `/terms` and `/privacy` there, following redirects. A page is served when it
-returns 200 and the final URL is still that path. A redirect to a sign-in page counts as not
-served: the page must be public. When nothing answers, or there is no port to try, both pages
-count as not served too. The item's `evidence` is the page URLs it checked.
+It sends a GET to `/terms` and `/privacy` there, following redirects. When `dev_url` is set, the
+two paths are added to it: a trailing slash on `dev_url` isn't doubled, and a path in `dev_url` is
+kept (`https://dev.example.com/app` gives `https://dev.example.com/app/terms`). A page is served
+when it returns 200 and the final URL is still that path. That path means `/terms` or `/privacy`
+with or without one trailing slash; a query or fragment the server adds doesn't change the path.
+A redirect to a sign-in page counts as not served: the page must be public. If nothing is
+published, or nothing answers, both pages count as not served, and /ship-it asks as it does for
+any missing page. The item's `evidence` is the page URLs it checked.
 
-The terms page must mention user content and arbitration, and the privacy page personal data
-(each found as words in the page's text, tags stripped). Item 1 is `done` only when both pages
-are served and all three topics are found. Then /ship-it doesn't ask: it tells the user to have
-a lawyer review both pages, and records the reason "pages found -- not a legal review". It says:
+The terms page must mention user content and arbitration, and the privacy page personal data.
+The topics are looked for in the page's visible text, after removing tags and the contents of
+`<script>`, `<style>` and `<noscript>` elements: words found only in a script payload don't
+count, so a page that the browser hides behind sign-in finds no topics. Item 1 is `done` only
+when both pages are served and all three topics are found. Then /ship-it doesn't ask: it tells
+the user to have a lawyer review both pages, and records the reason "pages found -- not a legal
+review". It says:
 "Your terms and privacy pages are up and cover the three topics I look for. I'm not a lawyer:
 have one review both pages before people rely on them." make-it and /ship-it never write, draft
 or suggest terms or privacy wording.
@@ -427,7 +443,8 @@ or suggest terms or privacy wording.
 Otherwise /ship-it names what is missing (which page, which topic, or that nothing answered), and
 the user picks `skipped`, with a reason they type, or `na`:
 "Before your app goes live, one check on my list isn't met: terms and privacy pages. They tell
-people the rules for using your app and what you do with their data. I looked at [base URL]:
+people the rules for using your app and what you do with their data. I looked at [base URL,
+scheme, host and path only]:
 [what is missing, for example: the terms page asks people to sign in first].
 What changes: only this list. Nothing is held up: your answer is kept in your code and listed
 with your changes, so don't put a password or key in it.
@@ -440,15 +457,20 @@ Pick one:
 - **Doesn't apply to this app** -- I won't ask again."
 
 The first pick records `skipped` with the reason the user typed; the second records `na` with the
-reason "does not apply".
+reason "does not apply". A **Skip for now** pick, or "skip", with no reason is answered with a
+request for the reason: nothing is recorded until the user types one. The pick's label, an empty
+reason or a default reason is never recorded as the reason.
 
 ### In the PR
 
 In the PR body, the `## Go-live checklist` section has five lines, one per item in item order:
-`- [item]: [state] -- [reason] ([date])`. It goes after "Before going live", which stays the
-DevOps setup list; a PR without that list gets it where that list would go. The left-out lines
-(Left-out items before production) go under the same heading, in their own list. AWS and VLF
-modes open no PR, so the five lines go in their final message instead.
+`- [item]: [state] -- [reason] ([date])`, each showing the item as the record holds it. It goes
+after "Before going live", which stays the DevOps setup list; a PR without that list gets it where
+that list would go. The left-out lines (Left-out items before production) go under the same
+heading, in their own list. When the checklist doesn't run because the request doesn't deploy to
+production, the left-out lines still go in the PR under `## Go-live checklist`, in their own list.
+Above them, one line says: "The five go-live items weren't asked: this request doesn't deploy to
+production." AWS and VLF modes open no PR, so the five lines go in their final message instead.
 
 ---
 
