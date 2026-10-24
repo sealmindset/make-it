@@ -957,6 +957,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.18 -- The ship-it guide describes what /ship-it really does
+
+make-it's `ship-it-guide.md` described 18 /ship-it steps that ship-it's own instructions never run.
+The owner chose a split:
+- **The guide matches ship-it.** Every step it calls a /ship-it step maps to ship-it's own
+  instructions, by their names; six wording mismatches are fixed.
+- **Safety steps stay, marked "not yet".** The secret leak scan on every push (save included), the
+  switch off the personal Claude token, the billing ask and the left-out rules stay in the guide,
+  under a section that says plainly ship-it doesn't run them yet and a later ship-it release adds
+  them -- and what guards a push meanwhile (the gitleaks pre-commit hook and the quality-gate scan).
+- **What make-it runs before ship.** NeMo, the AI-safety attestation, and the lint, migration and
+  build checks are no longer called /ship-it steps; a new section points at build-verify,
+  /nemo-it and /fix-it, which run them.
+- **Checked.** New `scripts/test-ship-it-guide.sh`; the left-out checks re-pinned to the guide's
+  new shape, including the rule that a check which found something says what it found.
+
 ### v1.44.17 -- You choose who pays for your app's AI before it's shared
 
 An app that uses AI through the builder's own Claude Code subscription can't be shared that way:

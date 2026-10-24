@@ -100,35 +100,30 @@ text, while the app uses claude_agent.
 2. Reads the DevOps-managed .ship-it.yml config
 3. **Scans dependencies for known vulnerabilities** (pip-audit for Python, npm audit for Node.js)
 4. **Auto-fixes vulnerable packages** by upgrading to patched versions
-5. **Runs NeMo Guardrails full test suite** (if AI features exist) -- 60+ test cases across
-   6 categories: prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage,
-   hallucination. Failures are auto-remediated; unresolvable findings documented with
-   root cause analysis and recommended compensating controls.
-6. **Checks prompt template safety** (if AI features + Tier 2/3 prompt management) --
-   queries `prompt_audit_log` for any `risk_flag=true` entries since the last deployment.
-   If found: adds a "Prompt Safety Review Required" section to the PR description listing
-   each flagged edit (who, when, which prompt, what warning was triggered). This flags the
-   changes for security review before merge. Does NOT block the PR -- security team reviews
-   and approves or requests changes.
-7. **Generates AI Safety Attestation** (if AI features exist) -- docs/attestations/YYYY-MM-DD-vN.md
-   with pass/fail per category, test details, and any unresolved findings. This attestation
-   is the GRC-required acceptance qualification for production deployment.
-8. Creates a branch, commits changes (including security fixes + attestation), pushes
-9. Generates a caller workflow referencing the org's shared reusable workflow
-10. Creates a PR with labels, reviewers, description, security audit summary, AI safety
-   attestation summary, and go-live checklist (its left-out lines: see Left-out items before
-   production)
-11. Reports back: "Done! The team will take it from here."
+5. Creates a branch, commits changes (including the package fixes), pushes
+6. Generates a workflow if the repo has none yet (it never overwrites one): a thin caller of the
+   org's shared reusable workflow when `.ship-it.yml` names one (see Workflow Generation)
+7. Creates a PR with labels, reviewers, description, a "Pending safety updates" list of the
+   dependency alerts it could not fix, and, for `intent:prod-ready`, the go-live checklist (its
+   left-out lines: see Left-out items before production)
+8. Reports back: "Done! Your code is on its way." with the PR link, and "The team will review
+   it and let you know when it's live."
 
 **Two modes:**
 | Command | What it does |
 |---------|-------------|
 | `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
-| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No reviewers; the pre-push checks (the secret leak scan among them) still run. |
+| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No reviewers; the dependency scan and the secret leak scan still run. |
+
+**What /ship-it never does in the two modes above:**
+- Force-push -- it always adds new commits to the PR branch
+- Show CI logs, workflow names, or check names to the user
+- Push to the deploy branch or trigger production deployments
 
 ### Git hygiene on the way to merge (see `git-operations.md`)
 
-Before merging any PR, apply the `/git-it` rules so nothing lands stale or conflicting:
+/ship-it itself never merges a PR. Whoever merges one applies the `/git-it` rules so nothing
+lands stale or conflicting:
 - **Branch off the latest `origin/main`**, commit atomically (Conventional Commits), stage only
   your own paths, and push feature branches with `--force-with-lease` (never plain `--force`).
 - **Fresh CI before merge.** If `main` moved since the last green run, **rebase onto `main` and
@@ -144,94 +139,49 @@ Before merging any PR, apply the `/git-it` rules so nothing lands stale or confl
   undated tag (`status` flags those as never due) -- (`/backlog-it reconcile --prs` does the move from `pr:`, never
   without a `signal:`); after the live check passes against the original report, to `Checked` and `done`.
 
-### Pre-Push Self-Review (runs before every push)
+### Safety steps /ship-it doesn't run yet
 
-Before committing and pushing, /ship-it runs a silent automated review to catch issues
-BEFORE they enter the CI pipeline. The user never sees the review unless something needs
-their attention. All output is in plain language -- never linter names, raw errors, or
-tool output.
+/ship-it doesn't run these safety steps yet: its SKILL.md (v1.3.0) has none of them; a later
+ship-it release adds them. Until then, what keeps a secret out of a push is the gitleaks pre-commit
+hook (checks Q05, Q08, Q12) and, on the pull request, the quality-gate workflow's secret scan (check
+Q13). Their sections describe them as /ship-it will run them.
+- **The secret leak scan before every push**, /ship-it save included (Pre-push secret leak scan,
+  below)
+- **The switch off the builder's personal Claude token** on a shareable or prod-ready ship (AI
+  Provider on Ship)
+- **The billing ask** before that switch (The billing ask; the ship hand-off of /make-it,
+  /resume-it and /retrofit-it asks it today)
+- **The left-out rules** (Left-out items before production): the production ask, the auto-fix
+  rule, the stop on a found secret, and the go-live lines
 
-**Review checks (in order):**
+### Pre-push secret leak scan (runs before every push, /ship-it save included)
 
-| # | Check | What it does | On failure |
-|---|-------|-------------|------------|
-| 1 | **Lint & type-check** | Run ruff/flake8 on changed .py files, tsc/eslint on changed .ts/.tsx/.js files | Auto-fix what's fixable (--fix), include fixes in commit. If unfixable: pause, explain in plain language, offer to help |
-| 2 | **Env var cross-check** | Compare .env/.env.example against docker-compose.yml, K8s manifests, and .ship-it.yml | Warn if new env vars aren't documented in .env.example. Auto-add missing entries to .env.example with TODO values |
-| 3 | **Schema & migration alignment** | Check for untracked migration files (Alembic, Django, Prisma). Verify migration chain integrity (every down_revision exists as a revision) | Auto-add untracked migrations. If chain is broken: pause, explain "a database update file is missing" |
-| 4 | **Import & dependency check** | Parse changed Python files with `ast.parse()`. Check requirements.txt/package.json against lockfiles | If syntax error: pause, explain in plain language. If dependency mismatch: warn |
-| 5 | **Secret leak scan** | Scan diff for patterns matching passwords, API keys, tokens, private keys — including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code subscription tokens. Exclude .example files, TODOs, and placeholder values | STOP. Explain "I found what looks like a secret in your changes." Move to .env (gitignored), replace with env var reference. A personal Claude Code token must never be committed or shipped. A secret that belongs to a left-out item is never moved here: see Left-out items before production. |
-| 6 | **Build verification** | Run `docker compose build` to verify images build successfully | If build fails: diagnose, attempt auto-fix (missing dependency, syntax error), retry. If unfixable: pause, explain |
+Before it commits and pushes, /ship-it scans the diff for what looks like a password, API key,
+token or private key -- including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code
+subscription tokens. It skips .example files, TODOs and placeholder values. If it finds nothing,
+it goes on silently.
 
-**If ALL checks pass:** proceed silently (user never knows the review happened).
-**If any check requires user input:** pause and explain in plain language only.
+When it finds one, it STOPS and explains in plain language: "I found what looks like a secret in
+your changes." It moves the secret to .env (gitignored) and puts an env var reference in its
+place. A personal Claude Code token must never be committed or shipped.
 
-### Post-Push CI Monitoring (runs after push, /ship-it full mode only)
+A secret that belongs to a left-out item is never moved here: see Left-out items before
+production.
 
-After pushing and creating the PR, /ship-it watches the CI pipeline and auto-fixes
-failures. This is the "full loop" -- the user doesn't need to monitor CI themselves.
+### What make-it runs before /ship-it
 
-**Monitoring flow:**
-
-```
-Push + Create PR
-  |
-  v
-Watch CI status (poll every 30s, up to 10 minutes)
-  |
-  +-- All checks pass?
-  |     -> Report success: "Your app passed all checks and is ready for review!"
-  |        (with a left-out item: "... except [item], left out by your choice,
-  |        which could not be checked"; if one of its checks ran and found something, say
-  |        what it found instead. For a secret, say where it is, never its value.)
-  |
-  +-- Check fails?
-  |     -> Read failure details (workflow logs, PR check annotations)
-  |     -> Classify failure:
-  |        |
-  |        +-- Auto-fixable (lint, formatting, dependency version, type error)?
-  |        |     -> Fix locally, commit, push (triggers new CI run)
-  |        |     -> Resume monitoring (max 3 auto-fix cycles)
-  |        |
-  |        +-- Test failure?
-  |        |     -> Read test output, diagnose root cause
-  |        |     -> If code fix is clear: apply, commit, push, resume monitoring
-  |        |     -> If test itself is wrong: fix the test, commit, push
-  |        |     -> If unclear: pause, explain to user in plain language
-  |        |
-  |        +-- Build failure?
-  |        |     -> Read build logs, diagnose (missing dep, Dockerfile issue, etc.)
-  |        |     -> Fix, commit, push, resume monitoring
-  |        |
-  |        +-- Infrastructure/permission failure?
-  |              -> Cannot auto-fix. Tell user: "The deployment system needs a
-  |                 configuration update. I've added a note to the review for
-  |                 the DevOps team."
-  |
-  +-- Timeout (10 minutes)?
-        -> Tell user: "CI is still running. You can check back later --
-           I'll note the status in the PR."
-```
-
-**Auto-fix rules:**
-- Maximum 3 auto-fix cycles per /ship-it invocation (prevents infinite loops)
-- Each fix cycle: fix locally → commit → push → watch CI again
-- Commit messages for auto-fixes: "fix: [plain description of what was fixed]"
-- Never force-push -- always new commits on the PR branch
-- If the same check fails twice after a fix attempt: stop, explain to user
-
-**What /ship-it tells the user during monitoring:**
-- "Your changes are being checked now. This usually takes a few minutes."
-- (On auto-fix) "One of the checks found a small issue. I've fixed it and resubmitted."
-- (On success) "All checks passed! Your app is ready for review." With a left-out item, add:
-  "[item] wasn't checked: you left it out." If one of its checks ran and found something, say
-  what it found instead. For a secret, say where it is, never its value.
-- (On failure requiring user) "There's an issue I need your help with: [plain description]"
-
-**What /ship-it does NOT do during monitoring:**
-- Show CI logs, workflow names, or check names to the user
-- Retry the same fix more than once
-- Push to the deploy branch or trigger production deployments
-- Modify the PR description with technical CI details (keep it user-friendly)
+These run before the app reaches /ship-it, so /ship-it doesn't repeat them:
+- **AI safety** (if the app has AI features): build-verify runs the NeMo Guardrails basic suite
+  (check AI09, 18 test cases) and fixes what fails. /nemo-it runs the full suite (60+ test cases
+  across the 6 categories) and writes the AI safety attestation,
+  `docs/attestations/nemo-it/YYYY-MM-DD-vN.md`: the attestation GRC asks for before production
+  comes from /nemo-it, and /fix-it fixes its findings. No skill puts an attestation summary in
+  the PR.
+- **Prompt edits flagged `risk_flag=true`** in `prompt_audit_log`: no skill flags them for
+  security review at ship.
+- **Code quality**: build-verify's checks (`build-standards.md`: lint and type-check, migrations,
+  `.env.example`) and its `docker compose up --build`; the quality-gate workflow (check Q13)
+  runs lint, type-check and tests again on every PR.
 
 ---
 
@@ -253,7 +203,7 @@ CONTINUOUS QUALITY (automated, invisible to user)
                      |
                      v
 SHIP (user triggers)
-  /ship-it        -> NeMo Guardrails full suite (if AI) -> Attestation -> PR
+  /ship-it        -> Dependency scan and fixes -> PR
                      |
                      v
 DEVOPS PREFLIGHT (automated, DevOps-owned)
@@ -298,16 +248,16 @@ ready for production" comes through /ship-it the same way.
 
 /ship-it reads the left-out record on every ship, through `left-out-record.md` (its read
 steps, the rule every reader follows, and what makes an item `[BLOCK]`). So its own auto-fixes --
-the package upgrades, the NeMo (AI-safety) remediation, the pre-push review and CI monitoring --
-never put a left-out item back, and never report one of its checks as FAIL. A left-out `[BLOCK]`
-item is neither silently blocked nor silently passed: no production check fails the ship on it,
-or skips it, without the production ask below.
+the package upgrades and the pre-push secret leak scan -- never put a left-out item back, and
+never report one of its checks as FAIL. A left-out `[BLOCK]` item is neither silently blocked nor
+silently passed: no production check fails the ship on it, or skips it, without the production
+ask below.
 
 One guard holds for a left-out item on every push, whatever the intent, /ship-it save included
 (the secret leak scan runs on save too): a found secret is never sent, whatever is left out.
-When the secret leak scan (pre-push check 5) finds a secret that belongs to a left-out item
-(for example "Move the passwords and keys out of your code", check X01), /ship-it stops before
-the push and sends nothing. It names the left-out item and
+When the secret leak scan finds a secret that belongs to a left-out item (for example "Move the
+passwords and keys out of your code", check X01), /ship-it stops before the push and sends
+nothing. It names the left-out item and
 the `file:line` where the secret is (never its value), and gives the same next step as the
 production ask's **Add [item] first**: "Run /resume-it and say 'add [item]'; it checks with you
 before it adds it. Then type /ship-it again." Before that, it says why in plain words: "I found
@@ -580,7 +530,7 @@ Automation scans PR
 **Automation -> User notifications** (via GitHub PR comments, plain language):
 - "Your app is being reviewed by our automation. You don't need to do anything -- we'll let you know when it's ready."
 - "We made a few updates to keep your app secure. Please check that everything still works by running `/try-it` in your project."
-- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test." With a left-out item, it adds: "[item] wasn't checked: you left it out."
+- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test." With a left-out item, it adds: "[item] wasn't checked: you left it out." If one of that item's checks ran and found something, it says what that check found instead; for a secret, where it is (`file:line`), never its value (`left-out-record.md`).
 - When DevOps holds the ship at the final review on an item the user left out, the automation tells the user which item, by name, with the next step: "Run /resume-it and say 'add [item]', then type /ship-it again."
 - When the DevOps team fixes an item the user chose to ship with, the automation tells the user which item, by name, in a PR comment that asks them to keep it or take it out again (Left-out items before production).
 
@@ -715,20 +665,23 @@ When /ship-it runs on a project built by /make-it, it reads:
 | Shareable | `intent:shareable` | Dev only |
 | Prod-ready | `intent:prod-ready` | Dev + Prod |
 
-With a /make-it project, most questions are skipped (stack, services, auth already known).
+With a /make-it project, the questions about the app are skipped (stack, services, auth already
+known); the 3 intent questions are still asked, unless `.make-it-state.md` shows the app was
+verified with /try-it and the user said it is ready for production (then it is `intent:prod-ready`).
 
 On `intent:prod-ready`, if the record has a left-out `[BLOCK]` item (`left-out-record.md` says how to tell), /ship-it's left-out ask comes next -- see Left-out items before production.
 
 ### Workflow Generation
 
-/ship-it generates a GitHub Actions workflow based on the `infra` section:
+If the repo has no workflow yet, /ship-it generates a GitHub Actions workflow (it never
+overwrites one). A `deployment.reusable_workflow` comes first; otherwise the `infra` section decides:
 
 | Infra State | Workflow Generated |
 |-------------|-------------------|
 | `infra.provider: aws` | ECR login, Docker build per service, ECS update-service |
 | `infra.provider: azure` | ACR login, Docker build, kubectl set image |
 | `infra.provider: ""` (empty) | Placeholder with "Deployment pending DevOps configuration" |
-| `deployment.reusableWorkflow` set | Thin caller referencing the shared workflow |
+| `deployment.reusable_workflow` set | Thin caller referencing the shared workflow |
 
 ---
 
