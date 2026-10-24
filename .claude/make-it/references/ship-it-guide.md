@@ -49,13 +49,13 @@ text, while the app uses claude_agent.
   it has your plan's usage limits.
   What changes: who pays for the AI, and how. With an Anthropic API key, every AI request is
   billed per use to whoever owns the key -- the more people use it, the more it costs. To cap
-  it, look for a monthly spending limit in the provider's console, its account website (not
-  every provider has one). With your organization's AI provider, your organization's account
-  pays, under its own rules. Your copy on this computer stays on your subscription either way.
+  the cost, set a monthly limit in the provider's account settings, where it offers one. With
+  your organization's AI provider, your organization's account pays, under its own rules. Your
+  copy on this computer stays on your subscription either way.
   Undo: switching back means changing the same places again -- the two app files I'd update,
-  and the settings where the shared app runs. Deleting the key is what stops the charges: new
-  charges stop at once, and the shared app's AI stops until you pick again. AI use already
-  billed can't be taken back.
+  and the settings where the shared app runs. Deleting the key is what stops the charges (for
+  your organization's provider, your IT team removes it): new charges stop at once, and the
+  shared app's AI stops until you pick again. AI use already billed can't be taken back.
   What's unusual: until now the AI cost nothing beyond your plan.
   The one thing to check: who will pay once others use it -- you, or your organization? Not
   sure? Pick 'Keep it local'.
@@ -84,10 +84,12 @@ text, while the app uses claude_agent.
     when they want others to use it. Record it in `.make-it-state.md`, as one line under
     `## Before sharing`:
     `- Open: who pays for the AI before others use the app (asked first at the next hand-off)`
-    -- and take the line out once they pick a way to pay.
 - Whatever they pick, warn the user NEVER to commit or ship their personal
   CLAUDE_CODE_OAUTH_TOKEN (single-identity, subscription usage limits, not a deployment
   credential). Confirm it's only in .env (gitignored).
+- When they pick a way to pay (an API key or their organization's provider), take the
+  `- Open: who pays for the AI` line out of `## Before sharing` in `.make-it-state.md`, if
+  it's there.
 
 ## What /ship-it Does
 

@@ -1394,8 +1394,8 @@ Reference ship-it-guide.md. Same handoff as /make-it Phase 4:
 
 1. Run full test suite one final time
 2. Ensure all changes are committed
-3. Tell the user: "All tests pass and your changes are saved." (No ask here: the deploy gate
-   is /ship-it's, and typing /ship-it is the user's go.)
+3. Tell the user: "All tests pass and your changes are saved." (No deploy ask here: the deploy
+   gate is /ship-it's, and typing /ship-it is the user's go.)
 4. If the app uses the claude_agent provider, the billing ask in ship-it-guide.md comes first.
 5. Hand off to /ship-it:
 
