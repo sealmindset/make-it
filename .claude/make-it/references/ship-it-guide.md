@@ -152,6 +152,7 @@ Q13). Their sections describe them as /ship-it will run them.
   Provider on Ship)
 - **The billing ask** before that switch (The billing ask; the ship hand-off of /make-it,
   /resume-it and /retrofit-it asks it today)
+- **The go-live checklist** (Go-live checklist): the five items, their record and item 1's check
 - **The left-out rules** (Left-out items before production): the production ask, the auto-fix
   rule, the stop on a found secret, and the go-live lines
 
@@ -338,8 +339,8 @@ doesn't run.
 ### The record
 
 The record is `.ship-it-go-live.json`, at the repo root. It is committed, and /ship-it owns it:
-other skills only read it. VLF mode commits it too: it is the one file on VLF's allowed list
-outside the frontend. It can't go in `.ship-it.yml`, since DevOps owns that file, or in
+other skills only read it. VLF mode commits it too: it will be the one file outside the frontend
+on VLF's allowed list. It can't go in `.ship-it.yml`, since DevOps owns that file, or in
 `app-context.json`, since /ship-it works without make-it.
 
 ```json
@@ -370,7 +371,8 @@ The go-live record is not the left-out record (`left-out-record.md`). A go-live 
 written under `## Left out by your choice`, and a left-out item never becomes a go-live ask. A
 go-live check that belongs to a left-out item (read step 3 of `left-out-record.md`) reads "Left
 out (your choice)": never FAIL, and never `done`. It is recorded `skipped` with that reason, and
-it isn't asked.
+it isn't asked while the item is left out; once the item is brought back, it is `skipped` like any
+other and asked at the next production /ship-it.
 
 ### No secret in the record
 
@@ -386,8 +388,9 @@ asked again, and an `evidence` that matches is written empty.
 
 ### Asking
 
-An item that is `skipped` or missing is asked again on every production /ship-it. A `done` or
-`na` item is not asked: it stays quiet and gets one PR line. An `na` is remembered. A `done` or
+An item that is `skipped` or missing is asked again on every production /ship-it, except an item
+skipped with the reason `coming soon` or "Left out (your choice)". A `done` or `na` item is not
+asked: it stays quiet and gets one PR line. An `na` is remembered. A `done` or
 `na` item changes only when the user asks for it; then it is asked like a missing one.
 
 Each ask is high-stakes, so it is active confirmation (`approval-block.md`). Each item gets its
@@ -784,6 +787,7 @@ deployment:
   environments:
     dev: dev
     production: production
+  dev_url: ""   # the dev URL: DevOps fills it in; the go-live checklist looks there
   reviewers:
     - devops-lead
   strategy: rolling
