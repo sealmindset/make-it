@@ -113,9 +113,9 @@ text, while the app uses claude_agent.
 | Command | What it does |
 |---------|-------------|
 | `/ship-it` | Ship for deployment. Creates PR, assigns reviewers, full safety checks. |
-| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No reviewers; the pre-push checks (the secret leak scan among them) still run. |
+| `/ship-it save` | Save work in progress. Commits, pushes, creates draft PR. No reviewers; the dependency scan and the secret leak scan still run. |
 
-**What /ship-it never does:**
+**What /ship-it never does in the two modes above:**
 - Force-push -- it always adds new commits to the PR branch
 - Show CI logs, workflow names, or check names to the user
 - Push to the deploy branch or trigger production deployments
@@ -141,8 +141,10 @@ lands stale or conflicting:
 
 ### Safety steps /ship-it doesn't run yet
 
-/ship-it doesn't run these safety steps yet: its SKILL.md (v1.3.0) has none of them, and card
-E02-S39 adds them. Their sections describe them as /ship-it will run them.
+/ship-it doesn't run these safety steps yet: its SKILL.md (v1.3.0) has none of them; a later
+ship-it release adds them. Until then, what keeps a secret out of a push is the gitleaks pre-commit
+hook (checks Q05, Q08, Q12) and, on the pull request, the quality-gate workflow's secret scan (check
+Q13). Their sections describe them as /ship-it will run them.
 - **The secret leak scan before every push**, /ship-it save included (Pre-push secret leak scan,
   below)
 - **The switch off the builder's personal Claude token** on a shareable or prod-ready ship (AI
@@ -528,7 +530,7 @@ Automation scans PR
 **Automation -> User notifications** (via GitHub PR comments, plain language):
 - "Your app is being reviewed by our automation. You don't need to do anything -- we'll let you know when it's ready."
 - "We made a few updates to keep your app secure. Please check that everything still works by running `/try-it` in your project."
-- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test." With a left-out item, it adds: "[item] wasn't checked: you left it out."
+- "All checks passed! Your app is being deployed to the dev environment. We'll let you know when it's ready to test." With a left-out item, it adds: "[item] wasn't checked: you left it out." If one of that item's checks ran and found something, it says what that check found instead; for a secret, where it is (`file:line`), never its value (`left-out-record.md`).
 - When DevOps holds the ship at the final review on an item the user left out, the automation tells the user which item, by name, with the next step: "Run /resume-it and say 'add [item]', then type /ship-it again."
 - When the DevOps team fixes an item the user chose to ship with, the automation tells the user which item, by name, in a PR comment that asks them to keep it or take it out again (Left-out items before production).
 
