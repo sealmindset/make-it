@@ -169,7 +169,9 @@ if [ -z "${1:-}" ]; then
   "restore_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""},
   "load_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""},
   "live_payment": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""}}}'
-  PLANT="${CLEAN/http:\/\/localhost:3000\/terms/https://x/?token=ghp_abcdefghijklmnopqrstuvwxyz0123456789}"
+  # the planted token is built at run time, so no token-shaped literal sits in the source (GitGuardian scans the repo)
+  TOK="ghp""_$(printf 'a%.0s' {1..36})"
+  PLANT="${CLEAN/http:\/\/localhost:3000\/terms/https://x/?token=$TOK}"
   check "(control) the test's secret check passes a clean record and flags a planted one (evidence https://x/?token=ghp_...), which still parses" \
     'printf "%s" "$CLEAN" | rec shape && printf "%s" "$CLEAN" | rec secrets && [ "$PLANT" != "$CLEAN" ] && printf "%s" "$PLANT" | rec shape && ! printf "%s" "$PLANT" | rec secrets'
   # mutation: delete the asked-again sentence(s) from a copy; the copy's run must print rule 4's FAIL
