@@ -1152,7 +1152,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **A01-A10**: Authentication & OIDC
 - **R01-R07**: RBAC & permissions
 - **U01-U07**: UI & frontend
-- **D01-D05**: Database & seed data
+- **D01-D06**: Database & seed data
 - **I01-I07**: Docker & infrastructure
 - **M01-M04**: Mock services
 - **L01-L08**: Activity logs
