@@ -104,8 +104,9 @@ text, while the app uses claude_agent.
 6. Generates a workflow if the repo has none yet (it never overwrites one): a thin caller of the
    org's shared reusable workflow when `.ship-it.yml` names one (see Workflow Generation)
 7. Creates a PR with labels, reviewers, description, a "Pending safety updates" list of the
-   dependency alerts it could not fix, and, for `intent:prod-ready`, the go-live checklist (its
-   left-out lines: see Left-out items before production)
+   dependency alerts it could not fix, for `intent:prod-ready` the "Before going live" list of
+   DevOps setup steps, and, on a production request (see Go-live checklist), the go-live checklist
+   (its left-out lines: see Left-out items before production)
 8. Reports back: "Done! Your code is on its way." with the PR link, and "The team will review
    it and let you know when it's live."
 
@@ -279,10 +280,11 @@ each one, the user picks:
   it is in. Run /resume-it and say 'add [item]'; it checks with you before it adds it. Then type
   /ship-it again." (`left-out-record.md`)
 
-/ship-it records each "Ship with [item] left out" pick in the PR's go-live checklist, by name:
-the item, what it guards, and "left out by the user's choice, confirmed at ship". Each /ship-it,
-before it pushes, rewrites those lines from the record and the picks as they stand then: an item
-the user has since added comes off the checklist, and its checks count like any `[BLOCK]` item's.
+/ship-it records each "Ship with [item] left out" pick in the PR's go-live checklist (see Go-live
+checklist), by name: the item, what it guards, and "left out by the user's choice, confirmed at
+ship". Each /ship-it, before it pushes, rewrites those lines from the record and the picks as
+they stand then: an item the user has since added comes off the checklist, and its checks count
+like any `[BLOCK]` item's.
 A change of mind at the dev environment's confirmation updates its line too. DevOps can still hold
 the ship on it at the final review; then the automation tells the user which item, by name, in a
 PR comment that gives the next step: "Run /resume-it and say 'add [item]', then type /ship-it
@@ -293,6 +295,156 @@ out again', then type /ship-it again."
 Their answer updates the record (`left-out-record.md`).
 
 A left-out item that is not `[BLOCK]` doesn't add to this ask.
+
+---
+
+## Go-live checklist
+
+Every production /ship-it goes through five go-live items and keeps their state in a record file
+in the repo. It is a checklist, not a gate: no answer stops the request or the push.
+
+| # | Key | The item, in plain words |
+|---|-----|--------------------------|
+| 1 | `terms_privacy` | Terms and privacy pages |
+| 2 | `security_audit` | Security audit |
+| 3 | `restore_test` | Backup restore test |
+| 4 | `load_test` | Load test |
+| 5 | `live_payment` | Live payment walk-through |
+
+### When it runs
+
+In SHIP MODE (plain `/ship-it`), it runs for a pull request into `main`, whatever its intent label,
+when the repo's workflow deploys to production. The workflow deploys to production when it has
+any of these:
+- a job whose `environment` is `deployment.environments.production` (default `production`);
+- a `deploy-prod` job;
+- a caller of a reusable workflow that passes `environment-prod`;
+- no workflow yet: /ship-it generates one, and every workflow it generates deploys to production
+  on merge.
+
+AWS and VLF modes (`/ship-it --aws`, `/ship-it --vlf`) always run it. SAVE mode (`/ship-it save`)
+never runs it. A re-run (RE-RUN: the branch has an open request) asks nothing: only a new request
+asks, and the PR's five go-live lines stay as written. Each run that goes through the checklist is
+a production /ship-it.
+
+In SHIP MODE it runs after intent classification and the left-out ask (when there is one), before
+the first commit, so the record goes out in the same push. AWS and VLF modes run it before their
+commit.
+
+The left-out ask and the secret stop (Left-out items before production) come first and keep their
+own rules. If the user picks **Add [item] first**, or the secret stop ends the run, the checklist
+doesn't run.
+
+### The record
+
+The record is `.ship-it-go-live.json`, at the repo root. It is committed, and /ship-it owns it:
+other skills only read it. VLF mode commits it too: it is the one file on VLF's allowed list
+outside the frontend. It can't go in `.ship-it.yml`, since DevOps owns that file, or in
+`app-context.json`, since /ship-it works without make-it.
+
+```json
+{
+  "schema": 1,
+  "items": {
+    "terms_privacy": {"state": "skipped", "reason": "our lawyer is writing them", "date": "2026-10-24", "evidence": "http://localhost:3000/terms http://localhost:3000/privacy"},
+    "security_audit": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""},
+    "restore_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""},
+    "load_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""},
+    "live_payment": {"state": "skipped", "reason": "coming soon", "date": "2026-10-24", "evidence": ""}
+  }
+}
+```
+
+- `state`: `done`, `skipped` or `na` (doesn't apply to this app).
+- `reason`: why, in a few words.
+- `date`: the day the state or reason last changed, as `YYYY-MM-DD`.
+- `evidence`: what the check looked at; empty when there is none.
+
+There is no history array: the git log is the history. No file means every item is missing. An
+unknown key is ignored. A missing item or an item with an unknown state is asked. If the file is
+unreadable, /ship-it says so in one line ("I couldn't read your go-live record, so I'm going
+through it again."), treats all five items as missing, and rewrites the file (git keeps the old
+one).
+
+The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
+written under `## Left out by your choice`, and a left-out item never becomes a go-live ask. A
+go-live check that belongs to a left-out item (read step 3 of `left-out-record.md`) reads "Left
+out (your choice)": never FAIL, and never `done`. It is recorded `skipped` with that reason, and
+it isn't asked.
+
+### No secret in the record
+
+The record has fixed fields only, and it never holds a secret. A `reason` the user types is the
+user's own words, at most 200 characters. A reason that matches a secret pattern is refused and
+asked again without the secret: "That looks like a password or key, and this answer goes into
+your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`, `AKIA`,
+`ghp_`, `github_pat_`, `-----BEGIN`, `password=`, `token=`, `secret=`, and a hex or base64 run of
+32 or more characters. `evidence` is a URL with no query string and no `user:pass@`, or a
+repo-relative path. The record never holds amounts, card, bank or account details, or row data.
+/ship-it runs this check on the whole record itself, before the commit: a reason that matches is
+asked again, and an `evidence` that matches is written empty.
+
+### Asking
+
+An item that is `skipped` or missing is asked again on every production /ship-it. A `done` or
+`na` item is not asked: it stays quiet and gets one PR line. An `na` is remembered. A `done` or
+`na` item changes only when the user asks for it; then it is asked like a missing one.
+
+Each ask is high-stakes, so it is active confirmation (`approval-block.md`). Each item gets its
+own pick, never one answer for all of them. A skip needs a reason the user types: there is no
+default reason, and a plain yes is not a pick. Each ask is decision-ready, in plain words: what
+changes, the evidence, the blast radius and undo, what is unusual, and the one thing to check. A
+reply that is not one of the picks gets the ask again.
+
+Items 2-5 are not asked: each is recorded `skipped` with the reason `coming soon`, and /ship-it
+says so in one line: "Four more go-live checks aren't built yet (security audit, backup restore
+test, load test, live payment walk-through); I marked them coming soon."
+
+### Item 1: terms and privacy pages
+
+/ship-it looks at `deployment.dev_url` in `.ship-it.yml` when DevOps has filled it in; otherwise
+at the local app, `http://localhost:[port]`, with the frontend's port from `.ship-it.yml`
+`app.services`, else the port docker-compose publishes for the frontend. /ship-it never starts
+the app.
+
+It sends a GET to `/terms` and `/privacy` there, following redirects. A page is served when it
+returns 200 and the final URL is still that path. A redirect to a sign-in page counts as not
+served: the page must be public. When nothing answers, or there is no port to try, both pages
+count as not served too. The item's `evidence` is the page URLs it checked.
+
+The terms page must mention user content and arbitration, and the privacy page personal data
+(each found as words in the page's text, tags stripped). Item 1 is `done` only when both pages
+are served and all three topics are found. Then /ship-it doesn't ask: it tells the user to have
+a lawyer review both pages, and records the reason "pages found -- not a legal review". It says:
+"Your terms and privacy pages are up and cover the three topics I look for. I'm not a lawyer:
+have one review both pages before people rely on them." make-it and /ship-it never write, draft
+or suggest terms or privacy wording.
+
+Otherwise /ship-it names what is missing (which page, which topic, or that nothing answered), and
+the user picks `skipped`, with a reason they type, or `na`:
+"Before your app goes live, one check on my list isn't met: terms and privacy pages. They tell
+people the rules for using your app and what you do with their data. I looked at [base URL]:
+[what is missing, for example: the terms page asks people to sign in first].
+What changes: only this list. Nothing is held up: your answer is kept in your code and listed
+with your changes, so don't put a password or key in it.
+Undo: a skip comes back at your next /ship-it to production. 'Doesn't apply' stays until you ask
+me to change it.
+What's unusual: [nothing, or: your app didn't answer, so I couldn't look].
+The one thing to check: will people outside your team use this app?
+Pick one:
+- **Skip for now** -- type why, in your own words.
+- **Doesn't apply to this app** -- I won't ask again."
+
+The first pick records `skipped` with the reason the user typed; the second records `na` with the
+reason "does not apply".
+
+### In the PR
+
+In the PR body, the `## Go-live checklist` section has five lines, one per item in item order:
+`- [item]: [state] -- [reason] ([date])`. It goes after "Before going live", which stays the
+DevOps setup list; a PR without that list gets it where that list would go. The left-out lines
+(Left-out items before production) go under the same heading, in their own list. AWS and VLF
+modes open no PR, so the five lines go in their final message instead.
 
 ---
 
@@ -551,7 +703,8 @@ Automation scans PR
 - Communicate in technical jargon to the user
 - Block the gate on a left-out item the user chose to ship with, remediate it, or put it back.
   It is reported to DevOps by name, and its checks don't count against "all checks" above.
-  The automation reads which items the user chose from the PR's go-live checklist.
+  The automation reads which items the user chose from the PR's go-live checklist (see Go-live
+  checklist).
 
 ---
 
