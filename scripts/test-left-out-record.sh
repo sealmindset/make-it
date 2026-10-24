@@ -919,7 +919,7 @@ check "ship-it-guide's pointer to left-out-record.md also covers its reader rule
 T4_AUTOFIX='\bauto-?fix(es|ing|ed)?\b|\bfix (loops?|cycles?)\b|\bauto-?remediat'
 # review3 Minor 4: the reject reads every sentence in the left-out section (and every left-out unit), not only "auto-fix" ones
 t4_secu() { t4_units | awk -v lo="$LO" '/^#/{insec=(tolower($0) ~ lo)} insec || tolower($0) ~ lo' || true; }
-check "/ship-it's own auto-fixes (pre-push review, CI monitoring) never put a left-out item back or report its check as FAIL (and no sentence in the left-out section puts one back)" \
+check "/ship-it's own auto-fixes (the package upgrades, the pre-push secret leak scan) never put a left-out item back or report its check as FAIL (and no sentence in the left-out section puts one back)" \
   's=$(t4_units | grep -iE "$LO" | t4sent | grep -iE "$T4_AUTOFIX" | grep -iE "$T4_NEGW[^.;:]{0,80}\b(put|add|bring)[a-z]*\b[^.;:]{0,30}\bback\b" | grep -iE "$T4_NEGW[^.;:]{0,120}\bFAIL\b"); [ -n "$s" ] && ! printf "%s\n" "$s" | gq -iE "$T4_QUAL" && ! t4_secu | t4sent | t4_aff | gq -iE "\b(puts?|adds?|brings?)\b[^.;:]{0,30}\bback\b|\b(reports?|reads?|marks?|shows?|counts?)\b[^.;:]{0,30}\bas (a )?FAIL\b"'
 
 # review1 Minor 7: the ask in a first-time builder's words
@@ -972,9 +972,11 @@ T4_ALLCHK='\bcount(s|ed)?\b[^.;:]{0,15}\b(against|toward|towards|in|as)\b[^.;:]{
 check "CI/CD contract: a left-out item's checks don't count against \"all checks\"" \
   's=$(t4_units | grep -iE "$LO" | t4sent | grep -iE "$T4_ALLCHK"); [ -n "$s" ] && printf "%s\n" "$s" | grep -qiE "$T4_NEGW[^.;:]{0,30}$T4_ALLCHK" && ! printf "%s\n" "$s" | gq -iE "$T4_QUAL" && ! t4_units | grep -iE "$LO" | t4sent | t4_aff | gq -iE "$T4_ALLCHK"'
 
-# review2 Minor 2: the auto-fix sentence names all four of /ship-it's own fix loops (steps 4 and 5 too)
-check "/ship-it's auto-fix sentence names all its own fixes: the package fixes, the NeMo (AI-safety) fixes, the pre-push review, CI monitoring" \
-  's=$(t4_units | grep -iE "$LO" | t4sent | grep -iE "$T4_AUTOFIX" | grep -iE "$T4_NEGW[^.;:]{0,80}\b(put|add|bring)[a-z]*\b[^.;:]{0,30}\bback\b"); [ -n "$s" ] && printf "%s\n" "$s" | grep -iE "\bpackages?\b|\bdependenc(y|ies)\b|\bvulnerab" | grep -iE "\bNeMo\b|\bAI.safety\b|\bguardrails?\b" | grep -iE "\bpre-push\b" | grep -qiE "\bCI\b" && ! printf "%s\n" "$s" | gq -iE "\b(not|excluding|apart from|besides|outside)( in)?( the| its)? (packages?|dependenc|vulnerab|NeMo|AI.safety|guardrail|pre-push|CI)\b"'
+# review2 Minor 2: the auto-fix sentence names all of /ship-it's own fixes. E02-S21 (the owner's Split): those are the package
+# upgrades and the pre-push secret leak scan; the NeMo remediation, the rest of the pre-push review and CI monitoring are no
+# /ship-it steps any more (build-verify and /nemo-it cover them), so the sentence never names them
+check "/ship-it's auto-fix sentence names all its own fixes: the package fixes and the pre-push secret leak scan (never the NeMo (AI-safety) remediation or CI monitoring, which /ship-it doesn't run)" \
+  's=$(t4_units | grep -iE "$LO" | t4sent | grep -iE "$T4_AUTOFIX" | grep -iE "$T4_NEGW[^.;:]{0,80}\b(put|add|bring)[a-z]*\b[^.;:]{0,30}\bback\b"); [ -n "$s" ] && printf "%s\n" "$s" | grep -iE "\bpackages?\b|\bdependenc(y|ies)\b|\bvulnerab" | grep -iE "\bpre-push\b" | grep -qiE "\bsecret leak scan\b" && ! printf "%s\n" "$s" | gq -iE "\bNeMo\b|\bAI.safety\b|\bguardrails?\b|\bCI\b|\bmonitoring\b" && ! printf "%s\n" "$s" | gq -iE "\b(not|excluding|apart from|besides|outside)( in)?( the| its)? (packages?|dependenc|vulnerab|pre-push|secret leak scan)\b"'
 
 # review2 Minor 3: the words a first-time builder reads, and the next step on each path
 T4_JARGON='\b(its|the|an?|this|own) ask\b|\[BLOCK\]|high-stakes|active confirmation|left-out-record'
@@ -1083,7 +1085,7 @@ T4_DEVONLY='NONPROD|shareable|experiment|dev-only|\bdev\b'
 t4_barunit() { t4_units | grep -iE "$LO" | while IFS= read -r u; do printf "%s\n" "$u" | t4sent | grep -iE "$T4_AUTOFIX" | gq -iE "$T4_NEGW[^.;:]{0,80}\b(put|add|bring)[a-z]*\b[^.;:]{0,30}\bback\b" && printf "%s\n" "$u"; done; true; }
 # any guide sentence where an auto-fix runs as usual on a ship that is not prod-ready, or reaches a left-out item anyway
 t4_devfree() { t4_units | t4sent | t4_nonprod | t4_aff | grep -iE "$T4_AUTOW" | grep -iE "($T4_DEVONLY)[^.;:]*$T4_USUAL|$T4_USUAL[^.;:]*($T4_DEVONLY)|\b(even|also|still|too)\b[^.;:]{0,20}\b(for|on|to|when|if)\b[^.;:]{0,40}($LO)|($LO)[^.;:]{0,60}$T4_PUTBACK|$T4_PUTBACK[^.;:]{0,60}($LO)" || true; }
-check "the never-put-back bar on /ship-it's own auto-fixes holds on every /ship-it run, not only for the production ask (a dev-only ship's package and NeMo fixes too)" \
+check "the never-put-back bar on /ship-it's own auto-fixes holds on every /ship-it run, not only for the production ask (a dev-only ship's package fixes too)" \
   'u=$(t4_barunit); [ -n "$u" ] && ! printf "%s\n" "$u" | t4_nonprod | t4_aff | gq -viE "$T4_EVERYSHIP" && ! printf "%s\n" "$u" | t4_nonprod | t4_aff | gq -iE "$T4_PRODONLY" && [ -z "$(t4_devfree)" ]'
 
 # ---- Task 4 adversarial round 2 ----
@@ -1102,8 +1104,10 @@ t5_secu() { t4_units | awk -v lo="$LO" '{l=tolower($0)} l ~ /secret/ && l ~ lo {
 t5_secs() { t5_secu | t5_sent | t5_tok || true; }
 # final fix review Important 2: the pre-push table is one unit; it is split into its rows (never dropped), so row 5's own
 # sentences -- "There, /ship-it shows the user its value." included -- are read. Re-review Important 2: a row that names a
-# secret or a left-out word is read (either, not both), so only one that names neither (row 2's kind) is not
-t5_secm() { t5_secu | perl -pe 's/ (?=\| *[0-9]+ *\| \*\*)/\n/g' | grep -iE "$T5_SECRET|$LO" | t5_sent | t5_tok || true; }
+# secret or a left-out word is read (either, not both), so only one that names neither (row 2's kind) is not.
+# E02-S21 (the owner's Split): the table is gone; its row 5 is now the "### Pre-push secret leak scan" section, read whole
+t5_scan() { awk '/^#/{on=(index($0,"### Pre-push secret leak scan")==1)} on' $SHIP | paras; }
+t5_secm() { { t5_secu | perl -pe 's/ (?=\| *[0-9]+ *\| \*\*)/\n/g'; t5_scan; } | grep -iE "$T5_SECRET|$LO" | t5_sent | t5_tok || true; }
 t5_sls() { t4_units | t5_sent | t5_tok | grep -iE "$T5_SECRET" | grep -iE "$LO" || true; }
 T5_STOP='\bstop(s|ped|ping)?\b[^.;:]{0,20}\b(before|ahead of)?( the| any| a)? push\b|\bSTOP\b[^.;:]{0,30}\bholds?\b'
 T5_NOSEND="$T4_NEGW[^.;:]{0,25}\b(sent|sends?|push(es|ed)?|committed|commits?|uploaded|uploads?)\b"
@@ -1174,15 +1178,16 @@ T5_ADDSHIP="/ship-it\b[^.;:]{0,30}\b(adds?|will add|builds?|applies|moves?|puts?
 t5_addm() { { t4_units | grep -v "^|" | grep -iE "$T4_ADDOPT" | t5_sent; t4_units | grep "^|" | t5_sent | grep -iE "$T4_ADDOPT"; } | t5_tok | t5_eg | t4_aff | t5_rsm | grep -iE "$T5_ADDSHIP" || true; }
 check "\"Add [item] first\" means one thing everywhere in the guide: /resume-it adds the item, never /ship-it" \
   '[ -z "$(t5_addm)" ]'
-# review7 Minor 3: the pre-push table's secret leak scan row (row 101) points at the guard. One of its sentences says a
-# secret that belongs to a left-out item is never moved there, and the row points at "Left-out items before production"
+# review7 Minor 3: the pre-push secret leak scan (the table's row 101; since E02-S21 its own section) points at the guard.
+# One of its sentences says a secret that belongs to a left-out item is never moved there, and it points at "Left-out items
+# before production"
 # (a "(see ...)" pointer is no part of the negated clause before it); no sentence of the row keeps its move for a left-out
 # item's secret (or for every secret, left out or not)
-t5_r101() { grep -E '^\| *5 *\| *\*\*Secret leak scan\*\*' $SHIP | t5_sent | t5_tok || true; }
+t5_r101() { t5_scan | t5_sent | t5_tok || true; }
 # final fix review Minor 9: "whichever item it belongs to" / "no matter which" widen the move too ("no matter" is one token,
 # NOMATTER, so t4_aff never reads its "no" as a negation)
 T5_R101X='\b(every|each|any|all)( the)? (secrets?|keys?)\b|\bwhatever\b|\bwhichever\b|NOMATTER|\bor not\b|\bregardless\b|\beven\b|\ball the same\b|\banyway\b|\btoo\b|\bas well\b|\balso\b'
-check "row 101 (the pre-push secret leak scan) says a secret that belongs to a left-out item is never moved there, and points at \"Left-out items before production\"" \
+check "the pre-push secret leak scan section (once row 101) says a secret that belongs to a left-out item is never moved there, and points at \"Left-out items before production\"" \
   's=$(t5_r101 | grep -iE "$T5_SECRET" | grep -iE "$LO" | grep -iE "$T4_NEGW[^.;:]{0,20}\bmov(e|es|ed)\b"); [ -n "$s" ] && ! printf "%s\n" "$s" | gq -iE "$T4_QUAL" && t5_r101 | perl -pe "s/\((?=(see|follow|read)\b)/: /gi" | t4_aff | gq -iE "\b(see|follow|read|go to|per|under|in)\b[^.;:]{0,10}($T4_SECPTR)" && [ -z "$(t5_r101 | t5_eg | perl -pe "s/\bno matter\b/NOMATTER/gi" | t4_aff | t5_rsm | grep -iE "$T5_MOVEX" | grep -iE "$LO|$T5_R101X")" ]'
 T5_FOUND='\b(found|finds|caught|catches|flagged|flags|turned up)\b'
 T5_NOTCHK="$T4_NEGW[^.;:]{0,40}\b(reported|reports?|reads?|called|calls?|said|says?|shown|shows?|told|tells?|listed|lists?|marked|marks?)\b[^.;:]{0,25}NOTCHECKED"
@@ -1315,9 +1320,10 @@ check "explore phase: when a left-out item keeps a fix's re-test from running, t
 check "try-it: the Status line's every-test-left-out case, \"I tested\" (checked and not left out), and gate 1's exception (a failure marked left_out)" \
   'printf "%s\n" "$AFTS" | gq -F "never 0 of 0 Passing: when every test is left out" && printf "%s\n" "$ALLLO" | gq -E "only what was checked and isn.t left out" && awk "/^<guardrails>/{on=1} on" $TRY | flat | gq -F "except a failure marked \`left_out\`, which follows"'
 
-# S1: the secret stop's "not checked" rule is that check's; /ship-it's success line says what a check found
-check "ship-it-guide: the secret stop's \"not checked\" rule is scoped to that check (never \"a check that ran and found something\"), and /ship-it's success line says what a check found instead" \
-  't5_secs | grep -F NOTCHECKED | gq -iE "\band that check is never reported as .?NOTCHECKED" && ! grep -qiE "\ba check that ran and found something\b" $SHIP && psents < $SHIP | tr -s " " | gq -F "If one of its checks ran and found something, say what it found instead."'
+# S1: the secret stop's "not checked" rule is that check's. E02-S21 (the owner's Split): /ship-it's CI-time success line is gone
+# with its CI watch; its success line is the done message, which claims no check passed (none of /ship-it's says so)
+check "ship-it-guide: the secret stop's \"not checked\" rule is scoped to that check (never \"a check that ran and found something\"), and /ship-it's success line is its done message, which claims no check passed" \
+  't5_secs | grep -F NOTCHECKED | gq -iE "\band that check is never reported as .?NOTCHECKED" && ! grep -qiE "\ba check that ran and found something\b" $SHIP && t4_units | grep -E "^[0-9]+\. Reports back:" | gq -F "\"Done! Your code is on its way.\"" && ! awk "BEGIN{on=1} /^## /{on=(index(\$0,\"## CI/CD Automation Contract\")!=1)} on" $SHIP | gq -iE "passed all checks|all checks pass(ed)?\b"'
 # S2: the stop says why, in plain words
 check "the secret stop says why in plain words: what was found, and that a sent key can be used by anyone who sees the code and can't be taken back" \
   's=$(t5_secs); printf "%s\n" "$s" | t4_aff | gq -iE "\bsays why in plain words\b" && printf "%s\n" "$s" | gq -iE "anyone who can see your code can use it" && printf "%s\n" "$s" | gq -iE "can.t be taken back" && ! printf "%s\n" "$s" | gq -iE "$T4_NEGW[^.;:]{0,20}\bsays? why\b"'
@@ -1329,9 +1335,9 @@ check "the DevOps-fix notice gives the next step: /resume-it and say which -- \"
 # S4: the guard's scope: every push, whatever the intent, /ship-it save included; never narrowed (review 6 M4's rejects)
 check "the secret guard's scope: every push, whatever the intent, /ship-it save included (never a live key only, never only the production push)" \
   't5_secs | t4_aff | gq -iE "\bon every push, whatever the intent, /ship-it save included\b" && ! t5_secs | t4_aff | gq -iE "\b(live|real|production|prod)\b[^.;:]{0,10}\b(secrets?|keys?)\b|\bnot (a|on) [^.;:]{0,25}\b(test|save|experiment)\b|\bproduction push\b"'
-# S5: the go-live lines are rewritten before the push, and step 10 points at the section
-check "the go-live lines are rewritten before /ship-it pushes, and step 10's go-live checklist points at Left-out items before production" \
-  't4_gl | t4_aff | gq -iE "\bEach /ship-it, before it pushes, rewrites those lines\b" && t4_units | grep -E "^10\. " | tr -s " " | gq -F "go-live checklist (its left-out lines: see Left-out items before production)"'
+# S5: the go-live lines are rewritten before the push, and the PR step (step 10 before E02-S21's Split) points at the section
+check "the go-live lines are rewritten before /ship-it pushes, and the PR step's go-live checklist points at Left-out items before production" \
+  't4_gl | t4_aff | gq -iE "\bEach /ship-it, before it pushes, rewrites those lines\b" && t4_units | grep -E "^[0-9]+\. Creates a PR\b" | tr -s " " | gq -F "go-live checklist (its left-out lines: see Left-out items before production)"'
 # S6: the Intent condition says how to tell, right after the item
 check "Intent Classification: the [BLOCK] condition says how to tell (\"(\`left-out-record.md\` says how to tell)\" right after the item)" \
   't4_intp | gq -E "left-out .\[BLOCK\]. item \(.left-out-record\.md. says how to tell\), /ship-it.s left-out ask comes next"'
@@ -1345,8 +1351,10 @@ check "rule 1: \"never goes in an ask\" also names the DevOps-fix PR comment and
 # "could not be checked", and for a secret, where it is, never its value
 fr_succ2() { awk '/Report success: "Your app passed all checks/{on=1;next} on&&/\+--/{exit} on' $SHIP | sed -E "s/^ *\| *//" | flat; echo
   awk '/^- \(On success\)/{on=1;print;next} on&&/^- /{exit} on' $SHIP | flat; echo; }
-check "both left-out success lines say what a check that ran found instead (for a secret: where it is, never its value), never \"could not be checked\" alone" \
-  '[ "$(fr_succ2 | grep -ciF "if one of its checks ran and found something, say what it found instead. For a secret, say where it is, never its value.")" = 2 ] && ! fr_succ2 | t4_aff | gq -iE "$T5_VALX|\beven (if|when)\b[^.;:]{0,40}\bfound\b"'
+# E02-S21 (the owner's Split): both lines went with /ship-it's CI watch and its messages. None comes back, so none can call a
+# check that ran "not checked" or show a secret's value
+check "/ship-it's two CI-time success lines are gone (no monitoring flow, no \"(On success)\" message), so neither can say \"could not be checked\" for a check that ran, or show a secret's value" \
+  '[ -z "$(fr_succ2 | tr -d " \n")" ] && ! grep -qiE "Report success:|^- \(On success\)|passed all checks and is ready for review|Your app is ready for review" $SHIP'
 # Minor 6: the guard says the secret leak scan runs on /ship-it save too (its "No review." is not "no pre-push checks").
 # Re-review Minor 2: the modes table's save row says so too, and never that save skips the pre-push checks or the scan
 check "the secret guard says the secret leak scan runs on /ship-it save too, and the modes table's save row says the pre-push checks still run (never that save skips them)" \
