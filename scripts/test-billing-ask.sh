@@ -26,8 +26,8 @@ flat() { tr '\n' ' ' | tr -s ' '; }
 # A switch instruction, two ways: a verb on the setting or a paid provider's value, in any case (SWI); or a switch
 # verb, then a paid provider's name, in the same sentence (SW: a dot inside a name like .env doesn't end it).
 SWI="(set|flip|switch|change|move|write|update)[a-z ]{0,12}(ai_providers\.primary|AI_PROVIDER)|AI_PROVIDER=(anthropic|openai|ollama)"
-SW='\b([Ss]et|[Ff]lip|[Ss]witch|[Cc]hange|[Mm]ove|[Ww]rite|[Uu]pdate)(s|es|ed|ing)?\b([^.]|\.[^ ]){0,40}(anthropic|enterprise|openai|ollama)'
-switch_lines() { local t; t="$(cat)"; printf "%s\n" "$t" | grep -iE "$SWI" || true; printf "%s\n" "$t" | grep -E "$SW" || true; }
+SW='\b([Ss]et|[Ff]lip|[Ss]witch|[Cc]hange|[Mm]ove|[Mm]oving|[Mm]oved|[Ww]rite|[Uu]pdate)(s|es|ed|ing)?\b([^.]|\.[^ ]){0,40}(anthropic|enterprise|openai|ollama)'
+switch_lines() { local t; t="$(cat)"; printf "%s\n" "$t" | grep -iE "$SWI" || true; printf "%s\n" "$t" | grep -iE "$SW" || true; }
 switches() { [ -n "$(switch_lines)" ]; }
 
 GUIDE=.claude/make-it/references/ship-it-guide.md
@@ -49,6 +49,11 @@ step() { awk '/^<step name="ship-handoff">/{on=1} on; on&&/^<\/step>/{exit}' "$1
 for f in .claude/commands/make-it.md .claude/commands/resume-it.md .claude/commands/retrofit-it.md; do
   check "$f ship-handoff: the billing ask in ship-it-guide.md comes first" \
     'step $f | gq -iE "claude_agent provider[^.]*billing ask in ship-it-guide\.md comes first"'
+  # the pointer sits before the hand-off's go-live text (its first **/ship-it**), and the skill loads the guide
+  check "$f ship-handoff: the pointer comes before the first **/ship-it**, and the skill loads ship-it-guide.md" \
+    'p="$(step $f | grep -obF "billing ask in ship-it-guide.md comes first" | head -1 | cut -d: -f1 || true)"
+     g="$(step $f | grep -obF "**/ship-it**" | head -1 | cut -d: -f1 || true)"
+     [ -n "$p" ] && [ -n "$g" ] && [ "$p" -lt "$g" ] && gq -xF "@~/.claude/make-it/references/ship-it-guide.md" $f'
 done
 check "make-it ship-handoff doesn't restate the ask or switch anything itself" \
   '[ -n "$(step .claude/commands/make-it.md)" ] && ! step .claude/commands/make-it.md | gq -F "Pick one by name" && ! step .claude/commands/make-it.md | switches'
@@ -71,12 +76,14 @@ check "the ask names who pays and how: per use on an API key, or the organizatio
   'printf "%s" "$ASK" | gq -iE "who pays" && printf "%s" "$ASK" | gq -iE "billed per use" && printf "%s" "$ASK" | gq -iE "organization.s account"'
 check "the ask says the copy on this computer stays on the subscription either way" \
   'printf "%s" "$ASK" | gq -iE "your copy on this computer stays on your subscription either way"'
-check "the ask names a way to cap the spend (a monthly limit in the provider's console), and that not every provider has one" \
-  'printf "%s" "$ASK" | gq -iE "monthly spending limit[^.]*provider.s console" && printf "%s" "$ASK" | gq -iE "not every provider has one"'
+check "the ask names a way to cap the cost: a monthly limit in the provider's account settings, where it offers one" \
+  'printf "%s" "$ASK" | gq -iE "to cap the cost[^.]*monthly limit in the provider.s account settings, where it offers one"'
 check "the ask gives the evidence: the subscription setting it saw, in plain words, and that it is single-user" \
   'printf "%s" "$ASK" | gq -F "AI_PROVIDER=claude_agent" && printf "%s" "$ASK" | gq -F "your settings file (.env)" && printf "%s" "$ASK" | gq -iE "just for you[^.]*can.t be (shared|given) "'
 check "the ask names the undo: switching back changes the same places again, deleting the key stops the charges, billed use can't be taken back" \
   'printf "%s" "$ASK" | gq -iE "undo: switching back means changing the same places again" && printf "%s" "$ASK" | gq -iE "deleting the key is what stops the charges" && printf "%s" "$ASK" | gq -iE "already billed can.t be taken back"'
+check "the undo says who deletes the key for the organization pick: their IT team" \
+  'printf "%s" "$ASK" | gq -iE "deleting the key is what stops the charges[^.]*organization.s provider[^.]*IT team removes it"'
 check "the ask says who puts the key where the shared app runs: their DevOps team, or their hosting settings" \
   'printf "%s" "$ASK" | gq -iE "where the shared app runs[^.]*DevOps team[^.]*hosting settings"'
 check "the ask names what is unusual" 'printf "%s" "$ASK" | gq -iE "what.s unusual:"'
@@ -85,7 +92,7 @@ check "the ask names the one thing to check" 'printf "%s" "$ASK" | gq -iE "the o
 # 5. nothing switches before the pick: the wait comes before every switch instruction, and "keep it local" changes nothing
 # byte offsets in the flat paragraph: the first switch instruction of either kind
 w="$(printf "%s" "$F" | grep -obF "**Wait for their pick.**" | head -1 | cut -d: -f1 || true)"
-s="$({ printf "%s" "$F" | grep -obiE "$SWI" || true; printf "%s" "$F" | grep -obE "$SW" || true; } | cut -d: -f1 | sort -n | head -1)"
+s="$({ printf "%s" "$F" | grep -obiE "$SWI" || true; printf "%s" "$F" | grep -obiE "$SW" || true; } | cut -d: -f1 | sort -n | head -1)"
 check "every switch instruction comes after the wait for the pick" '[ -n "$w" ] && [ -n "$s" ] && [ "$w" -lt "$s" ]'
 check "it says nothing switches before the pick" 'printf "%s" "$F" | gq -iE "nothing switches (before|until) (the|their) pick"'
 check "keep it local changes nothing" 'printf "%s" "$F" | gq -iE "\*\*Keep it local[^*]*\*\* -> change nothing"'
@@ -96,6 +103,8 @@ check "keep it local: /ship-it save backs up to GitHub as a draft, without putti
   'printf "%s" "$KEEP" | gq -iE "/ship-it save\` backs up their work to GitHub as a draft, without putting the app live for anyone" && ! printf "%s" "$F" | gq -iE "without sharing it"'
 check "keep it local records the open question in .make-it-state.md, under Before sharing" \
   'printf "%s" "$KEEP" | gq -F ".make-it-state.md" && printf "%s" "$KEEP" | gq -F "## Before sharing"'
+check "a pick of a way to pay takes that line out, outside the keep-it-local branch" \
+  'A="${POST#*Whatever they pick}"; [ "$A" != "$POST" ] && printf "%s" "$A" | gq -iE "when they pick a way to pay[^.]*take the \`- Open: who pays for the AI\` line out of \`## Before sharing\`"'
 for f in .claude/commands/resume-it.md .claude/commands/wrap-it.md; do
   check "$f save-state keeps the Before sharing section as it is" 'flat < $f | gq -iE "## Before sharing[^]]*keep it exactly as it is"'
 done
@@ -120,7 +129,7 @@ check "no skill, reference or template tells an agent to flip the AI provider" \
 # every sentence outside the billing ask that switches to a paid provider names the pick
 OFF="$(for f in $(git ls-files '.claude/commands/*.md' '.claude/make-it/references/*.md' '.claude/make-it/templates/*.md' 'desktop/skills/*.md'); do
   if [ "$f" = "$GUIDE" ]; then awk '/^### The billing ask/{on=1;next} on&&/^##/{on=0} !on' "$f"; else cat "$f"; fi | flat \
-    | sed 's/\([.!?]\) /\1\n/g' | { grep -E "$SW" || true; } | { grep -viE "pick" || true; } | sed "s|^|$f: |"
+    | sed 's/\([.!?]\) /\1\n/g' | { grep -E "$SW" || true; } | { grep -viE "picks? the billing mode|billing ask" || true; } | sed "s|^|$f: |"
 done)"
 check "no sentence anywhere else switches to a paid provider without the pick" '[ -z "$OFF" ] || { printf "%s\n" "$OFF" | cut -c1-200 | sed "s/^/  /"; false; }'
 check "ship-it-guide: no 'should switch off claude_agent'" '! gq -iE "should switch off claude_agent" $GUIDE'
