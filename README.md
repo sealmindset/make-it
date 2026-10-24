@@ -957,6 +957,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.20 -- The canary no longer splits a CLAUDE.md's intro from its title
+
+Claude Code's `/init` writes a short intro under a `CLAUDE.md`'s title. The S13 catch-up put the
+instruction-drift canary between the title and that intro, so the intro ended up inside the canary
+section.
+- **After the intro.** S13 now inserts the canary directly before the file's first `##` heading. The
+  title and any text under it stay together on top, and a file with no intro comes out as before.
+- **Checked.** New `scripts/test-claude-md-order.sh` (88 checks) turns S10-S13's wording into
+  placement rules and runs them in every order. Before the fix, 31 checks failed, all with the
+  canary right under the title. After it, every order gives the same file, and a second run changes
+  nothing.
+
 ### v1.44.19 -- The SDD gate knows a resumed agent is still working
 
 The `/subagent-it` Stop hook nudged the coordinator as if a run had stalled while an agent it had
