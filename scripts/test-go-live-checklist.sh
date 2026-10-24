@@ -429,6 +429,138 @@ check "adv2 7 (two lists, one heading): the five lines and the left-out lines ea
 check "adv2 8 (step 7): the PR step says the heading holds the five go-live lines on a production request and the left-out lines whenever the user left items out, production or not" \
   'printf "%s" "$STEP" | gq -iE "\bfive( go-live)? lines\b[^.;]{0,40}\bproduction request\b|\bproduction request\b[^.;]{0,40}\bfive( go-live)? lines\b" && printf "%s" "$STEP" | gq -iE "\bleft-out lines\b[^.;]{0,60}\b(whenever|production or not|whether or not)\b"'
 
+# ---- owner call on adversarial round 3, finding 1: "Start from main's copy" (task-1-owner-call-brief.md) ----
+# A scratch git fixture with a bare origin; the guide's own read command (`git show origin/<default branch>:...`) runs on it,
+# and the merge rule the guide states (its switches read from the wording, as in rounds 1-2) decides what the record holds.
+gx() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -c user.name=t -c user.email=t@example.com -c init.defaultBranch=main -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@" 2>/dev/null; }
+OCREC='.ship-it-go-live.json'
+oc_rec() { python3 -I -c 'import json, sys; print(json.dumps({"schema": 1, "items": json.loads(sys.argv[1])}))' "$1"; }
+oc_put() { printf '%s\n' "$2" > "$1/$OCREC" && gx -C "$1" add "$OCREC" && gx -C "$1" commit -qm "$3"; }
+# the guide's read command: a backticked `git show origin/<ref>:.ship-it-go-live.json`; the ref placeholder becomes main
+oc_ref() { printf '%s' "$FLAT" | grep -oE '`git show origin/(<[^>`]+>|\[[^]`]+\]|[A-Za-z0-9_.-]+):\.ship-it-go-live\.json`' | head -1 | sed -E 's/^`git show origin\/(<[^>]+>|\[[^]]+\]|[A-Za-z0-9_.-]+):.*/\1/'; }
+OCREF=$(oc_ref || true)
+case "$OCREF" in '<'*|'['*) OCREF=main;; esac
+OCFETCH=0; says '+\bfetch(es|ing)?\b' 'default branch|that branch|\bmain\b' && OCFETCH=1
+# what /ship-it reads as main's copy, from the clone in $1: "" when it can't (no ref, no file, no read command in the guide)
+oc_main() { [ -n "$OCREF" ] || return 0; [ "$OCFETCH" = 1 ] && gx -C "$1" fetch -q origin "$OCREF"; gx -C "$1" show "origin/$OCREF:$OCREC" || true; }
+OC="$TMPD/oc"; mkdir -p "$OC"
+oc_origin() { rm -rf "$OC/$1"; mkdir -p "$OC/$1"; gx init -q --bare "$OC/$1/origin.git" && gx clone -q "$OC/$1/origin.git" "$OC/$1/a" && printf 'app\n' > "$OC/$1/a/README" && gx -C "$OC/$1/a" add README && gx -C "$OC/$1/a" commit -qm init && gx -C "$OC/$1/a" push -q origin main && gx clone -q "$OC/$1/origin.git" "$OC/$1/b" && gx -C "$OC/$1/b" checkout -qb feature-b; }
+PY5='
+import json, sys
+f = dict(x.split("=") for x in sys.argv[1].split(","))
+on = lambda k: f.get(k) == "1"
+def load(t):
+    if t is None or t == "": return None
+    try: d = json.loads(t)
+    except ValueError: return "BAD"
+    if not isinstance(d, dict) or d.get("schema") != 1 or not isinstance(d.get("items"), dict): return "BAD"
+    return d["items"]
+m, b = load(sys.argv[2] if sys.argv[2] != "-" else None), load(sys.argv[3] if sys.argv[3] != "-" else None)
+if m == "BAD" and not on("unread"): m, b = None, None   # without the rule: the record is unreadable, all five are missing
+if m == "BAD": m = None
+if b is None and m is not None: merged = m if on("norec") else {}
+elif m is None: merged = b or {}
+else:
+    merged = {}
+    for k in sorted(set(m) | set(b)):
+        x, y = m.get(k), b.get(k)
+        if x and y:
+            if on("newer"): merged[k] = y if y["date"] > x["date"] else x if y["date"] < x["date"] else (y if on("tie") else x)
+            else: merged[k] = y
+        elif y: merged[k] = y
+        elif x and on("oneside"): merged[k] = x
+want = json.loads(sys.argv[4])
+sys.exit(0 if {k: (v["state"], v["date"]) for k, v in merged.items()} == {k: tuple(v) for k, v in want.items()} else 1)
+'
+oc_merge() { python3 -I -c "$PY5" "$1" "$2" "$3" "$4" 2>/dev/null; }
+OCNA='"terms_privacy": {"state": "na", "reason": "does not apply", "date": "2026-10-20", "evidence": ""}'
+# the records, as top-level literals (bash 3.2 brace-expands a {...} literal nested in "$(... "...")")
+OC1M="{$OCNA}"
+OC2M='{"terms_privacy": {"state": "na", "reason": "does not apply", "date": "2026-10-20", "evidence": ""}, "security_audit": {"state": "done", "reason": "audit passed", "date": "2026-10-22", "evidence": ""}, "restore_test": {"state": "done", "reason": "restored", "date": "2026-10-10", "evidence": ""}, "load_test": {"state": "done", "reason": "load test passed", "date": "2026-10-23", "evidence": ""}}'
+OC2B='{"terms_privacy": {"state": "skipped", "reason": "pages next week", "date": "2026-10-21", "evidence": ""}, "security_audit": {"state": "skipped", "reason": "coming soon", "date": "2026-10-22", "evidence": ""}, "live_payment": {"state": "skipped", "reason": "coming soon", "date": "2026-10-21", "evidence": ""}, "load_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-19", "evidence": ""}}'
+OC2W='{"terms_privacy": ["skipped", "2026-10-21"], "security_audit": ["skipped", "2026-10-22"], "restore_test": ["done", "2026-10-10"], "live_payment": ["skipped", "2026-10-21"], "load_test": ["done", "2026-10-23"]}'
+OC3B='{"terms_privacy": {"state": "skipped", "reason": "pages next week", "date": "2026-10-21", "evidence": ""}}'
+OC5C='{"terms_privacy": {"state": "skipped", "reason": "pages next week", "date": "2026-10-23", "evidence": ""}, "security_audit": {"state": "done", "reason": "audit passed", "date": "2026-10-25", "evidence": ""}}'
+OC5D='{"terms_privacy": {"state": "na", "reason": "does not apply", "date": "2026-10-24", "evidence": ""}, "security_audit": {"state": "skipped", "reason": "coming soon", "date": "2026-10-20", "evidence": ""}}'
+OC1W='{"terms_privacy": ["na", "2026-10-20"]}'
+OC3W='{"terms_privacy": ["skipped", "2026-10-21"]}'
+OC5W='{"terms_privacy": ["na", "2026-10-24"], "security_audit": ["done", "2026-10-25"]}'
+
+# rule 1: read main's copy first (fetch, then the guide's `git show`; a read only); a branch cut before the record reached
+# main has none, so the record starts from main's -- item 1's na stays, and item 1 isn't asked
+OCN=0; says '\bno record\b|\bhas no record\b|\bno file\b' '+\bstarts? from\b[^.;]{0,15}\b(main.s|the default branch.s)' && OCN=1
+oc_case1() { local mc
+  oc_origin c1 && oc_put "$OC/c1/a" "$(oc_rec "$OC1M")" "record" && gx -C "$OC/c1/a" push -q origin main || return 1
+  [ ! -e "$OC/c1/b/$OCREC" ] || return 1
+  mc="$(oc_main "$OC/c1/b")"; [ -z "$(gx -C "$OC/c1/b" status --porcelain)" ] && [ "$(gx -C "$OC/c1/b" symbolic-ref --short HEAD)" = feature-b ] || return 1
+  oc_merge "norec=$OCN,newer=1,tie=1,oneside=1,unread=1" "${mc:--}" - "$OC1W"; }
+check "owner 1 (start from main's copy): on a branch cut before the record reached main, the guide's fetch and \`git show origin/<default branch>:.ship-it-go-live.json\` read main's record (nothing checked out, merged or pushed); the record starts from it, so item 1's na stays and isn't asked" \
+  'says "default branch|main.s copy" "+\breads?\b" "+\bbefore (it )?asks?\b|\bbefore asking\b" && says "\bnothing\b[^.;]{0,30}\bchecked out\b" "\bmerged\b" "\bpushed\b" && oc_case1'
+
+# rule 2: both sides have an item -> the newer date counts, a tie goes to the branch; an item only one side has comes from it
+OCW=0; OCT=0; OCO=0
+says '\bboth\b' '+\bnewer `?date`?\b' '+\b(counts?|wins?)\b' && OCW=1
+says '\btie\b' '+\bbranch.s\b|\bthe branch\b' && OCT=1
+says '\bonly one side\b|\bone side has\b' '+\bfrom that side\b' && OCO=1
+oc_case2() { local mc
+  oc_origin c2 && oc_put "$OC/c2/a" "$(oc_rec "$OC2M")" "main record" && gx -C "$OC/c2/a" push -q origin main || return 1
+  oc_put "$OC/c2/b" "$(oc_rec "$OC2B")" "branch record" || return 1
+  mc="$(oc_main "$OC/c2/b")"
+  oc_merge "norec=1,newer=$OCW,tie=$OCT,oneside=$OCO,unread=1" "${mc:--}" "$(cat "$OC/c2/b/$OCREC")" "$OC2W"; }
+check "owner 2 (which answer counts): main and the branch both hold items -- the newer date wins (item 1: the branch's later skip; item 4: main's later done), a tie goes to the branch (item 2), an item only main has comes from main (item 3's done stays quiet)" 'oc_case2'
+
+# rule 2, last bullet: an unreadable main copy counts as no main copy; the merged record gets the no-secret, unreadable and
+# shape rules -- run on main copies that are truncated JSON and schema 2
+OCU=0; says 'unreadable' 'main.s copy|copy (on|from) main' '\bcounts? as no main copy\b|\bcounts? as none\b|\bas if there were no main copy\b' && ! says 'unreadable' 'main.s copy' '\b(doesn.t|does not|never|isn.t) count' && OCU=1
+oc_case3() { local mc t
+  for t in '{"schema": 1, "items": [' '{"schema": 2, "items": {}}'; do
+    oc_origin c3 && oc_put "$OC/c3/a" "$t" "bad main record" && gx -C "$OC/c3/a" push -q origin main || return 1
+    oc_put "$OC/c3/b" "$(oc_rec "$OC3B")" "branch record" || return 1
+    mc="$(oc_main "$OC/c3/b")"; [ -n "$mc" ] || return 1
+    oc_merge "norec=1,newer=1,tie=1,oneside=1,unread=$OCU" "$mc" "$(cat "$OC/c3/b/$OCREC")" "$OC3W" || return 1
+  done; }
+check "owner 3 (unreadable main copy): a main copy that is truncated JSON or schema 2 counts as no main copy -- the branch's record stands, not five missing items; the merged record gets the no-secret, unreadable and shape rules" \
+  'oc_case3 && says "\bmerged\b" "secret" "unreadable|shape"'
+
+# rule 3: main's copy can't be read -- the checklist goes on with the branch's own record and never stops the request; one
+# plain line only when GitHub couldn't be reached (a broken origin), nothing said when main simply has no file
+OCG=0; OCL=0; OCQ=0; OCS=0
+says "can.t be read|couldn.t be (read|reached)|unreachable|no network" '+\b(goes|carries) on\b|\bcontinues\b' "+\bbranch.s own record\b|\bits own record\b" && OCG=1
+says "couldn.t be reached|unreachable|can.t (be )?reach" '+\bone (plain )?line\b' && OCL=1
+says '\bno file (on|in|there)\b|\bno file on main\b|\bno record on main\b' '\bnormal\b|\bnothing (is )?said\b|\bsays nothing\b|\bsaid nothing\b' && OCQ=1
+says '\bnever stops the request\b|\bnothing stops\b' && OCS=1
+oc_case4() { local fetched shown lines
+  oc_origin c4 && oc_put "$OC/c4/b" "$(oc_rec "$OC1M")" "branch record" || return 1
+  # no file on main (GitHub reachable): the branch's record, nothing said
+  fetched=0; gx -C "$OC/c4/b" fetch -q origin main && fetched=1; shown="$(oc_main "$OC/c4/b")"
+  [ "$fetched" = 1 ] && [ -z "$shown" ] || return 1
+  lines=$([ "$OCQ" = 1 ] && echo 0 || echo 1); [ "$lines" = 0 ] && [ "$OCG" = 1 ] && [ "$OCS" = 1 ] || return 1
+  # GitHub unreachable (origin moved away): the branch's record, one plain line, nothing stops
+  mv "$OC/c4/origin.git" "$OC/c4/gone.git"
+  fetched=0; gx -C "$OC/c4/b" fetch -q origin main && fetched=1
+  [ "$fetched" = 0 ] || return 1
+  lines=$([ "$OCL" = 1 ] && echo 1 || echo 0); [ "$lines" = 1 ] && [ "$OCG" = 1 ] && [ "$OCS" = 1 ]; }
+check "owner 4 (GitHub unreachable): with no file on main the checklist goes on with the branch's record and says nothing; with origin unreachable it goes on, says so in one plain line, and nothing stops the request" 'oc_case4'
+
+# rule 4: a clash in .ship-it-go-live.json on the second PR is settled per item by the newer date (a real add/add-free
+# content conflict: two branches change item 1 and item 2 differently); re-running /ship-it after updating from main
+# settles it too; never a gate
+OCC=0; usays 'conflict|clash' '+\b(per|each) item\b' '+\bnewer date\b' '+\bkeep' && OCC=1
+oc_case5() { local base ours theirs
+  oc_origin c5 && base="$(oc_rec "$OC1M")" && oc_put "$OC/c5/a" "$base" "record" && gx -C "$OC/c5/a" push -q origin main || return 1
+  gx -C "$OC/c5/b" checkout -q main && gx -C "$OC/c5/b" pull -q origin main && gx -C "$OC/c5/b" checkout -qb feature-d || return 1
+  oc_put "$OC/c5/a" "$(oc_rec "$OC5C")" "branch c, merged" && gx -C "$OC/c5/a" push -q origin main || return 1
+  oc_put "$OC/c5/b" "$(oc_rec "$OC5D")" "branch d" || return 1
+  gx -C "$OC/c5/b" fetch -q origin main; ! gx -C "$OC/c5/b" merge -q origin/main >/dev/null || return 1
+  ours="$(gx -C "$OC/c5/b" show ":2:$OCREC")"; theirs="$(gx -C "$OC/c5/b" show ":3:$OCREC")"; [ -n "$ours" ] && [ -n "$theirs" ] || return 1
+  oc_merge "norec=1,newer=$OCC,tie=1,oneside=1,unread=1" "$theirs" "$ours" "$OC5W"; }
+check "owner 5 (a clash): two branches change the record and git shows a conflict on the second PR; keeping, per item, the line with the newer date settles it (item 1 from this branch, item 2 from main); re-running /ship-it after updating the branch from main settles it too; never a gate" \
+  'oc_case5 && says "+re-?run(ning)? /ship-it|/ship-it again" "+\bupdat\w* (the |your )?branch from main\b|\bafter (updating|merging)\b" "+\bsettles?\b" && usays "conflict|clash" "\bnever a gate\b|\bnot a gate\b"'
+
+# rule 5: a re-run, like a new request, reads main's copy the same way when it runs
+check "owner 6 (re-run): a re-run that runs the checklist reads main's copy the same way a new request does" \
+  'usays "\bre-?run\b|RE-RUN" "+main.s copy|the default branch" "+\bthe same way\b"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
