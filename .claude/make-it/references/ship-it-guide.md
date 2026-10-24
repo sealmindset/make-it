@@ -16,7 +16,7 @@ Everything else -- code quality, security scanning, infrastructure provisioning,
 
 ---
 
-## AI Provider on Ship (claude_agent -> API key)
+## AI Provider on Ship (who pays for the AI)
 
 If the app was built with `ai_providers.primary == "claude_agent"` (the default for
 single-user local apps -- it uses the builder's personal Claude Code subscription token),
@@ -24,12 +24,72 @@ that default is **local-individual only** and must NOT carry into a shared/produ
 
 - A `CLAUDE_CODE_OAUTH_TOKEN` is single-identity, has subscription usage limits, and is not a
   deployment credential. The secret-leak scan (below) already blocks it from being committed;
-  in addition, when shipping to others/production /ship-it should flip the recommended provider
-  to `anthropic` (API key) or the org's enterprise provider and tell the user to set the
-  appropriate key in the deployment environment.
+  in addition, moving off it changes who pays for the AI, so nothing switches until the user
+  picks the billing mode by name -- the billing ask below (high-stakes, `approval-block.md`):
+  an Anthropic API key (pay per use), the org's enterprise provider, or keep it local. After
+  the pick, tell the user to set the matching key in the deployment environment.
 - Intent classification: `intent:experiment` may keep claude_agent (still local); `intent:shareable`
-  and `intent:prod-ready` should switch off claude_agent. Never write the personal token into
-  `.ship-it.yml`, workflows, or any committed file.
+  and `intent:prod-ready` move off claude_agent only through that pick ("keep it local" means
+  they don't ship to others yet). Never write the personal token into `.ship-it.yml`, workflows,
+  or any committed file.
+
+### The billing ask
+
+The ship hand-off of /make-it, /resume-it and /retrofit-it asks this first, before its go-live
+text, while the app uses claude_agent.
+
+**If the app uses the claude_agent provider (Claude Code subscription):**
+- This default is local-individual only, and moving off it changes who pays for the AI: a
+  high-stakes ask (money, per the approval block). Before shipping to others/production, ask
+  once -- fill the evidence from what you saw (`AI_PROVIDER=claude_agent` in `.env`, or
+  `ai_providers.primary` in app-context.json):
+  "Before other people use your app, one money decision is yours. Its AI features run on your
+  own Claude Code subscription (I saw [`AI_PROVIDER=claude_agent` in your settings file (.env)]).
+  That sign-in is just for you: it can't be shared with other people or put on a server, and
+  it has your plan's usage limits.
+  What changes: who pays for the AI, and how. With an Anthropic API key, every AI request is
+  billed per use to whoever owns the key -- the more people use it, the more it costs. To cap
+  the cost, set a monthly limit in the provider's account settings, where it offers one. With
+  your organization's AI provider, your organization's account pays, under its own rules. Your
+  copy on this computer stays on your subscription either way.
+  Undo: switching back means changing the same places again -- the two app files I'd update,
+  and the settings where the shared app runs. Deleting the key is what stops the charges (for
+  your organization's provider, your IT team removes it): new charges stop at once, and the
+  shared app's AI stops until you pick again. AI use already billed can't be taken back.
+  What's unusual: until now the AI cost nothing beyond your plan.
+  The one thing to check: who will pay once others use it -- you, or your organization? Not
+  sure? Pick 'Keep it local'.
+  Pick one by name:
+  - **Use an Anthropic API key (pay per use)** -- billed per use to the key's owner; the key
+    goes into the settings where the shared app runs (your DevOps team sets it, or you add it
+    in your hosting settings), never in your code.
+  - **Use my organization's provider** -- billed to your organization's account; your IT team
+    gives you its address and key.
+  - **Keep it local, don't ship to others yet** -- nothing changes; it stays on your
+    subscription, just for you."
+- **Wait for their pick.** Nothing switches before the pick. A plain yes, "ok" or "go ahead"
+  is not a pick -- ask them to pick one by name. Then:
+  - **Use an Anthropic API key** -> set ai_providers.primary to "anthropic" in app-context.json
+    and `AI_PROVIDER=anthropic` in `.env.example`. Leave their own `.env` alone: it stays
+    `AI_PROVIDER=claude_agent`, so the copy on their computer keeps running on their plan. Tell
+    them in one line which files changed, that their settings file (.env) did not, and that
+    `AI_PROVIDER=anthropic` and the key (`ANTHROPIC_API_KEY`) go into the settings where the
+    shared app runs (their DevOps team sets them, or they add them in their hosting settings),
+    never in a committed file.
+  - **Use my organization's provider** -> the same with "anthropic_foundry" (or the provider
+    their organization names), its endpoint and key.
+  - **Keep it local, don't ship to others yet** -> change nothing in the app or its settings.
+    Skip the hand-off's go-live text; tell them `/ship-it save` backs up their work to GitHub
+    as a draft, without putting the app live for anyone, and that this question comes first
+    when they want others to use it. Record it in `.make-it-state.md`, as one line under
+    `## Before sharing`:
+    `- Open: who pays for the AI before others use the app (asked first at the next hand-off)`
+- Whatever they pick, warn the user NEVER to commit or ship their personal
+  CLAUDE_CODE_OAUTH_TOKEN (single-identity, subscription usage limits, not a deployment
+  credential). Confirm it's only in .env (gitignored).
+- When they pick a way to pay (an API key or their organization's provider), take the
+  `- Open: who pays for the AI` line out of `## Before sharing` in `.make-it-state.md`, if
+  it's there.
 
 ## What /ship-it Does
 

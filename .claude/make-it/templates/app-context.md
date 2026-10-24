@@ -211,7 +211,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_features.prompt_management_tier | Design | 0 (none -- no AI), 2 (db+admin -- MINIMUM for any AI app), 3 (full platform) |
 | ai_features.who_edits_prompts | Design | developers / product_team / business_users |
 | ai_providers | Design | Auto-determined when ai_features.needed is true |
-| ai_providers.primary | Design | Values: "claude_agent" \| "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama". **Default = "claude_agent" for single-user local apps** (users.estimated_count == 1 AND deployment.target == "local"/prototype_only) -- uses the Claude Code subscription, no API key. Enterprise -> "anthropic_foundry". Multi-user/shared -> "anthropic". On ship to others/production, flip claude_agent -> "anthropic"/enterprise. |
+| ai_providers.primary | Design | Values: "claude_agent" \| "anthropic_foundry" \| "anthropic" \| "openai" \| "ollama". **Default = "claude_agent" for single-user local apps** (users.estimated_count == 1 AND deployment.target == "local"/prototype_only) -- uses the Claude Code subscription, no API key. Enterprise -> "anthropic_foundry". Multi-user/shared -> "anthropic". On ship to others/production, move off claude_agent only after the user picks the billing mode by name (the billing ask in ship-it-guide.md). |
 | ai_providers.model_tiers | Design | Inferred from ai_features.agents complexity; defaults to latest Claude models |
 | brain_features.enabled | Design | Detected from keywords: "remember", "learn over time", "adapt", "know my preferences" |
 | brain_features.user_memory | Design | true when multi-user app with conversational AI |

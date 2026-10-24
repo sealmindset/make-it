@@ -424,8 +424,9 @@ reviewed, and hardened behind the scenes.
        Claude Code CLI in the backend Dockerfile, and wire CLAUDE_CODE_OAUTH_TOKEN through
        .env / .env.example / docker-compose (see design-blueprint.md + build-standards AI01d).
   - Enterprise/corporate -> "anthropic_foundry". Multi-user/shared/team -> "anthropic".
-  - On ship to others/production, flip claude_agent -> "anthropic"/enterprise and warn never
-    to commit/ship the personal CLAUDE_CODE_OAUTH_TOKEN (see ship-handoff + ship-it-guide.md).
+  - On ship to others/production, nothing moves off claude_agent until the user picks the
+    billing mode by name (the billing ask in ship-it-guide.md), and warn never to
+    commit/ship the personal CLAUDE_CODE_OAUTH_TOKEN (see ship-handoff + ship-it-guide.md).
 - AI Prompt Management: Classify usage level and set tier
   - No AI features -> tier 0 (skip)
   - 1-3 prompts, devs only -> tier 1 (code + config)
@@ -1459,11 +1460,8 @@ Reference ship-it-guide.md for this phase.
 3. Check if gh is authenticated: `gh auth status`
 4. Check if /ship-it skill is available
 
-**If the app uses the claude_agent provider (Claude Code subscription):**
-- This default is local-individual only. Before shipping to others/production, flip
-  ai_providers.primary to "anthropic" (API key) or the org's enterprise provider, and warn
-  the user NEVER to commit or ship their personal CLAUDE_CODE_OAUTH_TOKEN (single-identity,
-  subscription usage limits, not a deployment credential). Confirm it's only in .env (gitignored).
+**If the app uses the claude_agent provider (Claude Code subscription):** the billing ask in
+ship-it-guide.md comes first.
 
 **If prerequisites are missing, guide the user through setup:**
 - gh not installed: "Before we can deploy, I need you to install one tool. Run: `brew install gh`"
