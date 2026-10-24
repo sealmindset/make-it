@@ -105,8 +105,9 @@ text, while the app uses claude_agent.
    org's shared reusable workflow when `.ship-it.yml` names one (see Workflow Generation)
 7. Creates a PR with labels, reviewers, description, a "Pending safety updates" list of the
    dependency alerts it could not fix, for `intent:prod-ready` the "Before going live" list of
-   DevOps setup steps, and, on a production request (see Go-live checklist), the go-live checklist
-   (its left-out lines: see Left-out items before production)
+   DevOps setup steps, and the go-live checklist (its left-out lines: see Left-out items before
+   production): its five go-live lines on a production request, and its left-out lines whenever
+   the user left items out, production or not (see Go-live checklist)
 8. Reports back: "Done! Your code is on its way." with the PR link, and "The team will review
    it and let you know when it's live."
 
@@ -375,7 +376,8 @@ written under `## Left out by your choice`, and a left-out item never becomes a 
 go-live check that belongs to a left-out item (read step 3 of `left-out-record.md`) reads "Left
 out (your choice)": never FAIL, and never `done`. It is recorded `skipped` with that reason, and
 it isn't asked while the item is left out; once the item is brought back, it is `skipped` like any
-other and asked at the next production /ship-it.
+other and asked at the next production /ship-it. For an item 2-5 that belongs to a left-out item,
+"Left out (your choice)" wins over `coming soon`.
 
 ### No secret in the record
 
@@ -386,18 +388,26 @@ missing, so its item is asked. A reason that matches a secret pattern is refused
 asked again without the secret: "That looks like a password or key, and this answer goes into
 your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`, `AKIA`,
 `ghp_`, `github_pat_`, `-----BEGIN`, `password=`, `token=`, `secret=`, and a hex or base64 run of
-32 or more characters. `evidence` is a URL with no query string and no `user:pass@`, or a
+32 or more characters. Each pattern matches only at the start of a token: where the text starts,
+or after a character that isn't a letter or digit, so "risk-based" or "task-force" doesn't match.
+`evidence` is a URL with no query string and no `user:pass@`, or a
 repo-relative path. Every `evidence` URL is written as scheme, host, port (when the URL has one)
 and path only: any `user:pass@`, query and fragment are removed before it is written, and they
 are never shown either. The record never holds amounts, card, bank or account details, or row data.
-/ship-it runs this check on the whole record itself, before the commit: a reason that matches is
-asked again, and an `evidence` that matches is written empty.
+/ship-it runs this check itself on every item's `reason` and `evidence`, items 2-5 included,
+before the commit. On an item that is asked, a matching reason is asked again, as above, and a
+matching `evidence` is written empty. A stored field that matches, on an item that isn't asked, is
+written empty, and the item's state stays as the user set it. The user is told in one line which
+item and which field was cleared, never the value.
 
 ### Asking
 
-An item that is `skipped` or missing is asked again on every production /ship-it, except an item
-skipped with the reason `coming soon`, or "Left out (your choice)" while its item is still left
-out (The record). A `done` or `na` item is not asked: it stays quiet and gets one PR line. An
+An item that is `skipped` or missing is asked again on every production /ship-it, except items
+2-5 skipped with the reason `coming soon` (below), or an item skipped with "Left out (your
+choice)" while its item is still left out (The record). The `coming soon` exception covers items
+2-5 only: a `skipped` item 1 is asked at every production /ship-it, whatever its reason says
+(`coming soon` too); only the left-out exception keeps it quiet. A `done` or `na` item is not
+asked: it stays quiet and gets one PR line. An
 `na` is remembered. A `done` or `na` item changes only when the user asks for it; then it is asked
 like a missing one.
 
@@ -415,19 +425,25 @@ overwritten. The one line names only the items it recorded `coming soon` this ti
 ### Item 1: terms and privacy pages
 
 /ship-it looks at `deployment.dev_url` in `.ship-it.yml` when DevOps has filled it in; otherwise
-at the local app. The frontend is the service named in `.ship-it.yml` `app.services`, and its
-`port` is the container port. The local app is at `http://localhost:[host port]`, the host port
-Docker publishes for the frontend, as `docker compose port <frontend service> <its container port>`
-reports it. /ship-it never starts the app and never reads `.env`.
+at the local app. The frontend service is the one `.ship-it.yml` `app.services` names, when that
+file exists; otherwise the `docker-compose.yml` service named `frontend`; otherwise the only
+service that publishes a port. Its container port is the `port` `app.services` gives it, else the
+container side of its `ports` entry in `docker-compose.yml`. The local app is at
+`http://localhost:[host port]`, the host port Docker publishes for the frontend, as
+`docker compose port <frontend service> <its container port>` reports it. /ship-it never starts
+the app and never reads `.env`.
 
 It sends a GET to `/terms` and `/privacy` there, following redirects. When `dev_url` is set, the
 two paths are added to it: a trailing slash on `dev_url` isn't doubled, and a path in `dev_url` is
 kept (`https://dev.example.com/app` gives `https://dev.example.com/app/terms`). A page is served
-when it returns 200 and the final URL is still that path. That path means `/terms` or `/privacy`
-with or without one trailing slash; a query or fragment the server adds doesn't change the path.
-A redirect to a sign-in page counts as not served: the page must be public. If nothing is
-published, or nothing answers, both pages count as not served, and /ship-it asks as it does for
-any missing page. The item's `evidence` is the page URLs it checked.
+when it returns 200 and the final URL is still that path. That path is the page's path under the
+base URL (`dev_url`, or the local app): the base URL's own path joined with `/terms` or
+`/privacy` (`/app/terms` above; with no path in the base URL, `/terms`), with or without one
+trailing slash; a query or fragment the server adds doesn't change the path. A redirect to a
+sign-in page counts as not served: the page must be public. When there is no frontend service, or
+no published port, nothing is requested: /ship-it says "I couldn't find where your app runs on
+this computer" and asks as it does for any missing page. It says the app "didn't answer" only
+when a request was really sent and failed. The item's `evidence` is the page URLs it checked.
 
 The terms page must mention user content and arbitration, and the privacy page personal data.
 The topics are looked for in the page's visible text, after removing tags and the contents of
@@ -440,17 +456,18 @@ review". It says:
 have one review both pages before people rely on them." make-it and /ship-it never write, draft
 or suggest terms or privacy wording.
 
-Otherwise /ship-it names what is missing (which page, which topic, or that nothing answered), and
-the user picks `skipped`, with a reason they type, or `na`:
+Otherwise /ship-it names what is missing (which page, which topic, or that the app couldn't be
+found or didn't answer), and the user picks `skipped`, with a reason they type, or `na`:
 "Before your app goes live, one check on my list isn't met: terms and privacy pages. They tell
 people the rules for using your app and what you do with their data. I looked at [base URL,
-scheme, host, port (when it has one) and path only]:
+scheme, host, port (when it has one) and path only; with no app found, your project's settings]:
 [what is missing, for example: the terms page asks people to sign in first].
 What changes: only this list. Nothing is held up: your answer is kept in your code and listed
 with your changes, so don't put a password or key in it.
 Undo: a skip comes back at your next /ship-it to production. 'Doesn't apply' stays until you ask
 me to change it.
-What's unusual: [nothing, or: your app didn't answer, so I couldn't look].
+What's unusual: [nothing; or: I couldn't find where your app runs on this computer; or: your app
+didn't answer].
 The one thing to check: will people outside your team use this app?
 Pick one:
 - **Skip for now** -- type why, in your own words.
@@ -467,10 +484,12 @@ In the PR body, the `## Go-live checklist` section has five lines, one per item 
 `- [item]: [state] -- [reason] ([date])`, each showing the item as the record holds it. It goes
 after "Before going live", which stays the DevOps setup list; a PR without that list gets it where
 that list would go. The left-out lines (Left-out items before production) go under the same
-heading, in their own list. When the checklist doesn't run because the request doesn't deploy to
-production, the left-out lines still go in the PR under `## Go-live checklist`, in their own list.
-Above them, one line says: "The five go-live items weren't asked: this request doesn't deploy to
-production." AWS and VLF modes open no PR, so the five lines go in their final message instead.
+heading, in their own list. Each list sits under its own plain label: **Go-live items** for the
+five lines, and **Items you left out** for the left-out lines. When the checklist doesn't run
+because the request doesn't deploy to production, the left-out lines still go in the PR under
+`## Go-live checklist`, in their own list. Under **Go-live items**, one line says: "The five
+go-live items weren't asked: this request doesn't deploy to production." AWS and VLF modes open
+no PR, so the five lines go in their final message instead.
 
 ---
 
@@ -730,7 +749,7 @@ Automation scans PR
 - Block the gate on a left-out item the user chose to ship with, remediate it, or put it back.
   It is reported to DevOps by name, and its checks don't count against "all checks" above.
   The automation reads which items the user chose from the PR's go-live checklist (see Go-live
-  checklist).
+  checklist): only from its "Items you left out" list.
 
 ---
 
