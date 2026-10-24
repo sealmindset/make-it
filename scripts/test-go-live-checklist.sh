@@ -334,6 +334,101 @@ F3PH="$(printf '%s' "$FLAT" | grep -oiE '\bscheme,[^.;:]{0,60}\bpath only\b' || 
 check "fix round 3 (evidence keeps the port): the section's evidence rule on the local URL with a basic-auth user and password, ?x=1 and #f gives http://localhost:3000/terms; the rule and the ask's bracket both name the port" \
   '[ -n "$C4K" ] && python3 -I -c "$PY3" "$C4K" "$F3U" "$F3PW" "http://localhost:3000/terms" 2>/dev/null && [ "$(printf "%s\n" "$F3PH" | grep -c .)" -ge 2 ] && ! printf "%s\n" "$F3PH" | grep -viE "\bport\b" | gq . && printf "%s" "$FLAT" | grep -oE "\[[^]]*\bscheme\b[^]]*\]" | gq -iE "\bport\b"'
 
+# ---- adversarial round 2: eight counterexamples on their exact inputs (task-1-adv2.md; calls in task-1-adv2-fix-brief.md) ----
+# As in round 1, a behaviour check reads the rule's switches from the guide's wording, then runs the rule on the input.
+PY4='
+import json, os, re, sys
+from urllib.parse import urlsplit
+m = sys.argv[1]
+if m == "served":                          # base URL with a path: the served path is the base path joined with /terms
+    bp, sl, qf = (x == "1" for x in sys.argv[2:5])
+    def served(base, final):
+        want = (urlsplit(base).path.rstrip("/") if bp else "") + "/terms"
+        u = urlsplit(final); p = u.path if qf else u.path + ("?" + u.query if u.query else "") + ("#" + u.fragment if u.fragment else "")
+        return p == want or (sl and p == want + "/")
+    B = "https://dev.example.com/app"
+    ok = all(served(b, f) == e for b, f, e in [(B, B + "/terms", True), (B, B + "/terms/", True), (B, B + "/terms?x=1#f", True),
+             (B, "https://dev.example.com/terms", False), (B, B + "/login?next=/app/terms", False),
+             ("http://localhost:3000", "http://localhost:3000/terms", True), ("http://localhost:3000", "http://localhost:3000/terms/", True)])
+elif m == "asked":                         # the coming-soon exception: items 2-5 only, or keyed on the reason text alone
+    i25 = sys.argv[2] == "1"
+    def asked(item, state, reason):
+        return state in ("skipped", "missing") and not (reason == "coming soon" and (item >= 2 if i25 else True))
+    ok = asked(1, "skipped", "coming soon") and not asked(2, "skipped", "coming soon") and asked(1, "skipped", "our lawyer is writing them")
+elif m == "stored":                        # a stored done item 2 whose reason holds a ?token= URL, on an item that is not asked
+    cover, empty, kept, novalue = (x == "1" for x in sys.argv[2:6]); url = sys.argv[6]
+    old = {"state": "done", "reason": "pentest finished, report at " + url}
+    new = {"state": old["state"] if kept else "skipped", "reason": "" if (cover and empty) else old["reason"]}
+    line = "I cleared the reason of item 2 (security audit)" + ("" if novalue else ": " + old["reason"])
+    sec = re.compile(os.environ["SECRET_RE"])
+    ok = new["state"] == "done" and not sec.search(new["reason"]) and url.split("=", 1)[1] not in line
+elif m == "anchor":                        # the guide pattern list, anchored at a token start or not, on ordinary words
+    a = sys.argv[2] == "1"; pre = [p for p in sys.argv[3].split("\n") if p]
+    alt = "|".join(re.escape(p) for p in pre)
+    pat = re.compile(("(?:^|[^A-Za-z0-9])(?:" + alt + ")" if a else "(?:" + alt + ")") + "|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{32,}")
+    no, yes = sys.argv[4].split("\n"), sys.argv[5].split("\n")
+    ok = bool(pre) and not any(pat.search(x) for x in no) and all(pat.search(x) for x in yes)
+sys.exit(0 if ok else 1)
+'
+py4() { python3 -I -c "$PY4" "$@" 2>/dev/null; }
+
+# call 1: "that path" is the base URL's own path joined with /terms (https://dev.example.com/app -> /app/terms), one trailing
+# slash allowed, query and fragment ignored; /app/terms on that dev URL is served, /terms there is not
+A1B=0; A1S=0; A1Q=0
+says 'that path|final URL|served' 'base URL|dev_url' '+\b(own )?path\b[^.;]{0,20}\b(joined with|plus|followed by)\b[^.;]{0,10}`?/terms' && A1B=1
+{ says 'trailing slash' '\bwith or without\b' || says 'trailing slash' '+\bmay end\b|\ballowed\b|\beither\b'; } && A1S=1
+{ says '\b(query|fragment)\b' '+\bignored\b' || says '\b(query|fragment)\b' '\b(doesn.t|does not|don.t|do not|never) change the path\b'; } && A1Q=1
+check "adv2 1 (dev URL with a path): the served path is the base URL's path joined with /terms; on https://dev.example.com/app a final /app/terms (/, ?x=1#f) is served, /terms is not; with no base path it stays /terms" \
+  'py4 served "$A1B" "$A1S" "$A1Q"'
+
+# call 2: the coming-soon exception covers items 2-5 only -- a skipped item 1 is asked whatever its reason says, "coming soon" too
+A2I=0; [ -n "$(sel "${AGAIN[@]}" 'coming soon' | grep -iE 'items? 2.{1,4}5[^.;]{0,40}coming soon|coming soon[^.;]{0,40}items? 2.{1,4}5' || true)" ] && A2I=1
+check "adv2 2 (coming soon typed for item 1): the asked-again exception names items 2-5, so item 1 skipped with the reason \"coming soon\" is asked; item 2 with it is not; and a skipped item 1 is asked whatever its reason says" \
+  'py4 asked "$A2I" && says "\bitem 1\b" "\`?skipped\`?|\bskip" "+\b(whatever|any)\b[^.;]{0,20}\breason\b|\bregardless of\b[^.;]{0,20}\breason\b"'
+
+# call 3: no .ship-it.yml yet -- the frontend is app.services' service when that file exists, else the compose service named
+# frontend, else the only service that publishes a port; no service or port found: nothing is requested and the user hears
+# "I couldn't find where your app runs on this computer"; "didn't answer" only when a request was really sent and failed
+check "adv2 3 (no .ship-it.yml yet): the frontend is app.services' service when the file exists, else the compose service named frontend, else the only service publishing a port; none found -> nothing requested, \"I couldn't find where your app runs\"; \"didn't answer\" only after a real request" \
+  'says "\.ship-it\.yml" "+\b(exists|is there)\b" && says "compose" "+\bservice (named|called) \`?frontend\`?" && says "+\bonly service\b[^.;]{0,40}\bpublish" && infl "app\.services.{0,250}\bservice (named|called) \`?frontend.{0,250}\bonly service\b" && says "\bnothing is requested\b|\bno request is (made|sent)\b|\bsends nothing\b" && says "couldn.t (find|tell) where (your|the) app runs" && says "didn.t answer" "\bonly (when|if)\b[^.;]{0,50}\b(request|sent)\b"'
+
+# call 4: the no-secret check covers every item, items 2-5 included; a stored match on an item not asked is written empty,
+# the state stays, and one line names the item and field, never the value -- run on a stored done item 2 whose reason holds
+# a ?token= URL (built at run time)
+A4C=0; A4E=0; A4K=0; A4V=0
+says '\b(every|each|all five)\b[^.;]{0,20}\bitems?\b' 'reason' 'evidence' '+\bitems 2.{1,4}5\b[^.;]{0,15}\b(included|too)\b|\bincluding items 2.{1,4}5\b' && A4C=1
+says '\bstored\b|\bin the record\b' '\b(isn.t|is not|not) asked\b' '+\bwritten empty\b|\bcleared\b|\bemptied\b' && A4E=1
+says '\bstate\b' '+\b(stays?|is kept|kept)\b' && A4K=1
+says '\bone line\b' '\bwhich item\b' '\bwhich field\b' '\bnever the value\b|\bnever (shows|says|names|repeats) the value\b|\bwithout the value\b' && A4V=1
+A4U="$(printf 'https://%s/r?%s=%s%s' vault.example.com token abc 123)"
+check "adv2 4 (secret in an item not asked): a stored done item 2 whose reason holds a ?token= URL gets its reason written empty, keeps its state done, and the one line names the item and field, never the value" \
+  'py4 stored "$A4C" "$A4E" "$A4K" "$A4V" "$A4U"'
+
+# call 5: a pattern matches only at the start of a token -- "risk-based review", "task-force", "desk-check" (and "ask-me-later")
+# don't match; a run-time " sk-" plus a long run, "=sk-..." and "\"sk-..." do; the pattern list is the guide's own
+A5A=0
+{ says 'pattern|match' '+\bstart of (a |the )?(token|word)\b' || says 'pattern|match' '\b(isn.t|is not|not) a letter or (a )?digit\b'; } && ! says 'pattern|match' '+\banywhere\b' && A5A=1
+A5P="$(sel 'secret patterns' | cut -d $'\x1f' -f1 | grep -oE '`[^`]+`' | tr -d '`' | sort -u || true)"
+A5SK="$(printf '%s%s' s k-)"; A5RUN="$(printf 'a%.0s' {1..40})"
+A5NO="$(printf '%s\n' 'risk-based review is scheduled for next month' 'the task-force has not signed off yet' 'our desk-check happens Friday' 'ask-me-later')"
+A5YES="$(printf '%s\n' " ${A5SK}${A5RUN}" "=${A5SK}abc1" "\"${A5SK}abc1" "${A5SK}abc1")"
+check "adv2 5 (ordinary words): with the guide's own pattern list, matched only at the start of a token, \"risk-based review\", \"task-force\", \"desk-check\" don't match; \" sk-\" plus a long run, \"=sk-\" and \"\\\"sk-\" do" \
+  'py4 anchor "$A5A" "$A5P" "$A5NO" "$A5YES"'
+
+# call 6: an item 2-5 that belongs to a left-out item reads "Left out (your choice)", which wins over coming soon
+check "adv2 6 (one reason per item): when an item 2-5 belongs to a left-out item, \"Left out (your choice)\" wins over coming soon" \
+  'says "\bitems? 2.{1,4}5\b|left-out item" "Left out \(your choice\)\"?[^.;]{0,25}\b(wins|takes precedence|comes first|is used)\b[^.;]{0,25}\b(over|before|instead of|rather than)\b[^.;]{0,5}\`?coming soon"'
+
+# call 7: two lists under one heading, each under its own plain label ("go-live items", "items you left out"); the CI/CD
+# contract reads the user's left-out picks only from the left-out label
+check "adv2 7 (two lists, one heading): the five lines and the left-out lines each sit under their own label (go-live items, items you left out); the CI/CD contract reads left-out picks only from the left-out label" \
+  'says "\blabels?\b" "+go-live items" "+items you left out" && gsays "\bautomation\b" "+\breads?\b" "items you left out" "+\bonly\b"'
+
+# call 8: step 7 -- the heading holds the five lines on a production request, and the left-out lines whenever the user left
+# items out, production or not
+check "adv2 8 (step 7): the PR step says the heading holds the five go-live lines on a production request and the left-out lines whenever the user left items out, production or not" \
+  'printf "%s" "$STEP" | gq -iE "\bfive( go-live)? lines\b[^.;]{0,40}\bproduction request\b|\bproduction request\b[^.;]{0,40}\bfive( go-live)? lines\b" && printf "%s" "$STEP" | gq -iE "\bleft-out lines\b[^.;]{0,60}\b(whenever|production or not|whether or not)\b"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
