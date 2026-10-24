@@ -957,6 +957,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.19 -- The SDD gate knows a resumed agent is still working
+
+The `/subagent-it` Stop hook nudged the coordinator as if a run had stalled while an agent it had
+resumed by message was still working. Three nudges later, the gate released and stopped guarding the run.
+- **Resumes count.** A successful message that resumes a finished agent now counts as that agent
+  running again, until its final notice. An interim "waiting on its own work" notice still doesn't
+  end the wait, and the final notice ends every launch of that agent.
+- **Checked.** `scripts/test-sdd-gate.sh` grows from 23 to 31 checks; three of the new ones failed
+  before the fix. Replayed against this project's own session transcripts, the new gate counts all
+  60 resumes, and is never quieter than the old one.
+
 ### v1.44.18 -- The ship-it guide describes what /ship-it really does
 
 make-it's `ship-it-guide.md` described 18 /ship-it steps that ship-it's own instructions never run.

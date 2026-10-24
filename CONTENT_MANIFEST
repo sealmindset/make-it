@@ -264,7 +264,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 0bcd3db596f1cbecc6a969f252a07cd4ebad0ad30b7211c0c2e7fc747d7cdc46  make-it/sdd/adversarial-reviewer-prompt.md
 e209cd556fb7f81c0d60eef02a7e738c3a3d31a825e956adf062846f2dded817  make-it/sdd/implementer-prompt.md
 4fbb500aa29dfbc431813626cddaa1e6baddd41745d5cf62f30c15a0d365c077  make-it/sdd/scripts/review-package
-3df2106197855b3ca14f610926160b7f11ad672b1e8f8f7cbed0cbd46de80086  make-it/sdd/scripts/sdd-gate
+f0e626fd172c1c91601da41a3086d4002728beb7bd5943da51f0bf7eb07ed1c2  make-it/sdd/scripts/sdd-gate
 88b979defceb0005dbdf7a985aa0603ae272ab67bb68ed1ed4260f015944d288  make-it/sdd/scripts/task-brief
 4a919b17d2a83b2f92cf7652f010564532fb29d89f02408eb497e9ad1d73f461  make-it/sdd/task-reviewer-prompt.md
 0e94261fd25e1a6545d6c0fd23c776ce85bb6b5cf22ddc468af4a4639269f95a  make-it/sdd/test-writer-prompt.md

@@ -76,5 +76,22 @@ wait_case "interim, then final notice: nudges" 2 "$(launch 5; notice toolu_A "$I
 wait_case "final notice carrying only task-id: nudges" 2 "$(launch 5; notice "" "$FINAL")"
 wait_case "interim past the wait window (stale): nudges" 2 "$(launch 180; notice toolu_A "$INTERIM")"
 
+# E02-S42: a SendMessage that resumes a finished agent starts it working again. Its tool_result is
+# JSON (real shape); the resumed run's notice carries <task-id> = that agentId.
+RESUMED='{\"success\":true,\"message\":\"Resuming agent a1\",\"resumedAgentId\":\"a1\",\"pin\":{\"id\":\"a1\"}}'
+sent() { # sent <minutes-ago> <tool-use-id> <SendMessage result, quotes escaped>
+  m='{"role":"user","content":[{"tool_use_id":"'"$2"'","type":"tool_result","content":[{"type":"text","text":"'"$3"'"}]}]}'
+  printf '{"type":"user","timestamp":"%s","message":%s}\n{"type":"api-request-blob","message":%s}\n' "$(ago "$1")" "$m" "$m"
+}
+wait_case "resumed agent still running: no nudge" 0 "$(launch 30; notice toolu_A "$FINAL"; sent 5 toolu_S "$RESUMED")"
+wait_case "resumed agent's final notice (task-id only): nudges" 2 "$(launch 30; notice toolu_A "$FINAL"; sent 5 toolu_S "$RESUMED"; notice "" "$FINAL")"
+wait_case "resumed agent's interim notice: still waiting" 0 "$(launch 30; notice toolu_A "$FINAL"; sent 5 toolu_S "$RESUMED"; notice toolu_S "$INTERIM")"
+wait_case "second resume after it finished: no nudge" 0 "$(launch 30; notice toolu_A "$FINAL"; sent 20 toolu_S "$RESUMED"; notice toolu_S "$FINAL"; sent 5 toolu_T "$RESUMED")"
+wait_case "interim, resume, then final notice: nudges" 2 "$(launch 30; notice toolu_A "$INTERIM"; sent 5 toolu_S "$RESUMED"; notice toolu_S "$FINAL")"
+wait_case "resume past the wait window (stale): nudges" 2 "$(launch 200; notice toolu_A "$FINAL"; sent 180 toolu_S "$RESUMED")"
+# not a resume: a failed SendMessage, or one with no resumedAgentId (a running agent, another session)
+wait_case "failed SendMessage: not counted" 2 "$(launch 30; notice toolu_A "$FINAL"; sent 5 toolu_S '{\"success\":false,\"message\":\"Agent a1 not found\",\"resumedAgentId\":\"a1\"}')"
+wait_case "SendMessage without resumedAgentId: not counted" 2 "$(launch 30; notice toolu_A "$FINAL"; sent 5 toolu_S '{\"success\":true,\"message\":\"Message sent to a1\"}')"
+
 expect "garbage stdin: no-op (fail open)" 0 "not json"
 [ "$fail" = 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
