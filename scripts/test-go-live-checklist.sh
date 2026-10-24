@@ -177,6 +177,15 @@ check "fix 2 (VLF): VLF mode still commits the record, and no sentence says VLF'
 # asked; and the asked-again sentence itself names both kinds it doesn't ask
 check "fix 3 (left-out bound): a go-live item of a left-out item isn't asked while the item is left out; once brought back it is asked; the asked-again rule names its two exceptions (coming soon, Left out (your choice))" \
   'says "\b(isn.t|is not|not|never) asked\b[^.;]{0,40}\bwhile\b[^.;]{0,40}\bleft out\b" && says "\bbr(ing|ings|ought)\b[^.;]{0,25}\bback\b|\badd(s|ed)?\b[^.;]{0,25}\bback\b" "+\basked\b" && says "${AGAIN[@]}" "\b(except|but not|other than|apart from|unless)\b" "coming soon" "Left out \(your choice\)"'
+# fix round 2 (re-review 1, Important 2 residual): the reason "Left out (your choice)" outlives the left-out state, so the
+# asked-again rule's exception for it holds only while the item is still left out -- every asked-again sentence that names
+# it carries that bound, and none says the opposite ("even once brought back", "whether or not", "no longer left out")
+ASKBOUND='Left out \(your choice\)"?[^.;]{0,60}\b(while|as long as|so long as)\b[^.;]{0,40}\bleft out\b|Left out \(your choice\)"?[^.;]{0,60}\buntil\b[^.;]{0,40}\b(brought|comes) back\b'
+ASKUNB='\beven\b[^.;]{0,15}\b(once|after|when|if|though)\b|\b(whether|regardless)\b[^.;]{0,40}\bleft out\b|\b(no longer|not|isn.t) left out\b|\b(not|never|isn.t|aren.t) asked\b[^.;]{0,30}\b(once|after|when|if)\b[^.;]{0,30}\bbr(ought|ing|ings)\b'
+askbound() { local s; s="$(sel "${AGAIN[@]}" 'Left out \(your choice\)' | cut -d $'\x1f' -f1)"
+  [ -n "$s" ] && ! printf '%s\n' "$s" | grep -viE "$ASKBOUND" | gq . && ! printf '%s\n' "$s" | gq -iE "$ASKUNB"; }
+check "fix round 2 (Asking bound): the asked-again rule's \"Left out (your choice)\" exception holds only while the item is still left out (never \"even once brought back\", never unbounded)" \
+  'askbound'
 # call 4: the .ship-it.yml example documents deployment.dev_url -- an empty or placeholder value (never a host), with a
 # comment (on its line or right above it) that DevOps fills it in and the go-live checklist reads it
 YML="$(awk '/^## /{on=($0=="## .ship-it.yml Configuration")} on' "$G" | awk '/^```/{if(f)exit; f=1; next} f')"
