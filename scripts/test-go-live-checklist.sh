@@ -314,6 +314,26 @@ check "adv 9 (reason over 200): a typed reason over 200 characters gets a reques
 check "adv 10 (what unreadable means): by the guide's own definition an empty file, truncated JSON, a non-object and schema 2 are unreadable; a valid schema-1 record is not" \
   'py2 unreadable "$FLAT"'
 
+# fix round 3 (re-review 3, Important 1; the correction in task-1-adv1-fix-brief.md): evidence keeps the port it checked --
+# scheme, host, port (when the URL has one) and path only. The section's own rule (C4K, read above) runs on a local URL with
+# a basic-auth user and password (built at run time), a query and a fragment, and must give http://localhost:3000/terms;
+# every "scheme ... path only" phrase in the section, the ask's bracket included, names the port
+PY3='
+import re, sys
+from urllib.parse import urlsplit
+t, u, pw, want = sys.argv[1].lower(), urlsplit(sys.argv[2]), sys.argv[3], sys.argv[4]
+has = lambda *w: any(re.search(r"\b" + x + r"\b", t) for x in w)
+out = ((u.scheme + "://" if has("scheme", "protocol") else "") + ((u.username or "") + "@" if has("user", "username", "credentials", "login") else "")
+       + ((u.hostname or "") if has("host", "hostname", "domain") else "") + (":" + str(u.port) if has("port") and u.port else "")
+       + (u.path if has("path") else "") + ("?" + u.query if has("query") and u.query else "") + ("#" + u.fragment if has("fragment") and u.fragment else ""))
+sys.exit(0 if out == want and pw not in out else 1)
+'
+F3PW="$(printf '%s%s' Lo9 cal-pw)"
+F3U="$(printf '%s://%s%s%s@%s/terms?x=1#f' http tester : "$F3PW" localhost:3000)"
+F3PH="$(printf '%s' "$FLAT" | grep -oiE '\bscheme,[^.;:]{0,60}\bpath only\b' || true)"
+check "fix round 3 (evidence keeps the port): the section's evidence rule on the local URL with a basic-auth user and password, ?x=1 and #f gives http://localhost:3000/terms; the rule and the ask's bracket both name the port" \
+  '[ -n "$C4K" ] && python3 -I -c "$PY3" "$C4K" "$F3U" "$F3PW" "http://localhost:3000/terms" 2>/dev/null && [ "$(printf "%s\n" "$F3PH" | grep -c .)" -ge 2 ] && ! printf "%s\n" "$F3PH" | grep -viE "\bport\b" | gq . && printf "%s" "$FLAT" | grep -oE "\[[^]]*\bscheme\b[^]]*\]" | gq -iE "\bport\b"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
