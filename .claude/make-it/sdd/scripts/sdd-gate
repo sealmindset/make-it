@@ -96,16 +96,19 @@ def agent_pending(transcript):
     (`queue-operation` line) hasn't reached the controller yet, so it still counts as waiting.
     An interim notice ("is waiting on its own background work") isn't the agent reporting back.
     A later notice may carry only <task-id>; the launch result's agentId ties it to the launch.
+    A SendMessage that resumes a finished agent (result JSON with success and resumedAgentId) is a
+    new launch of that agent; its final notice ends every launch of that agent.
     """
     launched = {}
-    agents = {}  # agentId -> launch tool_use_id
+    agents = {}  # agentId -> tool_use_ids of its launch and each resume
     try:
         f = open(transcript, errors="replace")
     except (OSError, TypeError):
         return False
     with f:
         for line in f:
-            if "Async agent launched" not in line and "<task-notification>" not in line:
+            if ("Async agent launched" not in line and "<task-notification>" not in line
+                    and "resumedAgentId" not in line):
                 continue
             try:
                 d = json.loads(line)
@@ -122,15 +125,24 @@ def agent_pending(transcript):
                 text = c if isinstance(c, str) else "".join(
                     x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
                 if text.startswith("Async agent launched"):
-                    launched[b.get("tool_use_id")] = d.get("timestamp")
                     m = re.search(r"agentId: (\w+)", text)
-                    if m:
-                        agents[m.group(1)] = b.get("tool_use_id")
+                    aid = m and m.group(1)
+                else:
+                    try:
+                        r = json.loads(text)
+                    except ValueError:
+                        continue
+                    if not (isinstance(r, dict) and r.get("success") is True and r.get("resumedAgentId")):
+                        continue
+                    aid = r["resumedAgentId"]
+                launched[b.get("tool_use_id")] = d.get("timestamp")
+                if aid:
+                    agents.setdefault(aid, []).append(b.get("tool_use_id"))
             for note in re.findall(r"<task-notification>.*?</task-notification>", line):
                 if "is waiting on its own background work</summary>" in note:
                     continue  # interim: the agent is still working
                 ids = re.findall(r"<tool-use-id>(\w+)</tool-use-id>", note)
-                ids += [agents.get(t) for t in re.findall(r"<task-id>(\w+)</task-id>", note)]
+                ids += [u for t in re.findall(r"<task-id>(\w+)</task-id>", note) for u in agents.get(t, ())]
                 for tid in ids:
                     launched.pop(tid, None)
     now = datetime.datetime.now(datetime.timezone.utc)
