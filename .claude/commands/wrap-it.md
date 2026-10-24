@@ -174,6 +174,8 @@ Write or update the state breadcrumb:
 ## Left out by your choice
 [exactly as it is in the file now; if the file has no such section yet, the older left-out lines that read step 2 of `left-out-record.md` finds, moved in as its entries; with nothing left out anywhere, nothing under the heading -- never "- None" or any filler line]
 
+[## Before sharing -- if the file has this section now, keep it exactly as it is]
+
 ## Test Status
 - Unit tests: [X passing, Y failing, or "not yet set up"]
 - Integration tests: [X passing, Y failing, or "not yet set up"]

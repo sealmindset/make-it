@@ -1238,7 +1238,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
 
 <step name="ship-handoff">
 
-**Identical to /make-it Phase 4.** Reference ship-it-guide.md.
+**Identical to /make-it Phase 4.** Reference ship-it-guide.md. If the app uses the claude_agent
+provider, the billing ask in ship-it-guide.md comes first.
 
 "Your app has been upgraded and is ready to deploy! Everything that was working before still works, plus you now have:
 

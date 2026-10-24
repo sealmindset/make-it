@@ -303,8 +303,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   silent smart default: select it automatically, mention it in the Design summary, and keep
   switching to an API key a one-line `.env` change. Do NOT default multi-user/shared/team apps
   to `claude_agent` (a subscription token is single-identity). On ship to others/production,
-  move to `anthropic`/enterprise only after the user picks the billing mode by name (make-it
-  ship-handoff), and never commit/ship the personal token.
+  move to `anthropic`/enterprise only after the user picks the billing mode by name (the billing
+  ask in ship-it-guide.md), and never commit/ship the personal token.
 - **claude_agent (Claude Code subscription) auth:**
   - Auth via `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) -- NO `ANTHROPIC_API_KEY`.
   - Uses `claude-agent-sdk` (Python) driving the local Claude Code CLI subprocess in
