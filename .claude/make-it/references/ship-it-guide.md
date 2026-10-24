@@ -387,9 +387,9 @@ asked again without the secret: "That looks like a password or key, and this ans
 your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`, `AKIA`,
 `ghp_`, `github_pat_`, `-----BEGIN`, `password=`, `token=`, `secret=`, and a hex or base64 run of
 32 or more characters. `evidence` is a URL with no query string and no `user:pass@`, or a
-repo-relative path. Every `evidence` URL is written as scheme, host and path only: any
-`user:pass@`, query and fragment are removed before it is written, and they are never shown
-either. The record never holds amounts, card, bank or account details, or row data.
+repo-relative path. Every `evidence` URL is written as scheme, host, port (when the URL has one)
+and path only: any `user:pass@`, query and fragment are removed before it is written, and they
+are never shown either. The record never holds amounts, card, bank or account details, or row data.
 /ship-it runs this check on the whole record itself, before the commit: a reason that matches is
 asked again, and an `evidence` that matches is written empty.
 
@@ -444,7 +444,7 @@ Otherwise /ship-it names what is missing (which page, which topic, or that nothi
 the user picks `skipped`, with a reason they type, or `na`:
 "Before your app goes live, one check on my list isn't met: terms and privacy pages. They tell
 people the rules for using your app and what you do with their data. I looked at [base URL,
-scheme, host and path only]:
+scheme, host, port (when it has one) and path only]:
 [what is missing, for example: the terms page asks people to sign in first].
 What changes: only this list. Nothing is held up: your answer is kept in your code and listed
 with your changes, so don't put a password or key in it.
