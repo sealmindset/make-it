@@ -969,6 +969,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.7 -- No reference claims a /ship-it step that doesn't run
+
+v1.44.18 made the ship-it guide describe only what /ship-it really runs. Sixteen other files still
+said /ship-it runs the NeMo full suite, writes the AI-safety attestation, or flags risky prompts in the
+PR. Some also said a skill tests the fallback AI model, which none does.
+- **Pointed at what really runs.** References, the README and the docs now name build-verify,
+  /nemo-it and /fix-it (the guide's "What make-it runs before /ship-it"), or the guide's "Safety steps
+  /ship-it doesn't run yet". The fallback-model rule says plainly that it's a known gap.
+- **No card ids in shipped text.** Installed files name no board card. A new check enforces it.
+- **Checked.** New `scripts/test-references-ship-it-steps.sh` (20 checks): every reverted file fails it,
+  and every other test script stays green.
+
 ### v1.70.6 -- The second scaffold passes its own checks too, and both stay clean after the app runs
 
 - **`nextjs-fullstack` on a fresh copy** failed lint (1 error, 16 warnings), its formatting check
