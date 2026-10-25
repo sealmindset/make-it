@@ -382,7 +382,9 @@ with the newer `date` counts, and a tie goes to the branch's. An item only one s
 that side. So a `done` or `na` given on another branch and already merged stays quiet here. The
 record the checklist writes on the branch is the merged result: the no-secret check, the
 unreadable rules and the shape rules apply to it, and to main's copy as read, so an unreadable
-main copy counts as no main copy.
+main copy counts as no main copy, and nothing is said about it. An unreadable branch file beside a
+readable main copy counts as no branch record, so main supplies the items; the one-line notice is
+still said.
 
 When main's copy can't be read (no network, no default branch on GitHub yet, no file there), the
 checklist goes on with the branch's own record. It never stops the request. It says so in one
@@ -390,10 +392,21 @@ plain line only when GitHub couldn't be reached: "I couldn't reach GitHub, so I 
 branch's go-live record." No file on main is normal, and nothing is said about it.
 
 A clash is still possible: when two open branches both change an answer, git shows a conflict in
-`.ship-it-go-live.json` on the second PR. It is never a gate. /ship-it tells the user in plain
-words: "Your go-live record changed on two branches. To settle it, keep, for each item, the line
-with the newer date." Re-running /ship-it after updating the branch from main settles it too,
-since /ship-it reads both again and keeps, per item, the newer date.
+`.ship-it-go-live.json` on the second PR. It is never a gate. Re-running /ship-it after updating
+the branch from main settles it: /ship-it settles its own file. When the user's update from main
+has left the record in conflict and `git diff --name-only --diff-filter=U` lists only it, so it is
+the only conflicted file, /ship-it doesn't read the file in the working tree, which holds conflict
+markers; it reads the two sides from git, the branch's side and main's side, told apart by whether
+the user merged main in or rebased onto it, never by git's stage numbers. It keeps, per item, the
+newer date, a tie goes to the branch's side, and the record's rules (shape, no-secret check) apply
+to the result. It writes the result and stages it, so /ship-it's normal commit completes the
+user's update (in a rebase, it continues the one the user started). /ship-it never starts a merge
+or rebase itself; it only completes the one the user started. When any other file is conflicted,
+/ship-it stops as before, names those files, and touches none of them: it never settles a file it
+doesn't own.
+
+Only when /ship-it isn't run, the user can settle it by hand: "Your go-live record changed on two
+branches. To settle it, keep, for each item, the line with the newer date."
 
 The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
 written under `## Left out by your choice`, and a left-out item never becomes a go-live ask. A
