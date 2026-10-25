@@ -79,6 +79,9 @@ Nothing in this skill puts a left-out item back on its own (step 6b's dependency
 and the test phase's fixes included), and the test phase's pass/fail report reads a left-out
 item's tests as `left-out-record.md` says.
 
+**The go-live record, everywhere in this skill:** follow the readiness check's read-only rule
+(step 2, Go-live checklist).
+
 **0. Look for a /clear-it handoff (highest-priority context):**
 
 Check for `handoff.md` in the project root. This file is left by /clear-it as a
@@ -728,19 +731,31 @@ For **production**, detect the org's preferred approach:
 Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
 (The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
 resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
-writes, stages or commits it, because /ship-it owns it. Go-live items are normal open items, not
-left-out items (`left-out-record.md`). In the checklist file's `### Go-live checklist` (step 6),
-list:
-- each `skipped` or missing item that the guide's Asking asks again, with its reason and date. A
-  stored reason the guide's No secret rule would refuse is never copied into NEXT-STEPS.md: the
-  line reads `skipped -- (reason not shown) ([date])`, never the value or any part of it. A stored
-  reason over 200 characters counts as missing;
+writes, stages or commits it, because /ship-it owns it. No step of resume-it stages a change to
+`.ship-it-go-live.json`, scanner fixes and feature commits included. A Claude Desktop bundle's
+first commit (step 0) keeps the file exactly as it came in the bundle, without editing it.
+Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
+file's `### Go-live checklist` (step 6), list:
+- each `skipped` or missing item that the guide's Asking asks again, with its reason and date. An
+  item that isn't an object, or whose state is unknown, counts as missing;
 - each item that Asking marks `coming soon` instead (items 2-5), which reads "not built yet", not
   as a step for the user;
-- with no record on the branch or on main, only the "Not started" line: today's /ship-it doesn't
-  run the checklist yet (the guide's Safety steps /ship-it doesn't run yet). When the branch's
-  record is unreadable and main's copy can't be read either, a record still exists: treat all five
-  items as missing, as the guide does, and list them as above, never with the "Not started" line.
+- with no record on the branch and none readable on main (none there, unreadable, or GitHub
+  unreachable), only the "Not started" line: today's /ship-it doesn't run the checklist yet (the
+  guide's Safety steps /ship-it doesn't run yet). When the branch's record is unreadable and
+  main's copy can't be read either, a record still exists: treat all five items as missing, as the
+  guide does, and list them as above, never with the "Not started" line.
+
+Values from the go-live record are shown only as these rules allow, never a hidden value or any
+part of one:
+- A stored reason the guide's No secret rule would refuse is never copied into NEXT-STEPS.md: the
+  line reads `skipped -- (reason not shown) ([date])`. A stored reason over 200 characters counts
+  as missing.
+- A `skipped` item with no reason, or an empty one, shows `(no reason given)`.
+- A stored reason in the guide's left-out words (The record), on an item no longer left out, shows
+  as "left out earlier, since brought back", on a normal open line.
+- A reason's line breaks become spaces, so it stays on one line, and it shows as quoted text.
+- A `date` that isn't a real `YYYY-MM-DD` date shows as `(no date)`.
 
 `done` and `na` items are not listed, nor is an item kept quiet while its item is left out. When a
 record leaves nothing open, leave the subsection out. List go-live items only there, never under
@@ -829,10 +844,10 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 - [ ] [Security item] -- [What needs to happen]
 
 ### Go-live checklist
-- [ ] [Item]: skipped -- [reason] ([date]) -- asked again at your next /ship-it to production
-- [ ] [Item]: not answered yet -- asked again at your next /ship-it to production
+- [ ] [Item]: skipped -- "[reason]" ([date]) -- asked again at your next /ship-it to production (a new request, not a re-run)
+- [ ] [Item]: not answered yet -- asked again at your next /ship-it to production (a new request, not a re-run)
 - [Item]: not built yet in /ship-it (coming soon)
-- Not started -- /ship-it doesn't run this checklist yet; a later /ship-it release goes through it with you before your first production deploy.
+- Not started -- /ship-it doesn't run this checklist yet; a later /ship-it release goes through it with you before your next production deploy.
 
 ## Secrets & Environment Variables
 
