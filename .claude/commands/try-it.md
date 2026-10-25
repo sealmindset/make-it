@@ -535,6 +535,14 @@ c. If a page fails:
 
 **5. Test API endpoints (spot check):**
 
+If sign-in is left out (as in step 3), step 5 still runs, without a token: call each endpoint the
+app already had through the app's own access, whatever it had before the retrofit, and check that
+it responds as it did before. Those endpoints are recorded like any other API check, and the
+report lists them as checked. An endpoint that needed sign-in before the retrofit can't be called
+now, since this check signs in nowhere: name it plainly in the report as not checked, never as
+left out. Only an endpoint that belongs to the left-out item (`left-out-record.md` read step 3)
+is left out.
+
 For each API endpoint:
 ```bash
 curl -sf -H "Authorization: Bearer {token}" http://localhost:{backend_port}/api/{endpoint}
@@ -655,6 +663,11 @@ Your app was tested automatically. Here's what happened:
 | Permissions work correctly | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
 | API is responding | [PASS/FAIL/Left out (your choice)][, plus [W] left out (your choice)] |
 | Dependency health | [Clean / N vulnerabilities remaining / Left out (your choice)][, plus [W] left out (your choice)] |
+
+[If sign-in is left out, the API row gives how the endpoints the app already had went when called
+without signing in (Phase 2 step 5), as checked, never as left out. Under the table, name each
+endpoint that needed sign-in before the retrofit: "[endpoint] -- not checked: it needs signing in,
+and this check signs in nowhere."]
 
 ## Login Testing
 
@@ -1027,8 +1040,9 @@ Let me create it now..."
 
 **Report completeness:**
 - TRY-IT-REPORT.md must exist after every run
-- Screenshots directory must have at least: login, dashboard per role -- except a screenshot a
-  left-out item kept from being taken, which follows `left-out-record.md`
+- Screenshots directory must have at least: login, dashboard per role -- except any that couldn't
+  be taken: all of them when Playwright couldn't be installed, the per-role ones when sign-in is
+  left out, and one a left-out item kept from being taken, which follows `left-out-record.md`
 - All test results must be recorded (not just failures)
 
 **Container management:**
