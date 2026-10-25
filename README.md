@@ -957,6 +957,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.21 -- A broken migration chain is caught before the app starts
+
+Build-verify only checked that an app had migrations. An app whose Alembic chain was broken passed
+Part A, then its backend container died on `alembic upgrade head` in Part B.
+- **New check D06 [BLOCK].** Part A, and the /resume-it catch-up, read every migration's `revision`
+  and `down_revision`. The check fails on a duplicate revision, a `down_revision` that names nothing,
+  or anything other than exactly one head. `alembic heads` is an extra when it's installed, never
+  a way to clear a failure. Each failure has a plain fix, and the scaffold's own ids never change.
+- **Checked.** New `scripts/test-migration-chain.sh` (25 checks). The shipped scaffold and a proper
+  merge revision pass. A duplicate `002`, a second head and a dangling link fail. Real Alembic
+  agrees with every verdict.
+
 ### v1.44.20 -- The canary no longer splits a CLAUDE.md's intro from its title
 
 Claude Code's `/init` writes a short intro under a `CLAUDE.md`'s title. The S13 catch-up put the

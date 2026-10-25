@@ -158,7 +158,7 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 ## Database & Seed Data
 
-**These checks require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip all D01-D05 checks.
+**These checks require PostgreSQL.** If database is excluded (see design-blueprint.md Section 3b), skip all D01-D06 checks.
 
 **D01** [Tier 1, 5] [BLOCK] **Database migrations exist** -- Alembic versions/ or Prisma migrations/ (not just model files).
 
@@ -172,6 +172,8 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 - `sa.text("...").bindparams(...)` for parameterized inserts (NOT `op.execute()` with 2+ args)
 - f-string literals for deterministic UUIDs (NOT PostgreSQL `::uuid` cast)
 - `sa.Enum(create_type=False)` for existing enum columns (NOT `sa.String`)
+
+**D06** [Tier 1] [BLOCK] **One migration head, no duplicate or dangling revisions** (if using Alembic) -- The backend container runs `alembic upgrade head` at start and dies on a broken chain, so Part A reads the chain first. Read every `.py` file except `__init__.py` in Alembic's `versions/` directory (scaffold: `backend/alembic/versions/`) for its `revision` and its `down_revision` -- a string, `None`, or a tuple of strings for a merge revision (each string in the tuple counts). The check fails if any of these is true: (1) **duplicate revision** -- two files declare the same `revision`; (2) **dangling revision** -- a `down_revision` names a revision no file declares; (3) **not exactly one head** -- the chain must have exactly one head, and a head is a revision that no file's `down_revision` names. How to check: the static read is required and decides; `grep -nE '^(down_)?revision[: =]' backend/alembic/versions/*.py` lists the values (read the file when a value spans lines). When alembic and the app's packages are installed, also run `alembic heads` where `alembic.ini` lives: any error, or more than one line of output, fails the check too, and a clean `alembic heads` never clears a static failure. Fix: change the app's migrations, never the scaffold's own (`001`-`003` keep their ids). Duplicate → give the app's file the next free id and set its `down_revision` to the current head. Dangling → point it at the revision id it meant (a file name such as `"003_prompt_management"` used for `"003"` is the usual slip). Not one head → add a merge revision with the next free id whose `down_revision` is a tuple of the heads (`alembic merge heads` writes one). Re-run the check until it passes.
 
 ---
 

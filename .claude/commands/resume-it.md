@@ -398,7 +398,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
    - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
-   - **Database (D01-D05):** Check for migrations directory, seed data file
+   - **Database (D01-D06):** Check for migrations directory, seed data file, and one Alembic head with no duplicate or dangling revision (D06)
    - **Docker (I01-I07):** Check for docker-compose.yml, entrypoint.sh, 127.0.0.1 in health checks
    - **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh
    - **Activity Logs (L01-L08):** Grep for LogStore/log_store, log middleware, /logs/events endpoint

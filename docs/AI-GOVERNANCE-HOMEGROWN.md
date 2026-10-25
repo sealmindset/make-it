@@ -504,7 +504,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Authentication & OIDC | A01-A10 | 10 | 1 (Web App) |
 | RBAC & Permissions | R01-R07 (incl. R01a, R04a) | 9 | 1 (Web App) |
 | UI & Frontend | U01-U09 | 9 | 1 (Web App) |
-| Database & Seed Data | D01-D05 | 5 | 1 (Web App) |
+| Database & Seed Data | D01-D06 | 6 | 1 (Web App) |
 | Docker & Infrastructure | I01-I10 | 10 | 0-1 |
 | Mock Services | M01-M04 | 4 | 1 (Web App) |
 | Activity Logs | L01-L08 | 8 | 1 (Web App) |
@@ -517,7 +517,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Live Verification | V01-V15 | 15 | 0-1 |
 | AI Features | AI01-AI15 | 15 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~154** | |
+| **Total** | | **~155** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)
