@@ -328,8 +328,9 @@ AWS and VLF modes (`/ship-it --aws`, `/ship-it --vlf`) always run it. SAVE mode 
 never runs it. A re-run (RE-RUN: the branch has an open request) asks nothing: only a new request
 asks, and the PR's five go-live lines stay as written. The one exception is a re-run whose PR has
 no `## Go-live checklist` section: it never asked, so it runs the checklist as a new request does,
-for example on the draft PR that `/ship-it save` opened, shipped later. Each run that goes through
-the checklist is a production /ship-it.
+for example on the draft PR that `/ship-it save` opened, shipped later. That re-run reads main's
+copy the same way a new request does (The record). Each run that goes through the checklist is a
+production /ship-it.
 
 In SHIP MODE it runs after intent classification and the left-out ask (when there is one), before
 the first commit, so the record goes out in the same push. AWS and VLF modes run it before their
@@ -364,12 +365,35 @@ on VLF's allowed list. It can't go in `.ship-it.yml`, since DevOps owns that fil
 - `date`: the day the state or reason last changed, as `YYYY-MM-DD`.
 - `evidence`: what the check looked at; empty when there is none.
 
-There is no history array: the git log is the history. No file means every item is missing. An
+There is no history array: the git log is the history. No file on the branch or on main means every
+item is missing. An
 unknown key is ignored. A missing item or an item with an unknown state is asked. The file is
 unreadable when it is empty, isn't valid JSON, isn't an object, or its `schema` isn't 1. If it is
 unreadable, /ship-it says so in one line ("I couldn't read your go-live record, so I'm going
 through it again."), treats all five items as missing, and rewrites the file (git keeps the old
 one).
+
+Before asking, /ship-it reads main's copy: it fetches the default branch, then reads the record
+from it with `git show origin/<default branch>:.ship-it-go-live.json`. This is a read only:
+nothing is checked out, merged or pushed.
+
+When the branch has no record, the checklist starts from main's. When both have an item, the one
+with the newer `date` counts, and a tie goes to the branch's. An item only one side has comes from
+that side. So a `done` or `na` given on another branch and already merged stays quiet here. The
+record the checklist writes on the branch is the merged result: the no-secret check, the
+unreadable rules and the shape rules apply to it, and to main's copy as read, so an unreadable
+main copy counts as no main copy.
+
+When main's copy can't be read (no network, no default branch on GitHub yet, no file there), the
+checklist goes on with the branch's own record. It never stops the request. It says so in one
+plain line only when GitHub couldn't be reached: "I couldn't reach GitHub, so I used this
+branch's go-live record." No file on main is normal, and nothing is said about it.
+
+A clash is still possible: when two open branches both change an answer, git shows a conflict in
+`.ship-it-go-live.json` on the second PR. It is never a gate. /ship-it tells the user in plain
+words: "Your go-live record changed on two branches. To settle it, keep, for each item, the line
+with the newer date." Re-running /ship-it after updating the branch from main settles it too,
+since /ship-it reads both again and keeps, per item, the newer date.
 
 The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
 written under `## Left out by your choice`, and a left-out item never becomes a go-live ask. A
