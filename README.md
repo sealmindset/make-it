@@ -549,8 +549,8 @@ A complete, production-ready web application with:
 | **AI Providers** | Multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with model tiering (heavy/standard/light) -- only if your app uses AI features |
 | **AI Prompt Management** | Database-stored prompts with version history and admin UI for editing -- scales from code-only (1-3 prompts) to full management platform (10+ prompts). Includes content validation, immutable safety preamble, and mandatory test-before-publish workflow |
 | **AI Operational Safety** | Runtime safety stack: input sanitization, output validation, rate limiting, PII masking, error sanitization, prompt size validation, system prompt hardening, conversation history management |
-| **AI Prompt Template Validation** | Supply-chain injection protection: `validatePromptTemplate()` blocklist, immutable safety preamble auto-prepended at runtime, draft/test/publish workflow, variable interpolation sanitization, risk-flagged edits flagged for security review at deploy time |
-| **AI Safety Testing** | NeMo Guardrails with 6 test categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination) -- generates a GRC-required attestation document |
+| **AI Prompt Template Validation** | Supply-chain injection protection: `validatePromptTemplate()` blocklist, immutable safety preamble auto-prepended at runtime, draft/test/publish workflow, variable interpolation sanitization, risk-flagged edits logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it") |
+| **AI Safety Testing** | NeMo Guardrails with 6 test categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination) -- the GRC-required attestation document comes from `/nemo-it` |
 | **Application Settings** | Database-backed settings management with in-memory cache (60s TTL), cascading precedence (DB > .env > default), Admin Settings page with tab grouping, sensitive value masking, inline editing, and audit log |
 | **Docker** | Multi-service Compose with health checks, migration auto-run, mock services on dev profile |
 | **Mock Services** | Mock OIDC provider for local auth, plus mock services for any external integrations (Jira, Tempo, etc.) |
@@ -625,7 +625,7 @@ When administrators can edit AI prompts through the UI (Tier 2/3 prompt manageme
 
 **Security Review Integration:**
 - Risk-flagged edits (override warnings, system-category prompts) are logged with `risk_flag: true`
-- `/ship-it` checks for risk-flagged edits since last deploy and adds a "Prompt Safety Review Required" section to the PR for security team review
+- No skill flags them for security team review at ship (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ### Layer 3: NeMo Guardrails Testing (Prompt #10d)
 
@@ -641,9 +641,9 @@ Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
 | Hallucination | Does the AI generate false or fabricated information? | 10 |
 
 - Basic suite (18 tests) runs during build-verify
-- Full suite (60+ tests) runs during `/ship-it`
+- Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it")
 - Self-healing remediation loop for failures
-- Generates GRC-required AI Safety Attestation in `docs/`
+- The GRC-required AI Safety Attestation comes from `/nemo-it`, in `docs/attestations/nemo-it/`
 
 ### AI Prompt Management Tiers
 
@@ -875,8 +875,8 @@ All of Tier 0, plus:
 - **AI provider abstraction** (if app uses AI) -- configurable via env var, supports Azure AI Foundry, Anthropic, OpenAI, Ollama
 - **AI operational safety** (if app uses AI) -- runtime safety stack in `lib/ai/`: input sanitization, output validation, rate limiting, PII masking, error sanitization, prompt size validation, system prompt hardening, conversation history management
 - **AI prompt management** (if app uses AI) -- scales from code-only to database-managed with admin UI based on prompt count. Tier 2/3 includes content validation with blocklist, immutable safety preamble, mandatory test-before-publish workflow, and variable interpolation sanitization
-- **AI safety testing** (if app uses AI) -- NeMo Guardrails with 6 mandatory test categories; generates GRC-required attestation for production deployment
-- **Prompt safety review gate** (if app uses AI + Tier 2/3 prompts) -- `/ship-it` checks for risk-flagged prompt edits and includes them in the PR for security team review before merge
+- **AI safety testing** (if app uses AI) -- NeMo Guardrails with 6 mandatory test categories; the GRC-required attestation for production deployment comes from `/nemo-it`
+- **Prompt safety review** (if app uses AI + Tier 2/3 prompts) -- risk-flagged prompt edits are logged for security team review; no skill flags them at ship (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ### Tier 2: IDE Extension
 
@@ -935,7 +935,7 @@ Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your exis
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
 
 **What prevents someone from injecting malicious prompts through the admin UI?**
-Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that runs adversarial NeMo Guardrails tests against every draft prompt before it can go live. Additionally, template variables are sanitized at render time, risk-flagged edits are logged, and `/ship-it` flags them in the PR for security review.
+Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that runs adversarial NeMo Guardrails tests against every draft prompt before it can go live. Additionally, template variables are sanitized at render time and risk-flagged edits are logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it").
 
 **What if the AI returns something dangerous (XSS, hallucinated data, etc.)?**
 Every AI response passes through `validateAgentOutput()` before it reaches the database or the UI. Structured responses are validated against schemas with value range checks. Free-text responses are scanned for HTML/script tags, markdown injection, and system prompt leakage. AI-generated content in the frontend uses escaped rendering -- never `dangerouslySetInnerHTML`.
@@ -956,6 +956,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.44.23 -- No reference claims a step that doesn't run
+
+v1.44.18 made the ship-it guide describe only what /ship-it really runs. Sixteen other files still
+said /ship-it runs the NeMo full suite, writes the AI-safety attestation, or flags risky prompts in the
+PR. Some also said a skill tests the fallback AI model, which none does.
+- **Pointed at what really runs.** References, the README and the docs now name build-verify,
+  /nemo-it and /fix-it (the guide's "What make-it runs before /ship-it"), or the guide's "Safety steps
+  /ship-it doesn't run yet". The fallback-model rule says plainly that it's a known gap.
+- **No card ids in shipped text.** Installed files name no board card. A new check enforces it.
+- **Checked.** New `scripts/test-references-ship-it-steps.sh` (20 checks): every reverted file fails it,
+  and every other test script stays green.
 
 ### v1.44.22 -- /try-it checks what still works when sign-in is left out
 

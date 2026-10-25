@@ -17,7 +17,7 @@
 - **Shipping** your finished app to production (the default).
 - **Saving** your work safely without going live yet (`/ship-it save`).
 
-Along the way it scans for security problems, generates a safety attestation, and creates the formal "request to go live" with a checklist and reviewers.
+Along the way it scans for security problems and creates the formal "request to go live" with a checklist and reviewers. If your app uses AI, the full **AI-safety test suite** and the **safety attestation** come from [`/nemo-it`](08-nemo-it.md), before you ship.
 
 ---
 
@@ -52,9 +52,7 @@ It runs everything silently and asks **zero questions unless truly necessary**, 
 **What it does for you (a production ship):**
 1. Detects your repo, branch, and login status.
 2. Scans dependencies for vulnerabilities (and auto-fixes where it can).
-3. If your app uses AI, runs the full **AI-safety test suite**.
-4. Generates a **safety attestation** document.
-5. Commits your work, pushes it, and creates the go-live request with labels, reviewers, a security summary, and a go-live checklist.
+3. Commits your work, pushes it, and creates the go-live request with labels, reviewers, a security summary, and a go-live checklist.
 
 ---
 

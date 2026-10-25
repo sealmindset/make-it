@@ -218,7 +218,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | brain_features.org_memory | Design | true when user describes institutional knowledge or team decisions |
 | brain_features.curation_trigger | Design | "scheduled" (default), "post_conversation", or "manual" |
 | nemo_guardrails.enabled | Design | Auto-set to true when ai_features.needed = true |
-| nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each /ship-it) |
+| nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each run); the attestation comes from /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") |
 | nemo_guardrails.topic_domain | Design | Inferred from project purpose -- defines the AI's allowed scope (e.g., "vendor risk management") |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
 | cloud.provider | Design | "Where would you like to host this?" (Azure, AWS, Google Cloud, or just local) -- values: "azure" \| "aws" \| "gcp" \| "none" |

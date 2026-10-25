@@ -66,7 +66,7 @@ The user's journey is simple. The technical details happen invisibly.
    /resume-it        User iterates: "add a chart", "make it blue"
        |              (security scan auto-fix happens here too)
        v
-   /ship-it          Creates PR with scans, workflow, attestation
+   /ship-it          Creates PR with scans, workflow
        |
        v
    DevOps pipeline   Your world starts here
@@ -166,7 +166,7 @@ The full checklist is in `build-standards.md`. When new checks are added, `/resu
 | **Dependency audit** | `/ship-it` | pip-audit (Python), npm audit (Node.js) -- auto-upgrades vulnerable packages |
 | **Secret detection (gitleaks)** | Build-verify | Scans for hardcoded keys, tokens, passwords in committed files (pre-commit hook) |
 | **Trivy config** | Build-verify | Container scanning config verified (CI consumption) |
-| **NeMo Guardrails** | `/ship-it` (if AI features) | 60+ test cases: prompt injection, jailbreak, toxicity, PII leakage, hallucination |
+| **NeMo Guardrails** | Build-verify (18 basic tests); `/nemo-it` (full suite), before `/ship-it` -- if AI features | 60+ test cases: prompt injection, jailbreak, toxicity, PII leakage, hallucination |
 | **OWASP patterns** | Build-verify | Input validation, parameterized queries, security headers |
 
 ### What Happens Post-Build (If Scanner Configured)
@@ -297,11 +297,9 @@ sequenceDiagram
 
     User->>SI: /ship-it
     SI->>SI: Dependency scan + auto-fix
-    SI->>SI: NeMo Guardrails (if AI features)
-    SI->>SI: Generate attestation
     SI->>GH: Create branch, push, create PR
 
-    Note over GH: PR with labels, scans,<br/>attestation, go-live checklist
+    Note over GH: PR with labels, scans,<br/>go-live checklist
     Note over GH: DevOps reviews manually
 ```
 

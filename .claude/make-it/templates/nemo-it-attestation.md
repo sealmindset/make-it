@@ -862,8 +862,8 @@ understand the value of secure-by-design practices vs. post-hoc scanning.
 | PII masking before AI submission | Yes -- lib/ai/pii-masker.ts with pseudonymization | [PRESENT / ABSENT] |
 | AI error sanitization | Yes -- lib/ai/errors.ts, generic client messages | [PRESENT / ABSENT] |
 | Conversation history limits | Yes -- AI_MAX_HISTORY_TURNS with server-side storage | [PRESENT / ABSENT] |
-| NeMo Guardrails test suite | Yes -- 18 tests at build, 60 at ship | [PRESENT / ABSENT] |
-| AI safety attestation | Yes -- auto-generated in docs/attestations/ | [PRESENT / ABSENT] |
+| NeMo Guardrails test suite | Yes -- 18 tests in build-verify, 60 in /nemo-it | [PRESENT / ABSENT] |
+| AI safety attestation | No -- /nemo-it writes it, in docs/attestations/nemo-it/ | [PRESENT / ABSENT] |
 
 ### Coverage Statistics
 

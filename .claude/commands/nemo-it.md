@@ -1136,7 +1136,7 @@ Apply these classification rules:
 | AI: Error message leakage | sanitizeAIError() in Prompt #10e | Prevented |
 | AI: No rate limiting on AI endpoints | aiRateLimit middleware in Prompt #10e | Prevented |
 | AI: No conversation history limits | AI_MAX_HISTORY_TURNS in Prompt #10e | Prevented |
-| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |
+| AI: Fallback model not safety-tested | None today: neither build-verify nor /nemo-it runs the fallback model | Not covered |
 | AI: No system prompt hardening | System prompt safety block in Prompt #10e | Prevented |
 | AI: Admin prompt template injection | validatePromptTemplate() + immutable preamble (Prompt #10e Part 9) | Prevented |
 | AI: No test-before-publish on prompts | Draft/active workflow + mandatory testing (Prompt #10e Part 9) | Prevented |
@@ -1302,7 +1302,7 @@ If AI features were detected, show which AI operational safety controls would ap
 | AI error sanitization | [Prevented/Missing] | Prompt #10e Part 6 |
 | System prompt hardening | [Prevented/Missing] | Prompt #10e Part 7 |
 | Conversation history limits | [Prevented/Missing] | Prompt #10e Part 8 |
-| Fallback model safety | [Prevented/Missing] | Build-verify checklist |
+| Fallback model safety | [Missing/N/A] | None today: neither build-verify nor /nemo-it runs the fallback model |
 | NeMo Guardrails test suite | [Reduced/Missing] | Prompt #10d |
 | OIDC authentication | [Prevented/Missing] | Tier 1 guardrails |
 
