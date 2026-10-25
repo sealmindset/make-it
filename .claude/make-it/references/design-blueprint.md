@@ -946,7 +946,7 @@ guardrails/
 - guardrails/ directory with config.yml and Colang rail files
 - Test suite with minimum 10 cases per category
 - nemoguardrails in dev dependencies (requirements-dev.txt or package.json devDependencies)
-- Attestation document in docs/
+- No attestation document: /nemo-it writes it (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ---
 
@@ -3104,7 +3104,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] NeMo Guardrails config created (guardrails/config.yml + Colang rails) -- if using AI
 - [ ] NeMo Guardrails basic test suite passes during build-verify (18+ tests) -- if using AI
 - [ ] NeMo Guardrails full test suite passes in /nemo-it before /ship-it (60+ tests; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
-- [ ] AI Safety Attestation generated in docs/ -- if using AI
+- [ ] AI Safety Attestation written by /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] sanitizePromptInput() in lib/ai/ strips injection patterns, called by BaseAgent -- if using AI
 - [ ] User input in prompts wrapped in `<user_input>` delimiter tags -- if using AI
 - [ ] System prompts include anti-injection + anti-jailbreak instructions -- if using AI

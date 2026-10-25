@@ -91,7 +91,8 @@ These apply to every project /make-it builds, no exceptions.
     // RIGHT: dotenv only fills in missing vars
     require('dotenv').config()
     ```
-    Build-verify and /ship-it grep for `override=True` and `override: true` in dotenv calls.
+    Build-verify greps for `override=True` and `override: true` in dotenv calls (check I10),
+    before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it").
     Any match is a BLOCK finding.
 16a. **Operator safety** -- Follow `~/.claude/make-it/references/operator-safety.md` (secret and sensitive files, browser isolation, permission mode, prompt injection, vetted MCP servers).
 
@@ -287,7 +288,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Terraform (or equivalent IaC) generated for the user's chosen cloud provider as DevOps handoff artifact (user never applies)
 - IaC state backend configured for the chosen cloud provider's state storage
 - All cloud resources tagged (app, environment, managed-by, owner)
-- ICS/OT integration detection: if app connects to industrial control systems (Modbus, OPC-UA, BACnet, DNP3, S7, EtherNet/IP), flag for OT security team review with SANS ICS Five Critical Controls checklist. /ship-it requires explicit sign-off before production. See build-standards.md X08.
+- ICS/OT integration detection: if app connects to industrial control systems (Modbus, OPC-UA, BACnet, DNP3, S7, EtherNet/IP), flag for OT security team review with SANS ICS Five Critical Controls checklist. No skill asks for an OT security sign-off at ship (ship-it-guide.md, "What /ship-it Does"). See build-standards.md X08.
 
 ### AI Provider Architecture (if app uses AI/LLM features)
 - AI provider MUST be configurable via AI_PROVIDER environment variable
@@ -435,8 +436,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   the primary and fallback models
 - Fallback models may have different safety characteristics -- passing on primary does not
   guarantee passing on fallback
-- Build-verify runs against primary model only (speed); the full suite runs against ALL configured
-  models before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it")
+- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it
+  runs the fallback model, so the MUST above is not met yet: a known gap (card E02-S45)
 
 ### AI Prompt Management (MANDATORY for any app with AI features)
 - **Tier 2 is the MINIMUM for any AI-powered app.** Tier 1 (code-only prompts) is eliminated.
@@ -689,7 +690,7 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 **NeMo Guardrails:**
 - [ ] guardrails/ directory exists with config.yml and Colang rail files
 - [ ] Basic test suite passes (minimum 3 per category = 18 tests)
-- [ ] AI Safety Attestation generated in docs/
+- No AI Safety Attestation at build-verify: /nemo-it writes it (ship-it-guide.md, "What make-it runs before /ship-it")
 
 **Prompt Management (Tier 2 MANDATORY for any AI app):**
 - [ ] Prompts externalized (not hardcoded in business logic)

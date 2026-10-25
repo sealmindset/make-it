@@ -382,7 +382,7 @@ On detection: do NOT block the build. Add a `[SECURITY-OT]` section to TODO.md w
   2. "Ensure ICS/OT endpoints are only reachable from an isolated network segment, not from the general enterprise network"
   3. "Review SANS ICS Five Critical Controls: ICS-specific incident response plan, defensible network architecture, ICS network visibility and monitoring, secure remote access, risk-based vulnerability management"
   4. List each detected protocol/endpoint with the file and line where it was found
-Also add `ics_ot_integration: true` to app-context.json and include the detected protocols in `ics_ot_protocols[]`. /ship-it checks for `ics_ot_integration: true` and requires explicit OT security review sign-off in the PR description before production deployment. Motivation: the January 2026 SADM Monterrey water utility attack (Dragos report) demonstrated that AI-assisted attackers can identify and target ICS endpoints from enterprise IT networks without prior OT knowledge — network segmentation is the critical control that prevented deeper compromise.
+Also add `ics_ot_integration: true` to app-context.json and include the detected protocols in `ics_ot_protocols[]`. No skill checks `ics_ot_integration` or asks for an OT security review sign-off at ship (ship-it-guide.md, "What /ship-it Does"); the `[SECURITY-OT]` items in TODO.md are the reminder. Motivation: the January 2026 SADM Monterrey water utility attack (Dragos report) demonstrated that AI-assisted attackers can identify and target ICS endpoints from enterprise IT networks without prior OT knowledge — network segmentation is the critical control that prevented deeper compromise.
 
 ---
 
