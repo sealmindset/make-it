@@ -461,6 +461,20 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   editing a prompt and re-running the agent uses the updated text,
   sidebar shows "AI Instructions" nav item with Sparkles icon
 
+### AI Accounting (MANDATORY for any app with AI features)
+- Every AI call goes through one metering wrapper that requires the agent's name and writes one
+  ledger row: agent, model, tier, feature, user (tenant only when multi-tenant), the four token
+  counts, and the cost from a dated price table. No prompt or response text in the ledger.
+- An unknown model is recorded as unpriced, never as $0; a cloud bill that isn't connected shows
+  "not connected", never $0.
+- Budget caps stop a call before it spends. Agent switches, tier models, caps, the breaker and
+  prompt rollback live on an admin-only Control Plane, and every change is audited.
+- A tier is lowered only after a replay of past tasks shows quality holds (or with a typed,
+  audited reason). A weak answer gets one step up, never more; a fallback never steps up quietly.
+- ROI comes from what people do with the AI's results (accepted / corrected / redone / auto); dollar
+  ROI only from an admin-entered baseline, with assumptions labelled.
+- Spec: `ai-accounting.md`; Prompt #10g; build-standards AC01-AC16, ACV01-ACV03.
+
 ### AI Prompt Template Content Validation (Tier 2/3 -- database-backed prompts)
 
 When administrators can edit AI prompt templates through the UI, the saved content becomes

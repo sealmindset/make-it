@@ -149,6 +149,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
+      ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     variants/

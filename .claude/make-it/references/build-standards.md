@@ -594,6 +594,55 @@ These checks activate when `brain_features.enabled = true` in app-context.json. 
 
 ---
 
+## AI Accounting (when ai_features.needed = true)
+
+Every AI call counted, priced and named, set against what it produced. Full spec:
+`ai-accounting.md` (same references folder); section numbers below are its sections.
+
+**AC01** [AI] [BLOCK] **Ledger** -- An `ai_usage_events` table has the columns in section 3 (agent, feature, user, task, provider, model, tier, escalated_from, fallback, attempt, mode, the four token counts, cost_usd, priced, latency, status; `tenant_id` only when `multi_tenancy.needed`). No column holds prompt or response text. Verify: migration runs; the column list matches; no `prompt`/`response`/`content`/`messages` column.
+
+**AC02** [AI] [BLOCK] **Every call goes through one metering wrapper** -- One function in the provider layer meters every call (section 4); a failed ledger write never fails the call and is counted. Verify: no AI SDK import or provider URL outside the provider layer (the section 12 step 1 list); run one agent → exactly one new ledger row with all four token counts filled.
+
+**AC03** [AI] [BLOCK] **No unnamed call** -- The agent slug is a required argument of the wrapper, and a CI test fails when a call site skips the wrapper or names an agent missing from the registry (AI17), inline calls in routes and jobs included. Verify: add a throwaway call with an unknown slug → the test fails; remove it → it passes.
+
+**AC04** [AI] [BLOCK] **Dated prices, no silent $0** -- `model_prices` is effective-dated with separate cache-read and cache-write rates, seeded with a source URL and date (section 5). An unknown model is recorded with empty `cost_usd` and `priced = false`, never 0; adding its price re-prices those rows. Verify: a call on a model with no price row → `priced = false`, cost empty, and AI Spend's unpriced count goes up by one; add the price → the row is priced.
+
+**AC05** [AI] [FIX] **Tier on every call** -- Every call names a tier or a pinned model (with a comment saying why); `tier_models` maps tier → model; the ledger records `tier`. Verify: change the light tier's model on the Control Plane → the next light call records the new model, with no deploy.
+
+**AC06** [AI] [FIX] **Ladder report** -- `.make-it/ai-ladder.md` exists with the verdict (no ladder / fixed per agent / routed per call) and one row per call site: model as deployed, calls and cost per month, suggested tier, why, estimated saving, proof needed (section 6). Verify: every call site found by the AC03 test has a row.
+
+**AC07** [AI] [FIX] **One-step escalation; fallback never steps up quietly** -- A weak answer (schema fail, AI03 flag, or confidence below `AI_ESCALATE_BELOW`) gets one call a tier up, recorded in `escalated_from`, never more than one. A fallback call is marked `fallback = true`; one dearer than the primary is flagged on AI Spend. Verify: a light call whose output fails its schema → one standard call follows with `escalated_from = light`, and no third call.
+
+**AC08** [AI] [FIX] **Proven before stepping down** -- The Control Plane refuses to lower an agent's tier without a passing replay in the last 30 days, unless the admin types a reason (audited, shown on AI Agents). The replay writes nothing and sends nothing (section 6). Verify: lower a tier with no replay → refused with a plain message; run the replay on seed tasks → result and cost in `control_audit_log`; the switch is then allowed.
+
+**AC09** [AI] [FIX] **Outcomes from real actions** -- `ai_outcomes` gets accepted / corrected / redone / auto / unsure from the app's own actions on AI results, and a person's verdict beats a system one (section 7). Verify: approve one seeded AI result unchanged and edit another → `accepted` and `corrected` rows.
+
+**AC10** [AI] [FIX] **ROI shown** -- Cost per completed task (redone tasks in the cost, not the count; with median and p90), the verdict rates, and done-without-a-person always show. Dollar ROI shows only for agents or features with a baseline: ROI = (minutes saved ÷ 60 × hourly rate − AI cost − infra cost) ÷ (AI cost + infra cost), assumed values labelled "assumed", per-agent ROI labelled "AI cost only". Verify: with the seed baseline, the page's ROI equals the formula worked by hand from the seed rows.
+
+**AC11** [AI] [BLOCK] **Control Plane is admin-only and audited** -- Agent mode (on / off / shadow), tier, escalation, tier models, budget caps, breaker and prompt rollback, behind `ai_accounting.manage` (section 8). Every change writes `control_audit_log` with before and after; an unpriced or disallowed model is refused. Verify: a User-role session gets 403 on the Control Plane API; one change → one audit row; set an agent `off` → its next run makes no call.
+
+**AC12** [AI] [BLOCK] **Budget caps stop spend before the call** -- Before each call the wrapper checks every cap that applies (all / agent / tenant, day / month) against spend so far plus this call's worst case, and refuses over the cap with `status = refused_budget` and no tokens spent; one notice at 80% and one at 100% per cap per period. Verify: set a cap below today's seed spend → the next call is refused, recorded, and the agent returns its fallback.
+
+**AC13** [AI] [FIX] **Infra spend collected** -- An adapter per source (section 9). AWS: Cost Explorer daily, the last 3 days re-collected each run, split by the cost-allocation tag, untagged = shared. Azure and GCP: stubs that say "not connected yet". Manual monthly vendor lines. A source that isn't connected shows "not connected", never $0. Verify: with `INFRA_COST_SOURCE=mock`, two runs on the same days leave one row per (day, source, service, cost center).
+
+**AC14** [AI] [FIX] **Statements frozen, numbers gapless** -- `spend_statements` stores the computed statement in `payload` and has no update or delete route; the number comes from `statement_counters` in the same transaction as the insert; the page has a print stylesheet and says "Internal cost statement -- not an invoice" (section 10). Verify: issue two statements at once → consecutive numbers, both saved; change a seed price → an issued statement's total doesn't change.
+
+**AC15** [AI] [FIX] **The seven surfaces** -- AI Instructions (AI08), AI Agents, Control Plane, AI Monitor, AI Spend, Infra Spend and Spend Statements exist under the "AI & Spend" sidebar group with plain labels, gated by `ai_accounting.view` / `.manage` (section 11). AI Spend shows the cache-hit rate and the counts of unpriced calls, unnamed calls and ledger write failures. Editing a published prompt keeps the published version serving until the new one is published. Verify: each page renders with seed data; edit a published prompt → the agent's next call still uses the published text.
+
+**AC16** [AI] [FIX] **The parts add up** -- AI Spend: the sum by agent equals the total; Infra Spend: cost centers + shared equal the collected total; multi-tenant: tenants + unallocated equal the total, with fair-share infra (section 13). A gap over 1 cent shows as a warning on the page. Verify: the checks pass on seed data; a unit test feeding a rollup whose parts are 2 cents short of its total → the warning shows.
+
+---
+
+## AI Accounting -- Live Verification
+
+**ACV01** [AI] [BLOCK] **One call, one priced row** -- With the app running, trigger one agent through the UI or API. Exactly one new `ai_usage_events` row: agent, feature, tier and model filled, tokens above zero, `priced = true`, cost matching the price row by hand.
+
+**ACV02** [AI] [BLOCK] **A cap refuses before spending** -- Set an agent's day cap to $0.000001 on the Control Plane, trigger the agent: no provider call (no new tokens), one `refused_budget` row, the fallback answer shown in plain words, and an audit row for the cap change. Put the cap back.
+
+**ACV03** [AI] [FIX] **Pages agree with the ledger** -- AI Spend's total for today equals the sum of today's ledger rows; issue a 30-day statement and its AI total equals the same sum for its period.
+
+---
+
 ## PWA / Mobile (variant: mobile)
 
 These checks only activate when `variant == "mobile"` in app-context.json. They are additive to the base Tier 1 web-app checks.

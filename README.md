@@ -957,6 +957,32 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.45.0 -- AI accounting: what your AI costs, what it saves, and cheaper models where they're good enough
+
+Every AI app now records each AI call (which step, which model, what it cost) and sets it against
+what people did with the result, so the app can show its AI's return on cost. It also checks
+whether the app steps down to cheaper models for work that doesn't need the expensive ones.
+- **A prompt that retrofits it.** Prompt #10g adds it to an existing app: it finds every AI call
+  first, writes a model-ladder report (`.make-it/ai-ladder.md`), then meters, measures and builds
+  the pages. `/retrofit-it` runs it as a new step ("Measuring what your AI costs and saves"), or on
+  its own with `/retrofit-it ai-accounting`; `/resume-it` offers it to AI apps that lack it;
+  `/make-it` builds it into new AI apps.
+- **Seven admin pages:** AI Instructions, AI Agents, Control Plane, AI Monitor, AI Spend, Infra
+  Spend, Spend Statements.
+- **The model ladder:** every call names a tier, a weak answer gets one step up, and no step is
+  moved to a cheaper model until a replay of past work shows the answers hold.
+- **ROI:** cost per finished task and how often people accept, fix or redo the AI's work, always.
+  Dollar ROI when an admin enters minutes per task and an hourly rate.
+- **Control Plane:** turn an AI step on, off or to shadow, pick the model behind each tier, set
+  spending limits that stop a call before it spends, see the failover state, roll a prompt back.
+  Every change is audited.
+- **Spend:** the cloud bill from AWS Cost Explorer (Azure and GCP stubs, manual lines for other
+  vendors), and frozen internal statements with gapless numbers. Not invoices.
+- **New spec and checks:** `references/ai-accounting.md`, AC01-AC16 and ACV01-ACV03 in
+  build-standards; the reasoning is in `docs/ai-accounting-design.md`.
+- **Checked.** New `scripts/test-ai-accounting.sh`: the ids, sections, tables and wiring agree,
+  with a planted-defect control for each core check.
+
 ### v1.44.22 -- /try-it checks what still works when sign-in is left out
 
 When a /retrofit-it user left secure sign-in out, /try-it skipped every page check. So the pages and

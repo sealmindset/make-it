@@ -516,8 +516,9 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Test Infrastructure | T01-T05 | 5 | 0-1 |
 | Live Verification | V01-V15 | 15 | 0-1 |
 | AI Features | AI01-AI15 | 15 | AI (any type) |
+| AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~155** | |
+| **Total** | | **~174** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)

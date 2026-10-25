@@ -441,6 +441,9 @@ reviewed, and hardened behind the scenes.
   - Set brain_features.curation_trigger = "scheduled" (default) unless user
     specifically wants real-time learning ("post_conversation")
   - Reference design-blueprint.md Section 14 for decision rules
+- AI Accounting: ai_features.needed = true -> ai_accounting.enabled = true (not optional)
+  - ai_accounting.infra_source from cloud.provider ("aws" | "azure" | "gcp"); "none" for
+    local or prototype-only apps. Default tag key "CostCenter". No question needed.
 - Mock Services: Determine which mock services are needed
   - Auth needed -> mock-oidc (always)
   - Jira integration -> mock-jira (port 8443)
@@ -854,6 +857,14 @@ whole-branch review, keeping your own context for coordination. Stay sequential 
          If post_conversation, add hook in ConversationalAgent.chat() with
          signal-based pre-filter (BN10)
 
+9f. **AI Accounting**
+    - Tell user: "Adding a way to see what your AI costs and saves..."
+    - This step runs when `ai_features.needed = true` (every AI app)
+    - Reference prompt-templates.md Prompt #10g with MODE = new-build, and ai-accounting.md
+    - Build-standards.md checks: AC01-AC16, ACV01-ACV03
+    - Runs after 9e (or after the AI steps when there is no brain layer): every agent,
+      including the memory curator, must exist before it is metered
+
 10. **Security Hardening**
     - Tell user: "Locking down security..."
     - Implement security tier based on deployment target
@@ -1097,6 +1108,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
 - **Q01-Q13**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow)
 - **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
+- **AC01-AC16**: AI accounting (if ai_features.needed = true) -- ledger, one metering wrapper, no unnamed call, dated prices with no silent $0, tiers and the ladder report, escalation, replay proof, outcomes and ROI, Control Plane, budget caps, infra spend, statements, the seven pages, totals that add up
 - **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data
 
 Additionally, run a three-layer dependency safety check as part of **X03** verification:
@@ -1371,6 +1383,15 @@ Tell user (during fix cycle): "Almost there -- just polishing a few things..."
        user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
        user-type memories are NOT returned. Confirm org-type memories with scope 'all'
        ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
+
+33b. **Test AI accounting (ACV01-ACV03)** -- Skip if ai_features.needed != true
+    a. **ACV01: One call, one priced row** -- trigger one agent; exactly one new ledger row
+       with agent, feature, tier, model, tokens and a cost that matches the price row.
+    b. **ACV02: A cap refuses before spending** -- set the agent's day cap to $0.000001 on the
+       Control Plane, trigger it: no provider call, one refused_budget row, the fallback shown
+       in plain words. Put the cap back.
+    c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
+       today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
 
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.

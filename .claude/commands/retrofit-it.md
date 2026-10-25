@@ -12,6 +12,9 @@ allowed-tools:
   - Agent
 ---
 
+<!-- ARGUMENT SUBSTITUTION: Claude Code replaces $ARGUMENTS before this prompt is sent -->
+<!-- User invoked: /retrofit-it $ARGUMENTS -->
+
 <objective>
 
 Take an existing, working application -- built by Claude, a developer, or any tool -- and retrofit it with the production-ready foundations that /make-it provides. The app works but is missing enterprise requirements: OIDC authentication, database-driven RBAC, Docker Compose, mock services, environment-based config, security hardening, etc.
@@ -35,6 +38,12 @@ This skill has 7 phases:
 5. **Retrofit** -- Execute changes (single-pass or phased based on risk score)
 6. **Verify** -- Build-verify identical to /make-it
 7. **Ship** -- Hand off to /ship-it
+
+**AI accounting only.** When `$ARGUMENTS` is `ai-accounting` (case-insensitive), or the user asks
+for AI accounting alone ("add AI cost tracking to this app"), run Preflight and Discovery, then Gap Analysis, Plan,
+Retrofit and Verify for Phase F3 alone: only its gaps make the risk score, the plan lists only its
+items, and Verify runs AC01-AC16 and ACV01-ACV03 plus the preservation check. Other foundations
+stay as they are and aren't listed as missing. An app with no AI: say so in one line and stop.
 
 </objective>
 
@@ -141,6 +150,7 @@ cat .make-it/app-context.json 2>/dev/null
 | Cloud/infra | terraform/, CDK, serverless.yml, .github/workflows |
 | K8s manifests | env/*/*.yaml, k8s/*.yaml, deploy/*.yaml -- extract `secretKeyRef` mappings per environment |
 | AI/LLM usage | AI SDK imports, agent classes, hardcoded system prompts, LLM provider config |
+| AI cost and model choice | Every AI call site (ai-accounting.md section 12, step 1), the model each one runs on as deployed, usage or cost tables, pricing code, spend pages, budget checks, cloud-bill collectors |
 
 **3. Understand the architecture:**
 
@@ -175,6 +185,9 @@ Construct a mental model of:
 - **User types and permissions** (even if informal -- like admin checks in code)
 - **External integrations** (APIs called, services connected)
 - **Existing quality** (tests, linting, CI, error handling)
+- **AI calls and model choices** (if AI) -- every call site and the model it runs on as deployed,
+  and the ladder report drafted per Prompt #10g step 1 for the plan (nothing is written yet;
+  step 12b writes it to `.make-it/ai-ladder.md`)
 
 **6. Stack compatibility assessment:**
 
@@ -223,6 +236,11 @@ For each gap, assign a risk weight:
 | **Rewrite (rebuild from scratch)** | 8 | Complete auth rewrite, rebuild data model |
 
 **Risk Score = sum of (gap_count x risk_weight) for each category**
+
+AI accounting (Phase F3): routing the AI calls through the metering wrapper is one Wrap (3) for
+the whole app; each of the six surfaces beyond AI Instructions (Phase F scores that one) that is
+missing is an Add (1), and each one that exists in part is an Enhance (2). A surface that is
+already present adds nothing.
 
 **Risk thresholds:**
 
@@ -287,6 +305,7 @@ INTERNAL phase mapping (for the skill's use -- the user NEVER sees these technic
 | Phase E | Mock services, service clients, seed script | "Setting up test services so you can develop offline" |
 | Phase F | Prompt management tables, admin UI, agent refactor (if AI) | "Making your AI prompts editable" (skip if no AI) |
 | Phase F2 | AI operational safety: input sanitization, output validation, rate limiting, PII masking, error sanitization, system prompt hardening (if AI) | "Securing your AI features" (skip if no AI) |
+| Phase F3 | AI accounting: metering ledger, prices, model ladder report and routing, outcomes and ROI, Control Plane, budget caps, infra spend, spend statements, the seven admin pages (if AI) | "Measuring what your AI costs and saves" (skip if no AI) |
 | Phase G | Security headers, input validation, secret management | "Final security checks and deployment prep" |
 
 When presenting phases to the user, ALWAYS use the "User-Facing Name" column.
@@ -384,6 +403,14 @@ counts again: recompute the score and the route with it before they pick.
   sorting and filtering built in" NOT "Replace HTML tables with DataTable component"]
 5. ...
 
+[If the app uses AI, one short block, never numbered --]
+**How your AI picks its models:** [the ladder verdict in plain words, e.g. "every AI step uses
+the same top model"] and the [up to 3] steps that could run on a cheaper one, with the estimated
+monthly saving each. "I won't switch any of these until a check on past work shows the cheaper
+model gives the same answers -- that check is part of what I'm adding. Stepping up to a stronger
+model when an answer looks weak starts switched off, so nothing costs more on day one; you can
+turn it on per AI step."
+
 [If the record holds any item: one line each, never numbered --]
 **Left out by your choice earlier:**
 - [the item, in the words the user saw] -- left out by your choice -- tell me if you want it added.
@@ -398,6 +425,7 @@ Leave out of each step's name any item in the record.]
 - **Polishing the interface and setting up test services** -- your app will look the same, just with a few upgrades, and you can develop without needing real external systems
 - **Making your AI prompts editable** -- so you can tune AI behavior without code changes _(only if app uses AI)_
 - **Securing your AI features** -- protection against prompt tricks and data leaks _(only if app uses AI)_
+- **Measuring what your AI costs and saves** -- every AI step counted and priced, spending limits, and a check for steps that could use a cheaper model _(only if app uses AI)_
 - **Adding automated tests** -- so problems get caught early as you keep building
 - **Final security checks and deployment prep** -- locking everything down
 
@@ -1003,6 +1031,16 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - Risk weight: "Enhance" (2) for each control added -- these are additive,
       they don't replace existing code
 
+12b. **AI Accounting (Prompt #10g, MODE = retrofit -- if AI features detected):**
+    - Read `~/.claude/make-it/references/ai-accounting.md` in full; follow its section 12 order.
+    - The call-site list, the surfaces found and the ladder report come from Discovery and are
+      already in the approved plan; don't re-ask. Write the report to `.make-it/ai-ladder.md`.
+    - Route the call sites through the metering wrapper one agent at a time, running that
+      agent's existing tests after each. What each agent sends to its model doesn't change.
+    - A surface the app already has is extended in place and keeps its data.
+    - Set `ai_accounting` in app-context.json (`enabled`, `infra_source`, `infra_tag_key`,
+      `ladder_verdict`).
+
 13. **Infrastructure (Prompt #5 adapted):**
     - Generate Terraform as DevOps handoff artifact
     - Generate .ship-it.yml from app-context
@@ -1051,6 +1089,14 @@ In each step's name and its "Tell user" line, leave out any item in the record
 - Skip this step entirely if the app doesn't use AI/LLM features.
 - Run NeMo Guardrails basic test suite (18 tests) after this step to confirm the safety
   controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
+
+**Step 5b: "Measuring what your AI costs and saves" (if app uses AI)**
+- Internal: Step 12b (AI accounting)
+- Verify: AC01-AC16; one agent run gives one priced ledger row; a cap set below today's spend
+  refuses the next call; the seven pages open with seed data; existing agent tests still pass
+- Tell user: "Every AI step is now counted and priced. You can see what each one costs, how often
+  people accept its work, and which steps could run on a cheaper model."
+- Skip this step entirely if the app doesn't use AI/LLM features.
 
 **Step 6: "Adding automated tests" (low risk)**
 - Internal: Step 10 (test infrastructure)
@@ -1162,6 +1208,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **X01-X06**: Security
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
+- **AC01-AC16**: AI accounting (if ai_features.needed = true)
 
 For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately
@@ -1177,6 +1224,8 @@ Run ALL live verification checks from `build-standards.md`:
   API endpoints, page content, permission boundaries, Activity Logs, Docker cache
 - **N01-N08**: Notification model, query helper, REST API, bell component, type coding,
   entity routing, seed data, server-side creation points
+- **ACV01-ACV03**: AI accounting (if ai_features.needed = true) -- one call gives one priced row,
+  a cap refuses before spending, the pages agree with the ledger
 
 **PART C: Fix cycle (silent, automatic, up to 3 cycles)**
 
