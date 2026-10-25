@@ -36,13 +36,18 @@ stepof()  { printf '%s\n' "$T" | awk -v n="<step name=\"$1\">" 'index($0,n){on=1
 between() { printf '%s\n' "$T" | awk -v a="$1" -v b="$2" 'index($0,a){on=1} on&&index($0,b)&&!index($0,a){exit} on'; }
 SIGNIN='\b(if|when) (the )?(sign-in|sign in|login)\b[^.;:]{0,20}\bleft out\b'
 
-# 1-2. Phase 2: with sign-in left out, the pages the app already had are still checked, without signing in
-SIGNP="$(stepof smoke-test | paras | grep -iE "$SIGNIN" || true)"
+# Phase 2 step N's text, from its "**N. " heading to the next step's
+smokestep() { stepof smoke-test | awk -v a="^[*][*]$1[.] " -v b="^[*][*]$(($1+1))[.] " '$0~a{on=1} $0~b{exit} on'; }
+# 1-2. Phase 2: with sign-in left out, the pages the app already had are still checked, without signing in.
+# What it affirms is read in step 3, where the path lives; what it rejects, in every sign-in paragraph of Phase 2 but
+# step 5's, which check 8 reads (there "only an endpoint that belongs to the left-out item is" left out is right).
+SIGNP="$(smokestep 3 | paras | grep -iE "$SIGNIN" || true)"
+SIGNR="$(stepof smoke-test | awk '/^[*][*]5[.] /{off=1} /^[*][*]6[.] /{off=0} !off' | paras | grep -iE "$SIGNIN" || true)"
 S1X='\b(skip|skips|skipped|skipping)\b[^.;]{0,30}\b(step 4|pages?)\b|\bstep 4\b[^.;]{0,10}\b(doesn.t|does not|never|won.t|is not|isn.t) run|\b(sign|signs|log|logs) in (as|with|through|via|using|to)\b|\beven if\b|\bunless\b'
 check "S26-1 Phase 2: with sign-in left out, step 4 still checks, without signing in (signing in nowhere), the pages the app already had, through the app's own access, that they work as they did before" \
-  '[ -n "$SIGNP" ] && printf "%s" "$SIGNP" | pm "\bstill (runs|checks|opens)\b" && printf "%s" "$SIGNP" | pm "\bpages? the app already had\b" && printf "%s" "$SIGNP" | pm "\bwithout signing in\b" && printf "%s" "$SIGNP" | pm "\bsigns in nowhere\b" && printf "%s" "$SIGNP" | pm "\bapp.s own access\b" && printf "%s" "$SIGNP" | pm "\bas (it|they) did before\b" && ! printf "%s" "$SIGNP" | pm "$S1X"'
+  '[ -n "$SIGNP" ] && printf "%s" "$SIGNP" | pm "\bstill (runs|checks|opens)\b" && printf "%s" "$SIGNP" | pm "\bpages? the app already had\b" && printf "%s" "$SIGNP" | pm "\bwithout signing in\b" && printf "%s" "$SIGNP" | pm "\bsigns in nowhere\b" && printf "%s" "$SIGNP" | pm "\bapp.s own access\b" && printf "%s" "$SIGNP" | pm "\bas (it|they) did before\b" && ! printf "%s" "$SIGNR" | pm "$S1X"'
 check "S26-2 Phase 2: that path says those page checks are not the left-out item's by pointing at left-out-record.md read step 3, and try-it never restates the step" \
-  'printf "%s" "$SIGNP" | pm "left-out-record\.md.?\s+read\s+step\s+3\b" && printf "%s" "$SIGNP" | pm "\b(are not|aren.t|never|not) (the )?left.out item.s\b|\b(don.t|do not|never) belong" && ! printf "%s" "$SIGNP" | pm "(?<!not )(?<!never )(?<!n.t )\b(are|is) the left.out item.s\b|(?<!never )(?<!not )(?<!n.t )\bbelongs? to the left.out item" && ! printf "%s" "$T" | flat | pm "still works as it did before never belongs|\(and the user did not take out\)"'
+  'printf "%s" "$SIGNP" | pm "left-out-record\.md.?\s+read\s+step\s+3\b" && printf "%s" "$SIGNP" | pm "\b(are not|aren.t|never|not) (the )?left.out item.s\b|\b(don.t|do not|never) belong" && ! printf "%s" "$SIGNR" | pm "(?<!not )(?<!never )(?<!n.t )\b(are|is) the left.out item.s\b|(?<!never )(?<!not )(?<!n.t )\bbelongs? to the left.out item" && ! printf "%s" "$T" | flat | pm "still works as it did before never belongs|\(and the user did not take out\)"'
 
 # 3. the report lists those pages as checked
 PSIGN="$(between '## Pages Tested' '## Screenshots' | paras | grep -iE "$SIGNIN" || true)"
@@ -69,6 +74,18 @@ KEEPS='\b(if|when) a left.out item (keeps|kept|stops|blocks|prevents)\b[^.;:]{0,
 GATE="$(printf '%s\n' "$BS" | paras | grep -iE "$KEEPS" || true)"
 check "S26-7 build-and-start: a left-out item that keeps the app from building or starting has its own path before any fix -- no fix or retry, a plain message that it couldn't start, never \"Everything is running!\", on to the smoke test with left_out" \
   '[ -n "$GATE" ] && printf "%s" "$GATE" | pm "(don.t|do not|never) fix\b" && printf "%s" "$GATE" | pm "(don.t|do not|never) retry\b" && printf "%s" "$GATE" | pm "Tell user: \"[^\"]*(couldn.t|could not|can.t|cannot) (be started|start)[^\"]*leave out[^\"]*\"" && printf "%s" "$GATE" | pm "\bnever say\s+.?Everything is running" && printf "%s" "$GATE" | pm "\bsmoke test\b" && printf "%s" "$GATE" | pm "left_out" && ! printf "%s" "$GATE" | pm "\beven if\b|\bunless\b|\bexcept\b|(?<!never )(?<!not )(?<!n.t )\b(say|tell user:?)\s+.?Everything is running|\bfix it anyway\b|(?<!don.t )(?<!not )\bretry (it )?(up to|anyway|again)\b" && a=$(printf "%s\n" "$BS" | grep -niE "$KEEPS" | head -1 | cut -d: -f1) && b=$(printf "%s\n" "$BS" | grep -nF "**If build fails:**" | head -1 | cut -d: -f1) && [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]'
+
+# 8. Phase 2 step 5: with sign-in left out, the endpoints the app already had are still called, without a token
+APIP="$(smokestep 5 | paras | grep -iE "$SIGNIN" || true)"
+SUMSIGN="$(between '## Summary' '## Login Testing' | paras | grep -iE "$SIGNIN" || true)"
+S8X='\b(skip|skips|skipped|skipping)\b[^.;]{0,30}\b(step 5|endpoints?)\b|\bstep 5\b[^.;]{0,10}\b(doesn.t|does not|never|won.t|is not|isn.t) run|\bBearer\b|\b(sign|signs|log|logs) in (as|with|through|via|using|to)\b|(?<!never )(?<!not )\bas left out\b|\beven if\b|\bunless\b'
+check "S26-8 Phase 2 step 5: with sign-in left out, the endpoints the app already had are still called, without a token, through the app's own access, and listed as checked; one that needed sign-in before the retrofit is named plainly as not checked, never as left out (only one that belongs to the left-out item is, per read step 3)" \
+  '[ -n "$APIP" ] && [ -n "$SUMSIGN" ] && printf "%s" "$APIP" | pm "\bstep 5 still runs, without a token\b" && printf "%s" "$APIP" | pm "\bendpoints? the app already had\b" && printf "%s" "$APIP" | pm "\bapp.s own access\b" && printf "%s" "$APIP" | pm "\bas (it|they) did before\b" && printf "%s" "$APIP" | pm "\breport lists (them|those endpoints) as checked\b" && printf "%s" "$APIP" | pm "\bneeded sign-in before the retrofit\b[^.]*\bname (it|them) plainly\b[^.]*\bas not checked, never as left out\b" && printf "%s" "$APIP" | pm "\bonly an? endpoints? that belongs? to the left.out item\s+\(.left-out-record\.md.?\s+read\s+step\s+3\)" && ! printf "%s" "$APIP" | pm "$S8X" && printf "%s" "$SUMSIGN" | pm "\bendpoints? the app already had\b[^.]*\bwithout signing in\b[^.]*\bas checked, never as left out\b" && printf "%s" "$SUMSIGN" | pm "\bneeded sign-in before the retrofit\b[^.]*\bnot checked\b" && ! printf "%s" "$SUMSIGN" | pm "(?<!never )(?<!not )\bas left out\b|Left out \(your choice\)|\beven if\b|\bunless\b"'
+
+# 9. the guardrails' screenshot minimum names the exceptions <error-handling> and step 3 already allow, in one clause
+GR="$(printf '%s\n' "$T" | awk '/^<guardrails>/{on=1} on' | awk '/at least: login, dashboard per role/{on=1;print;next} on&&(/^- /||/^$/||/^</){exit} on' | flat)"
+check "S26-9 guardrails: the screenshot minimum names, in one except clause, each case where none can be taken -- all when Playwright couldn't be installed, the per-role ones when sign-in is left out, one a left-out item kept from being taken" \
+  '[ -n "$GR" ] && [ "$(printf "%s" "$GR" | perl -ne "\$c += () = /\bexcept\b/gi; END { print \$c + 0 }")" = 1 ] && ! printf "%s" "$GR" | pm "[.;]\s+\S" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\ball of them when Playwright couldn.t be installed\b" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\bper.role ones when sign-in is left out\b" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\bleft.out item kept from being taken, which follows .left-out-record\.md" && ! printf "%s" "$GR" | pm "\bno exception|\beven (if|when)\b|\bunless\b|\bstill (required|needed|must)\b"'
 
 # controls (the real try-it.md only): each check fails on its plain opposite
 if [ -z "${1:-}" ]; then
@@ -100,6 +117,30 @@ if [ -z "${1:-}" ]; then
     'opp S26-7 "s/never say\s+\"Everything is running!\"/say \"Everything is running!\"/"'
   check "(control) S26-7 fails with the left-out item fixed and retried" \
     'opp S26-7 "s/don.t fix it and don.t retry it/fix it and retry it/"'
+  check "(control) S26-1 still fails with its opposite outside step 3 (\"If sign-in is left out, skip every page check.\" in step 4)" \
+    'opp S26-1 "s/(\*\*4\. Test every page for each role \(and take screenshots\):\*\*\n\n)/\$1If sign-in is left out, skip every page check.\n\n/"'
+  check "(control) S26-2 still fails with its opposite outside step 3 (\"If sign-in is left out, the existing pages belong to the left-out item.\" in step 4)" \
+    'opp S26-2 "s/(\*\*4\. Test every page for each role \(and take screenshots\):\*\*\n\n)/\$1If sign-in is left out, the existing pages belong to the left-out item.\n\n/"'
+  check "(control) S26-8 fails with the step-5 path gone (every endpoint left out again)" \
+    'opp S26-8 "s/If sign-in is left out \(as in step 3\).*?\n\n//s"'
+  check "(control) S26-8 fails with step 5 skipped when sign-in is left out" \
+    'opp S26-8 "s/step 5 still runs,\s+without\s+a\s+token:/step 5 is skipped, since there is no token:/"'
+  check "(control) S26-8 fails with the endpoint that needed sign-in marked left out" \
+    'opp S26-8 "s/name it plainly in\s+the\s+report\s+as\s+not\s+checked,\s+never\s+as\s+left\s+out/mark it in the report as left out/"'
+  check "(control) S26-8 fails with step 5 saying the report lists those endpoints as left out" \
+    'opp S26-8 "s/the\s+report\s+lists\s+them\s+as\s+checked/the report lists them as left out/"'
+  check "(control) S26-8 fails with the pointer at read step 3 gone from step 5" \
+    'opp S26-8 "s/\s*\(.left-out-record\.md.\s+read\s+step\s+3\)(?=\s+is\s+left\s+out)//"'
+  check "(control) S26-8 fails with the report's API row reading those endpoints as left out" \
+    'opp S26-8 "s/\(Phase 2 step 5\),\s+as\s+checked,\s+never\s+as\s+left\s+out/(Phase 2 step 5), as left out/"'
+  check "(control) S26-9 fails with the Playwright exception gone" \
+    'opp S26-9 "s/\s+all\s+of\s+them\s+when\s+Playwright\s+couldn.t\s+be\s+installed,//"'
+  check "(control) S26-9 fails with the sign-in per-role exception gone" \
+    'opp S26-9 "s/\s+the\s+per-role\s+ones\s+when\s+sign-in\s+is\s+left\s+out,//"'
+  check "(control) S26-9 fails with the rule back to no exception" \
+    'opp S26-9 "s/ -- except any that couldn.t\s+be\s+taken:.*?which follows .left-out-record\.md./ -- no exception/s"'
+  check "(control) S26-9 fails with the exceptions split over two clauses" \
+    'opp S26-9 "s/couldn.t\s+be\s+installed,\s+the\s+per-role/couldn\x27t be installed. Except the per-role/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
