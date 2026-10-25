@@ -297,6 +297,12 @@ Tell user the port if it changed:
 
 <step name="build-and-start">
 
+**If a left-out item keeps the app from building or starting** (the failure belongs to it, per the
+Phase 0 pointer), in any step below: don't fix it and don't retry it. Tell user: "Your app couldn't
+be started, because of what you chose to leave out." Skip the rest of startup, never say
+"Everything is running!", and go on to the smoke test, where every test it kept from running is
+marked `left_out` (step 7).
+
 **1. SSL-inspecting proxies (the check ran in context discovery step 3, before any download):**
 
 SSL-inspecting proxies can break Docker image pulls and builds. A tool the check found running is
@@ -475,6 +481,14 @@ Do NOT tell the user about this step unless vulnerabilities couldn't be fixed (n
 This runs silently.
 
 **3. Test the login flow for each role:**
+
+If sign-in is left out (a left-out item names it, per the Phase 0 pointer), these login tests
+belong to it (step 7), and this check signs in nowhere. Step 4 still runs, once, without signing
+in: open every page the app already had through the app's own access, whatever it had before the
+retrofit, and check that each loads and works as it did before (step 4b's checks, apart from
+role-appropriate content), taking its screenshot. These page checks are not the left-out item's
+(`left-out-record.md` read step 3): they are recorded like any other page check, and the report
+lists those pages as checked, never as left out.
 
 For each role defined in app-context.json (e.g., admin, analyst, user):
 
@@ -663,13 +677,19 @@ which ones couldn't be tested "because of what you chose to leave out".]
 | [Page 3] | [PASS] | [PASS] | [Left out (your choice)] | |
 | Admin Panel | [PASS] | [N/A] | [N/A] | Admin only |
 
+[If sign-in is left out, one column, "Without signing in", in place of the role columns: each page
+the app already had was checked that way (Phase 2 step 4), so it is listed as checked, with how its
+check went, never as left out.]
+
 ## Screenshots
 
 Screenshots of each page (per role) are saved in `.try-it/screenshots/`:
 [If a left-out item blocked some pages or roles, say "of the pages that could be opened" in place
 of "of each page (per role)". If no page could be opened because of a left-out item, write in
 place of this line and the list: "No screenshots were taken -- no page could be opened because of
-what you chose to leave out."]
+what you chose to leave out." Otherwise, if no screenshot was taken (as when Playwright couldn't
+be installed), write in place of this line and the list: "Screenshots unavailable", plus " --
+pages were tested but not captured" only if pages were tested.]
 [LIST_SCREENSHOTS]
 
 ## How to Access Your App
@@ -750,7 +770,7 @@ Here's how to explore your app:
 
 4. **Explore!** Click around, try the features, see if it matches what you had in mind.
 
-I saved a full report with screenshots to `TRY-IT-REPORT.md` in your project folder."
+I saved a full report[only if screenshots were taken: ' with screenshots'] to `TRY-IT-REPORT.md` in your project folder."
 
 If every test passed, apart from a left-out item's tests, and anything is left out: the same
 message, with these changes. If a left-out item kept the app from starting, drop "I tested" and
@@ -983,7 +1003,8 @@ Let me create it now..."
 - Fall back to curl-based testing for API endpoints
 - Use `curl` + simple HTTP checks for page loading
 - Skip screenshot generation
-- Note in report: "Screenshots unavailable -- pages were tested but not captured"
+- Say so in the report's Screenshots section, worded as that section says (never "pages were
+  tested" when none were)
 
 </error-handling>
 
