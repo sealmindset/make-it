@@ -417,6 +417,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Code Quality (Q01-Q13):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs
    - **AI (AI01-AI28):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
+   - **AI Accounting (AC01-AC16):** Only if AI features detected -- check for the `ai_usage_events` table in migrations/schema, one metering wrapper (no AI SDK import or provider URL outside the provider layer), the AC03 CI test, `model_prices`, `.make-it/ai-ladder.md`, the Control Plane and the seven admin pages, `INFRA_COST_SOURCE` in .env.example. If AI features exist but there is no ledger (AC01 GAP), mark every AC check N/A in the gaps list and offer the whole feature as one suggestion (not auto-applied), which routes to `ai-accounting-addition`. Once the ledger exists, AC gaps go in the gaps list like any other.
 
 c. **Categorize results:**
    - **PASS:** Check is satisfied
@@ -499,6 +500,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | File upload missing (F01-F08 gaps) | "Your app has a Documents page but no drag-and-drop upload yet. Want me to add file upload with PDF/DOCX/XLSX extraction?" |
 | pdf-parse F03 violation detected | "Your PDF upload uses the wrong import for pdf-parse -- this will crash in production Docker. Want me to fix it?" (auto-fix, don't wait) |
 | AI features exist but no brain layer (BN01-BN13 all GAP) | "Your app has AI features but no persistent memory -- the AI starts fresh every conversation. Want me to add a brain layer so it learns user preferences, remembers decisions, and gets smarter over time?" |
+| AI features exist but no AI accounting (AC01 GAP) | "Your app uses AI, but nothing records what each AI step costs or whether people keep its work. Want me to add that -- with spending limits and a check for steps that could use a cheaper model?" |
 | Code quality missing (Q01-Q13 gaps) | "Your app doesn't have linting, formatting, or pre-commit hooks set up yet -- DevOps will flag this. Want me to add code quality tools? They catch problems before code gets committed." |
 | CI quality gate workflow missing (Q13) | "Your app has local quality checks but no CI workflow to enforce them on every PR. Want me to add the quality gate workflow? It runs all checks automatically and generates an attestation artifact." |
 | Standards gaps found (critical) | "I found [N] must-do updates before deployment ([name each]) and [M] improvements ([name each]) -- which group should I apply, or not now?" (active confirmation -- the ask below) |
@@ -1258,6 +1260,58 @@ Brain features are currently **OFF** (BRAIN_FEATURES_ENABLED=false in .env).
 To enable: set BRAIN_FEATURES_ENABLED=true and restart.
 
 Want to enable it now and test, or continue with something else?"
+
+</step>
+
+<!-- ============================================================ -->
+<!-- AI ACCOUNTING ADDITION -- cost, value, and the model ladder   -->
+<!-- ============================================================ -->
+
+<step name="ai-accounting-addition">
+
+**Triggered when:**
+- Catch-up scan found AI features with no ledger (AC01 GAP) and the user chose to add it
+- User asked for it ("what does our AI cost", "track AI spend", "AI ROI", "use cheaper models")
+
+Spec: `~/.claude/make-it/references/ai-accounting.md`. Prompt #10g, MODE = retrofit.
+Checks: AC01-AC16, ACV01-ACV03. Work in a worktree (WORKTREE FIRST).
+
+**Phase 1: Find (read-only).** Run Prompt #10g step 1: the call sites, the surfaces that exist,
+and `.make-it/ai-ladder.md`.
+
+**Phase 2: Ask** (adds tables and permissions: active confirmation, per the approval block):
+
+"Your app makes AI calls from [N] places ([agents, in plain words]). [What exists today, e.g.
+'nothing records what they cost' / 'costs are counted, but not per AI step'].
+[The ladder verdict in plain words] -- [up to 3] steps could likely run on a cheaper model, about
+[$X] a month saved.
+
+I'll add:
+- **A record of every AI call** -- which step, which model, what it cost (never the text sent)
+- **How often people keep the AI's work** -- accepted, fixed, redone -- and the cost per finished task
+- **A control page** -- turn an AI step off, set spending limits, pick the model per level
+- **Your cloud bill next to it** -- [AWS: read-only access your DevOps team grants; until then it
+  says 'not connected' / none: off for now]
+- **Monthly cost statements** you can print -- for your team, not invoices
+
+It's 13 new tables and 2 new permissions (who can see AI spend, who can change the AI controls),
+built in a separate copy we can throw away. No model is switched to a cheaper one until a check
+on past work shows it gives the same answers.
+
+Pick one:
+- **Add it** (Recommended -- the catch: every AI call now writes a row, and a spending limit set
+  too low stops that AI step until the next day or month; no limit is set until you set one)
+- **Not now** -- nothing changes; I'll note it in your to-do file"
+
+A plain yes isn't an answer -- ask which. 'Not now': delete `.make-it/ai-ladder.md` if this step
+wrote it, add the TODO.md line, and return to the menu.
+
+**Phase 3: Build.** Prompt #10g steps 2-7, in its order. Route the call sites one agent at a
+time, running that agent's existing tests after each. Set `ai_accounting` in app-context.json.
+
+**Phase 4: Verify and report.** AC01-AC16, and ACV01-ACV03 with the app running. Report each
+passed or failed from what ran, then in plain words: what each AI step cost in the seed data, the
+pages and where they are, and the ladder's suggested switches, each waiting on its check.
 
 </step>
 

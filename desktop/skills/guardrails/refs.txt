@@ -7,3 +7,5 @@
 .claude/make-it/references/operator-safety.md
 # named by build-standards S10
 .claude/make-it/references/learnings.md
+# named by prompt-templates #10g and build-standards AC01-AC16
+.claude/make-it/references/ai-accounting.md

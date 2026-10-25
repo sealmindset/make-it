@@ -24,3 +24,5 @@
 .claude/make-it/references/learnings.md
 # cited by ship-it-guide.md (the left-out record read at ship)
 .claude/make-it/references/left-out-record.md
+# named by prompt-templates #10g and build-standards AC01-AC16
+.claude/make-it/references/ai-accounting.md

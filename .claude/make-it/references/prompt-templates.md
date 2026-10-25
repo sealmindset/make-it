@@ -2281,6 +2281,90 @@ and #10e (needs safety controls — brain memories pass through the same sanitiz
 
 ---
 
+### Prompt #10g: AI Accounting -- cost, value, and the model ladder (always runs if AI features exist)
+
+```
+Add AI accounting to [PROJECT_NAME]: count, price and name every AI call, measure what the AI's
+work is worth, and check whether cheaper models are used where they are good enough.
+
+Mode: [MODE]   (retrofit = an existing app, the main path | new-build = during /make-it Build)
+Stack: [STACK]
+Multi-tenant: [MULTI_TENANT]   (true adds tenant_id and fair-share infra; false = no tenant column anywhere)
+Cloud bill: [INFRA_SOURCE]     (aws | azure | gcp | none; local dev always uses mock)
+Cost-allocation tag key: [INFRA_TAG_KEY]
+Agents (from the registry, AI17): [AGENTS_WITH_TIERS]
+Admin gate: [ADMIN_GATE]        (the permission check the admin pages use, or "none")
+
+Read ~/.claude/make-it/references/ai-accounting.md in full first. It is the spec; the section
+numbers below are its sections. Build-standards checks: AC01-AC16, ACV01-ACV03.
+
+--- STEP 1: FIND (retrofit mode; read-only, change nothing yet) ---
+1. List every AI call site (section 12, step 1): file:line, agent (existing or a proposed slug),
+   what it does in one plain line, and where its model comes from, with the value the deployed
+   app actually resolves (rule 10).
+2. Mark each of the seven surfaces none / partial / present, naming the files of anything that
+   exists. A present surface is extended, never rebuilt.
+3. Write .make-it/ai-ladder.md (section 6): the verdict (no ladder / fixed per agent / routed per
+   call) and one row per call site with the suggested tier, why, and the estimated saving.
+4. Stop and report: the call sites, the surfaces found, the ladder verdict and the three biggest
+   savings, in plain words. Building waits for the plan approval of the skill that runs this
+   prompt.
+New-build mode: skip 1-2; write the ladder report from each agent's planned tier.
+
+--- STEP 2: METER (sections 3-5) ---
+- Migration: ai_usage_events, model_prices, ai_outcomes, value_baselines, agent_controls,
+  tier_models, budget_caps, provider_breakers, control_audit_log, infra_cost_daily,
+  vendor_spend, spend_statements, statement_counters. tenant_id columns only if multi-tenant.
+- The one metering wrapper (section 4), with the agent slug a required argument. Route every
+  call site from step 1 through it, one agent at a time, running that agent's existing tests
+  after each. Never change what an agent sends to the model while doing this.
+- Seed model_prices from each provider's current public price page (source URL + today's date);
+  seed agent_controls (mode on, tier from the registry) and tier_models (from AI_MODEL_HEAVY /
+  STANDARD / LIGHT as deployed).
+- The CI test for AC03.
+
+--- STEP 3: OUTCOMES AND ROI (section 7) ---
+- Hook accepted / corrected / redone into the app's own actions on AI results; add the
+  correction-window job for auto / corrected where the app has no approve step.
+- Rollups: cost per completed task (+ median, p90), verdict rates, done without a person;
+  dollar ROI only where value_baselines has a row.
+
+--- STEP 4: CONTROL PLANE (section 8) ---
+- Agent mode / tier / escalation, tier models, budget caps checked before each call, the
+  provider breaker, one-click prompt rollback (AI08 versions), control_audit_log on every change.
+- The one-step escalation and the replay proof for stepping down (section 6).
+
+--- STEP 5: INFRA AND STATEMENTS (sections 9-10) ---
+- The [INFRA_SOURCE] adapter (AWS built; Azure / GCP stubs), the mock adapter for local dev, the
+  daily collector, manual vendor lines.
+- Spend statements with the counter-row numbering, frozen payload, print stylesheet.
+
+--- STEP 6: PAGES (section 11) ---
+- The seven surfaces under the "AI & Spend" sidebar group, behind ai_accounting.view /
+  ai_accounting.manage (seed both for Super Admin and Admin). Use the app's DataTable and page
+  patterns. Admin gate "none" → skip this step and list the pages as not built yet in TODO.md.
+
+--- STEP 7: SEED AND VERIFY ---
+- Dev seed: about 200 ledger rows over 30 days across every agent and tier, outcomes for most of
+  their tasks, one value baseline, one budget cap, three days of mock infra rows, one vendor line.
+- Run AC01-AC16; with the app running, ACV01-ACV03. Report each check passed or failed from what
+  ran.
+
+--- ENVIRONMENT VARIABLES ---
+Add section 14's variables to .env.example and docker-compose.yml (INFRA_COST_SOURCE=mock in the
+local .env), and to app settings when the G-series settings exist.
+```
+
+**Required context:** agent registry (AI17) with tiers, stack, multi-tenancy, cloud provider,
+deployment target, admin permission check
+**Runs when:** ai_features.needed = true (every AI app; the accounting is not optional)
+**Runs AFTER:** Prompt #10-provider, #10b/c (needs the provider layer, BaseAgent, the registry
+and managed_prompts) and #10e (budget refusals reuse its safe error messages); after #10f when
+the brain layer is built (its curator is an agent like any other)
+**Retrofit:** /retrofit-it Phase F3 and the /resume-it catch-up run it with MODE = retrofit
+
+---
+
 ## Prompt #11: Secure Everything
 
 ```

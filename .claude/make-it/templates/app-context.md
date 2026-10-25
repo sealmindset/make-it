@@ -87,6 +87,12 @@ This template is populated by /make-it as the user answers questions. It becomes
     "memory_ttl_days": 90,
     "confidence_threshold": 0.5
   },
+  "ai_accounting": {
+    "enabled": false,
+    "infra_source": "none",
+    "infra_tag_key": "CostCenter",
+    "ladder_verdict": ""
+  },
   "nemo_guardrails": {
     "enabled": false,
     "version": "latest",
@@ -217,6 +223,10 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | brain_features.user_memory | Design | true when multi-user app with conversational AI |
 | brain_features.org_memory | Design | true when user describes institutional knowledge or team decisions |
 | brain_features.curation_trigger | Design | "scheduled" (default), "post_conversation", or "manual" |
+| ai_accounting.enabled | Design | Auto-set to true when ai_features.needed = true (ai-accounting.md) |
+| ai_accounting.infra_source | Design | "aws" \| "azure" \| "gcp" \| "none" -- from cloud.provider; "none" for local/prototype apps. Local dev always uses the mock adapter |
+| ai_accounting.infra_tag_key | Design | The cost-allocation tag the cloud bill is split by (default "CostCenter") |
+| ai_accounting.ladder_verdict | Build / Retrofit | "no ladder" \| "fixed per agent" \| "routed per call" -- copied from `.make-it/ai-ladder.md` |
 | nemo_guardrails.enabled | Design | Auto-set to true when ai_features.needed = true |
 | nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each /ship-it) |
 | nemo_guardrails.topic_domain | Design | Inferred from project purpose -- defines the AI's allowed scope (e.g., "vendor risk management") |
