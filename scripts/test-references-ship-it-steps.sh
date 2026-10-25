@@ -20,10 +20,14 @@
 #     /ship-it in a cell and one of the steps claims it; so does "add ... to /ship-it", "at deploy time", "the PR with ...",
 #     and a sequence-diagram arrow from a /ship-it participant ("SI->>SI: NeMo ..." reads as "/ship-it runs NeMo ...").
 #   - The fallback AI model: no skill runs the NeMo tests against it today (card E02-S45). No sentence says one does (a
-#     MUST, or a "neither ..." / "none today" / "not run" sentence, is no such claim), and guardrails.md says so plainly.
+#     MUST, or a "neither ..." / "none today" / "not run" sentence, is no such claim), and guardrails.md says so plainly,
+#     as "a known gap": shipped text names no card id (the board is private).
 #   - The AI-safety attestation: only /nemo-it writes one. No sentence says one is generated without naming /nemo-it (or
 #     /fix-it, which re-scans with it), but the CI quality-gate's "attestation artifact" and the lines card E02-S44 owns
 #     (attestation_mode, docs/ai-safety-attestation.md and its template). nemo-it.md and fix-it.md are its own pages.
+#   - No card id (E01-S1 style) in any file the installer ships (.claude/), but under a Version History heading and in the
+#     /backlog-it skill's own files (its command, bin/, backlog-board.md, its Confluence page), whose ids are made-up
+#     examples of the id format. The board is private, so a real card id there points at nothing the reader can open.
 # Scanned: the tracked files under .claude/ and scripts/, the root README.md and docs/. The test scripts are not scanned:
 # they quote the opposites as controls.
 set -euo pipefail
@@ -114,14 +118,22 @@ CLAIMS="$(claims $FILES)"
 check "no reference outside ship-it-guide.md names the NeMo full run, the attestation, the risk_flag PR flag, the dotenv grep, the OT sign-off or DAST as a /ship-it step" \
   '[ -z "$CLAIMS" ] || { printf "%s\n" "$CLAIMS" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
 FALLBACK="$(fallback $FILES)"
-check "no reference says a skill runs the NeMo tests against the fallback (or every) AI model: none does today (card E02-S45)" \
+check "no reference says a skill runs the NeMo tests against the fallback (or every) AI model: none does today" \
   '[ -z "$FALLBACK" ] || { printf "%s\n" "$FALLBACK" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
 FBSEC="$(awk '/^#/{on=($0 ~ /^#### AI Fallback Model Safety/)} on' .claude/make-it/references/guardrails.md | tr '\n' ' ' | tr -s ' ')"
-check "guardrails.md keeps the fallback MUST and says plainly that neither build-verify nor /nemo-it runs the fallback model (card E02-S45)" \
-  'printf "%s" "$FBSEC" | gq -F "MUST run against BOTH" && printf "%s" "$FBSEC" | gq -F "neither build-verify nor /nemo-it runs the fallback model" && printf "%s" "$FBSEC" | gq -F "E02-S45"'
+check "guardrails.md keeps the fallback MUST and says plainly that neither build-verify nor /nemo-it runs the fallback model, a known gap, with no card id" \
+  'printf "%s" "$FBSEC" | gq -F "MUST run against BOTH" && printf "%s" "$FBSEC" | gq -F "neither build-verify nor /nemo-it runs the fallback model" && printf "%s" "$FBSEC" | gq -F "a known gap" && ! printf "%s" "$FBSEC" | gq -E "\bE[0-9]{2}-S[0-9]+\b"'
 UNATTESTED="$(unattested $DFILES)"
 check "no reference says the AI-safety attestation is generated without naming /nemo-it (build-verify writes none)" \
   '[ -z "$UNATTESTED" ] || { printf "%s\n" "$UNATTESTED" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
+
+# no card id in shipped text: cardids FILE... prints each sentence that names one (Version History skipped)
+cardids() { sents "$@" | nohist | { grep -E "$T.*\bE[0-9]{2}-S[0-9]+\b" || true; }; }
+# the /backlog-it skill's own files show the id format with made-up ids
+IDFILES="$( { git grep -lIE -e 'E[0-9]{2}-S[0-9]+' -- .claude || true; } | grep -vE '^\.claude/(commands/backlog-it\.md|make-it/backlog/|make-it/references/backlog-board\.md|make-it/confluence-docs/16-backlog-it\.md)' || true)"
+CARDIDS="$(cardids $IDFILES)"
+check "no file the installer ships (.claude/) names a card id (the board is private), but Version History and the /backlog-it skill's own examples" \
+  '[ -z "$CARDIDS" ] || { printf "%s\n" "$CARDIDS" | cut -c1-220 | sed "s/^/  card id: /"; false; }'
 
 # 2. the pointers name sections the guide has, and there are some (a pointer may wrap across lines)
 # ptrs_ok FILE...: the files point at "What make-it runs before /ship-it", and every section they point at is in the guide
@@ -154,10 +166,13 @@ check "(control) passes, the sibling fixes: build-verify greps (check I10) befor
   '! plant "Build-verify greps for \`override=True\` in dotenv calls (check I10), before /ship-it (ship-it-guide.md, \"What make-it runs before /ship-it\")." && ! plant "No skill asks for an OT security sign-off at ship (ship-it-guide.md, \"What /ship-it Does\")." && ! plant "| NeMo Guardrails | AI behavioral safety testing | Build-verify (basic) + /nemo-it (full suite), before /ship-it | Mandatory |" && ! plant "\`\`\`mermaid\nsequenceDiagram\n    participant SI as /ship-it\n    SI->>GH: Create branch, push, create PR\n\`\`\`"'
 fb() { printf "%b\n" "$1" > "$TMPD/f.md"; [ -n "$(fallback "$TMPD/f.md")" ]; }
 check "(control) fallback: fails when a skill runs the fallback model (the old wording, \"testing in build-verify\"); passes the MUST and a plain \"neither\"" \
-  'fb "- Build-verify runs against primary model only (speed); the full suite runs against ALL configured\n  models before /ship-it" && fb "| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |" && fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | /nemo-it full test suite |" && fb "| Fallback model safety | [Prevented/Missing] | Build-verify checklist |" && ! fb "- If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH\n  the primary and fallback models" && ! fb "- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it runs the fallback model: a known gap (card E02-S45)"'
+  'fb "- Build-verify runs against primary model only (speed); the full suite runs against ALL configured\n  models before /ship-it" && fb "| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |" && fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | /nemo-it full test suite |" && fb "| Fallback model safety | [Prevented/Missing] | Build-verify checklist |" && ! fb "- If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH\n  the primary and fallback models" && ! fb "- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it runs the fallback model: a known gap"'
 att() { printf "%b\n" "$1" > "$TMPD/a.md"; [ -n "$(unattested "$TMPD/a.md")" ]; }
 check "(control) attestation: fails when it is generated with no /nemo-it (a build-verify checklist item, \"Implementation generates:\", \"Yes -- auto-generated\", a feature line); passes /nemo-it, the quality-gate artifact and card E02-S44 lines" \
   'att "**NeMo Guardrails:**\n- [ ] AI Safety Attestation generated in docs/" && att "**Implementation generates:**\n- Attestation document in docs/" && att "| AI safety attestation | Yes -- auto-generated in docs/attestations/ | [PRESENT / ABSENT] |" && att "- Generates GRC-required AI Safety Attestation in \`docs/\`" && ! att "- No AI Safety Attestation at build-verify: /nemo-it writes it (ship-it-guide.md, \"What make-it runs before /ship-it\")" && ! att "Generates \`quality-gate-report.json\` attestation artifact." && ! att "    - \"snapshot\": each run creates docs/attestations/YYYY-MM-DD-vN.md"'
+ci() { printf "%b\n" "$1" > "$TMPD/c.md"; [ -n "$(cardids "$TMPD/c.md")" ]; }
+check "(control) card ids: fails on \"a known gap (card E02-S45)\" and a code comment \"(E02-S5)\"; passes \"a known gap\", an id under Version History, and a plain word like E2E-S3" \
+  'ci "- Today neither build-verify nor /nemo-it runs the fallback model: a known gap (card E02-S45)" && ci "# ponytail: one fixed window. Real agents ran up to 62 min (E02-S5); past this a wait nudges again." && ! ci "- Today neither build-verify nor /nemo-it runs the fallback model: a known gap" && ! ci "## Version History\n\n### v1.44.18\n- Ships card E02-S21" && ! ci "E2E-S3 and SE02-S4X are no card ids"'
 check "(control) the pointer check fails on a section the guide doesn't have, and with no pointer at all" \
   'printf "%s\n" "(ship-it-guide.md, \"What make-it runs before /ship-it\") (ship-it-guide.md, \"What /ship-it runs for AI safety\")" > "$TMPD/q.md" && ! ptrs_ok "$TMPD/q.md" >/dev/null && printf "%s\n" "/nemo-it runs the full suite." > "$TMPD/q.md" && ! ptrs_ok "$TMPD/q.md"'
 
