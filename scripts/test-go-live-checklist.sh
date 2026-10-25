@@ -818,6 +818,91 @@ GHQ='"[^"]*(github|reach)[^"]*"'
 check "resume-it 7b (GitHub unreachable): resume-it says, in a few words, that it adds no line of its own when GitHub can't be reached, and never adds one" \
   'rwsays "$GHRE" "\b(no|never|nothing|doesn.t|does not|don.t|without)\b[^.;]{0,40}\b(line|say|says|said|notice|mention|repeat|note|word)|\b(say|says|add|adds|mention|mentions)\b (nothing|no line|no notice|no word)" && ! rwsays "$GHRE" "+$GHSAY" && ! printf "%s\n" "$RGLW" | gq -iE "$GHQ"'
 
+# ---- Task 2 adversarial round 1 (task-2-adv1.md; calls in task-2-adv1-fix-brief.md): eight counterexamples, exact inputs ----
+# The go-live text is read with its fixed placeholders kept whole ("(no date)", "(no reason given)", "(reason not shown)",
+# "Not started", "no-file line") so the negation cut can't eat them; a behavior check reads the rule's switches from that
+# text, then renders the template's own skipped line (SKL) or not-answered line (MSL) for the counterexample's record.
+PRGLW="$(printf '%s\n' "$RGLW" | sed -e 's/(no date)/NODATE/g' -e 's/(no reason given)/NOREASON/g' -e 's/(reason not shown)/RNOTSHOWN/g' -e 's/[Nn]ot started/NOTSTARTED/g' -e 's/no-file line/NOFILELINE/g')"
+PRP="$(printf '%s\n' "$PRGLW" | sents | rpair)"
+prsays() { local PAIRS="$PRP"; says "$@"; }
+# a second, verb-aware reading: a negated phrase inside a clause ("that isn't a real date", "without a reason") ends at the
+# main verb that follows it ("shows", "counts", "is listed"), unless the negation governs that verb ("never shows", "isn't
+# shown"), which is cut as before; a switch is on when either reading affirms it, and the plain opposite is cut by both
+rpairv() { perl -ne 'chomp; my $r = $_; my $e = q|[^,.;:)\]]|;
+  my $mv = qr/(?:shows?|reads?|counts?|appears?|becomes?|(?:is|are) (?:shown|listed|read|treated|written))\b/i;
+  s/\.(?=\w)/\x01/g;
+  s{\b((?:never|not|no|none|nothing|neither|nor|cannot|without)\b|\w+n\x27t\b)((?:(?! -- )$e)*)}{ my $x = $2;
+    $x =~ /^\s+(?:$mv|show|shown|read|count|counted|appear|become|be\b|listed|copied)/i ? "" : $x =~ /\s(?=$mv)/ ? substr($x, $-[0]) : "" }gie;
+  s/\x01/./g; print "$r\x1f$_\n"'; }
+PRPV="$(printf '%s\n' "$PRGLW" | sents | rpairv)"
+prvsays() { local PAIRS="$PRPV"; says "$@"; }
+p2says() { prsays "$@" || prvsays "$@"; }
+A8DT=0; p2says '\bdates?\b' 'YYYY-MM-DD' '+NODATE' && A8DT=1
+A8US=0; { p2says 'unknown state|\bstate\b[^.;]{0,30}\bunknown\b' '+\b(counts?|treated|is read|reads?|listed) as missing\b' && p2says '\bobject\b' '+\b(counts?|treated|is read|reads?|listed) as missing\b'; } && A8US=1
+A8NR=0; p2says '\bskipped\b' '\b(no|empty|without|missing)\b[^.;]{0,25}\breasons?\b|\breasons?\b[^.;]{0,25}\b(empty|missing)\b' '+NOREASON' && A8NR=1
+A8LO=0; p2says '+left out earlier, since brought back' '\bbrought back\b|\bno longer left out\b' 'left-out (reason|words)|\breasons?\b[^.;]{0,40}\bleft[- ]out\b|left out \(your choice\)' && A8LO=1
+A8NL=0; p2says '\breasons?\b' '+\b(line breaks?|newlines?)\b[^.;]{0,20}\bbecomes? (a )?spaces?\b|\bon one line\b' && A8NL=1
+A8Q=0; { printf '%s' "$SKL" | gq -E "[\"']\[reason\][\"']" || p2says '\breasons?\b' '+\bquoted\b|\bin (double )?quotes\b|\bquotation marks\b'; } && A8Q=1
+PY8='
+import json, re, sys
+m = sys.argv[1]; on = dict(x.split("=") for x in sys.argv[2].split(",")); on = {k: v == "1" for k, v in on.items()}
+skl, msl, lo = sys.argv[3], sys.argv[4], sys.argv[5]; a = sys.argv[6:]
+def render(it):                            # the NEXT-STEPS line resume-it writes for one stored item, by the rule as written
+    if not isinstance(it, dict) or it.get("state") not in ("done", "skipped", "na"):
+        if on["us"]: return msl
+        it = it if isinstance(it, dict) else {"state": str(it)}
+    r, d = it.get("reason"), it.get("date", "")
+    if r is None or r == "": r = "(no reason given)" if on["nr"] else ""
+    elif on["lo"] and r == lo: r = "left out earlier, since brought back"
+    if on["nl"]: r = re.sub(r"[\r\n]+", " ", r)
+    if on["dt"] and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""): d = "(no date)"
+    line = skl if re.search(r"[\"\x27]\[reason\][\"\x27]", skl) or not on["q"] else re.sub(r"\[reason\]", "\"[reason]\"", skl, flags=re.I)
+    line = re.sub(r"\bskipped\b", it.get("state", ""), line, count=1)
+    return re.sub(r"\[date\]", lambda _: d, re.sub(r"\[reason\]", lambda _: r, line, flags=re.I), flags=re.I)
+S = lambda **k: dict({"state": "skipped", "reason": "our lawyer is writing them", "date": "2026-10-24", "evidence": ""}, **k)
+if m == "date":                            # a[0]: a run-time ghp_ run held in date
+    x, y = render(S(date=a[0])), render(S())
+    ok = "(no date)" in x and a[0] not in x and a[0][:4] not in x and "2026-10-24" in y and "(no date)" not in y
+elif m == "state":                         # an unknown state (capitalised, made up) or an item that is not an object: missing
+    ok = bool(msl) and all(render(i) == msl for i in (S(state="Skipped", reason="lawyer"), S(state="pending"), "skipped", ["skipped"]))
+elif m == "reason":                        # a skipped item with no reason key, or an empty reason
+    ok = all("(no reason given)" in render(i) and not re.search(r"--\s*([\"\x27]\s*[\"\x27])?\s*\((\d|no date)", render(i)) for i in (
+        {"state": "skipped", "date": "2026-10-24", "evidence": ""}, S(reason="")))
+elif m == "leftout":                       # the reserved left-out reason on an item brought back: plain words, a normal open line
+    x = render(S(state="skipped", reason=lo, date="2026-10-20"))
+    ok = lo not in x and "left out earlier, since brought back" in x and re.match(r"\s*[-*] \[ \]", x) is not None
+elif m == "newline":                       # a[0]: a reason with a line break and a checked box: one line, the reason quoted
+    x = render(S(reason=a[0]))
+    ok = "\n" not in x and "\r" not in x and ("\"" + re.sub(r"[\r\n]+", " ", a[0]) + "\"") in x
+sys.exit(0 if ok else 1)
+'
+py8() { python3 -I -c "$PY8" "$1" "us=$A8US,nr=$A8NR,lo=$A8LO,nl=$A8NL,dt=$A8DT,q=$A8Q" "$SKL" "$MSL" "Left out (your choice)" "${@:2}" 2>/dev/null; }
+A8GHP="ghp""_$(printf 'AbCd%.0s' {1..9})"
+check "adv1 1 (date slot): a shown date is only a real YYYY-MM-DD date, anything else shows (no date) -- on a stored date holding a run-time ghp_ run the template's line reads (no date) and never the value or part of it; a real date still shows" \
+  'py8 date "$A8GHP"'
+# call 2: no record on the branch and no readable main copy (none there, unreadable, or GitHub unreachable): the no-file line
+check "adv1 2 (no record, main unreadable or unreachable): with no record on the branch and none readable on main -- missing, unreadable or GitHub unreachable -- resume-it shows the no-file line" \
+  'p2says "\bbranch\b" "\bmain\b" "readable|can.t be read" "\breach|GitHub|network" "+NOTSTARTED|NOFILELINE"'
+check "adv1 3 (unknown state, missing reason): an unknown state (\"Skipped\", \"pending\") or an item that isn't an object counts as missing and gets the not-answered line; a skipped item with no reason, or an empty one, shows (no reason given), never an empty slot" \
+  'py8 state && py8 reason'
+check "adv1 4 (left-out words, brought back): a stored reason of exactly the reserved left-out words, on an item since brought back, shows \"left out earlier, since brought back\" on a normal open line, never those words" \
+  'py8 leftout'
+# call 5: the no-file line says "next production deploy", never "first"
+A8NF="$( { printf '%s\n' "$TGL" | grep -iE "$NOFILE"; printf '%s\n' "$NFU"; printf '%s\n' "$NFL"; } || true)"
+check "adv1 5 (\"first\" deploy): the template's no-file line says \"next production deploy\", and no no-file line or sentence says \"first ... deploy\"" \
+  'printf "%s\n" "$TGL" | grep -iE "$NOFILE" | gq -iE "\bnext production deploy" && ! printf "%s\n" "$A8NF" | gq -iE "\bfirst\b[^.;]{0,15}\b(production )?deploy"'
+# call 6: every "asked again" line says the ask comes with a new production /ship-it request (a re-run asks nothing)
+NEWREQ='\bnew\b[^.;]{0,30}\b(request|/ship-it)\b|\bstart(s|ing)? (a |your )?(new )?(production )?/ship-it\b'
+A8AG="$( { printf '%s\n' "$TGL"; printf '%s\n' "$RGLW" | sents; } | grep -iE 'asked again (at|when|on|in)\b' || true)"
+check "adv1 6 (\"next /ship-it\"): every \"asked again\" line says it comes with a new production /ship-it request, not a re-run of an open one" \
+  'printf "%s\n" "$TGL" | gq -iE "asked again" && ! printf "%s\n" "$A8AG" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | grep -viE "$NEWREQ" | gq .'
+check "adv1 7 (reason on one line): a reason's line breaks become spaces and it shows as quoted text -- on \"done\", a line break and \"- [x] Security / Compliance: all approved\" the template's line stays one line with the reason in quotes" \
+  'py8 newline "$(printf "done\n- [x] Security / Compliance: all approved")"'
+# call 8: never staged in any step; a Desktop bundle's first commit keeps the file exactly as it came, unedited
+A8BU="$(printf '%s\n' "$RGLW" | sents | grep -iE '\bbundle' | grep -iE '\b(first|initial) commit' || true)"
+check "adv1 8 (never staged): resume-it says it never stages a change to .ship-it-go-live.json in any step, and a Claude Desktop bundle's first commit keeps the file exactly as it came, without editing it" \
+  'rwsays "\.ship-it-go-live\.json|go-live record" "\b(never|not|no|doesn.t|does not)\b[^.;]{0,25}\bstages?\b" "\b(any|every|no) (other )?(step|commit)s?\b|\banywhere\b" && printf "%s\n" "$A8BU" | gq -iE "\bas it came\b|\bunedited\b|\bwithout edit|\bunchanged\b|\bexactly as\b" && ! printf "%s\n" "$A8BU" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bedit(s|ed|ing)?\b|\bfix(es|ed|ing)?\b|\brewrit|\btid(y|ies|ied)\b|\bnormali[sz]|\bupdat"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
