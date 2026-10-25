@@ -723,6 +723,23 @@ For **production**, detect the org's preferred approach:
 - If none detected, ask the user: "Where does your organization store production secrets -- a cloud secrets manager, HashiCorp Vault, or another secrets manager?"
 - Default recommendation: Use the secrets manager native to the chosen cloud provider
 
+**Go-live checklist:**
+
+Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
+(The record, No secret in the record): main's copy merged with the branch's, read only. resume-it
+only reads the go-live record: it never writes, stages or commits it, because /ship-it owns it.
+Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
+file's `### Go-live checklist` (step 6), list:
+- each `skipped` or missing item that the guide's Asking asks again, with its reason and date;
+- each item that Asking marks `coming soon` instead (items 2-5), which reads "not built yet", not
+  as a step for the user;
+- with no record on the branch or on main, only the "Not started" line: today's /ship-it doesn't
+  run the checklist yet (the guide's Safety steps /ship-it doesn't run yet).
+
+`done` and `na` items are not listed, nor is an item kept quiet while its item is left out. When a
+record leaves nothing open, leave the subsection out. List go-live items only there, never under
+"What you can do right now", and never offer a fix unless the user asks.
+
 **3. Check .env file (or .env.example) for missing values:**
 
 ```bash
@@ -804,6 +821,12 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 
 ### Security / Compliance
 - [ ] [Security item] -- [What needs to happen]
+
+### Go-live checklist
+- [ ] [Item]: skipped -- [reason] ([date]) -- asked again at your next /ship-it to production
+- [ ] [Item]: not answered yet -- asked again at your next /ship-it to production
+- [Item]: not built yet in /ship-it (coming soon)
+- Not started -- /ship-it doesn't run this checklist yet; a later /ship-it release goes through it with you before your first production deploy.
 
 ## Secrets & Environment Variables
 
