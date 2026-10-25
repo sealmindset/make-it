@@ -840,7 +840,12 @@ p2says() { prsays "$@" || prvsays "$@"; }
 A8DT=0; p2says '\bdates?\b' 'YYYY-MM-DD' '+NODATE' && A8DT=1
 A8US=0; { p2says 'unknown state|\bstate\b[^.;]{0,30}\bunknown\b' '+\b(counts?|treated|is read|reads?|listed) as missing\b' && p2says '\bobject\b' '+\b(counts?|treated|is read|reads?|listed) as missing\b'; } && A8US=1
 A8NR=0; p2says '\bskipped\b' '\b(no|empty|without|missing)\b[^.;]{0,25}\breasons?\b|\breasons?\b[^.;]{0,25}\b(empty|missing)\b' '+NOREASON' && A8NR=1
-A8LO=0; p2says '+left out earlier, since brought back' '\bbrought back\b|\bno longer left out\b' 'left-out (reason|words)|\breasons?\b[^.;]{0,40}\bleft[- ]out\b|left out \(your choice\)' && A8LO=1
+# (adv1 4's line, changed by adversarial round 2's call 3: "marked left out by your choice; not left out now" on any item not
+# left out now, in place of "left out earlier, since brought back"; the line is kept whole before the negation cut)
+LOLINE='marked left out by your choice; not left out now'
+PRPL="$(printf '%s\n' "$PRGLW" | sed "s/$LOLINE/MARKEDLO/g" | sents)"
+plsays() { local PAIRS; PAIRS="$(printf '%s\n' "$PRPL" | rpair)"; says "$@" || { PAIRS="$(printf '%s\n' "$PRPL" | rpairv)"; says "$@"; }; }
+A8LO=0; plsays '+MARKEDLO' '\b(isn.t|is not|not|no longer) left out\b|\bbrought back\b|\bwhether or not\b' 'left-out (reason|words)|\breasons?\b[^.;]{0,40}\bleft[- ]out\b|left out \(your choice\)' && A8LO=1
 A8NL=0; p2says '\breasons?\b' '+\b(line breaks?|newlines?)\b[^.;]{0,20}\bbecomes? (a )?spaces?\b|\bon one line\b' && A8NL=1
 A8Q=0; { printf '%s' "$SKL" | gq -E "[\"']\[reason\][\"']" || p2says '\breasons?\b' '+\bquoted\b|\bin (double )?quotes\b|\bquotation marks\b'; } && A8Q=1
 PY8='
@@ -853,7 +858,7 @@ def render(it):                            # the NEXT-STEPS line resume-it write
         it = it if isinstance(it, dict) else {"state": str(it)}
     r, d = it.get("reason"), it.get("date", "")
     if r is None or r == "": r = "(no reason given)" if on["nr"] else ""
-    elif on["lo"] and r == lo: r = "left out earlier, since brought back"
+    elif on["lo"] and r == lo: r = "marked left out by your choice; not left out now"
     if on["nl"]: r = re.sub(r"[\r\n]+", " ", r)
     if on["dt"] and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d or ""): d = "(no date)"
     line = skl if re.search(r"[\"\x27]\[reason\][\"\x27]", skl) or not on["q"] else re.sub(r"\[reason\]", "\"[reason]\"", skl, flags=re.I)
@@ -870,7 +875,7 @@ elif m == "reason":                        # a skipped item with no reason key, 
         {"state": "skipped", "date": "2026-10-24", "evidence": ""}, S(reason="")))
 elif m == "leftout":                       # the reserved left-out reason on an item brought back: plain words, a normal open line
     x = render(S(state="skipped", reason=lo, date="2026-10-20"))
-    ok = lo not in x and "left out earlier, since brought back" in x and re.match(r"\s*[-*] \[ \]", x) is not None
+    ok = lo not in x and "marked left out by your choice; not left out now" in x and re.match(r"\s*[-*] \[ \]", x) is not None
 elif m == "newline":                       # a[0]: a reason with a line break and a checked box: one line, the reason quoted
     x = render(S(reason=a[0]))
     ok = "\n" not in x and "\r" not in x and ("\"" + re.sub(r"[\r\n]+", " ", a[0]) + "\"") in x
@@ -885,7 +890,7 @@ check "adv1 2 (no record, main unreadable or unreachable): with no record on the
   'p2says "\bbranch\b" "\bmain\b" "readable|can.t be read" "\breach|GitHub|network" "+NOTSTARTED|NOFILELINE"'
 check "adv1 3 (unknown state, missing reason): an unknown state (\"Skipped\", \"pending\") or an item that isn't an object counts as missing and gets the not-answered line; a skipped item with no reason, or an empty one, shows (no reason given), never an empty slot" \
   'py8 state && py8 reason'
-check "adv1 4 (left-out words, brought back): a stored reason of exactly the reserved left-out words, on an item since brought back, shows \"left out earlier, since brought back\" on a normal open line, never those words" \
+check "adv1 4 (left-out words, brought back): a stored reason of exactly the reserved left-out words, on an item not left out now (here, brought back), shows \"marked left out by your choice; not left out now\" on a normal open line, never those words" \
   'py8 leftout'
 # call 5: the no-file line says "next production deploy", never "first"
 A8NF="$( { printf '%s\n' "$TGL" | grep -iE "$NOFILE"; printf '%s\n' "$NFU"; printf '%s\n' "$NFL"; } || true)"
@@ -902,6 +907,72 @@ check "adv1 7 (reason on one line): a reason's line breaks become spaces and it 
 A8BU="$(printf '%s\n' "$RGLW" | sents | grep -iE '\bbundle' | grep -iE '\b(first|initial) commit' || true)"
 check "adv1 8 (never staged): resume-it says it never stages a change to .ship-it-go-live.json in any step, and a Claude Desktop bundle's first commit keeps the file exactly as it came, without editing it" \
   'rwsays "\.ship-it-go-live\.json|go-live record" "\b(never|not|no|doesn.t|does not)\b[^.;]{0,25}\bstages?\b" "\b(any|every|no) (other )?(step|commit)s?\b|\banywhere\b" && printf "%s\n" "$A8BU" | gq -iE "\bas it came\b|\bunedited\b|\bwithout edit|\bunchanged\b|\bexactly as\b" && ! printf "%s\n" "$A8BU" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bedit(s|ed|ing)?\b|\bfix(es|ed|ing)?\b|\brewrit|\btid(y|ies|ied)\b|\bnormali[sz]|\bupdat"'
+
+# ---- Task 2 adversarial round 2 (task-2-adv2.md; calls in task-2-adv2-fix-brief.md): four counterexamples, exact inputs ----
+GLN='\.ship-it-go-live\.json|go-live (record|file|answers)'
+WU="$(units < "$R")"
+SCU="$(awk '/<step name="security-scanner-remediation">/{on=1} on; on&&/<\/step>/{exit}' "$R" | awk '/^```/{f=!f;next} !f' | units)"
+# call 1, side doors: the scanner step carries the go-live carve-out (like the left-out one): a finding on the record is not
+# fixed, whatever its severity, doesn't hold up the user's work, and the user hears once, with no value, that /ship-it clears
+# a matching stored field on its next production run (the guide's No-secret rule); the catch-up doesn't apply a gap on it
+# (X01) and doesn't hold up work; the commit offer never stages it, commits the rest and says it left it for /ship-it
+A9NOTFIX='\b(not|never|isn.t)\b[^.;]{0,20}\b(fixed|fix|applied|apply|changed|edited)\b'
+A9SEV='whatever (its|the) severity|any severity|regardless of (its |the )?severity|even (when|if)[^.;]{0,15}critical'
+A9HOLD='\b(doesn.t|does not|never|not|won.t)\b[^.;]{0,15}\b(hold|holds|block|blocks)\b'
+A9CLEAR='/ship-it\b[^.;]{0,40}\b(clears?|empties|writes? (it |them |the field )?empty)\b'
+A9NEXT='\bnext\b[^.;]{0,25}\b(production )?(run|/ship-it|request)\b'
+A9NOVAL='\bno value\b|\bnever (names?|shows?|says?|quotes?) (the|a|any|its) value\b|\bwithout (the|a|any) value\b|\bnames? no value\b|\bno scan detail\b'
+A9APPLY='\b(apply|applies|applying)\b[^.;]{0,30}\b(it|the (diff|fix|record|file))\b|\bfix(es)? (it|the (record|file|finding))\b'
+a9_scan() { printf '%s\n' "$SCU" | grep -iE "$GLN" | grep -iE '\bfindings?\b' | grep -iE "$A9NOTFIX" | grep -iE "$A9SEV" | grep -iE "$A9HOLD" \
+  | grep -iE "$A9CLEAR" | grep -iE "$A9NEXT" | grep -iE 'No.secret' | grep -iE '\bonce\b' | grep -iE "$A9NOVAL" | grep -viE '\[(the )?(value|secret|key|token)\]' | gq .; }
+a9_catchup() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' | grep -iE "$A9NOTFIX" \
+  | grep -iE "$A9HOLD|scanner step|security.scanner|as (for|with) (a )?(scanner )?finding" | gq .; }
+a9_commit() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'uncommitted|unsaved|commit (them|offer)' | grep -iE '\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,25}\bstag' \
+  | grep -iE '\bthe rest\b' | grep -iE '\b(left|leaves?|leaving)\b[^.;]{0,40}\bfor /ship-it\b' | grep -iE '\bone (plain )?line\b|"[^"]*for /ship-it[^"]*"' | gq .; }
+check "adv2 1 (side doors): the scanner step doesn't fix a finding on .ship-it-go-live.json, whatever its severity, nor hold up work, and tells the user once, with no value, that /ship-it clears it on its next production run (No-secret rule); the catch-up doesn't apply a gap on it (X01); the commit offer never stages it, commits the rest and says it left it for /ship-it" \
+  'a9_scan && a9_catchup && a9_commit && ! printf "%s\n" "$WU" | grep -iE "$GLN" | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$A9APPLY"'
+
+# calls 2 and 3 render the template's own line for the counterexample's item, the rule's switches read from the go-live text
+# (the call-3 line kept whole as MARKEDLO; plsays reads it both ways, as adv1 does)
+A9QL=0; { plsays '\bleft[- ]out\b' '\b(now|currently|still|while)\b' '\b(whatever|regardless of|no matter)\b[^.;]{0,25}\breasons?\b|\bany (stored )?reason\b' '+\bquiet\b' \
+  || plsays '\bleft[- ]out\b' '\b(now|currently|still|while)\b' '\b(whatever|regardless of|no matter)\b[^.;]{0,25}\breasons?\b|\bany (stored )?reason\b' '\b(not|never|isn.t)\b[^.;]{0,10}\b(listed|shown)\b'; } && A9QL=1
+A9ANY=0; plsays 'MARKEDLO' '\b(isn.t|is not|not) left out now\b|\bwhether or not\b|\bnever (really )?left out\b|\bany item\b' && A9ANY=1
+PY9='
+import re, sys
+ql, lo_on, anyc = (x == "1" for x in sys.argv[2:5]); skl, lo = sys.argv[5], sys.argv[6]; line3 = "marked left out by your choice; not left out now"
+def render(it, left_out_now, was_left_out):  # None when the item is not listed
+    if ql and left_out_now: return None
+    r = it["reason"]
+    if lo_on and r == lo and not left_out_now and (anyc or was_left_out): r = line3
+    return re.sub(r"\[date\]", it["date"], re.sub(r"\[reason\]", lambda _: r, skl, flags=re.I), flags=re.I)
+item1 = {"state": "skipped", "reason": "our lawyer is writing them", "date": "2026-10-20", "evidence": ""}
+if sys.argv[1] == "quiet":                 # item 1, a user reason, its left-out item left out now: not listed; not left out: listed
+    y = render(item1, False, False)
+    ok = render(item1, True, False) is None and y is not None and "our lawyer is writing them" in y
+else:                                      # the reserved words, never left out (no left-out record): the call-3 line
+    x = render(dict(item1, reason=lo, date="2026-10-24"), False, False)
+    ok = x is not None and line3 in x and lo not in x and "since brought back" not in x and re.match(r"\s*[-*] \[ \]", x) is not None
+sys.exit(0 if ok else 1)
+'
+py9() { python3 -I -c "$PY9" "$1" "$A9QL" "$A8LO" "$A9ANY" "$SKL" "Left out (your choice)" 2>/dev/null; }
+check "adv2 2 (quiet while left out): item 1, skipped with the user's reason, while its left-out item is left out now (left-out-record.md), is not listed -- never asked again, never a to-do, whatever its reason -- and the same item not left out is listed" \
+  'py9 quiet && ! plsays "\bleft[- ]out\b" "\b(now|currently|still)\b" "+\basked again\b|\b(is|are) listed\b|\bto-?do\b"'
+check "adv2 3 (reserved words, no left-out record): the reserved left-out words on an item never left out show \"marked left out by your choice; not left out now\" on a normal open line, and the go-live text never says \"since brought back\"" \
+  'py9 reserved && ! printf "%s\n" "$RGLW" | gq -iF "since brought back"'
+
+# call 4: on an unreadable record resume-it never repeats the guide's "I couldn't read your go-live record, so I'm going
+# through it again" (/ship-it's line): a sentence says so, and no quoted line of resume-it's own goes through it again,
+# rewrites or asks again unless a negation stands right before the quote
+A9P="$(printf '%s\n' "$WU" | sed -e 's/going through it again/GOINGAGAIN/g' -e "s/couldn.t read your go-live record/COULDNTREAD/g")"
+A9QG='
+my $bad = 0;
+while (<STDIN>) { next unless /unreadable|can.t be read|COULDNTREAD/i;
+  while (/"([^"]*)"/g) { my ($q, $s) = ($1, $-[0]); next unless $q =~ /GOINGAGAIN|going through|go through it|rewrit|ask(ing|ed)?\b[^"]{0,20}\bagain/i;
+    my $pre = substr($_, 0, $s); $pre =~ s/^.*[.!?]\s//s; $pre = substr($pre, -45) if length($pre) > 45;
+    $bad = 1 unless $pre =~ /\b(never|not|no)\b|n\x27t\b/i } }
+exit $bad;'
+check "adv2 4 (unreadable record, chat line): resume-it says it never repeats the guide's \"I couldn't read your go-live record, so I'm going through it again\", and no quoted line of its own says it goes through it again" \
+  'printf "%s\n" "$A9P" | grep -iE "unreadable|can.t be read|COULDNTREAD" | sents | gq -iE "\b(never|not|doesn.t|does not|don.t)\b[^.;]{0,25}\b(repeats?|says?|uses?|copies|quotes?)\b[^.;]{0,40}(GOINGAGAIN|COULDNTREAD|(the guide.s|/ship-it.s) (line|notice|words|sentence))" && printf "%s\n" "$A9P" | perl -e "$A9QG"'
 
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
