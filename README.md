@@ -957,6 +957,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.44.22 -- /try-it checks what still works when sign-in is left out
+
+When a /retrofit-it user left secure sign-in out, /try-it skipped every page check. So the pages and
+API the app already had were never checked. /try-it also claimed screenshots and tested pages that
+didn't exist.
+- **Existing pages and API, checked without signing in.** With sign-in left out, /try-it opens each
+  page and calls each endpoint the app already had through its own access, and lists them as
+  checked, never as left out. An endpoint that needed sign-in before is named plainly as not checked.
+- **Only claims what ran.** "with screenshots" is said only when screenshots were taken.
+  "Screenshots unavailable" says pages were tested only when they were. The report rule names its
+  exceptions.
+- **A left-out item that stops the app from starting** gets a true path: no fix, no retry, never
+  "Everything is running!", and the smoke test marks what it kept from running.
+- **Checked.** New `scripts/test-try-it-checks.sh` (9 checks, each with controls for its plain
+  opposite); the left-out record's 456 checks stay green.
+
 ### v1.44.21 -- A broken migration chain is caught before the app starts
 
 Build-verify only checked that an app had migrations. An app whose Alembic chain was broken passed
