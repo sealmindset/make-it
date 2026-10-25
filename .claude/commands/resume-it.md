@@ -726,15 +726,21 @@ For **production**, detect the org's preferred approach:
 **Go-live checklist:**
 
 Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
-(The record, No secret in the record): main's copy merged with the branch's, read only. resume-it
-only reads the go-live record: it never writes, stages or commits it, because /ship-it owns it.
-Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
-file's `### Go-live checklist` (step 6), list:
-- each `skipped` or missing item that the guide's Asking asks again, with its reason and date;
+(The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
+resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
+writes, stages or commits it, because /ship-it owns it. Go-live items are normal open items, not
+left-out items (`left-out-record.md`). In the checklist file's `### Go-live checklist` (step 6),
+list:
+- each `skipped` or missing item that the guide's Asking asks again, with its reason and date. A
+  stored reason the guide's No secret rule would refuse is never copied into NEXT-STEPS.md: the
+  line reads `skipped -- (reason not shown) ([date])`, never the value or any part of it. A stored
+  reason over 200 characters counts as missing;
 - each item that Asking marks `coming soon` instead (items 2-5), which reads "not built yet", not
   as a step for the user;
 - with no record on the branch or on main, only the "Not started" line: today's /ship-it doesn't
-  run the checklist yet (the guide's Safety steps /ship-it doesn't run yet).
+  run the checklist yet (the guide's Safety steps /ship-it doesn't run yet). When the branch's
+  record is unreadable and main's copy can't be read either, a record still exists: treat all five
+  items as missing, as the guide does, and list them as above, never with the "Not started" line.
 
 `done` and `na` items are not listed, nor is an item kept quiet while its item is left out. When a
 record leaves nothing open, leave the subsection out. List go-live items only there, never under
