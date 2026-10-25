@@ -664,6 +664,104 @@ check "owner call 2, 4 (unreadable branch file): a truncated branch record besid
 check "owner call 2, 5 (unreadable main copy): nothing is said about an unreadable main copy, and the \"I couldn't read your go-live record\" notice is never about it" \
   'says "unreadable" "main(.s)? copy" "\bnothing (is )?said\b|\bsays nothing\b|\bsilently\b" && ! says "main(.s)? copy" "couldn.t read your go-live record"'
 
+# ---- E05-S2 Task 2: resume-it's readiness check lists the open go-live items (task-2-brief.md) ----
+# resume-it only reads `.ship-it-go-live.json` (/ship-it owns it), the way the guide's Go-live checklist says the answer
+# counts, and the NEXT-STEPS template's "## For Production" gets "### Go-live checklist". RESUME_IT points these at a copy.
+R="${RESUME_IT:-.claude/commands/resume-it.md}"
+RC="$(awk '/<step name="readiness-check">/{on=1} on; on&&/<\/step>/{exit}' "$R")"
+RC2F="$(printf '%s\n' "$RC" | awk '/^\*\*2\. /{on=1} /^\*\*3\. /{on=0} on' | awk '/^```/{f=!f;next} !f' | flat)"
+# the NEXT-STEPS template (the fence that opens "# [PROJECT_NAME] -- What's Needed"), its "## For Production", and in that
+# "### Go-live checklist"; template units are lines, a line that opens no list item, bracket or heading continues the one above
+TPL="$(printf '%s\n' "$RC" | awk '/^```/{if(f){if(b ~ /^# \[PROJECT_NAME\] -- What.s Needed/){printf "%s", b; exit} b=""} f=!f; next} f{b=b $0 "\n"}')"
+PROD="$(printf '%s\n' "$TPL" | awk '/^## /{on=($0=="## For Production")} on')"
+GLT="$(printf '%s\n' "$PROD" | awk '/^##/{on=($0=="### Go-live checklist")} on' | sed 1d)"
+tunits() { awk '/^[[:space:]]*$/{if(u!="")print u; u=""; next} /^[[:space:]]*([-*>#[]|[0-9]+\.)/{if(u!="")print u; u=$0; next}
+  {u=(u=="")?$0:u" "$0} END{if(u!="")print u}' | tr -s ' '; }
+TGL="$(printf '%s\n' "$GLT" | tunits)"
+# the go-live units: the readiness check's blocks (code left out) that say go-live, with the list blocks right after one,
+# cut into units; plus the template's go-live lines
+RGL="$( { printf '%s\n' "$RC" | awk '/^```/{f=!f;next} !f' | awk 'BEGIN{RS=""} {l=($0 ~ /^[[:space:]]*([-*] |[0-9]+\. )/);
+  s=(tolower($0) ~ /go-live/) || (l && p); if(s) print $0 "\n"; p=s}' | units; printf '%s\n' "$TGL"; } | grep . || true)"
+# like pair, but a negated clause also ends at ")", "]" and " -- " (template lines); RP_STRONG=1 cuts past commas too
+rpair() { RP_E="$([ "${RP_STRONG:-}" = 1 ] && echo '[^.;:)\]]' || echo '[^,.;:)\]]')" perl -ne 'chomp; my $r = $_; my $e = $ENV{RP_E};
+  s/\.(?=\w)/\x01/g; s/\b(?:never|not|no|none|nothing|neither|nor|cannot|without)\b(?:(?! -- )$e)*//gi; s/\b\w+n\x27t\b(?:(?! -- )$e)*//gi;
+  s/\x01/./g; print "$r\x1f$_\n"'; }
+raff() { RP_STRONG=1 rpair | cut -d $'\x1f' -f2; }
+RPAIRS="$(printf '%s\n' "$RGL" | sents | rpair)"; RUPAIRS="$(printf '%s\n' "$RGL" | rpair)"; TPAIRS="$(printf '%s\n' "$TGL" | sents | rpair)"
+rsays()  { local PAIRS="$RPAIRS"; says "$@"; }
+rusays() { local PAIRS="$RUPAIRS"; says "$@"; }
+tsays()  { local PAIRS="$TPAIRS"; says "$@"; }
+
+# 1. step 2 names the record and points at the guide's section; nothing it says about the go-live items restates the rules
+GPTR='(ship-it-guide\.md`?|\bthe (ship-it )?guide(.s)?)[^.;#]{0,30}(`?## )?"?Go-live checklist\b|\bGo-live checklist"?`?[^.;#]{0,25}\b(in|of) [^ ]*ship-it-guide\.md'
+GLRESTATE='terms_privacy|security_audit|restore_test|load_test|live_payment|\bschema\b|\bsk-|AKIA|ghp_|github_pat_|-----BEGIN|password=|token=|secret=|/terms\b|/privacy\b|\barbitration\b|personal data|user content|deploy-prod|environment-prod|deployment\.environments|not a legal review|state\]? -- \[?reason'
+check "resume-it 1 (the record, by pointer): the readiness check's step 2 names .ship-it-go-live.json and points at ship-it-guide.md's Go-live checklist (which exists); no go-live line restates its rules (item keys, schema, secret patterns, item 1's pages and topics, trigger signals, the PR line)" \
+  '[ "$(grep -cxF "$H" "$G")" -ge 1 ] && printf "%s" "$RC2F" | gq -F ".ship-it-go-live.json" && printf "%s" "$RC2F" | gq -E "$GPTR" && ! printf "%s\n" "$RGL" | gq -iE "$GLRESTATE"'
+
+# 2. read only: it says it never writes or stages the file because /ship-it owns it; no paragraph, list item or template
+# line naming the file (or the go-live record) tells it to write, stage, commit or change it ("it" included), unless the
+# one doing it is /ship-it or the user; no code line writes or stages it
+NEVERW='\b(never|not|doesn.t|does not|don.t|do not|won.t)\b[^.;]{0,25}\b(writes?|stages?|commits?|changes?|edits?|updates?)\b'
+OWNS='/?ship-it\b[^.;]{0,10}\bowns\b|\bowned by /?ship-it\b|\bonly /?ship-it\b[^.;]{0,15}\b(writes|changes|updates)\b'
+WRITE_PL='
+my $v = qr/\b(?:write|writes|stage|stages|commit|commits|update|updates|edit|edits|rewrite|rewrites|overwrite|overwrites|save|saves|change|changes|modify|modifies|delete|deletes|remove|removes|mark|marks|settle|settles|fix|fixes|create|creates)\b/i;
+my $o = qr/(?:\s+(?:back|out))?(?:\s+(?:to|into|in))?\s+(?:it\b|the (?:go-live )?(?:record|file)\b|(?:main.s|the branch.s|its|the merged|that) (?:copy|record|file)\b|`?\.ship-it-go-live\.json)/i;
+while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
+  while ($aff =~ /$v$o|$v[^,.;:]{0,40}\b(?:to|into|in)\s+`?\.ship-it-go-live\.json|\bgit (?:add|commit|rm|checkout|restore)\b/g) {
+    my $pre = substr($aff, 0, $-[0]); $pre =~ s/^.*(?:[,;:(]|\. | -- )//s;
+    next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\bonly it\b|\b(?:the user|you|they)\b/i;
+    print "$raw\n"; last } }'
+RFILE="$( { units < "$R"; printf '%s\n' "$TGL"; } | grep -iE '\.ship-it-go-live\.json|go-live record' || true)"
+FENCEW="$(awk '/^```/{f=!f;next} f' "$R" | grep -F '.ship-it-go-live.json' | grep -E '\bgit (add|commit|rm|mv|checkout|restore|stash)\b|>>? *.?(\./)?\.ship-it-go-live\.json|\btee\b|\bsed -i\b' || true)"
+check "resume-it 2 (read only): resume-it names .ship-it-go-live.json and says it never writes or stages it (/ship-it owns it); nothing that names the file tells it to write, stage, commit or change it, in prose or in code" \
+  'printf "%s\n" "$RFILE" | gq -F ".ship-it-go-live.json" && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS" && [ -z "$(printf "%s\n" "$RFILE" | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && [ -z "$FENCEW" ]'
+
+# 3. the NEXT-STEPS template: "### Go-live checklist" inside "## For Production", with its lines
+check "resume-it 3 (template): the NEXT-STEPS template's ## For Production holds ### Go-live checklist" \
+  '[ -n "$TPL" ] && printf "%s\n" "$PROD" | gq -xF "### Go-live checklist"'
+NOFILE='\bnot started\b|\bno (go-live )?(record|file)\b|\bno `?\.ship-it-go-live\.json|\b(record|file|\.ship-it-go-live\.json)`? (doesn.t|does not|isn.t|is not) (exist|there)\b'
+check "resume-it 3a (open items): each skipped or missing item is listed, a skipped one with its reason and date, and every open line says \"asked again at your next /ship-it to production\"" \
+  'tsays "+\`?skipped\`?" "+\breason\b" "+\bdate\b|YYYY-MM-DD" "+asked again at your next /ship-it to production" && rsays "+\`?skipped\`?( items?)? (or|and|/) \`?missing\`?|\`?missing\`?( items?)? (or|and|/) \`?skipped\`?" && ! printf "%s\n" "$TGL" | grep -E "^[[:space:]]*[-*] \[ \]" | grep -viE "$NOFILE" | grep -vF "asked again at your next /ship-it to production" | gq .'
+CS_READS='coming soon`?"?[^.;]{0,80}\b(reads?|read as|shows?|shown as|says?|listed as|as)\b[^.;]{0,3}"?`?not built yet|coming soon`?"?\)? ?(--|:) ?"?not built yet|not built yet"?`?[^.;]{0,30}coming soon'
+CS_TODO='coming soon`?"?[^.;,]{0,40}\b(is|are|as|reads?( as)?|listed as)\b[^.;,]{0,10}\b(a |an )?to-?do\b'
+check "resume-it 3b (coming soon): a coming soon item reads \"not built yet\" -- never a to-do (no checkbox, never \"asked again\")" \
+  'rsays "$CS_READS" && ! printf "%s\n" "$TGL" | grep -iE "coming soon|not built yet" | gq -iE "^[[:space:]]*[-*] \[[ xX]\]|asked again" && ! rsays "+$CS_TODO"'
+DN_NOT='\b(aren.t|are not|isn.t|is not|not|never)\b[^.;]{0,20}\b(listed|shown|included|written)\b|\b(don.t|do not|never) (list|show|include)\b|\bomit'
+DN_LIST='`?\b(done|na)\b`?[^.;]{0,30}\b(are|is) (also )?(listed|shown|included)\b|\b(list|lists|show|shows|include|includes)\b[^.;]{0,40}`(done|na)`'
+check "resume-it 3c (done and na): done and na items aren't listed, and no line lists one" \
+  'rsays "\`?\bdone\b\`?" "\`na\`|\bna\b|\bn/a\b|doesn.t apply" "$DN_NOT" && ! rsays "+$DN_LIST" && ! printf "%s\n" "$TGL" | gq -iE "^[[:space:]]*[-*] \[[xX]\]|(--|:)[[:space:]]*\`?(done|na)\`?([^[:alnum:]_]|$)"'
+# the no-file line is true today: /ship-it v1.3.0 doesn't run the checklist (the guide's "Safety steps /ship-it doesn't
+# run yet"), so the line keeps that not-yet truth, and none of its sentences promises an ask without a qualifier
+NY='Safety steps /ship-it doesn.t run yet|/ship-it\b[^.;]{0,60}\b(doesn.t|does not|won.t|can.t|cannot|isn.t|is not|not|has no|hasn.t)\b[^.;]{0,50}\byet\b|\b(doesn.t|does not|isn.t|is not|not)\b[^.;]{0,40}/ship-it\b[^.;]{0,30}\byet\b|\b(doesn.t|does not|isn.t|is not|aren.t|are not|not)\b[^.;]{0,15}\b(run|runs|ask|asks|asked|built|part of|in|have|has)\b[^.;]{0,40}\byet\b|\b(later|future|newer|next|upcoming) (/?ship-it )?(release|version)\b'
+PROMISE='\b(asks|runs|checks|goes through|will (ask|run|check|go through))\b|\b(is|are|gets?|you.re|you are|will be) asked\b'
+QUAL='\b(once|until|later|future|newer|upcoming)\b|\bwhen\b[^.;]{0,40}\b(adds?|ships?|gets?|does|is (updated|released)|runs? (it|the (go-live )?checklist))\b|\bnext (ship-it |/ship-it )?(release|version)\b'
+NFU="$(printf '%s\n' "$RGL" | grep -iE "$NOFILE" || true)"
+# the line itself: every sentence of a template no-file line, the no-file sentences in prose, and a quoted "Not started" line
+NFL="$( { printf '%s\n' "$TGL" | grep -iE "$NOFILE"; printf '%s\n' "$RGL" | sents | grep -iE "$NOFILE"; printf '%s\n' "$RGL" | grep -oiE '"[^"]*not started[^"]*"'; } || true)"
+nofile_ok() { printf '%s\n' "$TGL" | gq -iE "$NOFILE" && printf '%s\n' "$NFU" | gq -iE "$NY" \
+  && ! printf '%s\n' "$NFU" | grep -iE '\bnot started\b' | grep -viE "$NY" | gq . \
+  && ! printf '%s\n' "$NFL" | sents | rpair | grep -iE $'\x1f'".*($PROMISE)" | cut -d $'\x1f' -f1 | grep -viE "$QUAL" | gq .; }
+NOFILE_L="resume-it 3d (no file, true today): the template's no-file line keeps the guide's not-yet truth (today's /ship-it doesn't run the checklist yet), and none of its sentences promises, unqualified, that /ship-it asks"
+check "$NOFILE_L" 'nofile_ok'
+
+# 4. a normal open item, not a left-out item (left-out-record.md); listed, never a fix offered unasked
+NOTLO='\b(not|never|isn.t|is not)\b (a |an )?left-out items?\b|\bnot the left-out record\b'
+LOAFF='\b(is|are|as) (a |an )?left-out items?\b|(--|:) left out by your choice|\b(is|are|as|goes|go|put|puts|write|writes|written|list|lists|listed)\b[^.;,]{0,25}left out by your choice'
+check "resume-it 4a (not left out): a go-live item is a normal open item, not a left-out item, and never listed the left-out way" \
+  'rsays "$NOTLO" "+\bopen items?\b" && ! rsays "+$LOAFF"'
+NOFIX='\b(never|not|doesn.t|does not|don.t|do not|won.t)\b[^.;]{0,30}\b(offers?|suggests?|proposes?)\b[^.;]{0,30}\bfix'
+UNASKED='\bunasked\b|\b(unless|until|only (when|if))\b[^.;]{0,30}\basks?\b'
+OFFER='\b(offer|offers|offering|suggest|suggests|propose|proposes)\b[^.;]{0,40}\b(fix|fixes|to fix|to add|to build|to write)\b'
+check "resume-it 4b (no fix unasked): resume-it lists a go-live item but never offers a fix unasked" \
+  'rsays "$NOFIX" "$UNASKED" && ! rsays "+$OFFER"'
+
+# 5. main's copy, as the guide says, read only
+MAINC='main.s copy|copy (on|from|of) main|the default branch|origin/'
+RONLY='\bread-only\b|\bonly reads?\b|\breads? (it )?only\b|\bjust reads?\b|\bnothing is (checked out|merged|pushed|written)\b'
+RW='\bgit (checkout|switch|merge|pull|rebase|push|stash|reset|add|commit|restore|cherry-pick)\b|\bchecks? out\b|\bswitch(es)? to\b|\bpulls? (main|from|origin)\b|\bpush(es)? (to|it|the)\b|\bmerges? (main|origin[^ ]*|the default branch) (into|in)\b'
+check "resume-it 5 (main's copy): resume-it reads main's copy merged with the branch's, as ship-it-guide.md's Go-live checklist says, read only (nothing checked out, merged, pulled or pushed)" \
+  'rsays "$MAINC" "+\b(merged?|combined?) with\b|\bnewer\b" "+\bbranch.s\b|\bthe branch\b|\bthis branch\b" && rusays "$MAINC" "ship-it-guide\.md|\bthe guide\b|\(The record\)" && rsays "$RONLY" && ! printf "%s\n" "$RGL" | raff | gq -iE "$RW"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
@@ -685,6 +783,18 @@ if [ -z "${1:-}" ]; then
     ! cmp -s "$G" "$TMPD/m.md" || return 1
     out="$(bash "$SELF" "$TMPD/m.md" || true)"; printf "%s\n" "$out" | gq -xF "FAIL $AGAIN_L"; }
   check "(control) deleting the asked-again sentence turns its check red" 'again_gone'
+fi
+
+# Task 2 control (no GUIDE argument): the brief's first no-file line, which promises a step /ship-it v1.3.0
+# doesn't run, put in place of the template's no-file line(s) on a copy, must turn the no-file check red
+if [ -z "${1:-}" ]; then
+  nofile_gone() { local l out; cp "$R" "$TMPD/r.md"
+    while IFS= read -r l; do [ -n "$l" ] || continue
+      L="$l" perl -pi -e 's/^\Q$ENV{L}\E$/- Not started -- \/ship-it asks it before your first production deploy./' "$TMPD/r.md"
+    done <<< "$(printf '%s\n' "$GLT" | grep -iE "$NOFILE" || true)"
+    ! cmp -s "$R" "$TMPD/r.md" || return 1
+    out="$(RESUME_IT="$TMPD/r.md" bash "$SELF" "$G" || true)"; printf '%s\n' "$out" | gq -xF "FAIL $NOFILE_L"; }
+  check "(control) the brief's unqualified no-file line (\"/ship-it asks it before your first production deploy\") in place of the template's turns the no-file check red" 'nofile_gone'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
