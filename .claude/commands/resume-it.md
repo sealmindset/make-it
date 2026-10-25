@@ -1277,7 +1277,7 @@ Spec: `~/.claude/make-it/references/ai-accounting.md`. Prompt #10g, MODE = retro
 Checks: AC01-AC16, ACV01-ACV03. Work in a worktree (WORKTREE FIRST).
 
 **Phase 1: Find (read-only).** Run Prompt #10g step 1: the call sites, the surfaces that exist,
-and `.make-it/ai-ladder.md`.
+and the drafted ladder report. Nothing is written yet.
 
 **Phase 2: Ask** (adds tables and permissions: active confirmation, per the approval block):
 
@@ -1294,17 +1294,19 @@ I'll add:
   says 'not connected' / none: off for now]
 - **Monthly cost statements** you can print -- for your team, not invoices
 
-It's 13 new tables and 2 new permissions (who can see AI spend, who can change the AI controls),
+It's 14 new tables and 2 new permissions (who can see AI spend, who can change the AI controls),
 built in a separate copy we can throw away. No model is switched to a cheaper one until a check
-on past work shows it gives the same answers.
+on past work shows it gives the same answers, and stepping up to a stronger model on a weak
+answer starts switched off. The one thing to check: are these [N] places really all the AI
+calls your app makes? One I missed would go uncounted until the new check catches it.
 
 Pick one:
 - **Add it** (Recommended -- the catch: every AI call now writes a row, and a spending limit set
   too low stops that AI step until the next day or month; no limit is set until you set one)
 - **Not now** -- nothing changes; I'll note it in your to-do file"
 
-A plain yes isn't an answer -- ask which. 'Not now': delete `.make-it/ai-ladder.md` if this step
-wrote it, add the TODO.md line, and return to the menu.
+A plain yes isn't an answer -- ask which. 'Not now': nothing was written; add the TODO.md line
+and return to the menu.
 
 **Phase 3: Build.** Prompt #10g steps 2-7, in its order. Route the call sites one agent at a
 time, running that agent's existing tests after each. Set `ai_accounting` in app-context.json.

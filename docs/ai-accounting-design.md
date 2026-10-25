@@ -60,7 +60,10 @@ Mapped from docai on 2026-10-25 (paths relative to that repo).
 ## Choices made while writing the spec
 
 - **No prompt text in the ledger.** The replay rebuilds inputs from the task's source record, so
-  no new store of sensitive text is needed to prove a step down.
+  no prompts are stored. Shadow and replay answers are kept only in `ai_comparisons`, deleted
+  after 30 days by default, because comparing them is the point of shadow mode and the proof.
+- **Escalation starts off in a retrofit** (on in a new build), so adding the accounting never
+  makes an existing app spend more on its first day.
 - **Unpriced is empty, not zero,** so sums never quietly undercount; pages show the unpriced count.
 - **A budget check that errors lets the call through and is counted:** a cap guards cost, not
   security, and failing closed would take the app's AI down with the database.

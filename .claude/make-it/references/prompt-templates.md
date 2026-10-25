@@ -2304,22 +2304,27 @@ numbers below are its sections. Build-standards checks: AC01-AC16, ACV01-ACV03.
    app actually resolves (rule 10).
 2. Mark each of the seven surfaces none / partial / present, naming the files of anything that
    exists. A present surface is extended, never rebuilt.
-3. Write .make-it/ai-ladder.md (section 6): the verdict (no ladder / fixed per agent / routed per
-   call) and one row per call site with the suggested tier, why, and the estimated saving.
+3. Draft the ladder report (section 6): the verdict (no ladder / fixed per agent / routed per
+   call) and one row per call site with the suggested tier, why, and the estimated saving. Keep
+   it for the report; nothing is written to the project yet.
 4. Stop and report: the call sites, the surfaces found, the ladder verdict and the three biggest
    savings, in plain words. Building waits for the plan approval of the skill that runs this
    prompt.
-New-build mode: skip 1-2; write the ladder report from each agent's planned tier.
+New-build mode: skip 1-2; draft the ladder report from each agent's planned tier.
 
 --- STEP 2: METER (sections 3-5) ---
+- Write the ladder report from step 1 to .make-it/ai-ladder.md.
+- No agent registry (AI17)? Create it first from step 1's call-site list (slug, name, type,
+  tier as deployed): AC03 checks every call against it.
 - Migration: ai_usage_events, model_prices, ai_outcomes, value_baselines, agent_controls,
-  tier_models, budget_caps, provider_breakers, control_audit_log, infra_cost_daily,
+  tier_models, budget_caps, provider_breakers, control_audit_log, ai_comparisons, infra_cost_daily,
   vendor_spend, spend_statements, statement_counters. tenant_id columns only if multi-tenant.
 - The one metering wrapper (section 4), with the agent slug a required argument. Route every
   call site from step 1 through it, one agent at a time, running that agent's existing tests
   after each. Never change what an agent sends to the model while doing this.
 - Seed model_prices from each provider's current public price page (source URL + today's date);
-  seed agent_controls (mode on, tier from the registry) and tier_models (from AI_MODEL_HEAVY /
+  seed agent_controls (mode on, tier from the registry, escalate off in retrofit
+  mode and on in new-build mode), statement_counters (one row) and tier_models (from AI_MODEL_HEAVY /
   STANDARD / LIGHT as deployed).
 - The CI test for AC03.
 
@@ -2342,7 +2347,8 @@ New-build mode: skip 1-2; write the ladder report from each agent's planned tier
 --- STEP 6: PAGES (section 11) ---
 - The seven surfaces under the "AI & Spend" sidebar group, behind ai_accounting.view /
   ai_accounting.manage (seed both for Super Admin and Admin). Use the app's DataTable and page
-  patterns. Admin gate "none" → skip this step and list the pages as not built yet in TODO.md.
+  patterns. Admin gate "none" → skip this step and STEP 5's statements, and list both as not
+  built yet in TODO.md.
 
 --- STEP 7: SEED AND VERIFY ---
 - Dev seed: about 200 ledger rows over 30 days across every agent and tier, outcomes for most of

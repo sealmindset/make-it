@@ -12,6 +12,9 @@ allowed-tools:
   - Agent
 ---
 
+<!-- ARGUMENT SUBSTITUTION: Claude Code replaces $ARGUMENTS before this prompt is sent -->
+<!-- User invoked: /retrofit-it $ARGUMENTS -->
+
 <objective>
 
 Take an existing, working application -- built by Claude, a developer, or any tool -- and retrofit it with the production-ready foundations that /make-it provides. The app works but is missing enterprise requirements: OIDC authentication, database-driven RBAC, Docker Compose, mock services, environment-based config, security hardening, etc.
@@ -36,8 +39,8 @@ This skill has 7 phases:
 6. **Verify** -- Build-verify identical to /make-it
 7. **Ship** -- Hand off to /ship-it
 
-**AI accounting only.** When the user asks for AI accounting alone (`/retrofit-it ai-accounting`,
-or "add AI cost tracking to this app"), run Preflight and Discovery, then Gap Analysis, Plan,
+**AI accounting only.** When `$ARGUMENTS` is `ai-accounting` (case-insensitive), or the user asks
+for AI accounting alone ("add AI cost tracking to this app"), run Preflight and Discovery, then Gap Analysis, Plan,
 Retrofit and Verify for Phase F3 alone: only its gaps make the risk score, the plan lists only its
 items, and Verify runs AC01-AC16 and ACV01-ACV03 plus the preservation check. Other foundations
 stay as they are and aren't listed as missing. An app with no AI: say so in one line and stop.
@@ -182,9 +185,9 @@ Construct a mental model of:
 - **User types and permissions** (even if informal -- like admin checks in code)
 - **External integrations** (APIs called, services connected)
 - **Existing quality** (tests, linting, CI, error handling)
-- **AI calls and model choices** (if AI) -- every call site and the model it runs on as deployed.
-  Write `.make-it/ai-ladder.md` now, per Prompt #10g step 1: an analysis file only, no app code
-  changes
+- **AI calls and model choices** (if AI) -- every call site and the model it runs on as deployed,
+  and the ladder report drafted per Prompt #10g step 1 for the plan (nothing is written yet;
+  step 12b writes it to `.make-it/ai-ladder.md`)
 
 **6. Stack compatibility assessment:**
 
@@ -235,8 +238,9 @@ For each gap, assign a risk weight:
 **Risk Score = sum of (gap_count x risk_weight) for each category**
 
 AI accounting (Phase F3): routing the AI calls through the metering wrapper is one Wrap (3) for
-the whole app; each of the seven surfaces that is missing is an Add (1), and each one that exists
-in part is an Enhance (2). A surface that is already present adds nothing.
+the whole app; each of the six surfaces beyond AI Instructions (Phase F scores that one) that is
+missing is an Add (1), and each one that exists in part is an Enhance (2). A surface that is
+already present adds nothing.
 
 **Risk thresholds:**
 
@@ -403,7 +407,9 @@ counts again: recompute the score and the route with it before they pick.
 **How your AI picks its models:** [the ladder verdict in plain words, e.g. "every AI step uses
 the same top model"] and the [up to 3] steps that could run on a cheaper one, with the estimated
 monthly saving each. "I won't switch any of these until a check on past work shows the cheaper
-model gives the same answers -- that check is part of what I'm adding."
+model gives the same answers -- that check is part of what I'm adding. Stepping up to a stronger
+model when an answer looks weak starts switched off, so nothing costs more on day one; you can
+turn it on per AI step."
 
 [If the record holds any item: one line each, never numbered --]
 **Left out by your choice earlier:**
@@ -1027,8 +1033,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
 
 12b. **AI Accounting (Prompt #10g, MODE = retrofit -- if AI features detected):**
     - Read `~/.claude/make-it/references/ai-accounting.md` in full; follow its section 12 order.
-    - The call-site list, the surfaces found and the ladder report (`.make-it/ai-ladder.md`)
-      come from Discovery and are already in the approved plan; don't re-ask.
+    - The call-site list, the surfaces found and the ladder report come from Discovery and are
+      already in the approved plan; don't re-ask. Write the report to `.make-it/ai-ladder.md`.
     - Route the call sites through the metering wrapper one agent at a time, running that
       agent's existing tests after each. What each agent sends to its model doesn't change.
     - A surface the app already has is extended in place and keeps its data.

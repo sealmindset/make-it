@@ -37,7 +37,9 @@ It adds seven admin surfaces: **AI Instructions** (prompt management, AI08), **A
 4. **Fallback never steps up quietly.** A fallback call is marked `fallback = true` with its real
    model and cost. A fallback that costs more than the primary is flagged on AI Spend.
 5. **No prompt text in the ledger.** The ledger holds counts, ids and money, never prompt or
-   response text. A replay rebuilds its input from the task's source record (section 6).
+   response text. A replay rebuilds its input from the task's source record (section 6). The only
+   model output kept is a shadow or replay result in `ai_comparisons`, deleted after
+   `AI_COMPARISON_RETENTION_DAYS`.
 6. **Recording never breaks the app, and is never silent.** A failed ledger write is logged and
    counted (`ai_ledger_write_failures`), and the count is shown on AI Spend.
 7. **No hard-coded hosts, names or prices in code.** Tenants, hosts, the statement issuer and
@@ -79,15 +81,21 @@ multi-tenant), `verdict`, `verdict_source` (`person` | `system`), `decided_by`, 
 `hourly_rate`, `effective_from`, `entered_by`.
 
 **`agent_controls`** -- `agent_slug` (PK), `mode` (`on` | `off` | `shadow`), `tier`,
-`escalate` (bool), `updated_by`, `updated_at`.
+`escalate` (bool; seeded off in a retrofit so nothing costs more on day one, on in a new build),
+`updated_by`, `updated_at`.
 **`tier_models`** -- `tier` (PK), `model`, `fallback_model`, `updated_by`, `updated_at`.
 **`budget_caps`** -- `scope` (`all` | `agent:<slug>` | `tenant:<id>`), `period` (`day` | `month`),
 `cap_usd`, `updated_by`, `updated_at`. Unique (`scope`, `period`).
 **`provider_breakers`** -- `provider` (PK), `state` (`closed` | `open` | `half_open`), `opened_at`,
 `reason`, `retry_at`, `forced_by`.
 **`control_audit_log`** -- `id`, `at`, `actor`, `surface` (`agent` | `tier` | `budget` | `breaker`
-| `prompt` | `price` | `baseline` | `vendor`), `target`, `before` (JSON), `after` (JSON), `reason`.
+| `prompt` | `price` | `baseline` | `vendor` | `statement`), `target`, `before` (JSON), `after` (JSON), `reason`.
 Insert-only.
+
+**`ai_comparisons`** -- shadow and replay results only: `id`, `run_id`, `agent_slug`,
+`task_ref`, `mode` (`shadow` | `replay`), `tier`, `model`, `output` (the model's answer),
+`agreed` (bool or empty until judged), `created_at`. A daily job deletes rows older than
+`AI_COMPARISON_RETENTION_DAYS`; summaries (counts, agreement, cost) go to `control_audit_log`.
 
 **`infra_cost_daily`** -- `day`, `source` (`aws` | `azure` | `gcp`), `service`, `cost_center` (the
 tag value, or `shared` when untagged), `amount_usd`, `collected_at`. Unique (`day`, `source`,
@@ -99,7 +107,8 @@ tag value, or `shared` when untagged), `amount_usd`, `collected_at`. Unique (`da
 `period_from`, `period_to`, `scope` (`all` or `tenant:<id>`), `total_usd`, `payload` (JSON, the
 frozen statement), `replaces` (number or empty), `issued_by`, `issued_at`. No update or delete
 route; a correction is a new statement that names the one it replaces.
-**`statement_counters`** -- `name` (PK), `next_value`.
+**`statement_counters`** -- `name` (PK), `next_value`. Seeded with one row (`next_value = 1`);
+it never resets, so the year in a statement number is the issue year only.
 
 The AI01c in-memory `UsageStats` stays as the running process view; the ledger is the record.
 AI22's per-job `cost_usd` is a sum of the job's ledger rows, never a separate estimate.
@@ -113,8 +122,8 @@ SDK or a provider URL directly.
 The wrapper, in order:
 1. Looks up the agent's control row. `off` → returns the agent's fallback (AI21) or a plain "this
    AI step is turned off" result, and makes no call. `shadow` → runs the call with
-   `mode = shadow`; the caller gets the fallback or "no AI result" and the shadow output is kept
-   only for comparison, never acted on.
+   `mode = shadow`; the caller gets the fallback or "no AI result" and the shadow output goes to
+   `ai_comparisons` only, never acted on.
 2. Resolves the model: a pinned model (with a code comment saying why), else `tier_models[tier]`.
 3. Checks the budget (section 8). Over a cap → records `status = refused_budget` (cost 0) and
    returns the fallback; no tokens are spent.
@@ -129,8 +138,9 @@ The wrapper, in order:
 | Ollama / local | `prompt_eval_count` | 0 | 0 | `eval_count` |
 | Claude Code subscription (claude_agent) | from the SDK result's usage | same | same | same |
 
-   Streaming: read usage from the final event (Anthropic `message_delta`; OpenAI with
-   `stream_options.include_usage`). A stream cut short records what is known, `status = aborted`.
+   Streaming: Anthropic sends input and cache counts in `message_start` and the running output
+   count in each `message_delta` (keep the last); OpenAI sends usage in the final chunk when
+   `stream_options.include_usage` is set. A stream cut short records what is known, `status = aborted`.
 6. Prices the call (section 5) and writes the ledger row without blocking the caller. A write that
    fails is logged and counted (rule 6).
 7. If the answer is weak and escalation is on, makes one more call a tier up (section 6).
@@ -153,8 +163,9 @@ The wrapper, in order:
 
 ## 6. The model ladder -- assess, route, prove
 
-**Assess (read-only, always first).** Find every call site (section 12, step 1) and write
-`.make-it/ai-ladder.md` (committed):
+**Assess (read-only, always first).** Find every call site (section 12, step 1) and draft the
+ladder report; it is shown in the plan and written to `.make-it/ai-ladder.md` (committed) when
+building starts:
 
 ```
 Verdict: no ladder | fixed per agent | routed per call
@@ -194,9 +205,9 @@ has passed in the last 30 days:
    act on the world replaced by stubs. An agent that can't run without side effects is marked
    "can't replay" in the ladder report and is proved by shadow mode only.
 3. Compare: structured output field by field; free text judged "same meaning or not" by a
-   heavy-tier check, plus 10 shown to the admin side by side.
+   heavy-tier check, plus 10 shown to the admin side by side. Outputs go to `ai_comparisons`.
 4. Pass = agreement at least the current tier's own accepted-as-is rate minus 2 points, and no
-   miss on a field marked critical. The result, its cost and its sample go in
+   miss on a field marked critical. The result (agreement, sample size, cost, `run_id`) goes in
    `control_audit_log`; the admin then makes the switch.
 5. An admin may switch without a pass only by typing a reason; the reason is audited and shown
    on the AI Agents page next to that agent.
@@ -244,7 +255,7 @@ before, after, reason) and takes effect within 60 seconds; the page says so.
 - **Agents:** each one on, off or shadow; its tier; escalation on or off.
 - **Tier models:** the model and fallback model behind each tier. A model with no price row is
   refused (rule 2). When `AI_ALLOWED_MODELS` is set, a model outside it is refused too.
-- **Budget caps:** for all AI, one agent, or one tenant, per day or month. Before each call the
+- **Budget caps:** for all AI, one agent, or one tenant (multi-tenant only), per day or month. Before each call the
   wrapper adds the period's spend so far to this call's worst case (input tokens counted or
   estimated at 4 characters per token, times the input price, plus `max_tokens` times the output
   price) and refuses the call if that passes any cap that applies. One notice at 80% and one at
@@ -271,9 +282,9 @@ mock-services rule).
   Runs daily; each run re-collects the last `INFRA_COST_RECOLLECT_DAYS` (3) because the bill
   keeps settling; the first run backfills `INFRA_COST_BACKFILL_DAYS` (90). An empty tag value
   is `shared`. Needs only `ce:GetCostAndUsage` on a read-only role. Two things to tell DevOps: the
-  tag must be activated as a cost-allocation tag in the Billing console (it counts from activation
-  onward and can take a day to appear), and Cost Explorer charges $0.01 per API request (a few
-  requests a day).
+  tag must be activated as a cost-allocation tag in the Billing console (it can take a day to
+  appear; ask for a backfill there to cover up to 12 earlier months), and Cost Explorer charges
+  $0.01 per API request (a few requests a day).
 - **Azure, GCP (stubs):** implement the same `collect` shape and return "not connected yet".
   Azure's path is the Cost Management Query API grouped by `ServiceName` and the tag; GCP's is a
   query over the billing export table in BigQuery. Building one is a new change with its own
@@ -337,7 +348,9 @@ Never rebuild a surface the app already has: wrap it or extend it, and keep its 
    billing collectors, approve/reject actions on AI results. Mark each surface none / partial /
    present.
 3. **Write the ladder report** (section 6). It is read-only and goes into the plan.
-4. **Meter:** add the ledger, prices and the one wrapper; route every call site through it.
+4. **Meter:** no agent registry (AI17)? Create it first from step 1's list (slug, name, type,
+   tier as deployed). Then add the ledger, prices and the one wrapper; route every call site
+   through it.
 5. **Outcomes:** hook the verdicts into the app's own actions (section 7).
 6. **Control Plane:** controls, tier models, caps, breaker, rollback, audit.
 7. **Infra:** the adapter for the app's cloud, plus manual lines.
@@ -345,8 +358,8 @@ Never rebuild a surface the app already has: wrap it or extend it, and keep its 
 9. **The CI check (AC03)** and seed data for local dev (sample calls, outcomes, a day of infra
    rows, one baseline) so no page opens empty.
 
-The pages need an admin permission check. An app with no sign-in or admin gate gets steps 1-7 and
-9 and no pages yet, and the plan says so in plain words.
+The pages and statements need an admin permission check. An app with no sign-in or admin gate
+gets steps 1-7 and 9 and no pages or statements yet, and the plan says so in plain words.
 
 **New build:** the same pieces built in, in order 4-9; step 1 is the agent registry (AI17)
 itself, and the ladder report is written from each agent's planned tier.
@@ -371,6 +384,7 @@ INFRA_COST_RECOLLECT_DAYS=3
 INFRA_COST_BACKFILL_DAYS=90
 AI_ESCALATE_BELOW=0.5             # agent-reported confidence that triggers one step up
 AI_CORRECTION_WINDOW_DAYS=14
+AI_COMPARISON_RETENTION_DAYS=30   # shadow and replay outputs, then deleted
 AI_BREAKER_ERRORS=5
 AI_BREAKER_WINDOW_SECONDS=60
 AI_ALLOWED_MODELS=                # optional, comma-separated
