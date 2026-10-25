@@ -561,6 +561,109 @@ check "owner 5 (a clash): two branches change the record and git shows a conflic
 check "owner 6 (re-run): a re-run that runs the checklist reads main's copy the same way a new request does" \
   'usays "\bre-?run\b|RE-RUN" "+main.s copy|the default branch" "+\bthe same way\b"'
 
+# ---- owner call 2: "Settle its own file" (task-1-owner-call-brief.md, "## Owner call 2"; re-review 6) ----
+# On the same git setup: the user merges main into the branch and git stops. The settle rule's switches are read from the
+# wording; the guide's own `git diff --name-only --diff-filter=U` lists the conflicted files.
+PY6='
+import json, sys
+m_ = sys.argv[1]; f = dict(x.split("=") for x in sys.argv[2].split(",") if x); on = lambda k: f.get(k) == "1"
+def load(t):
+    if t in (None, "-", ""): return None
+    try: d = json.loads(t)
+    except ValueError: return "BAD"
+    if not isinstance(d, dict) or d.get("schema") != 1 or not isinstance(d.get("items"), dict): return "BAD"
+    return d["items"]
+def merge(m, b):
+    if m == "BAD": m = None                                # an unreadable main copy counts as none (owner call 1)
+    if b == "BAD":
+        if not on("ubr"): return {}                        # without the rule: the record is unreadable, all five missing
+        b = None
+    if b is None: return m or {}
+    if m is None: return b
+    out = {}
+    for k in sorted(set(m) | set(b)):
+        x, y = m.get(k), b.get(k)
+        if x and y: out[k] = (y if y["date"] > x["date"] else x if y["date"] < x["date"] else (y if on("tie") else x)) if on("newer") else y
+        else: out[k] = y or x
+    return out
+if m_ == "settle": print(json.dumps({"schema": 1, "items": merge(load(sys.argv[3]), load(sys.argv[4]))})); sys.exit(0)
+got = merge(load(sys.argv[3]), load(sys.argv[4])) if m_ == "merge" else load(sys.argv[3])
+want = json.loads(sys.argv[-1])
+sys.exit(0 if isinstance(got, dict) and {k: (v["state"], v["date"]) for k, v in got.items()} == {k: tuple(v) for k, v in want.items()} else 1)
+'
+py6() { python3 -I -c "$PY6" "$@" 2>/dev/null; }
+OS_DIFF=0; OS_SOLE=0; OS_NOWT=0; OS_SIDES=0; OS_NEW=0; OS_TIE=0; OS_STAGE=0; OS_RULES=0; OS_STOP=0; OS_NONE=0; OS_UBR=0
+printf '%s' "$FLAT" | gq -F '`git diff --name-only --diff-filter=U`' && OS_DIFF=1
+says '\bonly conflicted file\b|\bthe only file in conflict\b|\blists only it\b' && OS_SOLE=1
+says 'working tree' '\bconflict markers\b|\b(doesn.t|does not|never|not) read\b' && OS_NOWT=1
+says '+\breads?\b' '\b(two|both) sides\b|\beach side\b' '\bgit\b' && OS_SIDES=1
+says '\bkeeps\b' '+\bnewer `?date`?\b' '\b(per|each) item\b' && OS_NEW=1
+says '\bkeeps\b' "+\btie\b[^.;]{0,15}\bbranch.s\b" && OS_TIE=1
+says '+\bwrites?\b' '+\bstages?\b' && OS_STAGE=1
+says '\bresult\b' '+\bshape\b' 'secret' '\bkeeps\b|\btie\b|\bsettl|\bconflict|\bsides?\b' && OS_RULES=1
+says '\bother (conflicted )?files?\b[^.;]{0,20}\b(in conflict|conflicted)\b|\b(any other|another|other) conflicted\b' '+\bstops?\b' '+\bnames?\b' && OS_STOP=1
+says '\btouches none\b|\btouches? none of them\b|\bnever settles a file it doesn.t own\b' && OS_NONE=1
+says 'unreadable' '\bbranch' '\bcounts? as no branch record\b' '+\bmain supplies\b' && OS_UBR=1
+OS1C='{"terms_privacy": {"state": "skipped", "reason": "pages next week", "date": "2026-10-23", "evidence": ""}, "security_audit": {"state": "done", "reason": "audit passed", "date": "2026-10-25", "evidence": ""}, "load_test": {"state": "done", "reason": "load test passed", "date": "2026-10-22", "evidence": ""}}'
+OS1D='{"terms_privacy": {"state": "na", "reason": "does not apply", "date": "2026-10-24", "evidence": ""}, "security_audit": {"state": "skipped", "reason": "coming soon", "date": "2026-10-20", "evidence": ""}, "load_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-22", "evidence": ""}}'
+OS1W='{"terms_privacy": ["na", "2026-10-24"], "security_audit": ["done", "2026-10-25"], "load_test": ["skipped", "2026-10-22"]}'
+OSMSG=""
+# /ship-it after the user's update stopped on conflicts, in clone $1, as the guide's rule says
+oc_settle() { local d="$1" f others br mn res
+  [ "$OS_DIFF" = 1 ] || return 1
+  f="$(gx -C "$d" diff --name-only --diff-filter=U)"; printf '%s\n' "$f" | gq -xF "$OCREC" || return 1
+  others="$(printf '%s\n' "$f" | grep -vxF "$OCREC" | grep . || true)"
+  if [ -n "$others" ] && [ "$OS_STOP" = 1 ]; then OSMSG="stopped: $(printf '%s' "$others" | tr '\n' ' ')"; return 0; fi
+  if [ "$OS_SIDES" = 1 ]; then br="$(gx -C "$d" show ":2:$OCREC")"; mn="$(gx -C "$d" show ":3:$OCREC")"
+  else br="$(cat "$d/$OCREC")"; mn="$(oc_main "$d")"; fi
+  res="$(py6 settle "newer=$OS_NEW,tie=$OS_TIE,ubr=$OS_UBR" "${mn:--}" "${br:--}")" || return 1
+  printf '%s\n' "$res" > "$d/$OCREC"; [ "$OS_STAGE" = 1 ] && gx -C "$d" add "$OCREC"; return 0; }
+# two branches change the record; branch C reaches main; branch D's user merges main in ($2 = also conflict README)
+os_clash() { local s="$1"
+  oc_origin "$s" && oc_put "$OC/$s/a" "$(oc_rec "$OC1M")" record && gx -C "$OC/$s/a" push -q origin main || return 1
+  gx -C "$OC/$s/b" checkout -q main && gx -C "$OC/$s/b" pull -q origin main && gx -C "$OC/$s/b" checkout -qb feature-d || return 1
+  if [ -n "${2:-}" ]; then printf 'app\nfrom C\n' > "$OC/$s/a/README"; gx -C "$OC/$s/a" add README; printf 'app\nfrom D\n' > "$OC/$s/b/README"; gx -C "$OC/$s/b" add README; fi
+  oc_put "$OC/$s/a" "$(oc_rec "$OS1C")" "branch c, merged" && gx -C "$OC/$s/a" push -q origin main || return 1
+  oc_put "$OC/$s/b" "$(oc_rec "$OS1D")" "branch d" || return 1
+  gx -C "$OC/$s/b" fetch -q origin main; ! gx -C "$OC/$s/b" merge -q origin/main >/dev/null; }
+
+# 1. the record is the only conflicted file: /ship-it reads the two sides from git (not the working-tree file with its
+# markers), keeps the newer date per item (a tie to the branch), applies the record rules, writes and stages the result
+os_case1() { os_clash s1 && [ "$(gx -C "$OC/s1/b" diff --name-only --diff-filter=U)" = "$OCREC" ] && oc_settle "$OC/s1/b" || return 1
+  [ -z "$(gx -C "$OC/s1/b" diff --name-only --diff-filter=U)" ] && py6 want "" "$(gx -C "$OC/s1/b" show ":0:$OCREC")" "$OS1W"; }
+check "owner call 2, 1 (settled clash): with .ship-it-go-live.json the only conflicted file after the user merges main in, /ship-it reads both sides from git (not the file with its markers), keeps per item the newer date (a tie to the branch), applies the record rules, writes and stages it; no conflict is left, and the branch's newer na survives" \
+  '[ "$OS_SOLE" = 1 ] && [ "$OS_NOWT" = 1 ] && [ "$OS_RULES" = 1 ] && os_case1'
+
+# 2. another file is conflicted too: nothing is settled -- that file is untouched, the record stays in conflict, the stop
+# names the other file
+os_case2() { local before
+  os_clash s2 readme || return 1; before="$(cksum < "$OC/s2/b/README")"; OSMSG=""
+  oc_settle "$OC/s2/b" || return 1
+  [ "$(cksum < "$OC/s2/b/README")" = "$before" ] && gx -C "$OC/s2/b" diff --name-only --diff-filter=U | gq -xF README && gx -C "$OC/s2/b" diff --name-only --diff-filter=U | gq -xF "$OCREC" && printf '%s' "$OSMSG" | gq -F README; }
+check "owner call 2, 2 (another conflicted file): with README conflicted too, nothing is settled -- README is untouched, the record stays in conflict, and the stop names README; /ship-it never settles a file it doesn't own" \
+  '[ "$OS_NONE" = 1 ] && os_case2'
+
+# 3. wording: /ship-it never starts a merge or rebase, it only completes the user's; the guide leads with the no-hands route,
+# and the hand route ("keep, for each item, the line with the newer date") is only the fallback when /ship-it isn't run
+os_lead() { local si hi
+  si="$(printf '%s\n' "$PAIRS" | cut -d $'\x1f' -f1 | grep -niE '/ship-it settles\b' | head -1 | cut -d: -f1)"
+  hi="$(printf '%s\n' "$PAIRS" | cut -d $'\x1f' -f1 | grep -niE '\bkeep,? (for )?(each|per) item\b' | head -1 | cut -d: -f1)"
+  [ -n "$si" ] && [ -n "$hi" ] && [ "$si" -lt "$hi" ]; }
+check "owner call 2, 3 (wording): /ship-it never starts a merge or rebase itself, only completes the user's update; the guide leads with /ship-it settling its own file, and the hand route comes after it, only as the fallback when /ship-it isn't run" \
+  'says "\bnever starts? a merge or (a )?rebase\b|\b(doesn.t|does not|never) start (a )?(merge|rebase)\b" && says "+\bcompletes?\b" "\buser (started|began)\b|\bthe user.s (update|merge)\b" && ! says "+/ship-it\b[^.;]{0,20}\b(merges|rebases|pulls)\b" && os_lead && usays "\bkeep,? (for )?(each|per) item\b" "\bfallback\b|\bwhen /ship-it isn.t run\b|\bif /ship-it isn.t run\b|\bwithout (running )?/ship-it\b"'
+
+# 4. an unreadable branch file beside a readable main copy counts as no branch record: main supplies the items
+os_case4() { local mc
+  oc_origin s4 && oc_put "$OC/s4/a" "$(oc_rec "$OC1M")" record && gx -C "$OC/s4/a" push -q origin main || return 1
+  oc_put "$OC/s4/b" '{"schema": 1, "items": [' "broken branch record" || return 1
+  mc="$(oc_main "$OC/s4/b")"; [ -n "$mc" ] || return 1
+  py6 merge "ubr=$OS_UBR,newer=1,tie=1" "$mc" "$(cat "$OC/s4/b/$OCREC")" "$OC1W"; }
+check "owner call 2, 4 (unreadable branch file): a truncated branch record beside main's readable copy counts as no branch record, so main supplies the items (item 1's na stays, not five missing items)" 'os_case4'
+
+# 5. an unreadable main copy: nothing is said about it (and it never gets the unreadable notice)
+check "owner call 2, 5 (unreadable main copy): nothing is said about an unreadable main copy, and the \"I couldn't read your go-live record\" notice is never about it" \
+  'says "unreadable" "main(.s)? copy" "\bnothing (is )?said\b|\bsays nothing\b|\bsilently\b" && ! says "main(.s)? copy" "couldn.t read your go-live record"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
