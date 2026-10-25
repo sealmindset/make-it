@@ -762,6 +762,62 @@ RW='\bgit (checkout|switch|merge|pull|rebase|push|stash|reset|add|commit|restore
 check "resume-it 5 (main's copy): resume-it reads main's copy merged with the branch's, as ship-it-guide.md's Go-live checklist says, read only (nothing checked out, merged, pulled or pushed)" \
   'rsays "$MAINC" "+\b(merged?|combined?) with\b|\bnewer\b" "+\bbranch.s\b|\bthe branch\b|\bthis branch\b" && rusays "$MAINC" "ship-it-guide\.md|\bthe guide\b|\(The record\)" && rsays "$RONLY" && ! printf "%s\n" "$RGL" | raff | gq -iE "$RW"'
 
+# ---- Task 2 fix round 1 (task-2-fix1-brief.md, calls 1-2): the reason slot never copies a secret; an unreadable record ----
+# The new checks read a wider go-live text: a block that says go-live and the blocks after it, up to the next block that
+# opens with a bold lead ("**"), a heading or a tag; plus the template's go-live lines (RGL, used above, stays as it was)
+RGLW="$( { printf '%s\n' "$RC" | awk '/^```/{f=!f;next} !f' | awk 'BEGIN{RS=""} {g=(tolower($0) ~ /go-live/); b=($0 ~ /^(\*\*|#|<)/);
+  s=g || (p && !b); if(s) print $0 "\n"; p=s}' | units; printf '%s\n' "$TGL"; } | grep . || true)"
+RPW="$(printf '%s\n' "$RGLW" | sents | rpair)"; RUPW="$(printf '%s\n' "$RGLW" | rpair)"
+rwsays()  { local PAIRS="$RPW"; says "$@"; }
+rwusays() { local PAIRS="$RUPW"; says "$@"; }
+# 6. The reader rule's switches are read from resume-it's go-live text, then the rule renders the template's own skipped
+# line for fake stored reasons (built at run time) and is matched against the guide's own secret patterns (A5P, A5A)
+NSRE='\b(is|are|gets?) (never|not) (copied|shown|written|put|included|repeated)\b|\bnever (copy|copies|show|shows|write|writes|put|puts|repeat|repeats)\b[^.;:]{0,25}\b(reasons?|values?|it|them)\b|\b(isn.t|aren.t) (copied|shown|written|put|included|repeated)\b'
+RNS=0; rwsays '\breasons?\b' 'secret|refuse' "$NSRE" && RNS=1
+RNSL=0; printf '%s\n' "$RGLW" | gq -iF '(reason not shown)' && RNSL=1
+RLEN=0; rwusays '\breasons?\b' '\b200\b' '+\b(counts?|is treated|treated|is read|reads?) as missing\b|\bas (if|though) (it were )?missing\b' && RLEN=1
+SKL="$(printf '%s\n' "$TGL" | grep -iE '^[[:space:]]*[-*] .*\bskipped\b.*\[reason\]' | sed -n 1p || true)"
+MSL="$(printf '%s\n' "$TGL" | grep -E '^[[:space:]]*[-*] \[ \]' | grep -viE "\bskipped\b|$NOFILE" | sed -n 1p || true)"
+PY7='
+import re, sys
+ns, nsl, ln, anch = (x == "1" for x in sys.argv[2:6]); pre = [p for p in sys.argv[6].split("\n") if p]; skl, msl = sys.argv[7], sys.argv[8]
+alt = "|".join(re.escape(p) for p in pre)
+pat = re.compile(("(?:^|[^A-Za-z0-9])(?:" + alt + ")" if anch else "(?:" + alt + ")") + "|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{32,}") if pre else None
+def render(reason):                        # the NEXT-STEPS line resume-it writes for a stored skipped item with this reason
+    if ln and len(reason) > 200: return msl
+    hide = ns and nsl and pat is not None and pat.search(reason) is not None
+    return re.sub(r"\[date\]", "2026-10-24", re.sub(r"\[reason\]", lambda m: "(reason not shown)" if hide else reason, skl, flags=re.I), flags=re.I)
+a = sys.argv[9:]
+if sys.argv[1] == "secret":                # a[0], a[1]: reasons holding a secret; a[2], a[3]: their secret parts; a[4]: a clean reason
+    ok = "[reason]" in skl.lower() and all("(reason not shown)" in render(r) and s not in render(r) for r, s in ((a[0], a[2]), (a[1], a[3]))) \
+         and a[4] in render(a[4]) and "(reason not shown)" not in render(a[4])
+else:                                      # a[0]: a clean reason over 200 characters, a[1]: a word only it holds
+    ok = bool(msl) and "[reason]" in skl.lower() and a[1] not in render(a[0])
+sys.exit(0 if ok else 1)
+'
+py7() { python3 -I -c "$PY7" "$1" "$RNS" "$RNSL" "$RLEN" "$A5A" "$A5P" "$SKL" "$MSL" "${@:2}" 2>/dev/null; }
+F6SK="$(printf '%s%s' s k-)$(printf 'a%.0s' {1..40})"; F6R1="pentest notes at $F6SK"
+F6TV="$(printf '%s=%s' token abc123)"; F6R2="$(printf 'report at https://%s/r?%s' vault.example.com "$F6TV")"
+F6LONG="LONGMARK$(printf ' the pages wait on our lawyer%.0s' {1..8})"
+PARTIAL='\b(first|last) (few|[0-9]+) (characters|chars|letters)\b|\bmask(ed|s|ing)?\b|\bpartly\b|\bpart of (it|the (reason|value|evidence))\b|\btruncat\w*|\bshorten\w*|\bcut (it|the reason|to)\b'
+check "resume-it 6a (reason slot, secret): a stored reason the guide's No secret rule would refuse is never copied into NEXT-STEPS.md -- the line reads \"(reason not shown)\", never the value or part of it (evidence too, if the template shows it); on reasons holding a run-time \" sk-\" run and a ?token= URL the template's line hides both, and a clean reason shows" \
+  'py7 secret "$F6R1" "$F6R2" "$F6SK" "$F6TV" "our lawyer is writing them" && ! printf "%s\n" "$RGLW" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$PARTIAL" && { ! printf "%s\n" "$TGL" | gq -iE "\bevidence\b" || rwsays "\bevidence\b" "$NSRE"; }'
+check "resume-it 6b (reason slot, over 200): a stored reason over 200 characters counts as missing, as the guide says -- on a clean 240-character reason the item gets the template's not-answered line, never the reason or part of it" \
+  'py7 long "$F6LONG" LONGMARK'
+
+# 7. An unreadable branch record with no readable main copy: all five not answered yet, never the no-file line (a record
+# exists); no line of resume-it's own about GitHub. "Not started" and "no-file line" are kept whole before the negation cut.
+UNREAD='unreadable|can.t be read|cannot be read|isn.t readable|not readable'
+UPR="$(printf '%s\n' "$RGLW" | sed -e 's/[Nn]ot started/NOTSTARTED/g' -e 's/no-file line/NOFILELINE/g' | sents | rpair)"
+ursays() { local PAIRS="$UPR"; says "$@"; }
+check "resume-it 7a (unreadable record): an unreadable branch record with no readable main copy lists all five items as not answered yet, and never shows the no-file line (a record exists)" \
+  'rwsays "$UNREAD" "\bmain\b|default branch" "+\ball five\b" "not answered yet|\bmissing\b" && ursays "$UNREAD" "\b(never|not|isn.t|no)\b[^.;]{0,40}\"?(NOTSTARTED|NOFILELINE)" && ! ursays "$UNREAD" "+\b(shows?|lists?|gives?|uses?|writes?|gets?)\b[^.;]{0,15}\"?(NOTSTARTED|NOFILELINE)"'
+GHRE='github|\breach|network|offline'
+GHSAY='\b(say|says|add|adds|write|writes|show|shows|tell|tells|note|notes|mention|mentions|give|gives|repeat|repeats)\b (so|that|it|the user)\b|\b(say|says|add|adds|write|writes|show|shows|give|gives|repeat|repeats)\b (a|an|one|the|its own|the guide.s)( [a-z-]+){0,2} (line|notice|note|warning)\b'
+GHQ='"[^"]*(github|reach)[^"]*"'
+check "resume-it 7b (GitHub unreachable): resume-it says, in a few words, that it adds no line of its own when GitHub can't be reached, and never adds one" \
+  'rwsays "$GHRE" "\b(no|never|nothing|doesn.t|does not|don.t|without)\b[^.;]{0,40}\b(line|say|says|said|notice|mention|repeat|note|word)|\b(say|says|add|adds|mention|mentions)\b (nothing|no line|no notice|no word)" && ! rwsays "$GHRE" "+$GHSAY" && ! printf "%s\n" "$RGLW" | gq -iE "$GHQ"'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
