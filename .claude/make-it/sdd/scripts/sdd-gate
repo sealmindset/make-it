@@ -35,7 +35,7 @@ import subprocess
 import sys
 
 CAP = 3  # consecutive nudges with no task completed -> release to the human
-# ponytail: one fixed window. Real agents ran up to 62 min (E02-S5); past this a wait nudges again.
+# ponytail: one fixed window. Real agents ran up to 62 min; past this a wait nudges again.
 WAIT_MAX = datetime.timedelta(hours=2)
 REGISTRY = os.environ.get("SDD_GATE_REGISTRY") or os.path.expanduser("~/.claude/sdd-runs")
 
