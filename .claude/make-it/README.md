@@ -24,7 +24,7 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 | `/resume-it` | Continue work on an existing app (features, bugs, testing) |
 | `/clear-it` | Checkpoint the session into `handoff.md` (goal, state, active files, changes, failed approaches, next steps) so context can be cleared without losing the thread -- works in any project, not just /make-it apps |
 | `/try-it` | Demo the app with mock services and guided walkthrough |
-| `/ship-it` | Deploy -- creates PR with security checks, attestation, review |
+| `/ship-it` | Deploy -- creates PR with security checks and review |
 | `/nemo-it` | Security attestation scan (OWASP + NeMo Guardrails AI safety) |
 | `/retrofit-it` | Add production foundations (auth, RBAC, Docker, security) to an existing app |
 | `/backlog-it` | Project board: Epic → Story → Task cards, bug queue, parallel fix lanes (see `references/backlog-board.md`) |
@@ -166,7 +166,7 @@ When administrators can edit AI prompts through the UI, the saved content become
 | `renderPromptSafe()` | Sanitizes ALL template variable values via `sanitizePromptInput()` before interpolation. Escapes HTML entities. |
 | `testPromptDraft()` | Mandatory test gate: validation + 5 adversarial NeMo inputs against draft prompt |
 | Risk Warnings | Friendly yellow banners for suspicious patterns (no jargon). Overrides logged with `risk_flag` for security review. |
-| /ship-it Integration | PR description flags `risk_flag` audit entries as "Prompt Safety Review Required" |
+| /ship-it Integration | None: no skill flags `risk_flag` audit entries at ship (ship-it-guide.md, "What make-it runs before /ship-it") |
 
 **NeMo Guardrails AI Safety Testing (Prompt #10d):**
 
@@ -307,13 +307,13 @@ When the user types `/ship-it`, the deployment pipeline:
 1. Detects repo, branch, auth status, project type
 2. Reads `.ship-it.yml` config
 3. Scans dependencies for vulnerabilities (auto-fixes where possible)
-4. Runs NeMo Guardrails full test suite (if AI features) -- 60+ test cases
-5. **Checks prompt template safety** (if Tier 2/3) -- flags `risk_flag` audit entries for security review
-6. Generates AI Safety Attestation
-7. Creates branch, commits (including security fixes + attestation), pushes
-8. Generates CI/CD caller workflow
-9. Creates PR with labels, reviewers, security summary, go-live checklist
-10. Reports back to user
+4. Creates branch, commits (including security fixes), pushes
+5. Generates CI/CD caller workflow
+6. Creates PR with labels, reviewers, security summary, go-live checklist
+7. Reports back to user
+
+The NeMo full test suite, the AI Safety Attestation and the `risk_flag` review are not /ship-it
+steps (ship-it-guide.md, "What make-it runs before /ship-it").
 
 The user's entire deployment experience is typing `/ship-it` and waiting.
 

@@ -1644,7 +1644,8 @@ Additional Tier 3 validation:
   before inserting -- no bypass via bulk import
 
 Risk escalation: if risk_flag entries exist, the Audit Log page highlights them
-with a yellow banner. /ship-it includes risk_flag count in PR security summary.
+with a yellow banner. No skill puts the risk_flag count in the PR at ship
+(ship-it-guide.md, "What make-it runs before /ship-it").
 
 Implementation details: see Prompt #10e Part 9.
 ```
@@ -2319,7 +2320,7 @@ Verify prompt template content validation (if Tier 2/3 prompt management):
 - Confirm render_prompt() sanitizes all variable values via sanitizePromptInput()
 - Confirm template variables containing <script> are escaped in rendered output
 - Confirm risk_flag warnings appear for suspicious patterns, overrides logged
-- Confirm /ship-it PR description includes risk_flag count from prompt_audit_log
+- No skill puts a risk_flag count in the PR at ship, so there is nothing to confirm (ship-it-guide.md, "What make-it runs before /ship-it")
 These controls are implemented by Prompt #10e Part 9. This prompt verifies they are wired.
 ```
 

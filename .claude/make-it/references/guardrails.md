@@ -341,7 +341,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
 - Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
-- /ship-it runs FULL suite (minimum 10 test cases per category = 60 tests)
+- /nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it
+  (ship-it-guide.md, "What make-it runs before /ship-it")
 - Self-healing: failures trigger automatic remediation (prompt hardening, rail adjustments,
   output filters). Re-test after each fix attempt (up to 3 cycles).
 - Unresolvable failures: document with full root cause analysis, impact assessment,
@@ -349,7 +350,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Attestation: generate docs/ai-safety-attestation.md (or versioned snapshot in
   docs/attestations/) from test results. Template: templates/ai-safety-attestation.md
 - Attestation mode configurable in app-context.json:
-  "snapshot" (default) = versioned file per run, "latest" = overwrite on each /ship-it
+  "snapshot" (default) = versioned file per run, "latest" = overwrite on each run. The
+  attestation comes from /nemo-it, before /ship-it (ship-it-guide.md,
+  "What make-it runs before /ship-it")
 - The attestation IS the sign-off -- no additional human approval required
 
 ### AI Operational Safety Controls (if app uses AI/LLM features)
@@ -432,7 +435,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   the primary and fallback models
 - Fallback models may have different safety characteristics -- passing on primary does not
   guarantee passing on fallback
-- Build-verify runs against primary model only (speed); /ship-it runs against ALL configured models
+- Build-verify runs against primary model only (speed); the full suite runs against ALL configured
+  models before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ### AI Prompt Management (MANDATORY for any app with AI features)
 - **Tier 2 is the MINIMUM for any AI-powered app.** Tier 1 (code-only prompts) is eliminated.
@@ -526,8 +530,8 @@ frictionless for non-technical users (80% of the audience).
   prompts:admin scope), show a yellow warning banner: "This prompt contains patterns that
   could affect AI safety. A security review may be required before production deployment."
 - Log all override events to `prompt_audit_log` with `risk_flag: true`.
-- /ship-it checks for any `risk_flag: true` entries in the audit log since the last deploy
-  and flags them in the PR description for security review.
+- No skill flags `risk_flag: true` entries for security review at ship (ship-it-guide.md,
+  "What make-it runs before /ship-it").
 
 **Agent Composition (when agents use invoke_agent, pipelines, delegation, or fan-out):**
 - [ ] `invoke_agent(slug, input)` method exists on BaseAgent with depth tracking and cycle detection
@@ -551,7 +555,7 @@ frictionless for non-technical users (80% of the audience).
 - [ ] render_prompt() passes all interpolated variable values through sanitizePromptInput()
 - [ ] Template variables with HTML/script content are escaped in rendered output
 - [ ] Risk warnings appear for blocklist-adjacent patterns; overrides logged with risk_flag
-- [ ] /ship-it checks prompt_audit_log for risk_flag entries since last deploy
+- No skill checks prompt_audit_log for risk_flag entries at ship, so there is nothing to check here (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ### AI Memory / Brain Layer (when brain_features.enabled = true)
 
@@ -704,7 +708,7 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] render_prompt() sanitizes all interpolated variable values via sanitizePromptInput()
 - [ ] HTML/script in template variables is escaped in rendered output
 - [ ] Risk warnings displayed for blocklist-adjacent patterns; overrides logged with risk_flag
-- [ ] /ship-it flags risk_flag audit entries in PR description for security review
+- No skill flags risk_flag audit entries for security review at ship, so there is nothing to check here (ship-it-guide.md, "What make-it runs before /ship-it")
 
 **AI Memory / Brain Layer (when brain_features.enabled = true):**
 - [ ] brain_memories, brain_memory_tags, brain_memory_feedback, brain_memory_audit_log tables exist
