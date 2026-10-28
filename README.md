@@ -957,6 +957,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.46.0 -- /backlog-it info: any card in plain terms
+
+`/backlog-it info <card>` explains a card in plain English, in the same three parts every time:
+**The problem**, **Impact if it's not fixed** (who it hits, the wider risk, how far it reaches),
+and **Why it's being fixed this way** (each choice and its reason, in the order the work runs).
+- **Any way in:** a card id, words from its title, a focus question after it (`info E02-S5 why is
+  Task 3 taking so long`), or bare `info` for the card this session is working on.
+- **Grounded:** it reads the card, its plan, its PRs and, for a card in a run, the run's ledger
+  and the owner's calls, and checks claims against the code when that's cheap.
+- **Out of the way:** read-only, and a background subagent does the reading, so running lanes
+  aren't disturbed.
+- **`/btw` knows the shape too** (in make-it sessions): CLAUDE.md carries the three parts, and
+  since `/btw` can't read files, it answers only from what the session has read and points to
+  `info` otherwise.
+- **Checked.** New `scripts/test-backlog-info.sh`: the route, the read-only rule, and the same
+  headings in the reference and in CLAUDE.md, with planted-defect controls.
+
 ### v1.45.0 -- AI accounting: what your AI costs, what it saves, and cheaper models where they're good enough
 
 Every AI app now records each AI call (which step, which model, what it cost) and sets it against

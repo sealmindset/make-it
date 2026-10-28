@@ -298,6 +298,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | *(none)* / `board` | Print the board compactly: by status (in-progress → ready → blocked → designing → backlog → done), epics with children nested, `id · title · [category] P#` |
 | `list <filter>` | The same, filtered by status, category, priority, or epic id |
 | `show <id>` | The card; for an epic, its children (id · status · title) and design docs |
+| `info [<card>] [<focus>]` | The card in plain terms: the problem, the impact if it isn't fixed, and why it's fixed this way. Read-only |
 | `epic` / `story <epic>` / `task <parent>` `<idea>` · `add` | Add planned work (clarify first) |
 | `capture <text>` · `bug <text>` · plain text | Capture (card first, AI triage) |
 | `start <id>` | Recall the card as an editable prompt, then run it |
@@ -381,6 +382,57 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 **For whoever runs a started card:** "deploy" means the project's real production path, with the
 project's own smoke tests; if a deploy goes wrong, prefer the project's rollback path. Two
 conditions halt shipping: red tests, and potential harm.
+
+### `info [<card>] [<focus>]` -- a card in plain terms
+
+What problem a card solves, what happens if it isn't solved, and why it's being solved the way it
+is -- in plain English, in the same shape every time. Read-only: it never writes a card, the
+board, or a lane's worktree, so it's safe to ask while lanes run.
+
+**Which card.**
+- `info E02-S5` -- the card with that id, of any type.
+- `info argo-it secret scan` -- the card whose title best matches the words. Several match → ask
+  which in one AskUserQuestion (id · title · stage, up to 4); none → say so and name the 3 closest
+  titles.
+- Words after the card are a **focus** (`info E02-S5 why is Task 3 taking so long`): it decides
+  what the three parts dwell on, never their headings.
+- Bare `info` -- the card this session is working on (its lane, run or `start`). Several → ask
+  which; none → explain this session's current work in the same shape yourself, and say it isn't
+  on a card.
+
+**Where it reads** (see [Grounding](#grounding-verify-never-block)): the card (frontmatter, body,
+`## Answers`, `## Finding`, reconciliations), its epic and design doc, its `plan:`, its PRs
+(`gh pr view`: state, checks, body), and for a card in a run, the run's ledger
+(`.make-it/sdd/progress.md` in the worktree on its PR's branch or named after the card, or
+`.make-it/sdd-archive/<id>/` once merged) with the owner calls in its briefs. A claim about the
+code is checked against the code when that's cheap; one that can't be confirmed is said as such.
+
+**Out of the way.** Hand the reading and the writing to one read-only background subagent (Opus or
+Fable: this is writing for a person). Give it the paths (card, board, repo), the focus, and what
+this session knows that the files don't (a step still running); it returns only the finished
+answer. Carry on with whatever was running, and print the answer as-is when it arrives.
+
+**The answer** -- this shape, every time:
+
+> Here's <id> in plain terms.
+>
+> **The problem**
+> What is wrong or missing, and where and when it was found, in a sentence or two. Then one bullet
+> per thing a person sees or can't do.
+>
+> **Impact if it's not fixed**
+> - Who it hits: who is affected and who isn't, and whether data, money or security is at risk.
+> - The wider risk: what it endangers beyond those people (legal, sales, trust, work it blocks).
+> - How far it reaches: which users, pages, projects or environments.
+>
+> **Why it's being fixed this way**
+> One bullet per choice, in the order the work runs: what is done and why -- the order of the
+> tasks, deliberate trade-offs or widenings, what is reused, what was ruled out, how it's proved
+> (tests first, reviews, its PR), and what needs a person. No fix chosen yet: the first bullet
+> says so, then what is known and what is still open (a `decision:` it waits on, in plain words).
+
+No jargon without a gloss, another card by its title rather than a bare id, dates as dates. For an
+epic, the problem is its goal, and the last part is how it's split into cards and in what order.
 
 ### `status`
 
