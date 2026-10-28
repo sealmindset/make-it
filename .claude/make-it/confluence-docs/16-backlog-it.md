@@ -30,6 +30,9 @@ and waiting to be checked, and what's next.
   time by default).
 - **Picking a card back up** later: `/backlog-it start <id>` turns the card into an instruction
   you can edit, then runs it.
+- **Understanding a card**: `/backlog-it info <id>` explains in plain words what problem it
+  solves, what happens if it isn't solved, and why it's being solved this way. It only reads, so
+  you can ask while other work is running.
 - **Keeping the board honest**: `reconcile` checks each card against the code, the tests, and
   the live app, so nothing is marked done that isn't.
 - **Deciding what's next**: `groom` proposes the order that finishes the most, soonest (you can
@@ -58,6 +61,7 @@ we?". With one, every session -- and every AI helper -- works from the same list
 /backlog-it the export button does nothing on the reports page
 /backlog-it epic a monthly report for managers   # plan new work (asks first)
 /backlog-it start E02-S4           # pick a card back up
+/backlog-it info E02-S4            # what it solves, what happens if it isn't, why it's fixed this way
 /backlog-it dispatch               # start the next bugs that can be fixed side by side
 /backlog-it groom                  # what to do next, in order
 /backlog-it groom move E05 1       # pin E05 to the top

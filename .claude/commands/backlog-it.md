@@ -1,6 +1,6 @@
 ---
 name: backlog-it
-description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used from anywhere. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → Live → Checked) with up to N parallel non-overlapping fix lanes, and recalls any card as an editable prompt with `start <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
+description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used from anywhere. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → Live → Checked) with up to N parallel non-overlapping fix lanes, recalls any card as an editable prompt with `start <id>`, and explains any card in plain terms with `info <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
 allowed-tools:
   - Read
   - Write
@@ -61,6 +61,7 @@ user's go, and every other skill reads the same board.
 |----------|----------------------------|
 | *(none)*, `board` | Print the board compactly |
 | `list` / `show` | Filter / show a card |
+| `info [<id>\|<title words>] [<focus>]` | The card in plain terms -- the problem, the impact if it isn't fixed, why it's fixed this way. Read-only; a background subagent reads, so running work isn't disturbed; bare `info` = this session's card |
 | `epic`, `story <epic>`, `task <parent>` + idea, `add` | Add planned work -- clarify first (Step 3) |
 | `capture <text>`, `bug <text>`, or text whose first word isn't a subcommand | Capture -- card first (Step 3) |
 | `start <id>` | Recall → preamble (+ alignment brief if high-stakes) → editable prompt → run on the user's go |
