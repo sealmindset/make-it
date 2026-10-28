@@ -410,15 +410,22 @@ code is checked against the code when that's cheap; one that can't be confirmed 
 **Out of the way.** Hand the reading and the writing to one read-only background subagent (Opus or
 Fable: this is writing for a person). Give it the paths (card, board, repo), the focus, and what
 this session knows that the files don't (a step still running); it returns only the finished
-answer. Carry on with whatever was running, and print the answer as-is when it arrives.
+answer. Carry on with whatever was running. When it arrives, count its words (`wc -w`): over 550,
+send it back once -- "Cut this to under 550 words: keep the three parts, drop the least important
+bullets and sentences, add nothing" -- then print what you have.
 
-**The answer** -- this shape, every time:
+**The answer** -- this shape, every time. It gives quick understanding, not analysis: about one
+screen (roughly 400-550 words), answering the question asked and nothing more. Read deep, write
+short: the run's record and the owner's calls are read to know why the work is shaped as it is
+now, never retold. **No history of the card** -- not how it was found over time, review rounds,
+dated calls or who decided what -- and no status or next steps unless the focus asks. Check
+quietly: mention only what couldn't be confirmed, in a few words.
 
 > Here's <id> in plain terms.
 >
 > **The problem**
-> What is wrong or missing, and where and when it was found, in a sentence or two. Then one bullet
-> per thing a person sees or can't do.
+> What is wrong or missing, and what found it and when, in a sentence or two. Then one bullet per
+> main thing a person sees or can't do, a sentence or two each, up to about 7.
 >
 > **Impact if it's not fixed**
 > - Who it hits: who is affected and who isn't, and whether data, money or security is at risk.
@@ -426,13 +433,15 @@ answer. Carry on with whatever was running, and print the answer as-is when it a
 > - How far it reaches: which users, pages, projects or environments.
 >
 > **Why it's being fixed this way**
-> One bullet per choice, in the order the work runs: what is done and why -- the order of the
-> tasks, deliberate trade-offs or widenings, what is reused, what was ruled out, how it's proved
-> (tests first, reviews, its PR), and what needs a person. No fix chosen yet: the first bullet
-> says so, then what is known and what is still open (a `decision:` it waits on, in plain words).
+> One bullet per main choice, up to about 7 (fold or drop the small ones), in the order the work
+> runs: the choice in a few words, then why in a sentence or two -- the order of the tasks,
+> deliberate trade-offs or widenings, what is reused instead of added, how it's proved (tests first,
+> reviews, its PR), and what needs a person. No fix chosen yet: the first bullet says so, then what
+> is known and what is still open (a `decision:` it waits on).
 
-No jargon without a gloss, another card by its title rather than a bare id, dates as dates. For an
-epic, the problem is its goal, and the last part is how it's split into cards and in what order.
+Plain bullets of one or two sentences: no sub-bullets, no bold inside them. No jargon without a
+gloss, another card by its title rather than a bare id, dates as dates. For an epic, the problem is
+its goal, and the last part is how it's split into cards and in what order.
 
 ### `status`
 

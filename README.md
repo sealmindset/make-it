@@ -962,6 +962,7 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 `/backlog-it info <card>` explains a card in plain English, in the same three parts every time:
 **The problem**, **Impact if it's not fixed** (who it hits, the wider risk, how far it reaches),
 and **Why it's being fixed this way** (each choice and its reason, in the order the work runs).
+About one screen, for quick understanding: no history of the card, no status unless asked.
 - **Any way in:** a card id, words from its title, a focus question after it (`info E02-S5 why is
   Task 3 taking so long`), or bare `info` for the card this session is working on.
 - **Grounded:** it reads the card, its plan, its PRs and, for a card in a run, the run's ledger

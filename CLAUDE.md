@@ -127,7 +127,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 
-Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side question -- answer in plain English under three headings: **The problem**, **Impact if it's not fixed** (Who it hits, The wider risk, How far it reaches), and **Why it's being fixed this way** (each choice and its reason, in the order the work runs; "no fix chosen yet" when none is). The full shape is `info` in `backlog-board.md`. `/btw` can't read files: answer only from what this session has already read, and if it hasn't read the card, say so and suggest `/backlog-it info <id>`.
+Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side question -- answer in plain English under three headings: **The problem**, **Impact if it's not fixed** (Who it hits, The wider risk, How far it reaches), and **Why it's being fixed this way** (each choice and its reason, in the order the work runs; "no fix chosen yet" when none is). Keep it to about one screen, for quick understanding: no history of the card (how it was found, review rounds, dated calls) and no status unless asked. The full shape is `info` in `backlog-board.md`. `/btw` can't read files: answer only from what this session has already read, and if it hasn't read the card, say so and suggest `/backlog-it info <id>`.
 
 ## File Structure
 
