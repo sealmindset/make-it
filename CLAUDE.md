@@ -104,6 +104,28 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Supports multiple registries (ghcr.io, ECR, ACR, Docker Hub), ingress controllers (nginx, Traefik, ALB, Istio), and storage classes
 - Local K8s testing via `kubectl apply -k env/dev/` on Rancher Desktop, minikube, or kind
 
+## /threats-it
+
+`/threats-it` turns any threat feed (advisory URL, article, CVE list, IOC list) into a verified, organisation-specific assessment. Standalone -- not tied to an app. Support files in `.claude/make-it/threats-it/`.
+
+0. **Scaffold** -- Local git project under `~/Documents/threat-briefs/<date>-<slug>/` (never pushed: it holds tenant evidence)
+1. **Intake** -- Archive every source raw with hashes; refused pages via API or two matching extractions
+2. **Extract** -- CVEs, products, IOCs, attack narratives into `facts.json`, quotes matched by regex
+3. **Verify** -- CISA KEV, MSRC, CVE record, vendor advisories, Microsoft Learn; corrections table
+4. **Attack chains** -- Flow diagram + ATT&CK-verified stage table per attack
+5. **Organisation assessment** -- Read-only Graph / Log Analytics / Resource Graph: IOC + behaviour hunts, exposure, Sentinel rule coverage
+6. **VEX** -- One statement per product x item, OpenVEX v0.2.0
+7. **Reports** -- Leadership briefing + technical companion + generated appendix, Markdown and PDF, figure check
+8. **Fact-check** -- Independent agent; every finding fixed
+9. **Deliver** -- Local commit, verdict, time-sensitive items, organisation profile updated
+
+### Key Principles
+
+- Read-only in the tenant; a real indicator stops the run and goes to the user, evidence preserved, nothing remediated
+- Prove it or don't report it -- WebFetch is discovery only, never the source of a figure
+- Behaviour first: the briefing leads with what attackers do and the VEX table, not product articles
+- The organisation profile (`~/.claude/threats-it/environment.md`) is local only -- never committed
+
 ## /wrap-it
 
 `/wrap-it` cleanly wraps up a work session. The user runs it when they're done for the day.
@@ -140,6 +162,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
     wrap-it.md                    # Wrap-up skill -- save progress, shut down, prep for next session
     argo-it.md                    # Argo CD skill -- generate K8s manifests, deploy via GitOps
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
+    threats-it.md                 # Threat skill -- threat feed to verified IOC hunt, attack chains, VEX, report pair
   make-it/
     references/
       prerequisites.md             # Preflight checks (from Vibe Code Quick Start)
@@ -154,6 +177,10 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
+    threats-it/
+      scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check
+      references/                 # report standard, attack-chain format, VEX, sources, tenant assessment, pitfalls, fact-check, profile template
+      templates/                  # per-project build.sh (OpenVEX -> pair check -> PDFs) and pdf.css
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     variants/
