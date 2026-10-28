@@ -282,6 +282,7 @@ report() {
         fix-it)      desc="Auto-fix security findings from /nemo-it" ;;
         demo-it)     desc="Demo tenant lifecycle for prospect onboarding" ;;
         backlog-it)  desc="Project board: work items, bug queue, parallel fixes" ;;
+        threats-it)  desc="Threat feed -> verified IOC hunt, attack chains, VEX, report pair" ;;
         *)           desc="Custom skill" ;;
       esac
       printf "    /%-14s -- %s\n" "$cmd_name" "$desc"

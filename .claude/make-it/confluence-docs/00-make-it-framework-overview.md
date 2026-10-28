@@ -65,6 +65,7 @@ The skills fall into natural groups. Each has its own detailed page in this spac
 | [`/dispatch-it`](14-dispatch-it.md) | Fix several unrelated problems at the same time, in parallel. |
 | [`/subagent-it`](15-subagent-it.md) | Execute a big multi-step plan automatically, with review after each step. |
 | [`/backlog-it`](16-backlog-it.md) | Keep your to-do list and bug reports on a simple board, and fix several bugs at once. |
+| [`/threats-it`](17-threats-it.md) | Find out whether a new threat affects your organisation, with proof, and write it up for leaders and engineers. |
 
 ---
 

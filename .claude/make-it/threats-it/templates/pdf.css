@@ -1,0 +1,23 @@
+@page { size: Letter; margin: 0.75in 0.7in; @bottom-right { content: counter(page) " / " counter(pages); font-size: 8pt; color: #666; } }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10pt; line-height: 1.4; color: #1a1a1a; }
+header#title-block-header { display: none; }
+h1 { font-size: 17pt; margin: 0 0 0.4em; }
+h2 { font-size: 13pt; margin-top: 1.4em; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+h3 { font-size: 11pt; margin-top: 1.1em; }
+table { border-collapse: collapse; width: 100%; margin: 0.6em 0 1em; font-size: 8.5pt; }
+th, td { border: 1px solid #bbb; padding: 3px 5px; vertical-align: top; text-align: left; }
+th { background: #eef1f5; }
+tr { page-break-inside: avoid; }
+code { font-family: Menlo, Consolas, monospace; font-size: 8.5pt; overflow-wrap: anywhere; }
+pre { background: #f6f8fa; border: 1px solid #ddd; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 7.8pt; page-break-inside: avoid; }
+pre code { font-size: 7.8pt; }
+hr { border: 0; border-top: 1px solid #ddd; margin: 1em 0; }
+a { color: #0b5cad; text-decoration: none; overflow-wrap: anywhere; }
+ol[start="2"] { counter-reset: list-item 1; }
+ol[start="3"] { counter-reset: list-item 2; }
+ol[start="4"] { counter-reset: list-item 3; }
+ol[start="5"] { counter-reset: list-item 4; }
+ol[start="6"] { counter-reset: list-item 5; }
+ol[start="7"] { counter-reset: list-item 6; }
+ol[start="8"] { counter-reset: list-item 7; }
+ol[start="9"] { counter-reset: list-item 8; }

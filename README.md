@@ -190,6 +190,7 @@ bash install.sh
 | `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
 | `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
 | `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
+| `/threats-it` | Turns a threat advisory, CVE list or IOC list into a verified assessment: archived sources, attack chains, a read-only hunt of your Microsoft tenant, VEX, and a leadership briefing plus technical companion (Markdown + PDF) | A new threat lands and someone asks "does this affect us, and do we have indicators?" |
 
 ---
 
@@ -956,6 +957,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.47.0 -- /threats-it: does this threat affect us, with proof
+
+A new skill for security teams. Give `/threats-it` a threat advisory URL, a pasted article, a CVE list or an IOC
+list, and it answers three questions for your own organisation -- has it happened here, would we be alerted, how
+exposed are we -- with every figure traceable to archived evidence.
+- **Sources archived, not summarised.** Pages are saved raw with SHA-256; refused pages are transcribed twice and
+  only matching values kept. Every CVE is checked on the day against CISA KEV, MSRC, the CVE record and vendor
+  advisories, and a corrections table records what the source got wrong or has since been overtaken by.
+- **Attack chains.** Each attack becomes a stage-by-stage flow diagram an engineer can hunt from, with ATT&CK IDs
+  verified against attack.mitre.org.
+- **Read-only tenant hunt.** Graph, Log Analytics and Resource Graph through the analyst's Azure CLI sign-in: IOC
+  and behaviour hunts in every readable workspace, an owner-classified sweep of app-initiated changes, exposure
+  (permissions, credentials, product presence, server builds against the fix) and Sentinel rule coverage
+  (live / partial / blind / disabled). Nothing is changed.
+- **VEX + OpenVEX.** One statement per product and item, validated, rendered as OpenVEX v0.2.0.
+- **The report pair.** A behaviour-first leadership briefing and a technical companion written from the same derived
+  data, a generated appendix, PDFs from a committed build script, a figure check that fails when the two disagree,
+  and an independent fact-check pass before delivery.
+- **Organisation profile stays local.** Tenant identifiers and known gaps live in
+  `~/.claude/threats-it/environment.md`, never in the repo; `references/environment-template.md` shows its shape.
 
 ### v1.46.0 -- /backlog-it info: any card in plain terms
 
