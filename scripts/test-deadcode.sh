@@ -49,8 +49,18 @@ check "a one-item ask still has two options"    gq -F '"Remove it" / "Keep it"' 
 check "log hashes are filled in at the end"     gq -F "replaces those with the short hashes" "$REF"
 check "deptry sees the project's packages"      gq -F "uvx --with-requirements requirements.txt deptry" "$REF"
 check "deps are removed by hand, not npm uninstall" gq -F '`npm uninstall` reformats `package.json`' "$REF"
+check "side-effect imports are never SAFE"     gq -F "**Imported for its effect**" "$REF"
+check "an export used in its own file is kept"  gq -F "**Used in its own file**" "$REF"
+check "Q14 never runs ruff --fix"               gq -E '^\*\*Q14\*\*.*never `--fix`' "$BS"
+check "Q14 eslint fixes directives only"        gq -F -- "--fix --fix-type directive" "$BS"
+check "untracked files don't block the run"     gq -F -- "--untracked-files=no" "$CMD"
+check "no tool ran is not 'nothing to clean'"   gq -F "I couldn't check your code" "$CMD"
+check "no push, clean or hard reset anywhere"   bash -c '! grep -nE "git push|gh pr create|git clean|reset --hard" "$1" "$2"' _ "$CMD" "$REF"
+saferow() { [ "$(grep -E '^\| \*\*SAFE\*\* \|' "$1" | grep -ciE 'whole file|page|route')" = 0 ]; }
+check "the SAFE row never covers files/routes"  saferow "$REF"
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
-# controls: a dropped tool or grade must fail
+# controls: a dropped tool or grade, or a widened SAFE row, must fail
+saferow <(sed -E 's/^(\| \*\*SAFE\*\* \|)/\1 whole files;/' "$REF") && bad "control: widened SAFE row passed" || ok "control: widened SAFE row fails saferow"
 tools <(grep -v "| vulture |" "$REF") && bad "control: missing tool passed" || ok "control: missing tool fails tools"
 grades <(sed 's/\*\*DANGER\*\*/DANGER/' "$REF") && bad "control: missing grade passed" || ok "control: missing grade fails grades"
 

@@ -49,9 +49,10 @@ goes in the deletion log, not in chat.
 <step name="preconditions">
 
 Silently:
-1. Git repo with a **clean working tree** (`git status --porcelain` empty). Not clean → stop and
-   say: "You have unsaved changes. Save them first (or run /wrap-it), then run /deadcode-it
-   again -- I keep cleanup separate from other work so it's easy to undo."
+1. Git repo with no uncommitted changes to tracked files (`git status --porcelain
+   --untracked-files=no` empty; untracked files are never touched). Not clean → stop and say:
+   "You have changes that aren't saved into your project's history yet. Run /wrap-it first, then
+   run /deadcode-it again -- I keep cleanup separate from other work so it's easy to undo."
 2. Branch: `chore/deadcode-<YYYY-MM-DD>` off the latest default branch (`git fetch` when there is
    a remote). Already on a `chore/deadcode-*` branch → continue on it.
 3. Read `docs/DELETION_LOG.md` if it exists: its `Kept (user's call)` items are on the keep-list.
@@ -75,7 +76,8 @@ anything. Want me to look into it?" (that routes to /debug-it).
 deadcode.md §2: detect the stacks, run every applicable tool in parallel, save raw output to the
 scratchpad, merge into one candidate list. Record tools not run, with the reason.
 
-Nothing found by any tool that ran → skip to `report` ("Nothing to clean up").
+No tool could run → skip to `report` and say "I couldn't check your code: <reasons>" -- never
+"nothing to clean up". Tools ran and found nothing → skip to `report` ("Nothing to clean up").
 
 </step>
 

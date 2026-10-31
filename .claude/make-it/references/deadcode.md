@@ -39,7 +39,7 @@ directory outside the repo (inside it, a file named `knip.json` is read by knip 
 | JS/TS | depcheck | `npx -y depcheck --json` | unused and missing deps (second opinion on knip) |
 | JS/TS | ts-prune | `npx -y ts-prune` | unused exports (archived upstream: corroboration only, never the sole evidence) |
 | JS/TS | tsc | `npx tsc --noEmit --noUnusedLocals` | unused imports and locals |
-| JS/TS | eslint | `npx --no-install eslint . --report-unused-disable-directives -f json` -- only when an `eslint.config.*` or `.eslintrc*` exists; none → "not run: no eslint config" | unused vars (per the project's config), stale `eslint-disable` comments |
+| JS/TS | eslint | `npx --no eslint . --report-unused-disable-directives -f json` -- only when an `eslint.config.*` or `.eslintrc*` exists; none → "not run: no eslint config" | unused vars (per the project's config), stale `eslint-disable` comments |
 | Python | ruff | `uvx ruff check --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
 | Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <keep-list dirs>` | unused functions, classes, attributes, variables (confidence %) |
 | Python | deptry | `cd <dir with requirements.txt> && uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json` (pyproject projects: `uvx --with <project dir> deptry .`) -- without the project's packages in its environment deptry can't map `PyYAML` → `yaml` and reports false hits | unused deps (DEP002 only; DEP001 "missing" is not dead code; exit code 1 whenever it finds anything) |
@@ -83,12 +83,22 @@ in parallel. A candidate survives as dead only when every check comes back empty
      `beautifulsoup4` → `bs4`. Grep the import name, not just the package name.
 6. **Only its own tests** -- if the only references are its tests, it is dead code, but removing
    it removes tests too: grade CAUTION, never SAFE.
+7. **Imported for its effect** -- an import whose imported name is a module (a file or package of
+   that name exists: `import app.models.reports`, `from . import signals`), an import inside a
+   function body, or a JS bare import (`import "./x"`). These run code when loaded (register
+   routes, models, signals, plugins) and tests rarely notice them gone: CAUTION, never SAFE.
+   `ruff --fix` deletes them (it turns `def ready(): from . import signals` into `pass`), so
+   ruff's fix is never applied blindly -- remove only the specifiers this check clears.
+8. **Used in its own file** -- an export nothing imports may still be used inside its own file
+   (knip and ts-prune report "not imported elsewhere", not "unused"). Grep the file itself: used
+   there → not dead code; log it as a candidate "exported but used in its own file" (dropping
+   only the `export` keyword is a refactor, out of scope).
 
 ## 4. Grade: SAFE / CAUTION / DANGER
 
 | Grade | What qualifies | What happens |
 |-------|----------------|--------------|
-| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import or local (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then); unused export of an internal module; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
+| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import of a named symbol (not §3.7) or unused local (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then); unused export of an internal module that §3.8 cleared; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
 | **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); flagged **only** by vulture below 100% | One batched ask (§6); deleted only if picked |
 | **DANGER** | Configs, entry points, framework-convention files (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
