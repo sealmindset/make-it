@@ -1145,6 +1145,7 @@ function Verify-Setup($state) {
                 "nemo-it"     { "Security attestation (scan any app)" }
                 "fix-it"      { "Auto-fix security findings from /nemo-it" }
                 "backlog-it"  { "Project board: work items, bug queue, parallel fixes" }
+                "deadcode-it" { "Find and safely remove code your app no longer uses" }
                 "threats-it"  { "Threat feed -> verified IOC hunt, attack chains, VEX, report pair" }
                 default       { "Custom skill" }
             }

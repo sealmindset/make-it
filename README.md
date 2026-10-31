@@ -968,11 +968,13 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
 - **Graded before it's touched.** SAFE items go automatically; CAUTION items (whole files, routes, shared utilities)
   come to you in one plain-English pick list; DANGER items (configs, entry points, public APIs, migrations) and the
   app's built-in scaffold features are never removed.
-- **Small, checked, undoable steps.** Green baseline first, one kind per batch, tests and build after each; a red batch
-  is rolled back and split until the culprit is found. Everything lands on a `chore/deadcode-<date>` branch.
+- **Small, checked, undoable steps.** Green baseline first, one kind per batch, tests and build after each -- for Docker
+  apps against freshly rebuilt containers; a red batch is rolled back and split until the culprit is found. Everything
+  lands on a `chore/deadcode-<date>` branch, and no branch is ever deleted.
 - **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.
-- **Wired into the framework.** New checks Q14 (unused imports in app-owned code, fixed in build-verify) and Q15
-  (report-only count to TODO.md, which `/resume-it` turns into a suggestion); `/retrofit-it` Discovery reports the counts.
+- **Wired into the framework, report-only.** New checks Q14 (unused imports) and Q15 (all dead-code candidates) count
+  into one dated TODO.md line that `/resume-it` turns into a suggestion; they never change code. `/retrofit-it`
+  Discovery reports the counts.
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 

@@ -60,3 +60,5 @@ If you have unsaved changes, it offers to save them first — it keeps the clean
 - Remove settings, entry points, database migrations, or your app's built-in features.
 - Rewrite, rename or reorganise code — it only removes.
 - Share or publish anything — the cleanup stays on your machine until you ship it.
+- Delete a branch — dropping a cleanup just sets it aside, so nothing you did can be lost.
+- Start your app against a real database or service — it checks only against what runs on your machine.
