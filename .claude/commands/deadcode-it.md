@@ -52,12 +52,14 @@ goes in the deletion log, not in chat.
 Silently, in this order:
 1. **On a branch.** `git branch --show-current` empty (a tag or a bare commit) → stop: "You're
    not on a branch right now, so I can't keep the cleanup separate. Switch to your branch first."
-2. **An unfinished cleanup.** The current branch is a cleanup branch (`chore/deadcode-*` or
-   `deadcode-cleanup-*`, not `*-dropped-*`) with uncommitted changes to tracked files → a batch
+2. **An unfinished cleanup.** A *cleanup branch* is one named `chore/deadcode-*` or
+   `deadcode-cleanup-*`; one whose name contains `-dropped` is a *dropped* cleanup and is never
+   rolled back, never waiting. The current branch is a cleanup branch, not dropped, with
+   uncommitted changes to tracked files → a batch
    was interrupted before it was checked: `git restore --staged --worktree -- :/`, and tell the
    user "An earlier cleanup was interrupted part-way; I undid the unchecked part." (It is never
    saved -- it was never verified.)
-3. **A cleanup still waiting.** Any cleanup branch (current or not; dropped ones excluded) whose
+3. **A cleanup still waiting.** Any cleanup branch (current or not; dropped ones -- name contains `-dropped` -- excluded) whose
    commits aren't in the branch named as its start in its log header (`git log --oneline
    <start>..<cleanup>` not empty), unless its changes are already there (a /ship-it squash-merge:
    `git diff --quiet <start> <cleanup> -- $(git diff --name-only <start>...<cleanup>)` succeeds)
@@ -95,7 +97,7 @@ about unused code: <one line>. I didn't change anything. Want me to look into it
 /debug-it.
 
 Green → create the cleanup branch from HEAD: `git switch -c chore/deadcode-<YYYY-MM-DD>` (that
-name taken → `-2`, `-3`, ...; refused for another reason, such as an existing branch named
+name, or a `-dropped` form of it, taken → `-2`, `-3`, ...; refused for another reason, such as an existing branch named
 `chore` → `deadcode-cleanup-<YYYY-MM-DD>`). Record its name for the log header.
 
 </step>
@@ -182,9 +184,10 @@ an earlier run). Neither ever deletes a branch:
   branch -m <cleanup branch> <cleanup branch>-dropped` (taken → `-dropped-2`, ...). The renamed
   branch keeps everything, including the log with the user's past decisions; it no longer counts
   as waiting.
-- After either one, if the cleanup removed a dependency, reinstall from the manifest of the
-  branch you're now on (deadcode.md §5.3 table, fresh-install column; rebuild the containers for
-  a Docker app), so what's installed matches it again.
+- After either one, a Docker app's containers are rebuilt from the branch you're now on
+  (`docker compose up -d --build --wait`), so the running app matches it; otherwise, if the cleanup
+  removed a dependency, reinstall from that branch's manifest (deadcode.md §5.3 table,
+  fresh-install column).
 - Say what happened in one line: "Done -- the cleanup is now part of your work on `<branch>`." /
   "Dropped -- you're back on `<branch>` exactly as it was."
 

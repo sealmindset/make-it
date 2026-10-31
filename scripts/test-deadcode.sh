@@ -60,7 +60,7 @@ check "a call on the right of a local is kept" gq -F "delete only the binding an
 # --- where checks run (owner's call: rebuild before every check)
 check "Docker apps rebuild before every verify" gq -F 'before **every** verify, `docker compose up -d --build --wait' "$REF"
 check "never exec into an old container"       gq -F 'Never `exec` into a container that' "$REF"
-check "settings must point at this machine"    gq -F "Your app's settings point at <host>, so I won't start it" "$REF"
+check "settings must point at this machine"    gq -F "Your app's settings point at <host>, so I" "$REF"
 check "release steps are never run"            gq -F "Never run a step that releases, deploys," "$REF"
 check "audits aren't part of the baseline"     gq -F "a newly published advisory isn't a broken" "$REF"
 check "red baseline deletes nothing"           gq -F "Nothing is deleted on a red baseline" "$REF"
@@ -108,6 +108,11 @@ check "CLAUDE.md: culprit in use, never offered" gq -F "the culprit is logged in
 check "desktop bundles carry deadcode.md"      bash -c 'for f in desktop/skills/make-it/refs.txt desktop/skills/guardrails/refs.txt; do [ "$(grep -cxF ".claude/make-it/references/deadcode.md" "$f")" = 1 ] || exit 1; done'
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 check "install.ps1 describes it"               gq -F '"deadcode-it" {' install.ps1
+check "dropped = name contains -dropped, never rolled back" gq -F 'one whose name contains `-dropped` is a *dropped* cleanup and is never' "$CMD"
+check "Python deps can be SAFE via deptry"      gq -F "knip, depcheck or deptry (ts-prune and vulture never count" "$REF"
+check "honoured decisions copied into this log" gq -F "so the decision survives if that branch is ever removed" "$REF"
+check "keep/drop rebuild a Docker app"          gq -F "containers are rebuilt from the branch you're now on" "$CMD"
+check "ruff leaves no cache in the project"     gq -F "uvx ruff check --no-cache" "$REF"
 # --- controls: the behavioural checks must fail on real regressions
 danger_never <(sed -E 's/\| Never deleted\./| Deleted after a confirm./' "$REF") && bad "control: DANGER deleted passed" || ok "control: DANGER 'deleted' fails"
 untracked_never <(sed 's/Never a candidate, never edited/Candidates like any file/' "$REF") && bad "control: untracked candidate passed" || ok "control: untracked candidate fails"

@@ -28,7 +28,8 @@ A path is **kept** when any of these holds. Kept paths are reported, never grade
    `git show <branch>:docs/DELETION_LOG.md` for every branch in
    `git for-each-ref --format='%(refname:short)' refs/heads`). Its `in use` candidates (including
    ones a red batch proved) count the same way: not dead, not re-tried. Never ask about it again;
-   report it in the count only.
+   report it in the count only, and copy each such row into this run's log (Kept or Candidates,
+   with "from `<branch>`"), so the decision survives if that branch is ever removed.
 3. **Generated or vendored** -- `node_modules/`, `.next/`, `dist/`, `build/`, `venv/`, `.venv/`,
    `__pycache__/`, `mock-services/`, `alembic/versions/`, lockfiles, codegen output (a file with
    a "generated"/"do not edit" header, or the output path of a codegen config).
@@ -57,13 +58,14 @@ missing; it never re-installs over an existing one.
 | JS/TS | ts-prune | `npx -y ts-prune` | unused exports (archived upstream: corroboration only, never the sole evidence) |
 | JS/TS | tsc | `npx --no tsc --noEmit --noUnusedLocals` | unused imports and locals |
 | JS/TS | eslint | `node_modules/.bin/eslint . --report-unused-disable-directives -f json` -- only when `node_modules/.bin/eslint` exists and its config matches its version (`eslint.config.*`, or `.eslintrc*` with eslint < 9); otherwise "not run: <reason>" | unused vars (per the project's config), stale `eslint-disable` comments |
-| Python | ruff | `uvx ruff check --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
+| Python | ruff | `uvx ruff check --no-cache --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
 | Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <§1.3 dirs>` | unused functions, classes, attributes, variables (confidence %) |
 | Python | deptry | `requirements.txt` → `uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json`; `pyproject.toml` only → `uv pip compile pyproject.toml -q -o <scratch>/req.txt` then `uvx --with-requirements <scratch>/req.txt deptry . --json-output <scratch>/deptry.json` (run from the manifest's directory; nothing is written into the project) | unused deps (DEP002 only; DEP001 "missing" is not dead code) |
 
 deptry needs the project's packages in its environment or it can't map `PyYAML` → `yaml` and
 reports false hits; the commands above give it them. A tool that can't run (no network, no
-install, crash) is recorded as **not run, with the reason** -- never as "no findings". Most of
+install, crash) is recorded as **not run, with the reason** -- never as "no findings". Tools for a
+stack the project doesn't have are "not applicable", not "not run", and aren't reported as gaps. Most of
 these tools exit non-zero when they find something (knip 1, depcheck 255, tsc 2, ruff 1,
 vulture 3, deptry 1): a tool ran if it produced its report. `<src>` is the same for ruff and
 vulture: every Python source directory outside the keep-list. Merge the outputs into one
@@ -84,7 +86,8 @@ in parallel. A candidate survives as dead only when every check comes back empty
    them by shape: `import(` with a template or variable, `require(` with a variable,
    `importlib`, `getattr`/`setattr`, `__import__`, registry dicts or maps keyed by name,
    `entry_points`, plugin lists, and commands built at run time (`subprocess`/`os.system`/
-   `child_process` calls, `python -m <var>`, `npx <var>`) -- a package such a call could start is
+   `child_process` calls, `python -m <var>`, `npx <var>`). A built name you can work out (`"pyfl" +
+   "akes"`) that names the package → in use; one you can't work out but that could name it →
    CAUTION, not SAFE.
 3. **Framework convention** -- Next.js `app/**/{page,layout,route,loading,error,global-error,not-found,global-not-found,forbidden,unauthorized,template,default}.*`,
    metadata files (`sitemap`, `robots`, `manifest`, `icon`, `apple-icon`, `opengraph-image`,
@@ -139,7 +142,7 @@ in parallel. A candidate survives as dead only when every check comes back empty
 
 | Grade | What qualifies | What happens |
 |-------|----------------|--------------|
-| **SAFE** | Flagged by ruff, tsc, eslint, knip or depcheck (ts-prune and vulture never count on their own), every §3 check empty, and one of: unused import that §3.7 cleared; unused local whose right-hand side is a literal or a plain name (a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)`; that is the one edit a cleanup batch makes beyond deleting); unused export of an internal module that §3.8 cleared; unused dependency, only when the §5.1 verify set starts the app the way production does (a Docker rebuild that passes its health checks) and the package is in no §3.5 class; JS/TS test helper nothing calls, inside a file that stays | Deleted automatically in batches (§5) |
+| **SAFE** | Flagged by ruff, tsc, eslint, knip, depcheck or deptry (ts-prune and vulture never count on their own), every §3 check empty, and one of: unused import that §3.7 cleared; unused local whose right-hand side is a literal or a plain name (a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)`; that is the one edit a cleanup batch makes beyond deleting); unused export of an internal module that §3.8 cleared; unused dependency, only when the §5.1 verify set starts the app the way production does (a Docker rebuild that passes its health checks) and the package is in no §3.5 class; JS/TS test helper nothing calls, inside a file that stays | Deleted automatically in batches (§5) |
 | **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); §3.7 effect imports; a test helper that is its own file, and every Python test helper (only vulture finds them); anything only ts-prune or vulture flags; an unused dependency that doesn't meet the SAFE bar | One batched ask (§6); deleted only if picked |
 | **DANGER** | Configs, entry points, framework-convention files and exports (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, `__init__.py` re-exports, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
@@ -162,8 +165,9 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
    - **The app runs in Docker** (a compose file builds its services): first check the settings
      point only at this machine -- every host in `docker compose config`'s environment values is
      a compose service name, `localhost` or `127.0.0.1`. A host anywhere else (a shared or real
-     database, a live API) → stop: "Your app's settings point at <host>, so I won't start it for
-     checks." Then, before **every** verify, `docker compose up -d --build --wait <app services>`
+     database, a live API) → stop, with nothing changed and no branch made: "Your app's settings point at <host>, so I
+     won't start it for checks. If that setting is only meant for the live app, point it at your
+     own machine for local runs and run /deadcode-it again." Then, before **every** verify, `docker compose up -d --build --wait <app services>`
      (this also runs the frontend's production build), and run the test commands in those fresh
      containers (`docker compose exec <service> pytest`, ...). Never `exec` into a container that
      was built before the batch -- it still holds the old code.
@@ -233,7 +237,7 @@ check. Each option in plain words:
   undo ("one step to bring it back").
 
 When the user answers, unpicked items go under `### Kept (user's call)` and are never asked about
-again. If the ask is dismissed or skipped, nothing was chosen: the items stay under Candidates
+again. An answer with nothing picked is an answer. If the ask is dismissed or skipped, nothing was chosen: the items stay under Candidates
 ("CAUTION, not yet decided") and are asked about on the next run.
 
 ## 7. Deletion log -- `docs/DELETION_LOG.md`
