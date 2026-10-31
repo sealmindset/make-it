@@ -190,6 +190,7 @@ bash install.sh
 | `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
 | `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
 | `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
+| `/deadcode-it` | Finds code your app no longer uses, proves it with tools and a search, and removes it in small checked steps with a deletion log; asks you about anything it can't fully prove | Routine upkeep, or when `/resume-it` says unused code has piled up |
 | `/threats-it` | Turns a threat advisory, CVE list or IOC list into a verified assessment: archived sources, attack chains, a read-only hunt of your Microsoft tenant, VEX, and a leadership briefing plus technical companion (Markdown + PDF) | A new threat lands and someone asks "does this affect us, and do we have indicators?" |
 
 ---
@@ -957,6 +958,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.48.0 -- /deadcode-it: clear out code nobody uses, safely
+
+A new upkeep skill. `/deadcode-it` finds dead code across the whole project and removes it without breaking anything.
+- **Proof, not guesses.** knip, depcheck, ts-prune, tsc and eslint (JS/TS) and ruff, vulture and deptry (Python) run in
+  parallel; an AI search then checks each candidate for string and path references, dynamic imports, framework entry
+  points, CI and script use, and config-loaded packages. A tool that can't run is reported, never read as "nothing found".
+- **Graded before it's touched.** SAFE items go automatically; CAUTION items (whole files, routes, shared utilities)
+  come to you in one plain-English pick list; DANGER items (configs, entry points, public APIs, migrations) and the
+  app's built-in scaffold features are never removed.
+- **Small, checked, undoable steps.** Green baseline first, one kind per batch, tests and build after each; a red batch
+  is rolled back and split until the culprit is found. Everything lands on a `chore/deadcode-<date>` branch.
+- **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.
+- **Wired into the framework.** New checks Q14 (unused imports in app-owned code, fixed in build-verify) and Q15
+  (report-only count to TODO.md, which `/resume-it` turns into a suggestion); `/retrofit-it` Discovery reports the counts.
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 

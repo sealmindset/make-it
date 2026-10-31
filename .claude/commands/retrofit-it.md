@@ -185,6 +185,9 @@ Construct a mental model of:
 - **User types and permissions** (even if informal -- like admin checks in code)
 - **External integrations** (APIs called, services connected)
 - **Existing quality** (tests, linting, CI, error handling)
+- **Dead code** -- the `deadcode.md` §2 Evidence pass, report-only: counts by kind (files,
+  exports, dependencies, imports). Nothing is deleted during a retrofit (it never mixes with
+  cleanup); the plan lists the counts and suggests /deadcode-it once the retrofit is verified
 - **AI calls and model choices** (if AI) -- every call site and the model it runs on as deployed,
   and the ladder report drafted per Prompt #10g step 1 for the plan (nothing is written yet;
   step 12b writes it to `.make-it/ai-ladder.md`)

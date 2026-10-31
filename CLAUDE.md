@@ -147,6 +147,25 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 `/make-it` writes `.make-it-state.md` at the end of the build phase. `/resume-it` and `/wrap-it` read and update this file each session. It tracks what was built, what's pending, test status, and suggested next steps.
 
+## /deadcode-it
+
+`/deadcode-it` is code-upkeep hygiene: it finds and removes dead code across the whole project (JS/TS and Python, any repo). Evidence, grading, cadence and log format live in `references/deadcode.md`.
+
+0. **Preconditions** -- Clean tree, `chore/deadcode-<date>` branch, earlier `docs/DELETION_LOG.md` read (its kept items are never re-asked)
+1. **Baseline** -- Full test/build must be green first; red → stop, nothing changed
+2. **Evidence** -- knip, depcheck, ts-prune, tsc, eslint / ruff, vulture, deptry run in parallel; a tool that can't run is reported, never read as "nothing found"
+3. **Review + grade** -- AI search proves each candidate (string/path forms, dynamic imports, framework conventions, CI/scripts, config-loaded deps); SAFE / CAUTION / DANGER
+4. **Delete SAFE** -- One category per batch, verify after each, commit green batches; red → roll back, split, regrade the culprit CAUTION
+5. **CAUTION ask** -- One multi-select ask in plain words; unpicked items are kept for good
+6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, plain-English summary with undo
+
+### Key Principles
+
+- Never deletes DANGER items (configs, entry points, framework-convention files, public APIs, migrations) or the keep-list (scaffold-owned files, user-kept items, generated code)
+- Delete only -- no refactors, renames or dedupes in a cleanup batch
+- Never weakens a check to make it pass; never pushes
+- Wired in through build-standards: Q14 (unused imports in app-owned code, auto-fixed in build-verify) and Q15 (report-only candidate count → TODO.md, which /resume-it turns into a suggestion); /retrofit-it Discovery reports the counts
+
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 
 Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side question -- answer in plain English under three headings: **The problem**, **Impact if it's not fixed** (Who it hits, The wider risk, How far it reaches), and **Why it's being fixed this way** (each choice and its reason, in the order the work runs; "no fix chosen yet" when none is). Keep it to about one screen, for quick understanding: no history of the card (how it was found, review rounds, dated calls) and no status unless asked. The full shape is `info` in `backlog-board.md`. `/btw` can't read files: answer only from what this session has already read, and if it hasn't read the card, say so and suggest `/backlog-it info <id>`.
@@ -162,6 +181,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
     wrap-it.md                    # Wrap-up skill -- save progress, shut down, prep for next session
     argo-it.md                    # Argo CD skill -- generate K8s manifests, deploy via GitOps
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
+    deadcode-it.md                # Dead-code skill -- prove unused, delete in verified batches, deletion log
     threats-it.md                 # Threat skill -- threat feed to verified IOC hunt, attack chains, VEX, report pair
   make-it/
     references/
@@ -176,6 +196,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
+      deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log (Q14-Q15)
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check

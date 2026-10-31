@@ -428,6 +428,10 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 **Q13** [Tier 0] [FIX] **CI quality gate workflow exists** -- `.github/workflows/quality-gate.yml` exists with four jobs: `python-quality` (ruff lint, ruff format, mypy, pytest), `frontend-quality` (eslint, prettier, tsc), `security-scan` (gitleaks, pip-audit, npm audit, trivy), and `attestation` (generates `quality-gate-report.json`). Workflow triggers on PRs to `main`. Attestation job uploads the report as a workflow artifact with 90-day retention. **Fix:** Copy from scaffold template (`.claude/make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml`), replace `[APP_SLUG]` with app slug from `app-context.json`.
 
+**Q14** [Tier 0] [FIX] **No unused imports in app-owned code** -- Lint-level dead code only. Applies to files outside the keep-list (`deadcode.md` §1: scaffold-owned, user-kept, generated). Python: `ruff check --select F401 --fix <file>` on app-owned files. JS/TS: `npx tsc --noEmit --noUnusedLocals`, then remove only the unused **import** specifiers it reports in app-owned files (never variables, functions or files), plus `npx eslint <app-owned files> --report-unused-disable-directives --fix`. Re-run Q01 and Q03 after. Nothing else is deleted here -- unused files, exports and dependencies are Q15's. N/A when the project has no Python or JS/TS code.
+
+**Q15** [Tier 0] [WARN] **Dead-code candidates counted** -- Run the `deadcode.md` §2 Evidence pass **report-only** (nothing deleted), drop keep-list items, count what remains by kind. Any left → one TODO.md line: "Run /deadcode-it -- <N> unused files, exports or dependencies found (none removed yet)". A tool that couldn't run is named in the line, not counted as zero. N/A when the project has no Python or JS/TS code.
+
 ---
 
 ## Live Verification Checks
