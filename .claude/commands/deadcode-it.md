@@ -108,7 +108,8 @@ removed -- each one is a single step to undo." Picked items run through the same
 
 <step name="log">
 
-Finish `docs/DELETION_LOG.md` per deadcode.md §7 (candidates, kept items, keep-list count), and
+Finish `docs/DELETION_LOG.md` per deadcode.md §7 (commit hashes in place of `this batch`,
+candidates incl. `in use` items, kept items, keep-list count), and
 add one line to `CHANGELOG.md` if it exists ("Removed <N> unused pieces of code -- see
 docs/DELETION_LOG.md"). If `TODO.md` exists and DANGER/unpicked candidates remain, one line
 pointing to the log. If `.make-it-state.md` exists, set `Last dead-code cleanup: <date>`.

@@ -39,6 +39,16 @@ check "make-it build-verify runs Q01-Q15"      gq -F "**Q01-Q15**" .claude/comma
 check "resume-it scans Q01-Q15"                gq -F "**Code Quality (Q01-Q15):**" .claude/commands/resume-it.md
 check "resume-it suggests /deadcode-it"        gq -F "(routes to /deadcode-it)" .claude/commands/resume-it.md
 check "retrofit-it Discovery counts dead code" gq -F "Evidence pass, report-only" .claude/commands/retrofit-it.md
+check "vulture alone can't block a ruff/tsc import"   gq -F "vulture's confidence doesn't matter then" "$REF"
+check "proven-in-use items are dropped, not graded"  gq -F "**In use (not graded).**" "$REF"
+check "manifests are judged per dependency"     gq -F "judged per entry, not by path" "$REF"
+check "eslint only runs with an eslint config"  gq -F 'not run: no eslint config' "$REF"
+check "CI commands are in the verify set"       gq -F "plus every command CI runs" "$REF"
+check "dep batches verify on a fresh install"   gq -F "verified on a fresh install from the manifest" "$REF"
+check "a one-item ask still has two options"    gq -F '"Remove it" / "Keep it"' "$REF"
+check "log hashes are filled in at the end"     gq -F "replaces those with the short hashes" "$REF"
+check "deptry sees the project's packages"      gq -F "uvx --with-requirements requirements.txt deptry" "$REF"
+check "deps are removed by hand, not npm uninstall" gq -F '`npm uninstall` reformats `package.json`' "$REF"
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 # controls: a dropped tool or grade must fail
 tools <(grep -v "| vulture |" "$REF") && bad "control: missing tool passed" || ok "control: missing tool fails tools"

@@ -17,7 +17,9 @@ A path is **kept** when any of these holds. Kept paths are reported, never grade
    `~/.claude/make-it/scaffolds/fastapi-nextjs/` (or `scaffolds/overlays/<variant>/` when
    `app-context.json` names a variant). These are capabilities the app ships with on purpose
    (AI Instructions pages, notifications, PWA parts, DataTable options) even when nothing uses
-   them yet. Report them as "built-in features not used yet".
+   them yet. Report them as "built-in features not used yet". Dependency manifests
+   (`package.json`, `requirements.txt`, `pyproject.toml`) are judged per entry, not by path: a
+   dependency is scaffold-owned only if the scaffold's own manifest lists it.
 2. **Kept by the user's call** -- listed under `### Kept (user's call)` in any earlier run of
    `docs/DELETION_LOG.md`. Never ask about it again; report it in the count only.
 3. **Generated or vendored** -- `node_modules/`, `.next/`, `dist/`, `build/`, `venv/`,
@@ -37,13 +39,14 @@ directory outside the repo (inside it, a file named `knip.json` is read by knip 
 | JS/TS | depcheck | `npx -y depcheck --json` | unused and missing deps (second opinion on knip) |
 | JS/TS | ts-prune | `npx -y ts-prune` | unused exports (archived upstream: corroboration only, never the sole evidence) |
 | JS/TS | tsc | `npx tsc --noEmit --noUnusedLocals` | unused imports and locals |
-| JS/TS | eslint | `npx eslint . --report-unused-disable-directives -f json` | unused vars (per the project's config), stale `eslint-disable` comments |
+| JS/TS | eslint | `npx --no-install eslint . --report-unused-disable-directives -f json` -- only when an `eslint.config.*` or `.eslintrc*` exists; none → "not run: no eslint config" | unused vars (per the project's config), stale `eslint-disable` comments |
 | Python | ruff | `uvx ruff check --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
 | Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <keep-list dirs>` | unused functions, classes, attributes, variables (confidence %) |
-| Python | deptry | `cd <dir with requirements.txt or pyproject.toml> && uvx deptry . --json-output <scratch>/deptry.json` | unused deps (DEP002 only; its exit code is 1 whenever it finds anything) |
+| Python | deptry | `cd <dir with requirements.txt> && uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json` (pyproject projects: `uvx --with <project dir> deptry .`) -- without the project's packages in its environment deptry can't map `PyYAML` → `yaml` and reports false hits | unused deps (DEP002 only; DEP001 "missing" is not dead code; exit code 1 whenever it finds anything) |
 
 A tool that can't run (no network, no install, crash) is recorded as **not run, with the
-reason** -- never as "no findings". Merge the outputs into one candidate list: item, kind
+reason** -- never as "no findings". `<src>` is the same for ruff and vulture: every Python source
+directory outside the keep-list; vulture's `--exclude` gets the §1.3 generated directories. Merge the outputs into one candidate list: item, kind
 (import / local / export / file / dependency / test helper), location, which tools flagged it.
 
 ## 3. AI review (prove each candidate)
@@ -85,23 +88,34 @@ in parallel. A candidate survives as dead only when every check comes back empty
 
 | Grade | What qualifies | What happens |
 |-------|----------------|--------------|
-| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import or local; unused export of an internal module; unused dependency (§3.5 checked); test helper nothing calls | Deleted automatically in batches (§5) |
-| **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything with a dynamic-reference shape nearby (§3.2); used only by its own tests (§3.6); vulture confidence below 100% | One batched ask (§6); deleted only if picked |
+| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import or local (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then); unused export of an internal module; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
+| **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); flagged **only** by vulture below 100% | One batched ask (§6); deleted only if picked |
 | **DANGER** | Configs, entry points, framework-convention files (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
 Torn between two grades → the higher one.
+
+**In use (not graded).** A §3 check that finds a real use -- a dynamic import whose pattern
+matches it, a `getattr` whose name it fits, a command, a config entry, an import under another
+name -- means the tool was wrong: it is not dead code. Drop it from grading and log it under
+Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An item that is also DANGER
+(e.g. a `package.json` `main`) is logged as DANGER.
 
 ## 5. Deletion cadence (SAFE, then picked CAUTION)
 
 1. **Baseline green.** Run the project's full verify set -- backend tests, frontend build,
    type-check, lint (`pytest`, `npm run build`, `npm run type-check`, `npm run lint`, or what
-   `package.json`/CI defines; inside the containers if the app runs in Docker). Red baseline →
+   `package.json` defines, plus every command CI runs; inside the containers if the app runs in
+   Docker). Red baseline →
    stop. Nothing is deleted on a red baseline; hand the failure to `/debug-it`.
 2. **One category per batch**, in this order: unused imports/locals → unused dependencies →
    unused exports → unused test helpers → picked CAUTION items. At most ~20 items per batch.
 3. **Delete only.** No renames, moves, reformatting, dedupes or "while I'm here" edits in a
-   cleanup batch. Removing a dependency also updates its lockfile (`npm install`; rebuild the
-   image if the app runs in Docker).
+   cleanup batch. Remove a dependency by deleting its manifest line by hand, then `npm install`
+   to update the lockfile (`npm uninstall` reformats `package.json`). That batch is
+   verified on a fresh install from the manifest (`npm ci`; a new venv from `requirements.txt`; the image
+   rebuilt if the app runs in Docker), not on the old environment.
+   After the imports/locals batch, re-run the evidence tools once: removing an import can leave
+   what it imported unused.
 4. **Re-run the verify set immediately.**
    - Green → commit the batch with its log entry (§7):
      `chore(deadcode): remove <N> unused <category>`.
@@ -117,7 +131,11 @@ Torn between two grades → the higher one.
 
 One ask for the whole run (approval-block.md: consequential; the user picks the specific items,
 never a plain yes). AskUserQuestion, `multiSelect: true`, up to 4 questions × 4 options = 16 items,
-ranked by strength of evidence; the rest stay candidates. Each option in plain words:
+ranked by strength of evidence; the rest stay candidates. Every question needs at least 2
+options: merge small groups into one question, and a single item becomes one question with the
+options "Remove it" / "Keep it". Open the ask with the approval-block.md points that apply to
+the whole set: what is unusual about these items (why they aren't SAFE) and the one thing to
+check. Each option in plain words:
 
 - **label** -- what it is ("Old 'Reports' chart", "Unused 'lodash' package")
 - **description** -- the evidence ("no page links to it; nothing loads it by name; knip and
@@ -129,7 +147,8 @@ Unpicked items go under `### Kept (user's call)` in the log and are never asked 
 ## 7. Deletion log -- `docs/DELETION_LOG.md`
 
 Created on the first run with a `# Deletion Log` title and one line saying what it is. Each run
-appends one section; each batch commit carries its own rows.
+appends one section; each batch commit carries its own rows with `this batch` in the Commit
+column, and the final log commit (the skill's `log` step) replaces those with the short hashes.
 
 ```markdown
 ## <YYYY-MM-DD> -- /deadcode-it
