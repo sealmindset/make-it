@@ -70,6 +70,10 @@ check "cleanup branches off the current HEAD"  gq -F 'off the **current HEAD**' 
 check "the report names the starting branch"   gq -F '`<starting branch>`' "$CMD"
 check "resume-it doesn't re-run Q15 tools each time" gq -F "re-run the \`deadcode.md\` §2 tools only when neither exists" .claude/commands/resume-it.md
 check "retrofit evidence pass is best effort"  gq -F "Best effort: an app that won't install yet" .claude/commands/retrofit-it.md
+check "stdlib imports are ordinary unused imports" gq -F "Standard-library modules" "$REF"
+check "release steps are never run"            gq -F "Never run a step that releases, deploys, publishes" "$REF"
+check "a dismissed ask keeps nothing for good" gq -F "If the ask is dismissed or skipped, nothing was chosen" "$REF"
+check "keep/drop the cleanup have procedures"  gq -F "git merge --ff-only chore/deadcode-" "$CMD"
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 # controls: a dropped tool or grade, or a widened SAFE row, must fail
 saferow <(sed -E 's/^(\| \*\*SAFE\*\* \|)/\1 whole files;/' "$REF") && bad "control: widened SAFE row passed" || ok "control: widened SAFE row fails saferow"

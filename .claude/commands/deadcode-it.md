@@ -107,7 +107,8 @@ Progress to the user, one line per batch: "Removed 12 unused imports -- everythi
 No CAUTION items → skip. Otherwise one ask per deadcode.md §6, opening with one line: "I found
 <N> things that look unused but could be loaded in a way I can't fully prove. Pick any you want
 removed -- each one is a single step to undo." Picked items run through the same cadence
-(§5.4) as their own batch(es). Unpicked → `Kept (user's call)`.
+(§5.4) as their own batch(es). Unpicked after an answer → `Kept (user's call)`; ask dismissed →
+they stay candidates (deadcode.md §6).
 
 </step>
 
@@ -126,12 +127,18 @@ Commit: `docs(deadcode): deletion log for <date>`.
 
 Plain English, about one screen:
 - **Removed:** counts by kind, and that everything was checked after each step.
-- **Left alone on purpose:** DANGER candidates and built-in features not used yet, in one line
-  each, with the log path for detail.
+- **Left alone on purpose:** DANGER candidates, things the checkers got wrong (in use), items
+  the user kept, and built-in features not used yet, in one line each, with the log path for
+  detail.
 - **Couldn't check:** any tool not run, and why (hide nothing).
 - **Undo:** "I kept this cleanup separate from your other work (started from your latest work on
-  `<starting branch>`). Nothing is shared yet. To keep it, run /ship-it; to undo it all, say
-  'drop the cleanup' and I'll throw it away and put you back where you were."
+  `<starting branch>`). Nothing is shared yet. Say 'keep the cleanup' and I'll add it to your
+  work, or 'drop the cleanup' and I'll throw it away and put you back where you were."
+  - **keep the cleanup** → `git switch <starting branch> && git merge --ff-only chore/deadcode-<date>`,
+    then `git branch -d chore/deadcode-<date>`. Not a fast-forward (the starting branch moved) →
+    stop and say so; don't merge.
+  - **drop the cleanup** → `git switch <starting branch> && git branch -D chore/deadcode-<date>`
+    (only that branch: it holds nothing but this run's commits).
 - Sample to inspect: name 3 removed items from the log so the user can spot-check one.
 
 </step>

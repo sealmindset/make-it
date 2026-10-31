@@ -23,7 +23,7 @@ A path is **kept** when any of these holds. Kept paths are reported, never grade
    dependency is scaffold-owned only if the scaffold's own manifest lists it.
 2. **Kept by the user's call** -- listed under `### Kept (user's call)` in any earlier run of
    `docs/DELETION_LOG.md`. Never ask about it again; report it in the count only.
-3. **Generated or vendored** -- `node_modules/`, `.next/`, `dist/`, `build/`, `venv/`,
+3. **Generated or vendored** -- `node_modules/`, `.next/`, `dist/`, `build/`, `venv/`, `.venv/`,
    `__pycache__/`, `mock-services/`, `alembic/versions/`, lockfiles, codegen output (a file with
    a "generated"/"do not edit" header, or the output path of a codegen config).
 
@@ -46,7 +46,8 @@ directory outside the repo (inside it, a file named `knip.json` is read by knip 
 | Python | deptry | `cd <dir with requirements.txt> && uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json` (pyproject projects: `uvx --with <project dir> deptry .`) -- without the project's packages in its environment deptry can't map `PyYAML` → `yaml` and reports false hits | unused deps (DEP002 only; DEP001 "missing" is not dead code; exit code 1 whenever it finds anything) |
 
 A tool that can't run (no network, no install, crash) is recorded as **not run, with the
-reason** -- never as "no findings". `<src>` is the same for ruff and vulture: every Python source
+reason** -- never as "no findings". Most of these tools exit non-zero when they find something
+(knip 1, depcheck 255, tsc 2, ruff 1, vulture 3, deptry 1): a tool ran if it produced its report. `<src>` is the same for ruff and vulture: every Python source
 directory outside the keep-list; vulture's `--exclude` gets the §1.3 generated directories. Merge the outputs into one candidate list: item, kind
 (import / local / export / file / dependency / test helper), location, which tools flagged it.
 
@@ -87,9 +88,11 @@ in parallel. A candidate survives as dead only when every check comes back empty
      `beautifulsoup4` → `bs4`. Grep the import name, not just the package name.
 6. **Only its own tests** -- if the only references are its tests, it is dead code, but removing
    it removes tests too: grade CAUTION, never SAFE.
-7. **Imported for its effect** -- an import whose imported name is a module (a file or package of
-   that name exists: `import app.models.reports`, `from . import signals`), an import inside a
-   function body, or a JS bare import (`import "./x"`). These run code when loaded (register
+7. **Imported for its effect** -- an import of a module that lives in this project (a file or
+   package in the repo: `import app.models.reports`, `from . import signals`) or of a third-party
+   package imported whole (`import some_plugin`), an import inside a function body, or a JS bare
+   import (`import "./x"`). Standard-library modules (`import json`, `import os`) don't register
+   anything when loaded: an unused one is an ordinary unused import. These run code when loaded (register
    routes, models, signals, plugins) and tests rarely notice them gone: CAUTION, never SAFE.
    `ruff --fix` deletes them (it turns `def ready(): from . import signals` into `pass`), so
    ruff's fix is never applied blindly -- remove only the specifiers this check clears.
@@ -102,7 +105,7 @@ in parallel. A candidate survives as dead only when every check comes back empty
 
 | Grade | What qualifies | What happens |
 |-------|----------------|--------------|
-| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import of a named symbol (not §3.7) or unused local whose right-hand side is a literal or a plain name (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then; a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)` -- or grade CAUTION); unused export of an internal module that §3.8 cleared; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
+| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import that §3.7 cleared or unused local whose right-hand side is a literal or a plain name (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then; a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)`; that is the one edit a cleanup batch makes beyond deleting); unused export of an internal module that §3.8 cleared; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
 | **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); flagged **only** by vulture below 100% | One batched ask (§6); deleted only if picked |
 | **DANGER** | Configs, entry points, framework-convention files (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
@@ -120,12 +123,15 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
 1. **Baseline green.** Run the project's full verify set -- backend tests, frontend build,
    type-check, lint (`pytest`, `npm run build`, `npm run type-check`, `npm run lint`, or what
    `package.json` defines, plus the build/test commands CI runs; inside the containers if the app
-   runs in Docker). Security and audit scans (`npm audit`, `pip-audit`, gitleaks, trivy) are not
+   runs in Docker). Never run a step that releases, deploys, publishes, tags, pushes, sends
+   anything, or migrates a real database -- even when CI runs it; name it in the log as "not run
+   (release step)" instead. Security and audit scans (`npm audit`, `pip-audit`, gitleaks, trivy) are not
    part of it: a newly published advisory isn't a broken app. Red baseline → stop. Nothing is deleted on a red baseline; hand the failure to `/debug-it`.
 2. **One category per batch**, in this order: unused imports/locals → unused dependencies →
    unused exports → unused test helpers → picked CAUTION items. At most ~20 items per batch.
 3. **Delete only.** No renames, moves, reformatting, dedupes or "while I'm here" edits in a
-   cleanup batch. Remove a dependency by deleting its manifest line by hand, then `npm install`
+   cleanup batch. Remove a dependency by deleting its manifest entry by hand (keep the file valid: a JSON entry
+   may share a line with others), then `npm install`
    to update the lockfile (`npm uninstall` reformats `package.json`). That batch is
    verified on a fresh install from the manifest (`npm ci`; a new venv from `requirements.txt`; the image
    rebuilt if the app runs in Docker), not on the old environment.
@@ -160,7 +166,9 @@ check. Each option in plain words:
   ts-prune both flag it"), what removing it changes for the user ("nothing you can see"), and the
   undo ("one step to bring it back").
 
-Unpicked items go under `### Kept (user's call)` in the log and are never asked about again.
+When the user answers, unpicked items go under `### Kept (user's call)` and are never asked about
+again. If the ask is dismissed or skipped, nothing was chosen: the items stay under Candidates
+("CAUTION, not yet decided") and are asked about on the next run.
 
 ## 7. Deletion log -- `docs/DELETION_LOG.md`
 
