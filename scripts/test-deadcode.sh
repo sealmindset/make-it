@@ -66,14 +66,26 @@ check "rollback covers the whole repo"         gq -F 'git restore --staged --wor
 check "a rolled-back dep batch reinstalls"     gq -F "reinstalls from the restored" "$REF"
 check "scaffold keep-list only in make-it apps" gq -F 'only when `.make-it/app-context.json` exists' "$REF"
 check "a one-item ask is single-select"        gq -F '(`multiSelect: false`) with the options' "$REF"
-check "cleanup branches off the current HEAD"  gq -F 'off the **current HEAD**' "$CMD"
+check "cleanup branch made from HEAD after a green baseline" gq -F 'Green → create the cleanup branch from HEAD' "$CMD"
+check "no branch exists before the baseline"   gq -F "No branch yet -- it is made only after the baseline is green." "$CMD"
+check "an old cleanup branch is never continued" gq -F "There's an earlier cleanup still waiting" "$CMD"
 check "the report names the starting branch"   gq -F '`<starting branch>`' "$CMD"
-check "resume-it doesn't re-run Q15 tools each time" gq -F "re-run the \`deadcode.md\` §2 tools only when neither exists" .claude/commands/resume-it.md
+check "resume-it doesn't re-run Q15 tools each time" gq -F "re-run the \`deadcode.md\` §2 tools only when there is none" .claude/commands/resume-it.md
 check "retrofit evidence pass is best effort"  gq -F "Best effort: an app that won't install yet" .claude/commands/retrofit-it.md
 check "stdlib imports are ordinary unused imports" gq -F "Standard-library modules" "$REF"
 check "release steps are never run"            gq -F "Never run a step that releases, deploys, publishes" "$REF"
 check "a dismissed ask keeps nothing for good" gq -F "If the ask is dismissed or skipped, nothing was chosen" "$REF"
-check "keep/drop the cleanup have procedures"  gq -F "git merge --ff-only chore/deadcode-" "$CMD"
+check "keep/drop the cleanup have procedures"  gq -F "git merge --ff-only" "$CMD"
+check "keep never merges into the default branch" gq -F "never merge into the default branch" "$CMD"
+check "branch -D appears once, in drop only"   bash -c '[ "$(grep -c -F "branch -D" "$1")" = 1 ] && [ "$(grep -F "branch -D" "$1" | grep -c -F "drop the cleanup")" = 1 ]' _ "$CMD"
+check "untracked files are never candidates"   gq -F '**Untracked** -- anything `git ls-files --others --exclude-standard` lists' "$REF"
+check "last in-project import is CAUTION"      gq -F "when it is the only import of that" "$REF"
+check "a commit hook's edits are re-verified"  gq -F "is unverified again" "$REF"
+check "log rows only after a green verify"     gq -F "rows are written only now, never before a green" "$REF"
+check "every multi-item question can keep all" gq -F '"Keep all of these"' "$REF"
+check "Q14 re-runs the tests"                  gq -E '^\*\*Q14\*\*.*the project.s tests \(T01\)' "$BS"
+check "Q14 is report-only in a retrofit"       gq -F "during a retrofit **Q14 is report-only**" .claude/commands/retrofit-it.md
+check "the Q15 TODO line is kept current"      gq -F "Q15 dead-code line" "$CMD"
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 # controls: a dropped tool or grade, or a widened SAFE row, must fail
 saferow <(sed -E 's/^(\| \*\*SAFE\*\* \|)/\1 whole files;/' "$REF") && bad "control: widened SAFE row passed" || ok "control: widened SAFE row fails saferow"

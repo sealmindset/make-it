@@ -50,16 +50,22 @@ goes in the deletion log, not in chat.
 
 Silently:
 1. Git repo with no uncommitted changes to tracked files (`git status --porcelain
-   --untracked-files=no` empty; untracked files are never touched). Not clean → stop and say:
-   "You have changes that aren't saved into your project's history yet. Run /wrap-it first, then
-   run /deadcode-it again -- I keep cleanup separate from other work so it's easy to undo."
-2. Branch: `chore/deadcode-<YYYY-MM-DD>` off the **current HEAD**, so "unused" is judged
-   against the user's newest code (a /make-it user's local feature branch is often days ahead of
-   `main`). On the default branch with a remote → `git fetch` and fast-forward first. Already on
-   a `chore/deadcode-*` branch → continue on it. Remember the branch you started from: the
-   report names it.
-3. Read `docs/DELETION_LOG.md` if it exists: its `Kept (user's call)` items are on the keep-list.
-4. Read `.make-it/app-context.json` if present (variant → which scaffold overlay is kept).
+   --untracked-files=no` empty; untracked files are never touched -- deadcode.md §1.4). Not
+   clean → stop and say: "You have changes that aren't saved into your project's history yet.
+   Say 'save my changes' and I'll save them, then start the cleanup -- I keep cleanup separate
+   from other work so it's easy to undo." Saving = one commit of those changes on the current
+   branch (on the default branch, a `feature/<short-name>` branch first -- git-operations.md).
+2. On a `chore/deadcode-*` branch → stop: "There's an earlier cleanup still waiting. Say 'keep
+   the cleanup' or 'drop the cleanup' for that one first." (its log header names the branch it
+   started from; the `report` step's keep/drop procedures apply to it).
+3. Record the **starting branch** (`git branch --show-current`). On the default branch with a
+   remote → `git fetch`, then `git merge --ff-only` from the remote; not a fast-forward → carry
+   on from HEAD as it is.
+4. Read `docs/DELETION_LOG.md` if it exists: its `Kept (user's call)` items are on the keep-list.
+5. Read `.make-it/app-context.json` if present (it switches the scaffold keep-list on; variant →
+   which overlay).
+
+No branch yet -- it is made only after the baseline is green.
 
 Tell the user one line: "Looking for code your app no longer uses. I'll check everything works
 before and after each change."
@@ -68,9 +74,15 @@ before and after each change."
 
 <step name="baseline">
 
-deadcode.md §5.1: find and run the full verify set; record the commands and the short sha.
-Red → stop: "Your app has a problem that isn't about unused code: <one line>. I didn't change
-anything. Want me to look into it?" Yes → /debug-it.
+deadcode.md §5.1: find the verify set. If the app runs in Docker and its containers aren't up,
+start them (`docker compose up -d`, then wait for health checks). Run the set; record the
+commands and the short sha.
+Red → stop, on the starting branch with nothing changed: "Your app has a problem that isn't
+about unused code: <one line>. I didn't change anything. Want me to look into it?" Yes →
+/debug-it.
+
+Green → create the cleanup branch from HEAD: `git switch -c chore/deadcode-<YYYY-MM-DD>`
+(that name taken → `-2`, `-3`, ...). This run's commits are the only ones on it.
 
 </step>
 
@@ -115,10 +127,10 @@ they stay candidates (deadcode.md §6).
 <step name="log">
 
 Finish `docs/DELETION_LOG.md` per deadcode.md §7 (commit hashes in place of `this batch`,
-candidates incl. `in use` items, kept items, keep-list count), and
-add one line to `CHANGELOG.md` if it exists ("Removed <N> unused pieces of code -- see
-docs/DELETION_LOG.md"). If `TODO.md` exists and DANGER/unpicked candidates remain, one line
-pointing to the log. If `.make-it-state.md` exists, set `Last dead-code cleanup: <date>`.
+candidates incl. `in use` items, kept items, keep-list count). If `CHANGELOG.md` exists, one line
+("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md"). If `TODO.md` exists, replace
+its Q15 dead-code line (if any) with the current count of candidates left, or remove it when none
+are left, so /resume-it never repeats an old count.
 Commit: `docs(deadcode): deletion log for <date>`.
 
 </step>
@@ -131,15 +143,21 @@ Plain English, about one screen:
   the user kept, and built-in features not used yet, in one line each, with the log path for
   detail.
 - **Couldn't check:** any tool not run, and why (hide nothing).
-- **Undo:** "I kept this cleanup separate from your other work (started from your latest work on
-  `<starting branch>`). Nothing is shared yet. Say 'keep the cleanup' and I'll add it to your
-  work, or 'drop the cleanup' and I'll throw it away and put you back where you were."
-  - **keep the cleanup** → `git switch <starting branch> && git merge --ff-only chore/deadcode-<date>`,
-    then `git branch -d chore/deadcode-<date>`. Not a fast-forward (the starting branch moved) →
-    stop and say so; don't merge.
-  - **drop the cleanup** → `git switch <starting branch> && git branch -D chore/deadcode-<date>`
-    (only that branch: it holds nothing but this run's commits).
+- **Keep or undo:** "I kept this cleanup separate from your other work (started from your latest
+  work on `<starting branch>`). Nothing is shared yet." Then, by starting branch:
+  - a feature branch → "Say 'keep the cleanup' and I'll add it to your work, or 'drop the
+    cleanup' and I'll throw it away and put you back where you were."
+  - the default branch → "To add it to your app, run /ship-it -- it goes through the usual
+    review. Or say 'drop the cleanup' and I'll throw it away."
 - Sample to inspect: name 3 removed items from the log so the user can spot-check one.
+
+Procedures (the starting branch comes from this run, or from the log header of an earlier run):
+- **keep the cleanup** (feature-branch start only; never merge into the default branch -- that
+  goes through /ship-it) → `git switch <starting branch> && git merge --ff-only
+  chore/deadcode-<date>`, then `git branch -d chore/deadcode-<date>`. Not a fast-forward (the
+  starting branch moved since) → stop and say so; don't merge.
+- **drop the cleanup** → `git switch <starting branch> && git branch -D chore/deadcode-<date>`.
+  Safe because the branch was created by that run and holds only its commits.
 
 </step>
 

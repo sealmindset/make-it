@@ -1214,6 +1214,8 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
+- **Q01-Q15**: Code quality -- except that during a retrofit **Q14 is report-only**: nothing is
+  deleted from the existing app (its unused imports fold into Q15's count for /deadcode-it)
 
 For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately

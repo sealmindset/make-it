@@ -40,7 +40,7 @@ From your project folder, type:
 /deadcode-it
 ```
 
-Save your work first (or run [`/wrap-it`](13-wrap-it.md)) — it keeps the cleanup separate so it's easy to undo. [`/resume-it`](02-resume-it.md) will also suggest it when unused code piles up.
+If you have unsaved changes, it offers to save them first — it keeps the cleanup separate so it's easy to undo. Files you haven't saved into your project yet are never touched. [`/resume-it`](02-resume-it.md) will also suggest it when unused code piles up.
 
 ---
 

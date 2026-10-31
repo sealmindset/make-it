@@ -151,13 +151,13 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 `/deadcode-it` is code-upkeep hygiene: it finds and removes dead code across the whole project (JS/TS and Python, any repo). Evidence, grading, cadence and log format live in `references/deadcode.md`.
 
-0. **Preconditions** -- Clean tree, `chore/deadcode-<date>` branch, earlier `docs/DELETION_LOG.md` read (its kept items are never re-asked)
-1. **Baseline** -- Full test/build must be green first; red → stop, nothing changed
+0. **Preconditions** -- No unsaved tracked changes (untracked files are never touched), no earlier cleanup still waiting, starting branch recorded, earlier `docs/DELETION_LOG.md` read (its kept items are never re-asked)
+1. **Baseline** -- Full test/build must be green first; red → stop, nothing changed. Green → a fresh `chore/deadcode-<date>` branch
 2. **Evidence** -- knip, depcheck, ts-prune, tsc, eslint / ruff, vulture, deptry run in parallel; a tool that can't run is reported, never read as "nothing found"
 3. **Review + grade** -- AI search proves each candidate (string/path forms, dynamic imports, framework conventions, CI/scripts, config-loaded deps); SAFE / CAUTION / DANGER
 4. **Delete SAFE** -- One category per batch, verify after each, commit green batches; red → roll back, split, regrade the culprit CAUTION
 5. **CAUTION ask** -- One multi-select ask in plain words; unpicked items are kept for good
-6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, plain-English summary with undo
+6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, plain-English summary. Keep = fast-forward into a feature branch, or /ship-it from the default branch; drop = delete only that run's branch
 
 ### Key Principles
 
