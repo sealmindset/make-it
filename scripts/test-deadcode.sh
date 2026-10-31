@@ -86,6 +86,11 @@ check "every multi-item question can keep all" gq -F '"Keep all of these"' "$REF
 check "Q14 re-runs the tests"                  gq -E '^\*\*Q14\*\*.*the project.s tests \(T01\)' "$BS"
 check "Q14 is report-only in a retrofit"       gq -F "during a retrofit **Q14 is report-only**" .claude/commands/retrofit-it.md
 check "the Q15 TODO line is kept current"      gq -F "Q15 dead-code line" "$CMD"
+check "kept decisions are read from every branch" gq -F "on **any local branch**" "$REF"
+check "a red batch's culprit is in use, never offered" gq -F "never offer it for removal" "$REF"
+check "run-time commands are a dynamic shape"   gq -F "commands built at run time" "$REF"
+check "waiting-cleanup message fits its start"  gq -F "if it started from the default branch" "$CMD"
+check "keep/drop reinstall changed deps"        gq -F "so what's installed matches it again" "$CMD"
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 # controls: a dropped tool or grade, or a widened SAFE row, must fail
 saferow <(sed -E 's/^(\| \*\*SAFE\*\* \|)/\1 whole files;/' "$REF") && bad "control: widened SAFE row passed" || ok "control: widened SAFE row fails saferow"

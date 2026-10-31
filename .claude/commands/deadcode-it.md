@@ -55,13 +55,16 @@ Silently:
    Say 'save my changes' and I'll save them, then start the cleanup -- I keep cleanup separate
    from other work so it's easy to undo." Saving = one commit of those changes on the current
    branch (on the default branch, a `feature/<short-name>` branch first -- git-operations.md).
-2. On a `chore/deadcode-*` branch → stop: "There's an earlier cleanup still waiting. Say 'keep
-   the cleanup' or 'drop the cleanup' for that one first." (its log header names the branch it
-   started from; the `report` step's keep/drop procedures apply to it).
+2. On a `chore/deadcode-*` branch → stop. Its log header names the branch it started from, and
+   the `report` step's keep/drop procedures apply to it. Say:
+   "There's an earlier cleanup still waiting." plus, if it started from a feature branch, "Say 'keep the cleanup' or 'drop the
+   cleanup' for that one first."; if it started from the default branch, "Run /ship-it to add
+   it to your app, or say 'drop the cleanup'."
 3. Record the **starting branch** (`git branch --show-current`). On the default branch with a
    remote → `git fetch`, then `git merge --ff-only` from the remote; not a fast-forward → carry
    on from HEAD as it is.
-4. Read `docs/DELETION_LOG.md` if it exists: its `Kept (user's call)` items are on the keep-list.
+4. Read `docs/DELETION_LOG.md` from every local branch that has one (deadcode.md §1.2): its
+   `Kept (user's call)` and `in use` items are not candidates again.
 5. Read `.make-it/app-context.json` if present (it switches the scaffold keep-list on; variant →
    which overlay).
 
@@ -109,8 +112,11 @@ Grade conservatively: torn → the higher grade.
 <step name="delete-safe">
 
 deadcode.md §5.2-§5.5 on the SAFE items: one category per batch, verify after each, commit
-green batches with their log rows, bisect and regrade red ones.
+green batches with their log rows, bisect red ones (the item that breaks a batch is logged
+`in use`).
 Progress to the user, one line per batch: "Removed 12 unused imports -- everything still works."
+A batch that went red: "Removed 2 unused packages -- everything still works. One more ('<name>')
+turned out to be needed, so I put it back."
 
 </step>
 
@@ -118,7 +124,8 @@ Progress to the user, one line per batch: "Removed 12 unused imports -- everythi
 
 No CAUTION items → skip. Otherwise one ask per deadcode.md §6, opening with one line: "I found
 <N> things that look unused but could be loaded in a way I can't fully prove. Pick any you want
-removed -- each one is a single step to undo." Picked items run through the same cadence
+removed -- each one is a single step to undo." A picked whole-file item deletes the file.
+Picked items run through the same cadence
 (§5.4) as their own batch(es). Unpicked after an answer → `Kept (user's call)`; ask dismissed →
 they stay candidates (deadcode.md §6).
 
@@ -158,6 +165,11 @@ Procedures (the starting branch comes from this run, or from the log header of a
   starting branch moved since) → stop and say so; don't merge.
 - **drop the cleanup** → `git switch <starting branch> && git branch -D chore/deadcode-<date>`.
   Safe because the branch was created by that run and holds only its commits.
+- After either one, if the cleanup removed a dependency, reinstall from the manifest of the
+  branch you're now on (`npm ci`; the project's venv from its requirements; rebuild the image if
+  the app runs in Docker), so what's installed matches it again.
+- Say what happened in one line: "Done -- the cleanup is now part of your work on `<branch>`." /
+  "Dropped -- you're back on `<branch>` exactly as it was."
 
 </step>
 

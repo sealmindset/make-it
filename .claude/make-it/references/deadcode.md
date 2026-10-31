@@ -22,7 +22,10 @@ A path is **kept** when any of these holds. Kept paths are reported, never grade
    (`package.json`, `requirements.txt`, `pyproject.toml`) are judged per entry, not by path: a
    dependency is scaffold-owned only if the scaffold's own manifest lists it.
 2. **Kept by the user's call** -- listed under `### Kept (user's call)` in any earlier run of
-   `docs/DELETION_LOG.md`. Never ask about it again; report it in the count only.
+   `docs/DELETION_LOG.md` on **any local branch** (a kept cleanup lives on the branch it was added
+   to, so read `git show <branch>:docs/DELETION_LOG.md` for every branch in
+   `git for-each-ref --format='%(refname:short)' refs/heads`). Its `in use` candidates (including
+   ones a red batch proved) count the same way: not dead, not re-tried. Never ask about it again; report it in the count only.
 3. **Generated or vendored** -- `node_modules/`, `.next/`, `dist/`, `build/`, `venv/`, `.venv/`,
    `__pycache__/`, `mock-services/`, `alembic/versions/`, lockfiles, codegen output (a file with
    a "generated"/"do not edit" header, or the output path of a codegen config).
@@ -67,7 +70,9 @@ in parallel. A candidate survives as dead only when every check comes back empty
    camel variants; the route a page file serves. Grep can't see dynamic references, so look for
    them by shape: `import(` with a template or variable, `require(` with a variable,
    `importlib`, `getattr`/`setattr`, `__import__`, registry dicts or maps keyed by name,
-   `entry_points`, plugin lists.
+   `entry_points`, plugin lists, and commands built at run time (`subprocess`/`os.system`/
+   `child_process` calls, `python -m <var>`, `npx <var>`) -- a package such a call could start is
+   CAUTION, not SAFE.
 3. **Framework convention** -- Next.js `app/**/{page,layout,route,loading,error,not-found,template,default}.*`,
    `middleware.*`, `instrumentation.*`, `sw.ts`, `next.config.*`; FastAPI/Flask decorated handlers
    (`@router.*`, `@app.*`), dependencies used via `Depends(...)`, startup/lifespan hooks; pytest
@@ -138,7 +143,7 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
    cleanup batch. Remove a dependency by deleting its manifest entry by hand (keep the file valid: a JSON entry
    may share a line with others), then `npm install`
    to update the lockfile (`npm uninstall` reformats `package.json`). That batch is
-   verified on a fresh install from the manifest (`npm ci`; a new venv from `requirements.txt`; the image
+   verified on a fresh install from the manifest (`npm ci`; a new venv from `requirements.txt`, made in the scratch directory; the image
    rebuilt if the app runs in Docker), not on the old environment.
    After the imports/locals batch, re-run the evidence tools once: removing an import can leave
    what it imported unused. New candidates go through §1, §3 and §4 like the rest.
@@ -153,9 +158,10 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
      are in) back to the last commit. A dependency batch also reinstalls from the restored
      manifest (`npm ci`, a fresh venv, or an image rebuild) before anything is verified again,
      or the next batch fails for the wrong reason. Then split the batch in halves
-     and retry each half until the item that breaks it is found. That item is regraded CAUTION
-     with the failure as its evidence, and the rest of the batch continues. Three failed splits in
-     one category → stop that category and report it.
+     and retry each half until the item that breaks it is found. That item is **in use** (the
+     failure is the proof): log it as `in use: <failing check>`, never offer it for removal, and
+     the rest of the batch continues. Three more red verifies in one category after its first →
+     stop that category and report it.
 5. Never make a check pass by weakening it: no new lint ignores, no skipped or deleted failing
    tests, no relaxed tool configs. A tool's false positive goes in the log as a candidate with the
    reason, not into an ignore file.
