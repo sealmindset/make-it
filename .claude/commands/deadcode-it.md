@@ -53,8 +53,11 @@ Silently:
    --untracked-files=no` empty; untracked files are never touched). Not clean → stop and say:
    "You have changes that aren't saved into your project's history yet. Run /wrap-it first, then
    run /deadcode-it again -- I keep cleanup separate from other work so it's easy to undo."
-2. Branch: `chore/deadcode-<YYYY-MM-DD>` off the latest default branch (`git fetch` when there is
-   a remote). Already on a `chore/deadcode-*` branch → continue on it.
+2. Branch: `chore/deadcode-<YYYY-MM-DD>` off the **current HEAD**, so "unused" is judged
+   against the user's newest code (a /make-it user's local feature branch is often days ahead of
+   `main`). On the default branch with a remote → `git fetch` and fast-forward first. Already on
+   a `chore/deadcode-*` branch → continue on it. Remember the branch you started from: the
+   report names it.
 3. Read `docs/DELETION_LOG.md` if it exists: its `Kept (user's call)` items are on the keep-list.
 4. Read `.make-it/app-context.json` if present (variant → which scaffold overlay is kept).
 
@@ -67,7 +70,7 @@ before and after each change."
 
 deadcode.md §5.1: find and run the full verify set; record the commands and the short sha.
 Red → stop: "Your app has a problem that isn't about unused code: <one line>. I didn't change
-anything. Want me to look into it?" (that routes to /debug-it).
+anything. Want me to look into it?" Yes → /debug-it.
 
 </step>
 
@@ -126,8 +129,9 @@ Plain English, about one screen:
 - **Left alone on purpose:** DANGER candidates and built-in features not used yet, in one line
   each, with the log path for detail.
 - **Couldn't check:** any tool not run, and why (hide nothing).
-- **Undo:** "All of this is on the branch `chore/deadcode-<date>`. Nothing is shared yet. To keep
-  it, merge it (or run /ship-it); to undo everything, say "drop the cleanup" and I'll delete that branch."
+- **Undo:** "I kept this cleanup separate from your other work (started from your latest work on
+  `<starting branch>`). Nothing is shared yet. To keep it, run /ship-it; to undo it all, say
+  'drop the cleanup' and I'll throw it away and put you back where you were."
 - Sample to inspect: name 3 removed items from the log so the user can spot-check one.
 
 </step>

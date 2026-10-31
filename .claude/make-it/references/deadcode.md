@@ -13,7 +13,8 @@ log every removal. When unsure, it stays a **candidate** -- logged, not deleted.
 
 A path is **kept** when any of these holds. Kept paths are reported, never graded SAFE or CAUTION.
 
-1. **Scaffold-owned** -- its path relative to the project root also exists under
+1. **Scaffold-owned** (only when `.make-it/app-context.json` exists -- in any other repo a path
+   that happens to match the scaffold means nothing) -- its path relative to the project root also exists under
    `~/.claude/make-it/scaffolds/fastapi-nextjs/` (or `scaffolds/overlays/<variant>/` when
    `app-context.json` names a variant). These are capabilities the app ships with on purpose
    (AI Instructions pages, notifications, PWA parts, DataTable options) even when nothing uses
@@ -68,7 +69,10 @@ in parallel. A candidate survives as dead only when every check comes back empty
    (`@router.*`, `@app.*`), dependencies used via `Depends(...)`, startup/lifespan hooks; pytest
    fixtures and `conftest.py`; pydantic validators and model/settings fields (read by name from
    env or JSON); SQLAlchemy models and event listeners;
-   Alembic `upgrade`/`downgrade`; Celery tasks; CLI entry points.
+   Alembic `upgrade`/`downgrade`; Celery tasks; CLI entry points. Also exports the framework reads
+   by name: Next.js `dynamic`, `revalidate`, `runtime`, `fetchCache`, `metadata`,
+   `generateMetadata`, `generateStaticParams`, `viewport`, middleware `config`; default exports
+   of any `*.config.*`; Storybook default `meta` and story exports.
 4. **Build and release time** -- referenced by CI, a Dockerfile, a compose command, a
    `package.json`/`pyproject.toml` script or bin, a codegen or docs pipeline.
 5. **Dependencies used without an import** -- the most common false positive (on the scaffold
@@ -98,11 +102,12 @@ in parallel. A candidate survives as dead only when every check comes back empty
 
 | Grade | What qualifies | What happens |
 |-------|----------------|--------------|
-| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import of a named symbol (not §3.7) or unused local (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then); unused export of an internal module that §3.8 cleared; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
+| **SAFE** | Flagged by a tool, every §3 check empty, and one of: unused import of a named symbol (not §3.7) or unused local whose right-hand side is a literal or a plain name (ruff F401/F841, tsc, or eslint flags it -- vulture's confidence doesn't matter then; a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)` -- or grade CAUTION); unused export of an internal module that §3.8 cleared; unused dependency (§3.5 checked); JS/TS test helper nothing calls (Python ones are found only by vulture, so they go to the CAUTION ask) | Deleted automatically in batches (§5) |
 | **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); flagged **only** by vulture below 100% | One batched ask (§6); deleted only if picked |
 | **DANGER** | Configs, entry points, framework-convention files (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
-Torn between two grades → the higher one.
+Torn between two grades → the higher one. ts-prune alone or vulture alone (below 100%) is never
+SAFE evidence: it needs a second tool, or it is CAUTION.
 
 **In use (not graded).** A §3 check that finds a real use -- a dynamic import whose pattern
 matches it, a `getattr` whose name it fits, a command, a config entry, an import under another
@@ -114,9 +119,9 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
 
 1. **Baseline green.** Run the project's full verify set -- backend tests, frontend build,
    type-check, lint (`pytest`, `npm run build`, `npm run type-check`, `npm run lint`, or what
-   `package.json` defines, plus every command CI runs; inside the containers if the app runs in
-   Docker). Red baseline →
-   stop. Nothing is deleted on a red baseline; hand the failure to `/debug-it`.
+   `package.json` defines, plus the build/test commands CI runs; inside the containers if the app
+   runs in Docker). Security and audit scans (`npm audit`, `pip-audit`, gitleaks, trivy) are not
+   part of it: a newly published advisory isn't a broken app. Red baseline → stop. Nothing is deleted on a red baseline; hand the failure to `/debug-it`.
 2. **One category per batch**, in this order: unused imports/locals → unused dependencies →
    unused exports → unused test helpers → picked CAUTION items. At most ~20 items per batch.
 3. **Delete only.** No renames, moves, reformatting, dedupes or "while I'm here" edits in a
@@ -125,11 +130,14 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
    verified on a fresh install from the manifest (`npm ci`; a new venv from `requirements.txt`; the image
    rebuilt if the app runs in Docker), not on the old environment.
    After the imports/locals batch, re-run the evidence tools once: removing an import can leave
-   what it imported unused.
+   what it imported unused. New candidates go through §1, §3 and §4 like the rest.
 4. **Re-run the verify set immediately.**
    - Green → commit the batch with its log entry (§7):
      `chore(deadcode): remove <N> unused <category>`.
-   - Red → `git restore --staged --worktree .` back to the last commit, split the batch in halves
+   - Red → `git restore --staged --worktree -- :/` (`:/` is the repo root, whatever folder you
+     are in) back to the last commit. A dependency batch also reinstalls from the restored
+     manifest (`npm ci`, a fresh venv, or an image rebuild) before anything is verified again,
+     or the next batch fails for the wrong reason. Then split the batch in halves
      and retry each half until the item that breaks it is found. That item is regraded CAUTION
      with the failure as its evidence, and the rest of the batch continues. Three failed splits in
      one category → stop that category and report it.
@@ -142,8 +150,8 @@ Candidates as `in use: <where>`, so the next run doesn't re-investigate it. An i
 One ask for the whole run (approval-block.md: consequential; the user picks the specific items,
 never a plain yes). AskUserQuestion, `multiSelect: true`, up to 4 questions × 4 options = 16 items,
 ranked by strength of evidence; the rest stay candidates. Every question needs at least 2
-options: merge small groups into one question, and a single item becomes one question with the
-options "Remove it" / "Keep it". Open the ask with the approval-block.md points that apply to
+options: merge small groups into one question, and a single item becomes one single-select
+question (`multiSelect: false`) with the options "Remove it" / "Keep it". Open the ask with the approval-block.md points that apply to
 the whole set: what is unusual about these items (why they aren't SAFE) and the one thing to
 check. Each option in plain words:
 

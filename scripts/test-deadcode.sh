@@ -43,7 +43,8 @@ check "vulture alone can't block a ruff/tsc import"   gq -F "vulture's confidenc
 check "proven-in-use items are dropped, not graded"  gq -F "**In use (not graded).**" "$REF"
 check "manifests are judged per dependency"     gq -F "judged per entry, not by path" "$REF"
 check "eslint only runs with an eslint config"  gq -F 'not run: no eslint config' "$REF"
-check "CI commands are in the verify set"       gq -F "plus every command CI runs" "$REF"
+check "CI build/test commands are verified"   gq -F "plus the build/test commands CI runs" "$REF"
+check "audits aren't part of the baseline"     gq -F "a newly published advisory isn't a broken app" "$REF"
 check "dep batches verify on a fresh install"   gq -F "verified on a fresh install from the manifest" "$REF"
 check "a one-item ask still has two options"    gq -F '"Remove it" / "Keep it"' "$REF"
 check "log hashes are filled in at the end"     gq -F "replaces those with the short hashes" "$REF"
@@ -58,6 +59,17 @@ check "no tool ran is not 'nothing to clean'"   gq -F "I couldn't check your cod
 check "no push, clean or hard reset anywhere"   bash -c '! grep -nE "git push|gh pr create|git clean|reset --hard" "$1" "$2"' _ "$CMD" "$REF"
 saferow() { [ "$(grep -E '^\| \*\*SAFE\*\* \|' "$1" | grep -ciE 'whole file|page|route')" = 0 ]; }
 check "the SAFE row never covers files/routes"  saferow "$REF"
+check "a call on the right of a local is kept"  gq -F "delete only the binding and keep the expression" "$REF"
+check "framework-read exports are DANGER"      gq -F '`generateStaticParams`' "$REF"
+check "one weak tool alone is never SAFE"      gq -F "ts-prune alone or vulture alone (below 100%) is never" "$REF"
+check "rollback covers the whole repo"         gq -F 'git restore --staged --worktree -- :/' "$REF"
+check "a rolled-back dep batch reinstalls"     gq -F "reinstalls from the restored" "$REF"
+check "scaffold keep-list only in make-it apps" gq -F 'only when `.make-it/app-context.json` exists' "$REF"
+check "a one-item ask is single-select"        gq -F '(`multiSelect: false`) with the options' "$REF"
+check "cleanup branches off the current HEAD"  gq -F 'off the **current HEAD**' "$CMD"
+check "the report names the starting branch"   gq -F '`<starting branch>`' "$CMD"
+check "resume-it doesn't re-run Q15 tools each time" gq -F "re-run the \`deadcode.md\` §2 tools only when neither exists" .claude/commands/resume-it.md
+check "retrofit evidence pass is best effort"  gq -F "Best effort: an app that won't install yet" .claude/commands/retrofit-it.md
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
 # controls: a dropped tool or grade, or a widened SAFE row, must fail
 saferow <(sed -E 's/^(\| \*\*SAFE\*\* \|)/\1 whole files;/' "$REF") && bad "control: widened SAFE row passed" || ok "control: widened SAFE row fails saferow"
