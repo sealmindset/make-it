@@ -60,16 +60,20 @@ earlier cleanup never blocks a run. Silently, in this order:
 3. **Saved work.** Uncommitted changes to tracked files (`git status --porcelain
    --untracked-files=no` not empty; untracked files are never touched -- deadcode.md §1.4) →
    stop, never undo them. One ask (approval-block.md), listing the changed files: "Save them"
-   (one commit of exactly those files on the current branch -- on the default branch, a
-   `feature/<short-name>` branch first, git-operations.md -- then carry on) or "Leave them" (stop
-   here; nothing changed). If the changes are only deletions of code files, add: "These look like
+   (one commit of exactly those files on the current branch, message `chore: save work before
+   dead-code cleanup` -- on the default branch, a `feature/<short-name>` branch first,
+   git-operations.md -- then carry on) or "Leave them" (stop: "OK -- I've left your changes as
+   they are and stopped here. Nothing changed; run /deadcode-it again when you're ready."). If the changes are only deletions of code files, add: "These look like
    an unfinished cleanup step that was never checked -- if you didn't make them, choose 'Leave
    them' and ask me to look."
-4. Record the **starting branch** and its short sha. Nothing is fetched or pulled: the cleanup
+4. Record the **starting branch** and its short sha. The *default branch* is `origin/HEAD`'s
+   target when there is a remote, otherwise whichever of `main` / `master` exists. Nothing is fetched or pulled: the cleanup
    works on the code as it is on this machine.
 5. List the other cleanup branches that aren't dropped and aren't already part of this branch
    (`git branch --list 'chore/deadcode-*' 'deadcode-cleanup-*' --no-merged HEAD`, minus names
-   containing `-dropped`). They don't stop the run; the report mentions them.
+   containing `-dropped`). They don't stop the run; the report mentions them. Items already
+   under `### Removed` in their logs are skipped this run ("already removed on `<branch>`"), so
+   two cleanups never remove the same thing.
 6. Read `docs/DELETION_LOG.md` from every local branch that has one (deadcode.md §1.2): its
    `Kept (user's call)` and `in use` items are not candidates again.
 7. Read `.make-it/app-context.json` if present (it switches the scaffold keep-list on; variant →
@@ -154,7 +158,8 @@ Commit: `docs(deadcode): deletion log for <date>`.
 Plain English, about one screen:
 - **Removed:** counts by kind, and that everything was checked after each step.
 - **Left alone on purpose:** DANGER candidates, things the checkers got wrong (in use), items
-  the user kept, and built-in features not used yet, in one line each, with the log path for
+  the user kept, recent work ("<N> pieces changed in the last two weeks -- I'll look at them
+  again next time"), and built-in features not used yet, in one line each, with the log path for
   detail.
 - **Couldn't check:** any tool not run, and why; any file a commit hook would also have edited
   (hide nothing).
@@ -167,10 +172,12 @@ Plain English, about one screen:
     review. Or say 'drop the cleanup' and I'll put you back where you were."
 - **Earlier cleanups** (precondition 5), if any: one line each -- "You also have an earlier
   cleanup on `<branch>` (<date>): say 'keep' or 'drop' it, or leave it."
-- Sample to inspect: name 3 removed items from the log so the user can spot-check one.
+- Sample to inspect: name up to 3 removed items from the log so the user can spot-check one.
 
 Procedures (the starting and cleanup branch names come from this run, or from the log header of
-an earlier run). Neither ever deletes a branch:
+an earlier run). Neither ever deletes a branch, and both first check for uncommitted changes to
+tracked files: any → the same save / leave ask as precondition 3, before anything switches
+branches (a switch would carry them along unseen):
 - **keep the cleanup** (feature-branch start only; never merge into the default branch -- that
   goes through /ship-it) → `git switch <starting branch> && git merge --ff-only <cleanup
   branch>`. Not a fast-forward (the starting branch moved since) → stop and say so; don't merge.

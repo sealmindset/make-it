@@ -161,10 +161,10 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 ### Key Principles
 
-- Never deletes DANGER items (configs, entry points, framework-convention files and exports, public APIs, migrations) or the keep-list (scaffold-owned files, user-kept items, generated code, untracked files)
+- Never deletes DANGER items (configs, entry points, framework-convention files and exports, public APIs, migrations) or the keep-list (scaffold-owned files, user-kept items, generated code, untracked files, code changed in the last 14 days)
 - Delete only -- no refactors, renames or dedupes in a cleanup batch
 - Never weakens a check to make it pass; never deletes a branch; never pushes
-- Wired in through build-standards Q14, a tool-free upkeep reminder (no deletion-log run yet, or 30+ days and 20+ commits since the last): /resume-it turns it into a suggestion; nothing else runs the tools
+- Wired in through build-standards Q14, a tool-free upkeep reminder (no kept cleanup on the current branch, or 30+ days and 20+ commits since the last, or a cleanup waiting to be kept or dropped): /resume-it turns it into a suggestion; nothing else runs the tools
 
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 

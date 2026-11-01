@@ -128,6 +128,15 @@ check "resume-it suggests /deadcode-it"        gq -F "(routes to /deadcode-it)" 
 check "scaffold lint no longer uses next lint" gq -F '"lint": "eslint . && prettier --check .",' .claude/make-it/scaffolds/fastapi-nextjs/frontend/package.json
 check "fullstack scaffold lint no longer uses next lint" gq -F '"lint": "eslint . && prettier --check .",' .claude/make-it/scaffolds/nextjs-fullstack/package.json
 check "scaffold ruff never auto-deletes imports" gq -F 'unfixable = ["F401", "F841"]' .claude/make-it/scaffolds/fastapi-nextjs/pyproject.toml
+check "recent work is never removed or offered" gq -F "**Recent work** -- code whose lines were last changed in the past 14 days" "$REF"
+check "only effectful in-project modules make an import CAUTION" gq -F "A module that only defines things" "$REF"
+check "no eslint dependency = not applicable"   gq -F "no \`eslint\` in the project's dependencies → not applicable" "$REF"
+check "Q14 counts only cleanups on this branch" gq -F "**on the current branch**" "$REF"
+check "Q14 flags a waiting cleanup"            gq -F "waiting to be kept or dropped\". The caller" "$REF"
+check "two cleanups never remove the same thing" gq -F "two cleanups never remove the same thing" "$CMD"
+check "keep/drop check unsaved changes first"  gq -F "both first check for uncommitted changes to" "$CMD"
+check "'Leave them' has its stop message"      gq -F "OK -- I've left your changes as" "$CMD"
+check "scaffold test fixture keeps ids off UserInfo" gq -F "SEED_USER_IDS[user_info.sub]" .claude/make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
 check "CLAUDE.md: culprit in use, never offered" gq -F "the culprit is logged in use and never offered" CLAUDE.md
 check "desktop bundles carry deadcode.md"      bash -c 'for f in desktop/skills/make-it/refs.txt desktop/skills/guardrails/refs.txt; do [ "$(grep -cxF ".claude/make-it/references/deadcode.md" "$f")" = 1 ] || exit 1; done'
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh

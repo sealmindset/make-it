@@ -36,6 +36,10 @@ A path is **kept** when any of these holds. Kept paths are reported, never grade
 4. **Untracked** -- anything `git ls-files --others --exclude-standard` lists (work in progress
    with no history: deleting it couldn't be undone). Never a candidate, never edited. Only
    tracked files (`git ls-files`) are candidates.
+5. **Recent work** -- code whose lines were last changed in the past 14 days (`git blame
+   --since=14.days -L <start>,<end> -- <file>` shows a commit, not a boundary `^`): it may be
+   work in progress that just isn't wired up yet. Logged as a candidate "recent work", never
+   removed or offered; a later run looks again.
 
 ## 2. Evidence pass (tools, in parallel)
 
@@ -55,7 +59,7 @@ over an existing one.
 | JS/TS | depcheck | `npx -y depcheck --json` | unused and missing deps (second opinion on knip) |
 | JS/TS | ts-prune | `npx -y ts-prune` | unused exports (archived upstream: corroboration only, never the sole evidence) |
 | JS/TS | tsc | `node_modules/.bin/tsc --noEmit --noUnusedLocals --incremental false` -- the project's own install only (`npx --no tsc ...` passes the flags to npm, not tsc: it then finds nothing and can write `.js` files into the project) | unused imports and locals |
-| JS/TS | eslint | `node_modules/.bin/eslint . --report-unused-disable-directives -f json` -- only when `node_modules/.bin/eslint` exists and its config matches its version (`eslint.config.*`, or `.eslintrc*` with eslint < 9); otherwise "not run: <reason>" | unused vars (per the project's config), stale `eslint-disable` comments |
+| JS/TS | eslint | `node_modules/.bin/eslint . --report-unused-disable-directives -f json` -- only when `node_modules/.bin/eslint` exists and its config matches its version (`eslint.config.*`, or `.eslintrc*` with eslint < 9); no `eslint` in the project's dependencies → not applicable; installed but the config doesn't match → "not run: <reason>" | unused vars (per the project's config), stale `eslint-disable` comments |
 | Python | ruff | `uvx ruff check --no-cache --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
 | Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <§1.3 dirs>` | unused functions, classes, attributes, variables (confidence %) |
 | Python | deptry | `requirements.txt` → `uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json`; `pyproject.toml` only → `uv pip compile pyproject.toml -q -o <scratch>/req.txt` then `uvx --with-requirements <scratch>/req.txt deptry . --json-output <scratch>/deptry.json` (run from the manifest's directory; nothing is written into the project) | unused deps (DEP002 only; DEP001 "missing" is not dead code) |
@@ -122,8 +126,11 @@ in parallel. A candidate survives as dead only when every check comes back empty
      whole (`import some_plugin`);
    - an import inside a function body, or a JS bare import (`import "./x"`);
    - a named import from a module in this project (`from app.models.invoice import Invoice`)
-     when it is the only import of that module anywhere in the repo: removing it stops the
-     module loading;
+     when it is the only import of that module anywhere in the repo **and** that module does
+     something when loaded -- any top-level statement other than imports, definitions (`def`,
+     `class`, `function`, `interface`, `type`) and plain constant assignments, or a decorator
+     on a definition: removing the import stops it running. A module that only defines things
+     has no load effect, and its unused import is an ordinary one;
    - **any import in an `__init__.py`** is a re-export (public API): DANGER, unless
      `from <package> import <Name>` and `<package>.<Name>` both grep empty -- then CAUTION.
 
@@ -170,11 +177,13 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
      settings files (`conftest.py`, `pytest.ini`, `jest`/`vitest` configs, `settings*.py`) for
      anything run on the host. A database, queue or cache URL (`DATABASE_URL`, `REDIS_URL`,
      `*_DSN`, `amqp://`, ...) whose host isn't a compose service name, `localhost` or `127.0.0.1`
+     (a file-based URL with no host, like `sqlite:///./local.db`, is local)
      → stop, with nothing changed and no branch made: "Your app's settings point at <host>, so I
      won't start it for checks. If that setting is only meant for the live app, point it at your
      own machine for local runs and run /deadcode-it again." Any other outside host (an AI or
-     email API, a log collector) → one ask naming them before the baseline: the checks will run
-     about <N> times, and each run may call them.
+     email API, a log collector) → one ask naming them before the baseline, options "Go ahead" /
+     "Stop": "Your settings name <hosts>. I'll run your checks several times; if the tests call
+     these, each run will too." Stop → nothing changed.
    - **The app runs in Docker** (a compose file builds its services): before **every** verify,
      `docker compose up -d --build --wait <app services>` (this also runs the frontend's
      production build), and run the test commands in those fresh containers (`docker compose
@@ -193,7 +202,7 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
 3. **One category per batch**, in this order: unused imports/locals → unused dependencies →
    unused exports → unused test helpers → picked CAUTION items. At most ~20 items per batch.
    **Delete only.** No renames, moves, reformatting, dedupes or "while I'm here" edits in a
-   cleanup batch. Remove a dependency by deleting its manifest entry by hand (keep the file
+   cleanup batch (a blank line a deletion leaves doubled, or at the top of a file, goes with it). Remove a dependency by deleting its manifest entry by hand (keep the file
    valid: a JSON entry may share a line with others; `npm uninstall` reformats `package.json`),
    then update the lockfile with the project's own package manager, and verify that batch on a
    fresh frozen install (in Docker, the `--build` above):
@@ -276,6 +285,8 @@ tsc ✓, eslint ✓, ruff ✓, vulture ✓, deptry ✗ (not run: <reason>).
 ### Candidates (not removed)
 | Item | Grade | Reason |
 |------|-------|--------|
+| `helper` in `src/local.ts` | not dead | used in its own file (§3.8) |
+| `pyflakes` | in use | `tests/test_x.py:16` starts it by a built name |
 
 ### Kept (user's call)
 | Item | Asked on |
@@ -289,8 +300,11 @@ candidates with "duplicate of <path>" as the reason).
 
 ## 8. The upkeep reminder (Q14)
 
-Q14 runs **no tools** and writes nothing. It reads the dates of `/deadcode-it` runs from
-`docs/DELETION_LOG.md` on every local branch (the `## <YYYY-MM-DD> -- /deadcode-it` headers) and
-is a gap when there is no run at all, or the newest is 30+ days old and HEAD has 20+ commits since
-(`git rev-list --count --since=<date> HEAD`). The caller turns a gap into a suggestion to run
+Q14 runs **no dead-code tools** and writes nothing; it only reads git. It reads the dates of
+`/deadcode-it` runs from `docs/DELETION_LOG.md` **on the current branch** (the
+`## <YYYY-MM-DD> -- /deadcode-it` headers) -- a cleanup that was dropped or never kept isn't
+there, so it doesn't count. It is a gap when there is no run at all, or the newest is 30+ days old
+and HEAD has 20+ commits since (`git rev-list --count --since=<date> HEAD`). Separately, a cleanup
+branch that isn't dropped and isn't part of the current branch is a gap too: "you have a cleanup
+waiting to be kept or dropped". The caller turns a gap into a suggestion to run
 `/deadcode-it`; it never writes a TODO.md line for it.
