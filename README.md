@@ -972,9 +972,9 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
   apps against freshly rebuilt containers; a red batch is rolled back and split until the culprit is found. Everything
   lands on a `chore/deadcode-<date>` branch, and no branch is ever deleted.
 - **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.
-- **Wired into the framework, report-only.** New checks Q14 (unused imports) and Q15 (all dead-code candidates) count
-  into one dated TODO.md line that `/resume-it` turns into a suggestion; they never change code. `/retrofit-it`
-  Discovery reports the counts.
+- **Wired into the framework, tool-free.** New check Q14 is an upkeep reminder that runs no tools: when no cleanup has
+  been done, or the last is 30+ days and 20+ commits old, `/resume-it` suggests `/deadcode-it`. `/retrofit-it` suggests
+  it once a retrofit is verified. Also fixes the `fastapi-nextjs` scaffold's `lint` script (`next lint` is gone in Next 16).
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 

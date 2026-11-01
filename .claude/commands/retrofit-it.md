@@ -185,12 +185,9 @@ Construct a mental model of:
 - **User types and permissions** (even if informal -- like admin checks in code)
 - **External integrations** (APIs called, services connected)
 - **Existing quality** (tests, linting, CI, error handling)
-- **Dead code** -- the `deadcode.md` §2 Evidence pass, report-only: counts by kind (files,
-  exports, dependencies, imports). Nothing is deleted during a retrofit (it never mixes with
-  cleanup); the plan lists the counts and suggests /deadcode-it once the retrofit is verified.
-  Existing installs only -- never `npm ci`, a venv install or any other install on an app the
-  user hasn't approved changes to yet; a tool without its install is listed as not run, with the
-  reason (never as zero)
+- **Dead code** -- not measured here (no tools run on an app the user hasn't approved changes to
+  yet, and nothing is deleted during a retrofit: it never mixes with cleanup). The plan suggests
+  /deadcode-it once the retrofit is verified
 - **AI calls and model choices** (if AI) -- every call site and the model it runs on as deployed,
   and the ladder report drafted per Prompt #10g step 1 for the plan (nothing is written yet;
   step 12b writes it to `.make-it/ai-ladder.md`)
@@ -1215,8 +1212,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
-- **Q01-Q15**: Code quality (Q14 and Q15 are report-only: nothing is deleted from the existing
-  app; their counts go to the TODO.md Q15 line for /deadcode-it)
+- **Q01-Q14**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)
 
 For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately

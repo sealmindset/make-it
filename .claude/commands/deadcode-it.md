@@ -49,32 +49,27 @@ goes in the deletion log, not in chat.
 
 <step name="preconditions">
 
-Silently, in this order:
+A *cleanup branch* is one named `chore/deadcode-*` or `deadcode-cleanup-*`; one whose name
+contains `-dropped` is a *dropped* cleanup. Nothing here is ever undone automatically, and an
+earlier cleanup never blocks a run. Silently, in this order:
 1. **On a branch.** `git branch --show-current` empty (a tag or a bare commit) → stop: "You're
    not on a branch right now, so I can't keep the cleanup separate. Switch to your branch first."
-2. **An unfinished cleanup.** A *cleanup branch* is one named `chore/deadcode-*` or
-   `deadcode-cleanup-*`; one whose name contains `-dropped` is a *dropped* cleanup and is never
-   rolled back, never waiting. The current branch is a cleanup branch, not dropped, with
-   uncommitted changes to tracked files → a batch
-   was interrupted before it was checked: `git restore --staged --worktree -- :/`, and tell the
-   user "An earlier cleanup was interrupted part-way; I undid the unchecked part." (It is never
-   saved -- it was never verified.)
-3. **A cleanup still waiting.** Any cleanup branch (current or not; dropped ones -- name contains `-dropped` -- excluded) whose
-   commits aren't in the branch named as its start in its log header (`git log --oneline
-   <start>..<cleanup>` not empty), unless its changes are already there (a /ship-it squash-merge:
-   `git diff --quiet <start> <cleanup> -- $(git diff --name-only <start>...<cleanup>)` succeeds)
-   → stop and say: "There's an earlier cleanup still waiting
-   (`<cleanup>`)." plus, if it started from a feature branch, "Say 'keep the cleanup' or 'drop the
-   cleanup' for that one first."; if it started from the default branch, "Run /ship-it from it to
-   add it to your app, or say 'drop the cleanup'." The `report` step's procedures apply to it.
-4. **Saved work.** No uncommitted changes to tracked files (`git status --porcelain
-   --untracked-files=no` empty; untracked files are never touched -- deadcode.md §1.4). Not clean
-   → stop and say: "You have changes that aren't saved into your project's history yet. Say
-   'save my changes' and I'll save them, then start the cleanup -- I keep cleanup separate from
-   other work so it's easy to undo." Saving = one commit of those changes on the current branch
-   (on the default branch, a `feature/<short-name>` branch first -- git-operations.md).
-5. Record the **starting branch** and its short sha. Nothing is fetched or pulled: the cleanup
+2. **Not on a cleanup.** The current branch is a cleanup branch → stop: "You're on an earlier
+   cleanup (`<branch>`). Say 'keep the cleanup' or 'drop the cleanup' for it, or switch back to
+   your work, then run /deadcode-it again." (The `report` step's procedures apply to it.)
+3. **Saved work.** Uncommitted changes to tracked files (`git status --porcelain
+   --untracked-files=no` not empty; untracked files are never touched -- deadcode.md §1.4) →
+   stop, never undo them. One ask (approval-block.md), listing the changed files: "Save them"
+   (one commit of exactly those files on the current branch -- on the default branch, a
+   `feature/<short-name>` branch first, git-operations.md -- then carry on) or "Leave them" (stop
+   here; nothing changed). If the changes are only deletions of code files, add: "These look like
+   an unfinished cleanup step that was never checked -- if you didn't make them, choose 'Leave
+   them' and ask me to look."
+4. Record the **starting branch** and its short sha. Nothing is fetched or pulled: the cleanup
    works on the code as it is on this machine.
+5. List the other cleanup branches that aren't dropped and aren't already part of this branch
+   (`git branch --list 'chore/deadcode-*' 'deadcode-cleanup-*' --no-merged HEAD`, minus names
+   containing `-dropped`). They don't stop the run; the report mentions them.
 6. Read `docs/DELETION_LOG.md` from every local branch that has one (deadcode.md §1.2): its
    `Kept (user's call)` and `in use` items are not candidates again.
 7. Read `.make-it/app-context.json` if present (it switches the scaffold keep-list on; variant →
@@ -115,7 +110,8 @@ No tool could run → skip to `report` and say "I couldn't check your code: <rea
 <step name="review-and-grade">
 
 deadcode.md §3 then §4. Apply the keep-list first. For more than ~30 candidates, dispatch
-read-only Explore subagents in parallel, one per kind (imports/locals, exports, files,
+Explore subagents in parallel (their brief says: read only -- no edits, no git commands that
+change anything), one per kind (imports/locals, exports, files,
 dependencies, test helpers), each handed deadcode.md §3 and its slice of the list, each
 returning per item: the searches run, what they found, and a proposed grade with the reason.
 Grade conservatively: torn → the higher grade.
@@ -147,8 +143,8 @@ answer → `Kept (user's call)`; ask dismissed → they stay candidates (deadcod
 
 Finish `docs/DELETION_LOG.md` per deadcode.md §7 (commit hashes in place of `this batch`,
 candidates incl. `in use` items, kept items, keep-list count). If `CHANGELOG.md` exists, one line
-("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md"). If `TODO.md` exists, replace
-its Q15 line (deadcode.md §8) with the count of candidates left, dated today.
+("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md"). The log's dated header is what
+the Q14 upkeep reminder reads (deadcode.md §8); nothing is written to TODO.md.
 Commit: `docs(deadcode): deletion log for <date>`.
 
 </step>
@@ -169,6 +165,8 @@ Plain English, about one screen:
     cleanup' and I'll put you back where you were."
   - the default branch → "To add it to your app, run /ship-it -- it goes through the usual
     review. Or say 'drop the cleanup' and I'll put you back where you were."
+- **Earlier cleanups** (precondition 5), if any: one line each -- "You also have an earlier
+  cleanup on `<branch>` (<date>): say 'keep' or 'drop' it, or leave it."
 - Sample to inspect: name 3 removed items from the log so the user can spot-check one.
 
 Procedures (the starting and cleanup branch names come from this run, or from the log header of
@@ -176,6 +174,9 @@ an earlier run). Neither ever deletes a branch:
 - **keep the cleanup** (feature-branch start only; never merge into the default branch -- that
   goes through /ship-it) → `git switch <starting branch> && git merge --ff-only <cleanup
   branch>`. Not a fast-forward (the starting branch moved since) → stop and say so; don't merge.
+  The starting branch no longer exists (it was shipped and removed) → "The branch this cleanup
+  started from is gone, so there's nothing to add it to -- run /ship-it from the cleanup, or say
+  'drop the cleanup'."
   The merged cleanup branch stays; it no longer counts as waiting.
 - **drop the cleanup** → first `git log --format=%s <starting branch>..<cleanup branch>`: any
   subject that isn't `chore(deadcode): ...` or `docs(deadcode): ...` means the user did other
@@ -188,6 +189,8 @@ an earlier run). Neither ever deletes a branch:
   (`docker compose up -d --build --wait`), so the running app matches it; otherwise, if the cleanup
   removed a dependency, reinstall from that branch's manifest (deadcode.md §5.3 table,
   fresh-install column).
+- `git switch` refused because that branch is open in another folder (a worktree) → say so:
+  "That branch is open in another folder; close it there or tell me to leave things as they are."
 - Say what happened in one line: "Done -- the cleanup is now part of your work on `<branch>`." /
   "Dropped -- you're back on `<branch>` exactly as it was."
 

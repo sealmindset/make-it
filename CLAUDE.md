@@ -151,20 +151,20 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 `/deadcode-it` is code-upkeep hygiene: it finds and removes dead code across the whole project (JS/TS and Python, any repo). Evidence, grading, cadence and log format live in `references/deadcode.md`.
 
-0. **Preconditions** -- On a branch; an interrupted cleanup is rolled back (never saved); an earlier cleanup still waiting stops the run; no unsaved tracked changes (untracked files are never touched); kept and in-use decisions read from the log on every local branch
+0. **Preconditions** -- On a branch, not on an earlier cleanup; uncommitted changes → ask to save or leave them, never undone; earlier cleanups never block (the report mentions them); kept and in-use decisions read from the log on every local branch
 1. **Baseline** -- Full test/build green first, against the code as it is now: Docker apps are rebuilt (`docker compose up -d --build --wait`) before every check, and only if their settings point at this machine; red → stop, nothing changed. Green → a fresh `chore/deadcode-<date>` branch
 2. **Evidence** -- knip, depcheck, ts-prune, tsc, eslint / ruff, vulture, deptry run on the host in parallel; a tool that can't run is reported, never read as "nothing found"
 3. **Review + grade** -- AI search proves each candidate (string/path forms, dynamic and run-time loading, framework conventions, CI/scripts, config- or platform-loaded deps, `__init__.py` re-exports); SAFE / CAUTION / DANGER
 4. **Delete SAFE** -- One category per batch, verify after each, commit green batches; red → roll back, split; the culprit is logged in use and never offered
 5. **CAUTION ask** -- One multi-select ask in plain words; unpicked items are kept for good, a dismissed ask decides nothing
-6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, the TODO.md Q15 line refreshed, plain-English summary. Keep = fast-forward into a feature branch, or /ship-it from the default branch; drop = switch back and rename the branch `...-dropped`
+6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, plain-English summary. Keep = fast-forward into a feature branch, or /ship-it from the default branch; drop = switch back and rename the branch `...-dropped`
 
 ### Key Principles
 
 - Never deletes DANGER items (configs, entry points, framework-convention files and exports, public APIs, migrations) or the keep-list (scaffold-owned files, user-kept items, generated code, untracked files)
 - Delete only -- no refactors, renames or dedupes in a cleanup batch
 - Never weakens a check to make it pass; never deletes a branch; never pushes
-- Wired in through build-standards Q14 (unused imports) and Q15 (all dead-code candidates): both report-only everywhere, into one dated TODO.md line that /resume-it turns into a suggestion; /retrofit-it Discovery reports the counts
+- Wired in through build-standards Q14, a tool-free upkeep reminder (no deletion-log run yet, or 30+ days and 20+ commits since the last): /resume-it turns it into a suggestion; nothing else runs the tools
 
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 
@@ -196,7 +196,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
-      deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log (Q14-Q15)
+      deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check

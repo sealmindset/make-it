@@ -429,7 +429,7 @@ Every app passes through five gates before reaching production:
 
 | Gate | When | What |
 |------|------|------|
-| **1. Build-Verify** | During `/make-it` build | 130+ checks: auth, RBAC, code quality (Q01-Q15), AI safety (AI01-AI28) |
+| **1. Build-Verify** | During `/make-it` build | 130+ checks: auth, RBAC, code quality (Q01-Q14), AI safety (AI01-AI28) |
 | **2. Pre-Push** | When `/ship-it` runs | Lint, type-check, dependency audit, secret scan, migration validation |
 | **3. Pre-Commit** | Every `git commit` | ruff, eslint, prettier, gitleaks (via `.pre-commit-config.yaml`) |
 | **4. CI/CD** | GitHub Actions on PR | Quality gate workflow: lint, format, type-check, tests, secret scan, CVE audit, Trivy container scan. Generates `quality-gate-report.json` attestation artifact. |

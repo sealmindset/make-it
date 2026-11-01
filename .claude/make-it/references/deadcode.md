@@ -1,8 +1,8 @@
 # Dead Code -- evidence, grading, deletion cadence, log
 
-The single source of truth for finding and removing dead code. `/deadcode-it` runs all of it.
-Build-standards checks Q14 and Q15 run the §2 Evidence pass **report-only** (they never delete or
-edit anything), and `/retrofit-it` Discovery does the same.
+The single source of truth for finding and removing dead code. Only `/deadcode-it` runs it.
+Build-standards check Q14 is a tool-free upkeep reminder (§8); nothing else in the framework runs
+these tools.
 
 **The rule:** prove "unused" with tools AND a search, delete in small batches, verify after each
 against the code that actually ships, log every removal. When unsure, it stays a **candidate** --
@@ -45,18 +45,16 @@ host them: the scaffold's frontend image holds only the built app, and no image 
 Save raw output to a scratch directory outside the repo (inside it, a file named `knip.json` is
 read by knip as its config).
 
-JS/TS tools need the project's packages installed on the host. Report-only callers (Q14, Q15,
-`/retrofit-it` Discovery) use **existing installs only** -- they never install anything, and a
-tool without its install is "not run: packages not installed". `/deadcode-it` may install them
-with the project's own package manager (§5.3 table, frozen form) when `node_modules/` is
-missing; it never re-installs over an existing one.
+JS/TS tools need the project's packages installed on the host. When `node_modules/` is missing,
+install them with the project's own package manager (§5.3 table, frozen form); never re-install
+over an existing one.
 
 | Stack | Tool | Command (raw output to scratch) | Finds |
 |-------|------|---------------------------------|-------|
 | JS/TS | knip | `npx -y knip --reporter json` | unused files, exports, types, deps, devDeps, binaries (its Next.js plugin knows `app/` convention files) |
 | JS/TS | depcheck | `npx -y depcheck --json` | unused and missing deps (second opinion on knip) |
 | JS/TS | ts-prune | `npx -y ts-prune` | unused exports (archived upstream: corroboration only, never the sole evidence) |
-| JS/TS | tsc | `npx --no tsc --noEmit --noUnusedLocals` | unused imports and locals |
+| JS/TS | tsc | `node_modules/.bin/tsc --noEmit --noUnusedLocals --incremental false` -- the project's own install only (`npx --no tsc ...` passes the flags to npm, not tsc: it then finds nothing and can write `.js` files into the project) | unused imports and locals |
 | JS/TS | eslint | `node_modules/.bin/eslint . --report-unused-disable-directives -f json` -- only when `node_modules/.bin/eslint` exists and its config matches its version (`eslint.config.*`, or `.eslintrc*` with eslint < 9); otherwise "not run: <reason>" | unused vars (per the project's config), stale `eslint-disable` comments |
 | Python | ruff | `uvx ruff check --no-cache --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
 | Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <§1.3 dirs>` | unused functions, classes, attributes, variables (confidence %) |
@@ -144,9 +142,14 @@ in parallel. A candidate survives as dead only when every check comes back empty
 |-------|----------------|--------------|
 | **SAFE** | Flagged by ruff, tsc, eslint, knip, depcheck or deptry (ts-prune and vulture never count on their own), every §3 check empty, and one of: unused import that §3.7 cleared; unused local whose right-hand side is a literal or a plain name (a right-hand side that calls, awaits or builds anything does work: delete only the binding and keep the expression -- `save(order)`, not `result = save(order)`; that is the one edit a cleanup batch makes beyond deleting); unused export of an internal module that §3.8 cleared; unused dependency, only when the §5.1 verify set starts the app the way production does (a Docker rebuild that passes its health checks) and the package is in no §3.5 class; JS/TS test helper nothing calls, inside a file that stays | Deleted automatically in batches (§5) |
 | **CAUTION** | Whole files, components, pages' children, API routes, shared utilities; anything a dynamic-loading shape elsewhere (§3.2) could plausibly reach but you can't tell whether it does; used only by its own tests (§3.6); §3.7 effect imports; a test helper that is its own file, and every Python test helper (only vulture finds them); anything only ts-prune or vulture flags; an unused dependency that doesn't meet the SAFE bar | One batched ask (§6); deleted only if picked |
-| **DANGER** | Configs, entry points, framework-convention files and exports (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, `__init__.py` re-exports, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
+| **DANGER** | Configs, entry points, framework-convention files and exports (§3.3), public API (`package.json` `exports`/`main`/`bin`, `__all__`, `__init__.py` re-exports unless §3.7 downgrades one to CAUTION, a published package), anything §3.4 found, migrations, auth/RBAC/security code | Never deleted. Listed as a candidate with the reason |
 
-Torn between two grades → the higher one. vulture's 100%-confidence items (unused function
+Torn between two grades → the higher one. Never candidates at all: a name in a destructuring
+pattern that has a rest element (`const { password, ...safe } = user`, Python `a, *rest = ...`,
+`**rest`) -- removing it changes what `rest` holds, e.g. puts a secret back into a response.
+A ruff F811 redefinition of a `def` or `class` is never SAFE (two decorated handlers can share a
+name and both serve routes: DANGER per §3.3); F811 on an import is handled like F401.
+vulture's 100%-confidence items (unused function
 parameters, unreachable code) are refactors, not dead code: candidates, never deleted.
 
 **Weak verify set.** If the §5.1 verify set has neither a test run nor a build or type-check, SAFE
@@ -162,19 +165,27 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
 
 1. **Where checks run.** Every verify -- the baseline and the one after each batch -- runs
    against the code as it is now, never an older build:
-   - **The app runs in Docker** (a compose file builds its services): first check the settings
-     point only at this machine -- every host in `docker compose config`'s environment values is
-     a compose service name, `localhost` or `127.0.0.1`. A host anywhere else (a shared or real
-     database, a live API) → stop, with nothing changed and no branch made: "Your app's settings point at <host>, so I
+   - **Settings first, wherever the checks run.** Read the hosts in the settings the checks will
+     use: `docker compose config`'s environment values for a Docker app, and `.env*` plus test
+     settings files (`conftest.py`, `pytest.ini`, `jest`/`vitest` configs, `settings*.py`) for
+     anything run on the host. A database, queue or cache URL (`DATABASE_URL`, `REDIS_URL`,
+     `*_DSN`, `amqp://`, ...) whose host isn't a compose service name, `localhost` or `127.0.0.1`
+     → stop, with nothing changed and no branch made: "Your app's settings point at <host>, so I
      won't start it for checks. If that setting is only meant for the live app, point it at your
-     own machine for local runs and run /deadcode-it again." Then, before **every** verify, `docker compose up -d --build --wait <app services>`
-     (this also runs the frontend's production build), and run the test commands in those fresh
-     containers (`docker compose exec <service> pytest`, ...). Never `exec` into a container that
-     was built before the batch -- it still holds the old code.
+     own machine for local runs and run /deadcode-it again." Any other outside host (an AI or
+     email API, a log collector) → one ask naming them before the baseline: the checks will run
+     about <N> times, and each run may call them.
+   - **The app runs in Docker** (a compose file builds its services): before **every** verify,
+     `docker compose up -d --build --wait <app services>` (this also runs the frontend's
+     production build), and run the test commands in those fresh containers (`docker compose
+     exec <service> pytest`, ...). Never `exec` into a container that was built before the batch
+     -- it still holds the old code. Steps the images can't run (the frontend's lint and
+     type-check: its image holds only the built app) run on the host from the same checkout.
    - **Otherwise** run the set on the host.
 2. **Baseline green.** The project's full verify set: backend tests, frontend build, type-check,
-   lint (`pytest`, `npm run build`, `npm run type-check`, `npm run lint`, or what `package.json`
-   defines, plus the build/test commands CI runs). Never run a step that releases, deploys,
+   lint -- the commands CI runs for these when CI defines them (they are what the project is held
+   to), otherwise `package.json`'s scripts (`npm run build`, `npm run type-check`, `npm run
+   lint`) and `pytest`. Never run a step that releases, deploys,
    publishes, tags, pushes, sends anything, or migrates a real database -- even when CI runs it;
    name it in the log as "not run (release step)". Security and audit scans (`npm audit`,
    `pip-audit`, gitleaks, trivy) are not part of it: a newly published advisory isn't a broken
@@ -193,7 +204,7 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
    | `pnpm-lock.yaml` | `pnpm install` | `pnpm install --frozen-lockfile` |
    | `yarn.lock` | `yarn install` | `yarn install --frozen-lockfile` (Yarn 2+: `--immutable`) |
    | `uv.lock` | `uv lock` | `uv sync --locked` |
-   | `poetry.lock` | `poetry lock --no-update` | `poetry install --sync` |
+   | `poetry.lock` | `poetry lock` (Poetry 2: no longer updates; 1.x: `--no-update`) | `poetry sync` (1.x: `poetry install --sync`) |
    | none (`requirements.txt`) | -- | a new venv in the scratch directory from the file |
 
    Any other package manager → that dependency goes to CAUTION.
@@ -208,8 +219,12 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
      commit, take it out of the batch (log it: "kept: the project's commit hook would also edit
      this file"), re-run the verify set, and commit the rest. Never `--no-verify`, never add an
      ignore comment. The report names the hook as something a developer should look at.
-   - Red → `git restore --staged --worktree -- :/` (`:/` is the repo root, whatever folder you
-     are in) back to the last commit. A dependency batch also reinstalls from the restored
+   - Red → first re-run the same verify once on the same code: green this time → a flaky check;
+     run it a third time, and two passes count as green (name the flaky test in the log and the
+     report). Still red → `git restore --staged --worktree -- <every path the batch deleted or
+     edited> <its manifest and lockfile> docs/DELETION_LOG.md`, run from the repo root (`git
+     rev-parse --show-toplevel`) -- only the batch's own paths, so nothing else the user touched
+     is undone -- back to the last commit. A dependency batch also reinstalls from the restored
      manifest (the fresh-install column above, or the `--build`) before anything is verified
      again, or the next batch fails for the wrong reason. Then split the batch in halves and
      retry each half until the item that breaks it is found. That item is **in use** (the
@@ -272,14 +287,10 @@ Built-in features not used yet: <N> (scaffold-owned, never removed).
 "Replaced by" stays `--`: this cleanup deletes, it never dedupes (duplicates are listed as
 candidates with "duplicate of <path>" as the reason).
 
-## 8. The Q15 result line (TODO.md)
+## 8. The upkeep reminder (Q14)
 
-Q14, Q15 and `/deadcode-it` share one line in `TODO.md`, always starting with the same marker so
-each can find and replace it:
-
-`- [ ] Q15 dead code (<YYYY-MM-DD>): <N> unused files, exports, dependencies or imports found, none removed -- run /deadcode-it`
-
-with `0 found` or `not run: <reason>` in place of the count when that is the result. Each writer
-replaces the existing marker line rather than adding another. `/resume-it` reuses the line while
-no tracked file has changed since its date (`git log --since=<date> --oneline -- . ':!docs' ':!TODO.md'`
-is empty) and re-runs the §2 pass only otherwise.
+Q14 runs **no tools** and writes nothing. It reads the dates of `/deadcode-it` runs from
+`docs/DELETION_LOG.md` on every local branch (the `## <YYYY-MM-DD> -- /deadcode-it` headers) and
+is a gap when there is no run at all, or the newest is 30+ days old and HEAD has 20+ commits since
+(`git rev-list --count --since=<date> HEAD`). The caller turns a gap into a suggestion to run
+`/deadcode-it`; it never writes a TODO.md line for it.
