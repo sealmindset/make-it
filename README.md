@@ -978,7 +978,9 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
   it once a retrofit is verified.
 - **Scaffold fixes found along the way.** Both scaffolds' `lint` scripts use `eslint .` (`next lint` is gone in Next 16).
   The `fastapi-nextjs` scaffold's ruff config now reports unused imports instead of auto-deleting them on commit (an
-  import can be there for what it does when loaded), and its own 12 unused imports are removed.
+  import can be there for what it does when loaded), and its own 12 unused imports are removed. Both scaffolds get a
+  `.dockerignore`, so image builds no longer copy the developer's own `node_modules` / `.venv` over the image's install.
+  The `fastapi-nextjs` test fixture no longer sets a `user_id` that `UserInfo` doesn't have (its tests pass again).
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 

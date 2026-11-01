@@ -41,6 +41,10 @@ check "DANGER is never deleted, no exceptions" danger_never "$REF"
 check "SAFE: no files/routes/components, never ts-prune/vulture alone" safe_narrow "$REF"
 check "untracked files are never candidates"   untracked_never "$REF"
 check "batches are at most ~20 items"          batch20 "$REF"
+check "scaffold-owned is judged by content, not path" gq -F "Judged **by content, not by path**" "$REF"
+check "unused imports/locals are never scaffold-owned" gq -F "**unused import or local is never scaffold-owned**" "$REF"
+check "unchecked areas are CAUTION at most"    gq -F "your checks run this file, so I can't confirm" "$REF"
+check "keep from the default branch has wording" gq -F "so I don't add it there directly" "$CMD"
 check "scaffold keep-list only in make-it apps" gq -F 'only when `.make-it/app-context.json` exists' "$REF"
 check "kept decisions read from every branch"  gq -F "on **any local branch**, dropped cleanups included" "$REF"
 check "honoured decisions copied into this log" gq -F "so the decision survives if that branch is ever removed" "$REF"
@@ -146,6 +150,7 @@ check "two cleanups never remove the same thing" gq -F "two cleanups never remov
 check "keep/drop check unsaved changes first"  gq -F "both first check for uncommitted changes to" "$CMD"
 check "'Leave them' has its stop message"      gq -F "OK -- I've left your changes as" "$CMD"
 check "scaffold test fixture keeps ids off UserInfo" gq -F "SEED_USER_IDS[user_info.sub]" .claude/make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
+check "scaffold images never get the host's installs" bash -c 'for f in .claude/make-it/scaffolds/fastapi-nextjs/frontend/.dockerignore .claude/make-it/scaffolds/fastapi-nextjs/backend/.dockerignore .claude/make-it/scaffolds/nextjs-fullstack/.dockerignore; do [ "$(grep -cE "^(node_modules|\.venv)$" "$f")" -ge 1 ] || exit 1; done'
 check "CLAUDE.md: culprit in use, never offered" gq -F "the culprit is logged in use and never offered" CLAUDE.md
 check "desktop bundles carry deadcode.md"      bash -c 'for f in desktop/skills/make-it/refs.txt desktop/skills/guardrails/refs.txt; do [ "$(grep -cxF ".claude/make-it/references/deadcode.md" "$f")" = 1 ] || exit 1; done'
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh

@@ -1,0 +1,9 @@
+# Keep machine-local installs and build output out of the image: the Dockerfile installs its own
+# dependencies (deps stage, `npm ci`) for Linux. A host node_modules copied over them would mix in
+# binaries built for the developer's machine.
+node_modules
+.next
+coverage
+*.tsbuildinfo
+npm-debug.log*
+.git

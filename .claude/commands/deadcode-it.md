@@ -149,7 +149,8 @@ answer → `Kept (user's call)`; ask dismissed → they stay candidates (deadcod
 
 Finish `docs/DELETION_LOG.md` per deadcode.md §7 (commit hashes in place of `this batch`,
 candidates incl. `in use` items, kept items, keep-list count). If `CHANGELOG.md` exists, one line
-("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md"). The log's dated header is what
+("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md") under its `## [Unreleased]` /
+`### Removed` heading, adding those headings at the top if they aren't there. The log's dated header is what
 the Q14 upkeep reminder reads (deadcode.md §8); nothing is written to TODO.md.
 Commit: `docs(deadcode): deletion log for <date>`.
 
@@ -163,7 +164,9 @@ Plain English, about one screen:
   the user kept, recent work ("<N> pieces changed in the last two weeks -- I'll look at them
   again next time"), and built-in features not used yet, in one line each, with the log path for
   detail.
-- **Couldn't check:** any tool not run, and why; any file a commit hook would also have edited
+- **Couldn't check:** any tool not run, and why; any file a commit hook would also have edited;
+  commit hooks the project defines (`.pre-commit-config.yaml`) but that aren't installed, so they
+  didn't run
   (hide nothing).
 - **Keep or undo:** "I kept this cleanup separate from your other work (started from your latest
   work on `<starting branch>`). You're on the cleanup now. Nothing is shared yet." Then, by
@@ -180,6 +183,9 @@ Procedures (the starting and cleanup branch names come from this run, or from th
 an earlier run). Neither ever deletes a branch, and both first check for uncommitted changes to
 tracked files: any → the same save / leave ask as precondition 3, before anything switches
 branches (a switch would carry them along unseen):
+- "keep the cleanup" for a cleanup that started from the default branch → "This cleanup started
+  from `<default branch>`, so I don't add it there directly -- run /ship-it from here and it goes
+  through the usual review. Or say 'drop the cleanup'. Nothing changed."
 - No cleanup branch exists (the run stopped before making one) → "There's no cleanup to keep or
   drop -- I stopped before making one, and nothing was changed."
 - **keep the cleanup** (feature-branch start only; never merge into the default branch -- that

@@ -15,14 +15,20 @@ logged, not deleted.
 A path is **kept** when any of these holds. Kept paths are reported, never graded SAFE or CAUTION.
 
 1. **Scaffold-owned** (only when `.make-it/app-context.json` exists -- in any other repo a path
-   that happens to match the scaffold means nothing) -- its path relative to the project root
-   also exists under `~/.claude/make-it/scaffolds/fastapi-nextjs/` (or
-   `scaffolds/overlays/<variant>/` when `app-context.json` names a variant). These are
-   capabilities the app ships with on purpose (AI Instructions pages, notifications, PWA parts,
-   DataTable options) even when nothing uses them yet. Report them as "built-in features not
-   used yet". Dependency manifests (`package.json`, `requirements.txt`, `pyproject.toml`) are
-   judged per entry, not by path: a dependency is scaffold-owned only if the scaffold's own
-   manifest lists it.
+   that happens to match the scaffold means nothing). Judged **by content, not by path**: the
+   app build edits scaffold files, so a matching path proves nothing about a given line. Compare
+   with the scaffold's copy of the same file under `~/.claude/make-it/scaffolds/fastapi-nextjs/`
+   (or `scaffolds/overlays/<variant>/` when `app-context.json` names a variant):
+   - a **whole file** is scaffold-owned when the scaffold has that file;
+   - an **export, function, class, component, route or field** is scaffold-owned when the
+     scaffold's copy of that file defines it under the same name;
+   - a **dependency** is scaffold-owned when the scaffold's own manifest lists it;
+   - an **unused import or local is never scaffold-owned** -- it isn't a capability, wherever it
+     sits (the scaffold itself is kept free of them).
+
+   Scaffold-owned items are capabilities the app ships with on purpose (AI Instructions pages,
+   notifications, PWA parts, DataTable options) even when nothing uses them yet. Report them as
+   "built-in features not used yet".
 2. **Kept by the user's call** -- listed under `### Kept (user's call)` in any earlier run of
    `docs/DELETION_LOG.md` on **any local branch**, dropped cleanups included (read
    `git show <branch>:docs/DELETION_LOG.md` for every branch in
@@ -71,8 +77,9 @@ stack the project doesn't have are "not applicable", not "not run", and aren't r
 these tools exit non-zero when they find something (knip 1, depcheck 255, tsc 2, ruff 1,
 vulture 3, deptry 1): a tool ran if it produced its report. `<src>` is the same for ruff and
 vulture: every Python source directory outside the keep-list. Merge the outputs into one
-candidate list: item, kind (import / local / export / file / dependency / test helper),
-location, which tools flagged it.
+candidate list: item, kind (import / local / export / file / dependency / test helper /
+attribute -- vulture's attributes, model fields, enum members and settings fields, which §3.3
+usually covers), location, which tools flagged it.
 
 ## 3. AI review (prove each candidate)
 
@@ -161,6 +168,11 @@ parameters, unreachable code) are refactors, not dead code: candidates, never de
 
 **Weak verify set.** If the §5.1 verify set has neither a test run nor a build or type-check, SAFE
 is limited to unused imports and locals; everything else goes to CAUTION, and the report says why.
+The same holds per area: a file in a folder no gate or ratcheted check exercises (an `e2e/` or
+`scripts/` folder outside the test and build runs) is CAUTION at most, and its ask says "none of
+your checks run this file, so I can't confirm removing it is safe". A prose mention in docs or
+`.make-it/` briefs isn't a use, but it goes into the ask's evidence and the log ("still mentioned
+in <file>").
 
 **In use (not graded).** A §3 check that finds a real use -- a dynamic import whose pattern
 matches it, a `getattr` whose name it fits, a command, a config entry, an import under another
