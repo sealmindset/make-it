@@ -90,10 +90,12 @@ before and after each change."
 
 deadcode.md §5.1-§5.2: decide where checks run (rebuilt containers for a Docker app, after the
 settings check; otherwise the host), find the verify set, run it; record the commands, where they
-ran, and the short sha.
-Red → stop, on the starting branch with nothing changed: "Your app has a problem that isn't
-about unused code: <one line>. I didn't change anything. Want me to look into it?" Yes →
-/debug-it.
+ran, the short sha, and the ratcheted findings list.
+A gate (tests or build) red → stop, on the starting branch with nothing changed: "One of your
+app's checks already fails before I change anything: <one line>. I didn't change anything. Want
+me to look into that first?" Options "Yes, look into it" (→ /debug-it) / "No, stop here".
+Lint, type-check or format findings alone never stop the run: say once, "Your app already has
+<N> style and type warnings; I'll make sure the cleanup doesn't add any." 
 
 Green → create the cleanup branch from HEAD: `git switch -c chore/deadcode-<YYYY-MM-DD>` (that
 name, or a `-dropped` form of it, taken → `-2`, `-3`, ...; refused for another reason, such as an existing branch named
@@ -178,6 +180,8 @@ Procedures (the starting and cleanup branch names come from this run, or from th
 an earlier run). Neither ever deletes a branch, and both first check for uncommitted changes to
 tracked files: any → the same save / leave ask as precondition 3, before anything switches
 branches (a switch would carry them along unseen):
+- No cleanup branch exists (the run stopped before making one) → "There's no cleanup to keep or
+  drop -- I stopped before making one, and nothing was changed."
 - **keep the cleanup** (feature-branch start only; never merge into the default branch -- that
   goes through /ship-it) → `git switch <starting branch> && git merge --ff-only <cleanup
   branch>`. Not a fast-forward (the starting branch moved since) → stop and say so; don't merge.

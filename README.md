@@ -968,7 +968,8 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
 - **Graded before it's touched.** SAFE items go automatically; CAUTION items (whole files, routes, shared utilities)
   come to you in one plain-English pick list; DANGER items (configs, entry points, public APIs, migrations) and the
   app's built-in scaffold features are never removed.
-- **Small, checked, undoable steps.** Green baseline first, one kind per batch, tests and build after each -- for Docker
+- **Small, checked, undoable steps.** Tests and build must pass first, and existing lint/type findings may only shrink
+  (a ratchet, so apps with old warnings can still be cleaned). One kind per batch, checked after each -- for Docker
   apps against freshly rebuilt containers; a red batch is rolled back and split until the culprit is found. Everything
   lands on a `chore/deadcode-<date>` branch, and no branch is ever deleted.
 - **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.

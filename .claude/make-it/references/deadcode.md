@@ -174,7 +174,8 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
    against the code as it is now, never an older build:
    - **Settings first, wherever the checks run.** Read the hosts in the settings the checks will
      use: `docker compose config`'s environment values for a Docker app, and `.env*` plus test
-     settings files (`conftest.py`, `pytest.ini`, `jest`/`vitest` configs, `settings*.py`) for
+     settings files (`conftest.py`, `pytest.ini`, `jest`/`vitest` configs, `settings*.py`, the app's
+     config module's defaults such as `config.py`'s `Settings` fields) for
      anything run on the host. A database, queue or cache URL (`DATABASE_URL`, `REDIS_URL`,
      `*_DSN`, `amqp://`, ...) whose host isn't a compose service name, `localhost` or `127.0.0.1`
      (a file-based URL with no host, like `sqlite:///./local.db`, is local)
@@ -191,14 +192,26 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
      -- it still holds the old code. Steps the images can't run (the frontend's lint and
      type-check: its image holds only the built app) run on the host from the same checkout.
    - **Otherwise** run the set on the host.
-2. **Baseline green.** The project's full verify set: backend tests, frontend build, type-check,
-   lint -- the commands CI runs for these when CI defines them (they are what the project is held
-   to), otherwise `package.json`'s scripts (`npm run build`, `npm run type-check`, `npm run
-   lint`) and `pytest`. Never run a step that releases, deploys,
-   publishes, tags, pushes, sends anything, or migrates a real database -- even when CI runs it;
-   name it in the log as "not run (release step)". Security and audit scans (`npm audit`,
-   `pip-audit`, gitleaks, trivy) are not part of it: a newly published advisory isn't a broken
-   app. Red baseline → stop. Nothing is deleted on a red baseline; hand the failure to `/debug-it`.
+2. **Baseline.** The project's verify set has two kinds of check: the commands CI runs for these when CI defines them
+   (they are what the project is held to), otherwise `package.json`'s scripts and `pytest`. A command that can't run at all (`next lint` is gone in Next 16) is
+   replaced by CI's equivalent, or recorded as "not run":
+   - **Gates -- tests and build** (`pytest`, `npm test`, `npm run build`, the Docker `--build`).
+     They must pass completely at the baseline and after every batch: they are the real safety
+     net. Run tests without flags that only write reports (`--cov*`, `--junitxml`, coverage JSON)
+     -- they change nothing about pass/fail and fail on read-only images.
+   - **Ratcheted -- lint, type-check, format** (`eslint`, `tsc --noEmit --incremental false`,
+     `prettier --check`, `ruff check`, `ruff format --check`, `mypy`). Many projects carry
+     findings their CI never enforces. Record the baseline's findings as a list of (file, rule,
+     message) -- never line numbers, which shift as code is deleted -- and save it to the scratch
+     directory. They run on the host, from the folder CI runs them in (their config often lives
+     outside the images).
+
+   Never run a step that releases, deploys, publishes, tags, pushes, sends anything, or migrates
+   a real database -- even when CI runs it; name it in the log as "not run (release step)".
+   Security and audit scans (`npm audit`, `pip-audit`, gitleaks, trivy) are not part of it:
+   a newly published advisory isn't a broken app. **A gate red at the baseline → stop.**
+   Nothing is deleted on a red baseline; hand the failure to `/debug-it`. Ratcheted findings at the baseline
+   don't stop the run; the log header records their counts.
 3. **One category per batch**, in this order: unused imports/locals → unused dependencies →
    unused exports → unused test helpers → picked CAUTION items. At most ~20 items per batch.
    **Delete only.** No renames, moves, reformatting, dedupes or "while I'm here" edits in a
@@ -219,7 +232,10 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
    Any other package manager → that dependency goes to CAUTION.
    After the imports/locals batch, re-run the evidence tools once: removing an import can leave
    what it imported unused. New candidates go through §1, §3 and §4 like the rest.
-4. **Re-run the verify set immediately.**
+4. **Re-run the verify set immediately.** The batch is **green** when every gate passes and no
+   ratcheted check has a finding that wasn't in the baseline list (per (file, rule, message), its
+   count may only stay or drop; findings the batch removes are welcome). A new finding is red,
+   exactly like a failing test.
    - Green → write the batch's log rows (§7; rows are written only now, never before a green
      verify), stage **only** the paths the batch deleted or edited, its manifest and lockfile,
      and `docs/DELETION_LOG.md` (never `git add -A`), and commit:
@@ -274,7 +290,8 @@ column, and the final log commit (the skill's `log` step) replaces those with th
 ## <YYYY-MM-DD> -- /deadcode-it
 
 Started from: `<starting branch>` at <short sha>. Cleanup branch: `<cleanup branch>`.
-Baseline: <verify set> green (<where: host / rebuilt containers>). Tools: knip ✓, depcheck ✓,
+Baseline: gates <tests, build> green (<where: host / rebuilt containers>); ratcheted findings at
+the start: eslint <n>, tsc <n>, ruff <n>, mypy <n>, format <n> (none added). Tools: knip ✓, depcheck ✓,
 tsc ✓, eslint ✓, ruff ✓, vulture ✓, deptry ✗ (not run: <reason>).
 
 ### Removed
