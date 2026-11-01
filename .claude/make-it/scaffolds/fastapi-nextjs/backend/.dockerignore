@@ -1,0 +1,13 @@
+# Keep machine-local virtualenvs, caches and reports out of the image: the Dockerfile installs
+# its own dependencies from requirements.txt.
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+coverage.json
+htmlcov
+.git

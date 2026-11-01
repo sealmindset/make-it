@@ -5,11 +5,10 @@ Auth is bypassed by overriding the get_current_user dependency.
 """
 
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import String, event
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database import get_db
@@ -31,7 +30,7 @@ from app.schemas.auth import UserInfo
 
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.dialects import sqlite as sqlite_dialect
+from sqlalchemy.dialects import sqlite as sqlite_dialect  # noqa: F401 -- kept: loads the SQLite dialect the shims below compile for
 
 
 @pytest.fixture(autouse=True)
@@ -56,9 +55,16 @@ def _patch_pg_types_for_sqlite():
 # These match the 4 system roles and the mock-oidc seed users.
 # Permissions should be updated to match the app's seed data.
 
+# Database ids of the seed users, keyed by OIDC subject. They live here, not on UserInfo:
+# UserInfo mirrors the JWT claims exactly, and the JWT carries no database id.
+SEED_USER_IDS = {
+    "mock-admin": "00000000-0000-0000-0000-000000000001",
+    "mock-user": "00000000-0000-0000-0000-000000000003",
+    "mock-viewer": "00000000-0000-0000-0000-000000000004",
+}
+
 ADMIN_USER = UserInfo(
     sub="mock-admin",
-    user_id="00000000-0000-0000-0000-000000000001",
     email="admin@[APP_SLUG].local",
     name="Admin User",
     role_id="00000000-0000-0000-0000-000000000010",
@@ -75,7 +81,6 @@ ADMIN_USER = UserInfo(
 
 REGULAR_USER = UserInfo(
     sub="mock-user",
-    user_id="00000000-0000-0000-0000-000000000003",
     email="user@[APP_SLUG].local",
     name="Regular User",
     role_id="00000000-0000-0000-0000-000000000040",
@@ -87,7 +92,6 @@ REGULAR_USER = UserInfo(
 
 VIEWER_USER = UserInfo(
     sub="mock-viewer",
-    user_id="00000000-0000-0000-0000-000000000004",
     email="viewer@[APP_SLUG].local",
     name="Viewer User",
     role_id="00000000-0000-0000-0000-000000000050",
@@ -142,7 +146,7 @@ async def seed_user(db: AsyncSession, user_info: UserInfo) -> None:
     from app.models.user import User
 
     role_id = uuid.UUID(user_info.role_id)
-    user_id = uuid.UUID(user_info.user_id)
+    user_id = uuid.UUID(SEED_USER_IDS[user_info.sub])
 
     from sqlalchemy import select
     existing_role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()

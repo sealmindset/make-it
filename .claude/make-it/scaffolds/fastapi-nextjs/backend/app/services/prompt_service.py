@@ -5,11 +5,8 @@ Simple CRUD stays in the router; this service handles complex operations.
 """
 
 import difflib
-import json
-import re
 import time
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.managed_prompt import (
     ManagedPrompt,
     PromptAuditLog,
-    PromptTag,
-    PromptTestCase,
     PromptUsage,
     PromptVersion,
 )

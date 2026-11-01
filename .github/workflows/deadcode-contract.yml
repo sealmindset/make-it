@@ -1,0 +1,22 @@
+name: deadcode-it contract
+
+# /deadcode-it deletes code in users' projects, and its Q14 reminder runs in every /make-it build,
+# /retrofit-it and /resume-it. scripts/test-deadcode.sh pins what must never happen (DANGER or
+# untracked files deleted, a branch deleted, a push, Q14 running tools, checks against an
+# old build). Run in CI so a later edit can't loosen it unnoticed.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: deadcode-it contract test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-deadcode.sh

@@ -27,6 +27,10 @@ select = [
     "UP",  # pyupgrade
     "N",   # pep8-naming
 ]
+# Report unused imports/variables, never delete them automatically: an import can be there for
+# what it does when loaded (registering models, routes, signals), and `ruff --fix` -- which the
+# pre-commit hook runs -- cannot tell. Remove them by hand, or with /deadcode-it.
+unfixable = ["F401", "F841"]
 
 [tool.ruff.lint.per-file-ignores]
 "backend/tests/*" = ["S101"]   # allow assert in tests

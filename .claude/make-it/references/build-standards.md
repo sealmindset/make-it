@@ -428,6 +428,8 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 **Q13** [Tier 0] [FIX] **CI quality gate workflow exists** -- `.github/workflows/quality-gate.yml` exists with four jobs: `python-quality` (ruff lint, ruff format, mypy, pytest), `frontend-quality` (eslint, prettier, tsc), `security-scan` (gitleaks, pip-audit, npm audit, trivy), and `attestation` (generates `quality-gate-report.json`). Workflow triggers on PRs to `main`. Attestation job uploads the report as a workflow artifact with 90-day retention. **Fix:** Copy from scaffold template (`.claude/make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml`), replace `[APP_SLUG]` with app slug from `app-context.json`.
 
+**Q14** [Tier 0] [WARN] **Dead-code upkeep reminder (no tools)** -- Runs no tools, changes nothing and writes nothing (not even TODO.md). Gap when `docs/DELETION_LOG.md` on the current branch has no `/deadcode-it` run (dropped or never-kept cleanups don't count), or the newest is 30+ days old and HEAD has 20+ commits since it, or a cleanup branch is waiting to be kept or dropped (`deadcode.md` §8). /resume-it turns a gap into a suggestion to run `/deadcode-it`. N/A in /make-it's first build-verify and right after /retrofit-it (the code was just written or changed), and when the project has no Python or JS/TS code.
+
 ---
 
 ## Live Verification Checks

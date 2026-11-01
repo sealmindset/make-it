@@ -147,6 +147,25 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 `/make-it` writes `.make-it-state.md` at the end of the build phase. `/resume-it` and `/wrap-it` read and update this file each session. It tracks what was built, what's pending, test status, and suggested next steps.
 
+## /deadcode-it
+
+`/deadcode-it` is code-upkeep hygiene: it finds and removes dead code across the whole project (JS/TS and Python, any repo). Evidence, grading, cadence and log format live in `references/deadcode.md`.
+
+0. **Preconditions** -- On a branch, not on an earlier cleanup; uncommitted changes → ask to save or leave them, never undone; earlier cleanups never block (the report mentions them); kept and in-use decisions read from the log on every local branch
+1. **Baseline** -- Tests and build must pass first (gates); existing lint/type/format findings are recorded and only may not grow (ratchet). Checks run against the code as it is now: Docker apps are rebuilt (`docker compose up -d --build --wait`) before every check, and only if their settings point at this machine; a red gate → stop, nothing changed. Green → a fresh `chore/deadcode-<date>` branch
+2. **Evidence** -- knip, depcheck, ts-prune, tsc, eslint / ruff, vulture, deptry run on the host in parallel; a tool that can't run is reported, never read as "nothing found"
+3. **Review + grade** -- AI search proves each candidate (string/path forms, dynamic and run-time loading, framework conventions, CI/scripts, config- or platform-loaded deps, `__init__.py` re-exports); SAFE / CAUTION / DANGER; the grading subagents are pinned to Fable (Opus fallback), never Sonnet/Haiku
+4. **Delete SAFE** -- One category per batch, verify after each, commit green batches; red → roll back, split; the culprit is logged in use and never offered
+5. **CAUTION ask** -- One multi-select ask in plain words; unpicked items are kept for good, a dismissed ask decides nothing
+6. **Log + report** -- `docs/DELETION_LOG.md` (what, why safe, verification, commit), CHANGELOG line, plain-English summary. Keep = fast-forward into a feature branch, or /ship-it from the default branch; drop = switch back and rename the branch `...-dropped`
+
+### Key Principles
+
+- Never deletes DANGER items (configs, entry points, framework-convention files and exports, public APIs, migrations) or the keep-list (scaffold-owned files, user-kept items, generated code, untracked files, code changed in the last 14 days)
+- Delete only -- no refactors, renames or dedupes in a cleanup batch
+- Never weakens a check to make it pass; never deletes a branch; never pushes
+- Wired in through build-standards Q14, a tool-free upkeep reminder (no kept cleanup on the current branch, or 30+ days and 20+ commits since the last, or a cleanup waiting to be kept or dropped): /resume-it turns it into a suggestion; nothing else runs the tools
+
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 
 Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side question -- answer in plain English under three headings: **The problem**, **Impact if it's not fixed** (Who it hits, The wider risk, How far it reaches), and **Why it's being fixed this way** (each choice and its reason, in the order the work runs; "no fix chosen yet" when none is). Keep it to about one screen, for quick understanding: no history of the card (how it was found, review rounds, dated calls) and no status unless asked. The full shape is `info` in `backlog-board.md`. `/btw` can't read files: answer only from what this session has already read, and if it hasn't read the card, say so and suggest `/backlog-it info <id>`.
@@ -162,6 +181,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
     wrap-it.md                    # Wrap-up skill -- save progress, shut down, prep for next session
     argo-it.md                    # Argo CD skill -- generate K8s manifests, deploy via GitOps
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
+    deadcode-it.md                # Dead-code skill -- prove unused, delete in verified batches, deletion log
     threats-it.md                 # Threat skill -- threat feed to verified IOC hunt, attack chains, VEX, report pair
   make-it/
     references/
@@ -176,6 +196,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
+      deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check

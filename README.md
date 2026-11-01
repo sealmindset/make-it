@@ -190,6 +190,7 @@ bash install.sh
 | `/nemo-it` | Scans any app for security vulnerabilities (OWASP + NeMo AI safety) and generates an attestation report | Security assessment of any project -- standalone, not tied to /make-it |
 | `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
 | `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
+| `/deadcode-it` | Finds code your app no longer uses, proves it with tools and a search, and removes it in small checked steps with a deletion log; asks you about anything it can't fully prove | Routine upkeep, or when `/resume-it` says unused code has piled up |
 | `/threats-it` | Turns a threat advisory, CVE list or IOC list into a verified assessment: archived sources, attack chains, a read-only hunt of your Microsoft tenant, VEX, and a leadership briefing plus technical companion (Markdown + PDF) | A new threat lands and someone asks "does this affect us, and do we have indicators?" |
 
 ---
@@ -957,6 +958,31 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.48.0 -- /deadcode-it: clear out code nobody uses, safely
+
+A new upkeep skill. `/deadcode-it` finds dead code across the whole project and removes it without breaking anything.
+- **Proof, not guesses.** knip, depcheck, ts-prune, tsc and eslint (JS/TS) and ruff, vulture and deptry (Python) run in
+  parallel; an AI search then checks each candidate for string and path references, dynamic imports, framework entry
+  points, CI and script use, and config-loaded packages. A tool that can't run is reported, never read as "nothing found".
+- **Deletion decisions on a strong model.** The subagents that prove and grade candidates always run on Fable (Opus
+  if unavailable), never Sonnet or Haiku, whatever the session uses.
+- **Graded before it's touched.** SAFE items go automatically; CAUTION items (whole files, routes, shared utilities)
+  come to you in one plain-English pick list; DANGER items (configs, entry points, public APIs, migrations) and the
+  app's built-in scaffold features are never removed.
+- **Small, checked, undoable steps.** Tests and build must pass first, and existing lint/type findings may only shrink
+  (a ratchet, so apps with old warnings can still be cleaned). One kind per batch, checked after each -- for Docker
+  apps against freshly rebuilt containers; a red batch is rolled back and split until the culprit is found. Everything
+  lands on a `chore/deadcode-<date>` branch, and no branch is ever deleted.
+- **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.
+- **Wired into the framework, tool-free.** New check Q14 is an upkeep reminder that runs no tools: when no cleanup has
+  been done, or the last is 30+ days and 20+ commits old, `/resume-it` suggests `/deadcode-it`. `/retrofit-it` suggests
+  it once a retrofit is verified.
+- **Scaffold fixes found along the way.** Both scaffolds' `lint` scripts use `eslint .` (`next lint` is gone in Next 16).
+  The `fastapi-nextjs` scaffold's ruff config now reports unused imports instead of auto-deleting them on commit (an
+  import can be there for what it does when loaded), and its own 12 unused imports are removed. Both scaffolds get a
+  `.dockerignore`, so image builds no longer copy the developer's own `node_modules` / `.venv` over the image's install.
+  The `fastapi-nextjs` test fixture no longer sets a `user_id` that `UserInfo` doesn't have (its tests pass again).
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 
