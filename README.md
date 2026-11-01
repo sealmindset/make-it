@@ -974,7 +974,10 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
 - **A deletion log.** `docs/DELETION_LOG.md` records what went, why it was safe, how it was verified, and the commit.
 - **Wired into the framework, tool-free.** New check Q14 is an upkeep reminder that runs no tools: when no cleanup has
   been done, or the last is 30+ days and 20+ commits old, `/resume-it` suggests `/deadcode-it`. `/retrofit-it` suggests
-  it once a retrofit is verified. Also fixes the `fastapi-nextjs` scaffold's `lint` script (`next lint` is gone in Next 16).
+  it once a retrofit is verified.
+- **Scaffold fixes found along the way.** Both scaffolds' `lint` scripts use `eslint .` (`next lint` is gone in Next 16).
+  The `fastapi-nextjs` scaffold's ruff config now reports unused imports instead of auto-deleting them on commit (an
+  import can be there for what it does when loaded), and its own 12 unused imports are removed.
 
 ### v1.47.0 -- /threats-it: does this threat affect us, with proof
 

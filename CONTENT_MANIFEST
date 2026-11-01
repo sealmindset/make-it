@@ -99,7 +99,7 @@ b79d1137aba1082652b664a42e0ee18318f4513801ffb42f750ab8bbbeedf325  make-it/scaffo
 0ee2088539f00fa05d19c54503848d7917e73568215562f9fab5292f36caba65  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/validate.py
 ac74946362fe220bc6b988e2ed03d01f980f74fb7cfefaddcfe4a26d589122d4  make-it/scaffolds/fastapi-nextjs/backend/app/main.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/__init__.py
-c994e3644f46ec5d26b831e8e702d8a0556f57313da201bb3adc5883266931d0  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/auth.py
+0081e6faf69a642a0a8ad7841c396e1dfafee7c7b9114f238458bb2f7954acaa  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/auth.py
 11ddd1049787a8bddfb685c8cf9aa90878e53af5834f95d557e37727a904f231  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/logging.py
 feaf00914fe2bb7a2c9c458d9b23bd0eb48e9c59e62b7356221ddf7141000866  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/permissions.py
 ec2533e98c7785cf54aac902cd309c1dca96bf9715a80657c108a0d65370e5bc  make-it/scaffolds/fastapi-nextjs/backend/app/models/__init__.py
@@ -110,10 +110,10 @@ cd8336fb2564c3eb24144cf6d0edbd0c18913a322e83b70fff7ad93e4aeed900  make-it/scaffo
 c23152b719c4f713527e214e898ba9df8aedf2ff16fc224ed8d2ef747fd33deb  make-it/scaffolds/fastapi-nextjs/backend/app/models/role.py
 79af05a77791221d4036d3e4d13ab5a00358199e3b9d1fa1ddc48ba097f5de4f  make-it/scaffolds/fastapi-nextjs/backend/app/models/user.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/routers/__init__.py
-59a029ddd937e73bf9429bc3bfc356cf70865951a084cb630d15e187b14c6960  make-it/scaffolds/fastapi-nextjs/backend/app/routers/auth.py
+4f5d435175b18bd368a94b736514a7a7ab0c27c81eee67472f762986bb550136  make-it/scaffolds/fastapi-nextjs/backend/app/routers/auth.py
 8745dd2b9d9267f4c7b82daf94f65b78fd13ec568ec3645947cefc724284ac6e  make-it/scaffolds/fastapi-nextjs/backend/app/routers/logs.py
 320fea774a6a8e38f0dce79c97891e1c30d0835a21e5ac53a1f0babc813d85ac  make-it/scaffolds/fastapi-nextjs/backend/app/routers/permissions.py
-944f61e8862a915ce61a9ffbf47e3f84b963355825e1746b3f253dc712551022  make-it/scaffolds/fastapi-nextjs/backend/app/routers/prompts.py
+f4f54e2a7f59965fb035293b37c59e582e28c313d6449d3ddd26337944ce803d  make-it/scaffolds/fastapi-nextjs/backend/app/routers/prompts.py
 013a093af308282f7d87f9bc22dc11f5a976991010176aff481d8d05d234744b  make-it/scaffolds/fastapi-nextjs/backend/app/routers/roles.py
 550874121e2cfddc18d552d2d1e5daf1ba3a978e03dd241c6ab22ef48741069f  make-it/scaffolds/fastapi-nextjs/backend/app/routers/settings.py
 e77fabed2966c1f4b58927b5a904da42c06b7fb7e440238fbcbe19ebff19fe6c  make-it/scaffolds/fastapi-nextjs/backend/app/routers/users.py
@@ -124,13 +124,13 @@ e9d22fde12ff6ccb823a92ffb1b652a8ef4755d075f2dcef67107917d9387166  make-it/scaffo
 d9400939ade6b4aea77e46e48ff4e2f9d4ec669ab3a01bf2539b0687741ab38d  make-it/scaffolds/fastapi-nextjs/backend/app/schemas/role.py
 9b20c36e95a344c2c5954b40a3d339f5c2de0e29c4265aa218c5224d67f65a01  make-it/scaffolds/fastapi-nextjs/backend/app/schemas/user.py
 4a4bc82d6d7ce9f5ad4a425382798d63a23364f42d6feff2832504f02cdd14ab  make-it/scaffolds/fastapi-nextjs/backend/app/services/log_service.py
-af711cc58536527e2afcb0c7002655bc197bc66ccffe2caad46a0918771a1748  make-it/scaffolds/fastapi-nextjs/backend/app/services/prompt_service.py
+8b8c861b6fe765ae04e387d082be2496f984611cbb3e4d584749513dabaf587d  make-it/scaffolds/fastapi-nextjs/backend/app/services/prompt_service.py
 37ac6812ded646893e0d71ca365f1d0fc9452a2b58c4a198210218d1c2f5740f  make-it/scaffolds/fastapi-nextjs/backend/app/services/settings_service.py
 79792f2f7cc2c48fd59e11a06b68ab25264ae2974d14b884853e2da65511b2e1  make-it/scaffolds/fastapi-nextjs/backend/entrypoint.sh
 79f73c8fbc81fc630f08d5839dc67039a12dbcd8a9ba24c6a1bb5f8515ef7d5d  make-it/scaffolds/fastapi-nextjs/backend/pytest.ini
 8bffbf6c8c0406f9ed303d6b04bc02605a2b8dfd7e6918c62a3f7b8da01c79a1  make-it/scaffolds/fastapi-nextjs/backend/requirements.txt
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/__init__.py
-2a31cdcd5634be5e7dfc3908a64088b0ccaac8b67568b4bc32b30e4359049d46  make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
+9324ba10697aeb275efba73a11099a728b8983963d6b8a8300506ea16e76d919  make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/__init__.py
 4f4a54e6b1b85e166c2f036229b14db74a53962ad973c97d854ce45553f6e27b  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_health.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/unit/__init__.py
@@ -184,7 +184,7 @@ f376074b41f9ea59f63682af69f0a3b19879dc22751dc68479e8cacf83255600  make-it/scaffo
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/Dockerfile
 7719b9908602199e66a7d229259ba3b853aece4f2a87dd432de4ae3c700468a5  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
-359b368676370a3e08da9ea260d341a3b18e0daa6fbf771383f3a1e7f68e7a7f  make-it/scaffolds/fastapi-nextjs/pyproject.toml
+791dba6a60419b7e6e1bc27754fb8c9e451d8f6a306eb0bbe12e8c5c5a34abec  make-it/scaffolds/fastapi-nextjs/pyproject.toml
 9c66da23d70ab4242ffd543293778f7f99acd73870bf57d54534a2b607fa0bc4  make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh
 794bdeaa8f1f9c59fd5f338615f6bc79a9ad2d17789e44ebee35a3383f69c416  make-it/scaffolds/fastapi-nextjs/scripts/worktree.sh
 05105062832af7399ede470e5e8e0564c971ea3f62b17f763653270a02eed25f  make-it/scaffolds/fastapi-nextjs/trivy.yaml
@@ -203,7 +203,7 @@ df6ada73b40d268e916188e82e207114182dfc9d7d21d3f56558502cbf764d92  make-it/scaffo
 28a97b0cb14aaa20bd4ed4a072eb4a6d3dc8fa244304b1df8655de7877e6abae  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/requirements.txt
 64429a3b3ec4001151c5af63647eae573e8cd483de0801e03fe754846d1b0697  make-it/scaffolds/nextjs-fullstack/next.config.ts
-bfe93c89ffa9821f2d9b2f90faf21b9159cb4184c457e61d31f6a656c6f7fb38  make-it/scaffolds/nextjs-fullstack/package.json
+6c716fec39f0bc92f73f7b3bfcdba94dd675152afba03eb3cee41d8563fcc870  make-it/scaffolds/nextjs-fullstack/package.json
 ac31e2a95ef64fe27ceb4124e101675273107aae2e33bc490b01d919e7f03646  make-it/scaffolds/nextjs-fullstack/postcss.config.mjs
 f2a5b4feb025b4f9d6406baed433f4c11fdd979c992b6b241b2c38492de8db92  make-it/scaffolds/nextjs-fullstack/prisma/schema.prisma
 4f9b4a6ec02bdaea88e9d8bb8f8d728070f85f90275d127f7798c18d9ec92d79  make-it/scaffolds/nextjs-fullstack/prisma/seed.ts

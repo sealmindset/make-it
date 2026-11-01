@@ -5,11 +5,10 @@ Auth is bypassed by overriding the get_current_user dependency.
 """
 
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import String, event
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database import get_db
@@ -31,7 +30,7 @@ from app.schemas.auth import UserInfo
 
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.dialects import sqlite as sqlite_dialect
+from sqlalchemy.dialects import sqlite as sqlite_dialect  # noqa: F401 -- kept: loads the SQLite dialect the shims below compile for
 
 
 @pytest.fixture(autouse=True)

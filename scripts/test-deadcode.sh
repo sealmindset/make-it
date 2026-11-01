@@ -126,6 +126,8 @@ check "retrofit runs no dead-code tools"       gq -F "not measured here (no tool
 check "resume-it reads only log dates for Q14" gq -F "it runs no tools and writes nothing, just reads the dates" .claude/commands/resume-it.md
 check "resume-it suggests /deadcode-it"        gq -F "(routes to /deadcode-it)" .claude/commands/resume-it.md
 check "scaffold lint no longer uses next lint" gq -F '"lint": "eslint . && prettier --check .",' .claude/make-it/scaffolds/fastapi-nextjs/frontend/package.json
+check "fullstack scaffold lint no longer uses next lint" gq -F '"lint": "eslint . && prettier --check .",' .claude/make-it/scaffolds/nextjs-fullstack/package.json
+check "scaffold ruff never auto-deletes imports" gq -F 'unfixable = ["F401", "F841"]' .claude/make-it/scaffolds/fastapi-nextjs/pyproject.toml
 check "CLAUDE.md: culprit in use, never offered" gq -F "the culprit is logged in use and never offered" CLAUDE.md
 check "desktop bundles carry deadcode.md"      bash -c 'for f in desktop/skills/make-it/refs.txt desktop/skills/guardrails/refs.txt; do [ "$(grep -cxF ".claude/make-it/references/deadcode.md" "$f")" = 1 ] || exit 1; done'
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh
