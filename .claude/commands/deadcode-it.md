@@ -81,7 +81,7 @@ earlier cleanup never blocks a run. Silently, in this order:
 
 No branch yet -- it is made only after the baseline is green.
 
-Tell the user one line: "Looking for code your app no longer uses. I'll check everything works
+Once every precondition has passed, tell the user one line: "Looking for code your app no longer uses. I'll check everything works
 before and after each change."
 
 </step>
@@ -94,12 +94,16 @@ ran, the short sha, and the ratcheted findings list.
 A gate (tests or build) red → stop, on the starting branch with nothing changed: "One of your
 app's checks already fails before I change anything: <one line>. I didn't change anything. Want
 me to look into that first?" Options "Yes, look into it" (→ /debug-it) / "No, stop here".
-Lint, type-check or format findings alone never stop the run: say once, "Your app already has
-<N> style and type warnings; I'll make sure the cleanup doesn't add any." 
+Lint, type-check or format findings alone never stop the run: when there are any, say once,
+"Your app already has <N> style and type warnings; I'll make sure the cleanup doesn't add any."
+A build command that is only a type-check (`"build": "tsc --noEmit"`) counts as a gate.
 
-Green → create the cleanup branch from HEAD: `git switch -c chore/deadcode-<YYYY-MM-DD>` (that
-name, or a `-dropped` form of it, taken → `-2`, `-3`, ...; refused for another reason, such as an existing branch named
-`chore` → `deadcode-cleanup-<YYYY-MM-DD>`). Record its name for the log header.
+Green → the cleanup branch is created from HEAD **when the run first has something to commit**
+(the first batch, or a log that records new decisions): `git switch -c chore/deadcode-<YYYY-MM-DD>`
+(that name, or a `-dropped` form of it, taken → `-2`, `-3`, ...; refused for another reason, such
+as an existing branch named `chore` → `deadcode-cleanup-<YYYY-MM-DD>`). Record its name for the
+log header. A run with nothing to remove and no new decision to record makes no branch and no
+commit: the report says "Nothing to clean up" and the user stays where they were.
 
 </step>
 
@@ -121,6 +125,12 @@ change anything), one per kind (imports/locals, exports, files,
 dependencies, test helpers), each handed deadcode.md §3 and its slice of the list, each
 returning per item: the searches run, what they found, and a proposed grade with the reason.
 Grade conservatively: torn → the higher grade.
+
+**Model for these decisions.** Proving a candidate unused and grading it decide what gets
+deleted, so the subagents are always dispatched with `model: "fable"` (`"opus"` if Fable isn't
+available) -- never `sonnet` or `haiku`, whatever model this session runs on. If this session
+itself runs on Sonnet or Haiku, it hands the whole §3-§4 review to such a subagent instead of
+grading itself, and applies the grades it returns.
 
 </step>
 
@@ -147,8 +157,9 @@ answer → `Kept (user's call)`; ask dismissed → they stay candidates (deadcod
 
 <step name="log">
 
-Finish `docs/DELETION_LOG.md` per deadcode.md §7 (commit hashes in place of `this batch`,
-candidates incl. `in use` items, kept items, keep-list count). If `CHANGELOG.md` exists, one line
+Skipped when the run made no branch (nothing to record). Otherwise finish `docs/DELETION_LOG.md`
+per deadcode.md §7 (commit hashes in place of `this batch`, candidates incl. `in use` items and
+items "already removed on `<branch>`", kept items, keep-list count). If `CHANGELOG.md` exists, one line
 ("Removed <N> unused pieces of code -- see docs/DELETION_LOG.md") under its `## [Unreleased]` /
 `### Removed` heading, adding those headings at the top if they aren't there. The log's dated header is what
 the Q14 upkeep reminder reads (deadcode.md §8); nothing is written to TODO.md.
@@ -177,7 +188,8 @@ Plain English, about one screen:
     review. Or say 'drop the cleanup' and I'll put you back where you were."
 - **Earlier cleanups** (precondition 5), if any: one line each -- "You also have an earlier
   cleanup on `<branch>` (<date>): say 'keep' or 'drop' it, or leave it."
-- Sample to inspect: name up to 3 removed items from the log so the user can spot-check one.
+- Sample to inspect: name up to 3 removed items from the log so the user can spot-check one
+  (none removed → leave this line out).
 
 Procedures (the starting and cleanup branch names come from this run, or from the log header of
 an earlier run). Neither ever deletes a branch, and both first check for uncommitted changes to

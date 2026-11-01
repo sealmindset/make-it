@@ -120,7 +120,7 @@ check "detached HEAD stops the run"            gq -F "not on a branch right now"
 check "a red gate stops in the skill"          gq -F "A gate (tests or build) red → stop, on the starting branch with nothing changed" "$CMD"
 check "lint debt never stops the run"          gq -F "Lint, type-check or format findings alone never stop the run" "$CMD"
 check "keep/drop with no cleanup has wording"  gq -F "There's no cleanup to keep or" "$CMD"
-check "cleanup branch made only after a green baseline" gq -F 'Green → create the cleanup branch from HEAD' "$CMD"
+check "cleanup branch made only after a green baseline" gq -F 'Green → the cleanup branch is created from HEAD' "$CMD"
 check "nothing is fetched or pulled"           gq -F "Nothing is fetched or pulled" "$CMD"
 check "drop renames to -dropped"               gq -F 'branch -m <cleanup branch> <cleanup branch>-dropped' "$CMD"
 check "drop refuses a branch with the user's work" gq -F "also has your own work on it" "$CMD"
@@ -151,6 +151,13 @@ check "keep/drop check unsaved changes first"  gq -F "both first check for uncom
 check "'Leave them' has its stop message"      gq -F "OK -- I've left your changes as" "$CMD"
 check "scaffold test fixture keeps ids off UserInfo" gq -F "SEED_USER_IDS[user_info.sub]" .claude/make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
 check "scaffold images never get the host's installs" bash -c 'for f in .claude/make-it/scaffolds/fastapi-nextjs/frontend/.dockerignore .claude/make-it/scaffolds/fastapi-nextjs/backend/.dockerignore .claude/make-it/scaffolds/nextjs-fullstack/.dockerignore; do [ "$(grep -cE "^(node_modules|\.venv)$" "$f")" -ge 1 ] || exit 1; done'
+check "grading subagents are pinned to fable/opus" gq -F 'always dispatched with `model: "fable"` (`"opus"` if Fable isn'"'"'t' "$CMD"
+check "never sonnet or haiku for grading"      gq -F 'never `sonnet` or `haiku`, whatever model this session runs on' "$CMD"
+check "a small-model session hands grading off" gq -F "hands the whole §3-§4 review to such a subagent" "$CMD"
+check "no branch when nothing is removed"      gq -F "makes no branch and no" "$CMD"
+check "Q14 date counts from midnight"          gq -F -- "--since='<date> 00:00'" "$REF"
+check "Q14 on a cleanup branch reads its start" gq -F "When the current branch is itself a cleanup branch, read the branch" "$REF"
+check "an untracked lockfile blocks dep removal" gq -F "An untracked lockfile can't be updated" "$REF"
 check "CLAUDE.md: culprit in use, never offered" gq -F "the culprit is logged in use and never offered" CLAUDE.md
 check "desktop bundles carry deadcode.md"      bash -c 'for f in desktop/skills/make-it/refs.txt desktop/skills/guardrails/refs.txt; do [ "$(grep -cxF ".claude/make-it/references/deadcode.md" "$f")" = 1 ] || exit 1; done'
 check "install.sh describes it"                gq -F "deadcode-it) desc=" install.sh

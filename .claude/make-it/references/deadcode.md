@@ -67,7 +67,7 @@ over an existing one.
 | JS/TS | tsc | `node_modules/.bin/tsc --noEmit --noUnusedLocals --incremental false` -- the project's own install only (`npx --no tsc ...` passes the flags to npm, not tsc: it then finds nothing and can write `.js` files into the project) | unused imports and locals |
 | JS/TS | eslint | `node_modules/.bin/eslint . --report-unused-disable-directives -f json` -- only when `node_modules/.bin/eslint` exists and its config matches its version (`eslint.config.*`, or `.eslintrc*` with eslint < 9); no `eslint` in the project's dependencies → not applicable; installed but the config doesn't match → "not run: <reason>" | unused vars (per the project's config), stale `eslint-disable` comments |
 | Python | ruff | `uvx ruff check --no-cache --select F401,F811,F841 --output-format json <src>` | unused imports, redefinitions, unused locals |
-| Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude <§1.3 dirs>` | unused functions, classes, attributes, variables (confidence %) |
+| Python | vulture | `uvx vulture <src> --min-confidence 60 --exclude node_modules,.next,dist,build,venv,.venv,__pycache__,mock-services,alembic/versions` | unused functions, classes, attributes, variables (confidence %) |
 | Python | deptry | `requirements.txt` → `uvx --with-requirements requirements.txt deptry . --json-output <scratch>/deptry.json`; `pyproject.toml` only → `uv pip compile pyproject.toml -q -o <scratch>/req.txt` then `uvx --with-requirements <scratch>/req.txt deptry . --json-output <scratch>/deptry.json` (run from the manifest's directory; nothing is written into the project) | unused deps (DEP002 only; DEP001 "missing" is not dead code) |
 
 deptry needs the project's packages in its environment or it can't map `PyYAML` → `yaml` and
@@ -230,7 +230,8 @@ DANGER (e.g. a `package.json` `main`) is logged as DANGER.
    cleanup batch (a blank line a deletion leaves doubled, or at the top of a file, goes with it). Remove a dependency by deleting its manifest entry by hand (keep the file
    valid: a JSON entry may share a line with others; `npm uninstall` reformats `package.json`),
    then update the lockfile with the project's own package manager, and verify that batch on a
-   fresh frozen install (in Docker, the `--build` above):
+   fresh frozen install (in Docker, the `--build` above). An untracked lockfile can't be updated
+   (§1.4: never edited), so that manifest's dependencies are logged as candidates, not removed:
 
    | Lockfile | Update the lock | Fresh install to verify |
    |----------|-----------------|-------------------------|
@@ -289,7 +290,7 @@ check. Each option in plain words:
   undo ("one step to bring it back").
 
 When the user answers, unpicked items go under `### Kept (user's call)` and are never asked about
-again. An answer with nothing picked is an answer. If the ask is dismissed or skipped, nothing was chosen: the items stay under Candidates
+again. An answer that picks nothing to remove ("Keep all of these", or "Keep it") is an answer. If the ask is dismissed or skipped, nothing was chosen: the items stay under Candidates
 ("CAUTION, not yet decided") and are asked about on the next run.
 
 ## 7. Deletion log -- `docs/DELETION_LOG.md`
@@ -332,8 +333,10 @@ candidates with "duplicate of <path>" as the reason).
 Q14 runs **no dead-code tools** and writes nothing; it only reads git. It reads the dates of
 `/deadcode-it` runs from `docs/DELETION_LOG.md` **on the current branch** (the
 `## <YYYY-MM-DD> -- /deadcode-it` headers) -- a cleanup that was dropped or never kept isn't
-there, so it doesn't count. It is a gap when there is no run at all, or the newest is 30+ days old
-and HEAD has 20+ commits since (`git rev-list --count --since=<date> HEAD`). Separately, a cleanup
+there, so it doesn't count. When the current branch is itself a cleanup branch, read the branch
+it started from (its log header) instead. It is a gap when there is no run at all, or the newest
+is 30+ days old and HEAD has 20+ commits since (`git rev-list --count --since='<date> 00:00'
+HEAD` -- a bare date means "this time of day", which miscounts that day). Separately, a cleanup
 branch that isn't dropped and isn't part of the current branch is a gap too: "you have a cleanup
 waiting to be kept or dropped". The caller turns a gap into a suggestion to run
 `/deadcode-it`; it never writes a TODO.md line for it.

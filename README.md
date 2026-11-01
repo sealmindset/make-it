@@ -965,6 +965,8 @@ A new upkeep skill. `/deadcode-it` finds dead code across the whole project and 
 - **Proof, not guesses.** knip, depcheck, ts-prune, tsc and eslint (JS/TS) and ruff, vulture and deptry (Python) run in
   parallel; an AI search then checks each candidate for string and path references, dynamic imports, framework entry
   points, CI and script use, and config-loaded packages. A tool that can't run is reported, never read as "nothing found".
+- **Deletion decisions on a strong model.** The subagents that prove and grade candidates always run on Fable (Opus
+  if unavailable), never Sonnet or Haiku, whatever the session uses.
 - **Graded before it's touched.** SAFE items go automatically; CAUTION items (whole files, routes, shared utilities)
   come to you in one plain-English pick list; DANGER items (configs, entry points, public APIs, migrations) and the
   app's built-in scaffold features are never removed.
