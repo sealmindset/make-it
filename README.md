@@ -959,6 +959,10 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.49.1 -- /try-it checks for code that attacks your computer, too
+
+`/try-it` can be the first thing to run a project, and it runs package installs early, so the hostile-code check (X09) now comes before all of that.
+
 ### v1.49.0 -- Check for code that attacks your computer, before running anything
 
 Some fake projects start a password stealer the moment a file is loaded, and the usual scanners can

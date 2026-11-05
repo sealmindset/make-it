@@ -31,7 +31,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 
 `/try-it` presents the user's app for exploration. When called after `/make-it`, the app is already running and verified by build-verify. When called standalone, it starts the app first.
 
-0. **Context Discovery** -- Reads app-context, docker-compose, .env; checks if app is already running
+0. **Context Discovery** -- Checks for hostile code first (X09); reads app-context, docker-compose, .env; checks if app is already running
 1. **Startup** -- Starts containers if not already running; skips if build-verify left them up
 2. **Smoke Test** -- Quick verification (health checks, login, pages, screenshots) as a safety net
 3. **Fix (safety net)** -- If smoke test finds issues, diagnose and fix (should rarely happen)

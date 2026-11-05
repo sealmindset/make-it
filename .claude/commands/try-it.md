@@ -78,6 +78,13 @@ so the user can walk into a fully working demo.
 
 **MANDATORY FIRST STEP -- Gather project context silently.**
 
+**Check for hostile code first (X09).** Called on its own, this skill may be the first thing to run
+this project, and step 3b below already runs package installs. Follow
+`~/.claude/make-it/references/hostile-code.md` now, before anything in this project is installed,
+tested, built or started. Exit 1 stops here: that file's wording replaces this skill's "never show
+technical issues" and "keep trying to fix it" rules. If the app is already running, leave it running
+and say so, because the code may already have run. Exit 0 stays silent.
+
 **1. Read project state files:**
 
 ```
