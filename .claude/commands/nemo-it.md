@@ -365,6 +365,9 @@ Report to user: "Preflight complete. I am ready to begin scanning. Results will 
 
 Tell the user: "Starting static analysis. I am scanning your code for security issues without needing the app to be running. This looks at your source code, dependencies, and configuration files."
 
+**0. Hostile-code check (X09):** run it first, as `~/.claude/make-it/references/hostile-code.md` says:
+`python3 -I ~/.claude/make-it/scripts/hostile-code-check.py .` Exit 1 is a CRITICAL finding titled "Code that attacks the computer running it", listed with its files; Semgrep and Bandit can miss this entirely, so don't lower it because they found nothing. It is not run or probed further, and later phases that start the app don't run. Exit 2 is reported as "not checked", never as a pass. Report only, as with every /nemo-it finding.
+
 **1. Semgrep scan with security rulesets:**
 
 ```bash

@@ -196,6 +196,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
+      hostile-code.md            # X09: check for code that attacks the computer running it, before anything runs; a stop, never a fix
       deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     threats-it/
@@ -305,6 +306,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 - Input validation at system boundaries, sensitive data masked in output
 - Latest stable dependencies, separation of concerns, environment-based config
 - Git initialized with proper .gitignore
+- Checked for hostile code before anything runs (X09): a match stops the run and only the user can clear it
 
 ### Tier 1: Web Application
 - OIDC authentication, database-driven RBAC, 4 system roles, permission matrix

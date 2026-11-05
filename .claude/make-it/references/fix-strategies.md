@@ -17,6 +17,8 @@ Every finding from a `/nemo-it` attestation is classified using these rules:
 | **MANUAL** | Fix requires understanding business logic, architectural decisions, or has multiple valid approaches. |
 | **SKIP** | Finding is informational, accepted risk, or N/A. |
 
+**Never classified: X09, hostile code** (`hostile-code.md`). A finding that code attacks the computer running it has no fix strategy: don't edit, delete or re-run it. It goes to the user.
+
 ---
 
 ## Strategy 1: Dependency Upgrades
