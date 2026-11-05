@@ -24,6 +24,7 @@ and the search can't prove on their own.
 <execution_context>
 
 @~/.claude/make-it/references/deadcode.md
+@~/.claude/make-it/references/hostile-code.md
 @~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/references/git-operations.md
 
@@ -83,6 +84,13 @@ No branch yet -- it is made only after the baseline is green.
 
 Once every precondition has passed, tell the user one line: "Looking for code your app no longer uses. I'll check everything works
 before and after each change."
+
+</step>
+
+<step name="hostile-code">
+
+**Check for hostile code (X09).** The next step installs packages and runs this project's tests on
+this computer. Follow `~/.claude/make-it/references/hostile-code.md` now, before anything in this project is installed, tested, built or started. Exit 1 stops here.
 
 </step>
 

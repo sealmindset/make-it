@@ -372,6 +372,8 @@ Document the decision in the project's `app-context.json` under `data_integratio
 
 **X07** [Tier 0] [FIX] **Dependency vulnerability audit** -- Run `pip-audit -r backend/requirements.txt` (Python) and/or `npm audit` (Node.js) to detect known CVEs. Auto-fix with retry loop: (1) `pip-audit --fix` / `npm audit fix`, (2) re-audit to verify, (3) manual version pin if auto-fix insufficient, (4) repeat up to 3 cycles. Remaining vulnerabilities after 3 cycles logged to TODO.md with severity, package, and CVE ID. Install `pip-audit` if not available. Runs silently during /resume-it static scan and /try-it smoke test. Rebuild affected Docker services if requirements.txt or package.json changed.
 
+**X09** [Tier 0] [BLOCK] **No code built to attack the computer running it** -- Run `~/.claude/make-it/scripts/hostile-code-check.py` before anything in the project is installed, tested, built or started; `~/.claude/make-it/references/hostile-code.md` is the whole procedure. A match stops the run and goes to the user. It is never auto-fixed, never edited or deleted, never downgraded to TODO.md, and only the user can clear it. "Could not finish" is not a pass. Finding nothing does not prove the project is safe.
+
 **X08** [Tier 1, 5] [WARN] **ICS/OT integration detection** -- Scan service client code, dependency lists, and environment variables for references to industrial control system protocols and endpoints. Detection patterns:
 - **Protocol libraries**: `pymodbus`, `opcua`, `asyncua`, `python-opcua`, `bacpypes`, `pydnp3`, `snap7`, `pycomm3`, `cpppo`, `node-opcua`, `modbus-serial`, `jsmodbus`
 - **Protocol URIs/ports**: `opc.tcp://`, `modbus://`, port references to 502 (Modbus), 4840 (OPC-UA), 47808 (BACnet), 20000 (DNP3), 102 (S7/ISO-TSAP), 44818 (EtherNet/IP)

@@ -68,6 +68,8 @@ You are the same friendly guide from /make-it. The user already built their app 
 
 **MANDATORY FIRST STEP -- Gather project context before interacting with the user.**
 
+**Check for hostile code first (X09).** The project may have changed since the last session. Follow `~/.claude/make-it/references/hostile-code.md` now, before anything in this project is installed, tested, built or started. Exit 1 stops here.
+
 **Items left out by your choice, everywhere in this skill:** follow
 `~/.claude/make-it/references/left-out-record.md`, and read the record with it before step 6b.
 When the user brings a left-out item back, all of it or only part (which narrows its line), follow
@@ -405,7 +407,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Notifications (N01-N08):** Check for notifications table in migrations/schema, /api/notifications route, notification-bell component, notification seed data
    - **File Upload (F01-F08):** Check for upload component, extract-text utility, Docker volume in docker-compose.yml. If pdf-parse is in package.json, verify import uses `pdf-parse/lib/pdf-parse` NOT default import (F03 -- crashes in production Docker)
    - **Settings (G01-G07):** Check for app_settings table in migrations, settings service, admin page
-   - **Security (X01-X07):** Grep for hardcoded secrets, external font imports
+   - **Security (X01-X09):** Grep for hardcoded secrets, external font imports (X09, the hostile-code check, already ran first)
    - **Security (X07) Dependency audit:** Run `pip audit` (Python) and/or `npm audit` (Node.js) to detect known vulnerabilities in installed packages. This catches CVEs that Dependabot would flag on GitHub. If vulnerabilities found:
      1. **Auto-fix:** Run `pip audit --fix` / `npm audit fix` to resolve what can be resolved automatically
      2. **Verify:** Re-run the audit to confirm fixes applied

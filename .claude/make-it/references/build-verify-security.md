@@ -17,6 +17,10 @@ pass, but BEFORE /try-it presents the app to the user.
 - No attestation document generated (that's /nemo-it's job when run standalone)
 - Findings and fixes are logged internally for the build-verify report
 
+**One exception to all of this -- X09, hostile code.** `hostile-code.md` runs before Part B starts
+anything, and a match is not a finding for this file: it is never auto-fixed, never left in TODO.md,
+and it does stop handoff. Everything below is for honest code with flaws.
+
 ---
 
 ## Phase 0: Tool Detection (Silent)

@@ -1104,7 +1104,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **M01-M04**: Mock services (mock-oidc, seed script, contracts, env vars)
 - **L01-L08**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI)
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
-- **X01-X06**: Security (secrets, validation, deps, headers, no Java, no module throws)
+- **X01-X09**: Security (secrets, validation, deps, headers, no Java, no module throws, X09 hostile code: `~/.claude/make-it/references/hostile-code.md`, a stop rather than a fix, run before Part B starts anything)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
 - **Q01-Q14**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow, dead-code upkeep reminder -- N/A in this first build)
 - **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)

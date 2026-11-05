@@ -112,6 +112,9 @@ If all GREEN: "Your machine is ready. Now let me take a look at your app..."
 
 **This is the core differentiator from /make-it.** Instead of asking the user what they want to build, you READ the codebase and figure it out.
 
+**0. Check for hostile code first (X09).** This is someone's existing code and it hasn't run on this
+computer through us yet. Follow `~/.claude/make-it/references/hostile-code.md` now, before anything in this project is installed, tested, built or started. Exit 1 stops here.
+
 **1. Scan the project structure:**
 
 ```bash
@@ -1208,7 +1211,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **N01-N08**: Notifications
 - **F01-F08**: File upload & document processing (if app has Documents page or uploads)
 - **G01-G07**: Application settings
-- **X01-X06**: Security
+- **X01-X09**: Security (X09 is the hostile-code check: re-run it, because this retrofit added code)
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)

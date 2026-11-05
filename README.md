@@ -959,6 +959,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.49.0 -- Check for code that attacks your computer, before running anything
+
+Some fake projects start a password stealer the moment a file is loaded, and the usual scanners can
+miss them entirely. A new check (X09) reads a project before `/retrofit-it`, `/resume-it`,
+`/deadcode-it` or build-verify runs any of it, and `/nemo-it` reports it.
+
+- A match stops the run. Nothing is fixed, deleted or run, and only you can clear a file, by typing
+  its path. A clearing holds for those exact contents and lives outside the project.
+- It looks for shapes, not one campaign's addresses, and reads Python, npm install hooks and VS Code
+  tasks. Finding nothing doesn't prove a project is safe.
+
 ### v1.48.0 -- /deadcode-it: clear out code nobody uses, safely
 
 A new upkeep skill. `/deadcode-it` finds dead code across the whole project and removes it without breaking anything.
