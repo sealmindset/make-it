@@ -441,6 +441,10 @@ class Wiring(unittest.TestCase):
         self.order(".claude/commands/make-it.md", mark, "**PART B: Live verification")
         self.order(".claude/commands/retrofit-it.md", "X09", "**PART B: Live verification")
         self.order(".claude/commands/nemo-it.md", "hostile-code-check.py", "PHASE 1.5: DEPENDENCY")
+        # Phase 0 of /try-it already runs npm audit fix and pip install, so the check goes before all of it.
+        self.order(".claude/commands/try-it.md", mark, "**1. Read project state files:**")
+        self.order(".claude/commands/try-it.md", mark, "npm audit fix")
+        self.order(".claude/commands/try-it.md", mark, "docker compose")
 
     def run_snippet(self, shell, path):
         import re
