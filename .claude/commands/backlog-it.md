@@ -70,9 +70,9 @@ user's go, and every other skill reads the same board.
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
 | `reconcile --prs [--dry-run]` | No AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"`, print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item (Step 4); always end with `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --needs-you` |
-| `plan [filter] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b) |
+| `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b); `--with-deps` also plans what the filter waits on, across epics |
 | `mode <id> <mode\|auto>` | Choose a card's mode yourself; `plan` keeps it |
-| `groom [filter] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md` |
+| `groom [filter] [--with-deps] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md`; `--with-deps` adds the chain behind the filter |
 | `groom move/pin <id> <pos>`, `groom unpin <id>` | Pin / release a rank |
 | `groom strategy [--apply\|--dry-run]` | Foundation vs polish → `STRATEGY.md` |
 | `undo` | Revert the last board commit (board in its own repo only) |
@@ -105,7 +105,7 @@ if they touch **no common source files** and **no common data**. At most one lan
 category; high-stakes cards are never auto-picked. Dispatch the lanes with `/dispatch-it` -- one
 agent per card, each in its own worktree, each running the `/debug-it` method and recording its PR
 as `pr:` and how the fix is proved live as `signal:`. Dispatch starts with `reconcile --prs`. With no bug
-waiting, start **one** item: reconcile verdict `not-built`/`partial`, no unfinished `dependsOn`,
+waiting, start **one** item: reconcile verdict `not-built`/`partial`, nothing it waits on unfinished (its own `dependsOn` or its epic's; an epic id = its open cards),
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
 Announce each pick before it starts. Gather every lane's questions into one message, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks). Shipping
 stays serial: one PR through CI and deploy at a time.
@@ -115,10 +115,15 @@ stays serial: one PR through CI and deploy at a time.
 `plan` reads `handoff.md` and the board, and gives each card that could start a mode --
 **solo**, **spike** (unknowns first), **subagent-it** (3+ ordered tasks), or **dispatch-it** (3+
 independent cards) -- in waves that finish soonest with every gate held, bugs first. High-stakes
-cards are held; cards that must wait are skipped with what they wait on. One headless `claude -p`
-returns strict JSON; `check-plan.py` then enforces the hard rules (no shared files or data in a
-parallel wave, high-stakes never in a wave, `dependsOn` order) -- if it still fails after one
-re-run, nothing is written.
+cards are held; cards that must wait are skipped with what they wait on. `scope.py` fixes the cards
+first: the filter (a card id such as an epic or one story, a status, a priority, or a category) and,
+with **`--with-deps`**, the chain of open cards they wait on across epics, all the way down
+(upstream only; same finish-soonest order) -- so `plan E04 --with-deps` puts E04 first without
+dropping its prerequisites. One headless `claude -p` returns strict JSON -- with `--with-deps`,
+also suggested missing links with their evidence; `check-plan.py --scope` then enforces the hard
+rules (no shared files or data in a parallel wave, high-stakes never in a wave, wait order, nothing
+outside the scope) -- if it still fails after one re-run, nothing is written. `--apply` writes the
+suggested links as `dependsOn:` and plans what they pull in (one more pass).
 It stamps `mode:` on the cards (never over `mode_by: you`), drafts `## Task N` plans for
 `subagent-it` cards, and proposes spike cards (filed with `--apply`). `start` adds the card's
 mode line after the preamble; `dispatch` follows the plan's next wave. A plan stays in force for

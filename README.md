@@ -959,6 +959,33 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.50.0 -- /backlog-it plan --with-deps: put one epic first, with what it needs from other epics
+
+`/backlog-it plan E04 --with-deps` plans epic E04 **and** the cards in other epics it waits on --
+then what those wait on, all the way down -- so putting an epic first no longer drops its
+cross-epic prerequisites out of the plan. Without the flag nothing changes: a filtered plan skips a
+card that waits outside the filter, and now says `--with-deps` pulls it in.
+- **One waiting rule, everywhere.** A card waits on its own `dependsOn` **and its epic's**, and a
+  `dependsOn` that names an epic means that epic's open cards (an epic whose cards are all done
+  waits on nothing). `BOARD.md`'s Next up, `status`, `plan`, `groom` and `dispatch` share it
+  (`regen-board.py`'s `needs`). **This changes existing boards:** cards under an epic that carries
+  `dependsOn:` -- `groom strategy --apply` stamps these -- now wait on it too.
+- **`scope.py`** (new, read-only) resolves the filter -- a card id (an epic or one story), a status,
+  a priority, or a category -- and with `--with-deps` the chain: what was pulled in and for which
+  card, what can't run (in progress, blocked), loops, and links to ids on another board.
+- **Suggested links.** Most cards have no written `dependsOn`, so a `--with-deps` plan also names
+  missing links with their evidence. `--apply` writes them as `dependsOn:` (plus a `## Links` note
+  on the card) and plans the cards they pull in, in one more pass; without it they're listed.
+- **The gate knows the scope.** `check-plan.py --scope` refuses a card outside the filter and its
+  chain, requires every scope card to be placed, held or skipped (filtered plans used to switch
+  that check off), and checks each suggested link (from a scope card, to an open card outside it,
+  not already a link, no loop, evidence given).
+- **`groom [filter] --with-deps`** grounds and ranks the chain too; its missing links are proposed
+  Board deltas, written under `--apply`.
+- **Checked.** New `scripts/test-backlog-with-deps.sh`: every backlog helper's self-test (new cases
+  for inheritance, epic ids, the scope, the gate), the routes, the doc contract and its anchors,
+  with planted-defect controls.
+
 ### v1.49.1 -- /try-it checks for code that attacks your computer, too
 
 `/try-it` can be the first thing to run a project, and it runs package installs early, so the hostile-code check (X09) now comes before all of that.
