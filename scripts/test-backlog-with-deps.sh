@@ -67,6 +67,13 @@ check "groom pulls in the chain too"             has "$GROOM" "**\`--with-deps\`
 check "dispatch waits on the same rule"          gq -F "nothing it waits on unfinished (its own \`dependsOn\` or its epic's" "$CMD"
 check "the user doc shows plan E04 --with-deps"  gq -F 'plan E04 --with-deps' "$DOC"
 check "plan/groom anchors resolve"               anchors "$REF"
+MODELS="$(one "$(awk '/^### Which model does what/{on=1; next} on && /^##/{exit} on' "$REF")")"
+check "the reference says which model does what" [ -n "$MODELS" ]
+check "settings carry models, Fable 5.2 then 5.1" gq -F '"judge": ["claude-fable-5-2", "claude-fable-5-1"]' "$REF"
+check "plan routes with --model"                 has "$PLAN" 'claude -p --model <route>'
+check "groom judges on the judge model"          has "$GROOM" 'one agent on model `judge` for steps 2-5'
+check "no judge served -> route, said aloud"     has "$MODELS" 'never a silent switch'
+check "the skill loads MODELS"                   gq -F '`MODELS` = `models`' "$CMD"
 # controls: a renamed heading must break the anchor check; a dropped flag must fail the route check
 sed 's/^### `plan \[filter\] \[--with-deps\]/### `plan [filter]/' "$REF" >"$TMPF"
 anchors "$TMPF" >/dev/null && bad "control: renamed plan heading passed" || ok "control: renamed plan heading breaks anchors"

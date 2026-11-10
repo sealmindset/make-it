@@ -959,6 +959,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.51.0 -- /backlog-it runs each AI step on the model it needs
+
+`plan`, `groom` and `groom strategy` no longer run everything on the session's model. Steps a
+checker or script backs up run on Opus: `plan`'s routing call (`check-plan.py` gates it) and
+`groom`'s per-card grounders. Pure-judgment steps run on Fable: `plan --with-deps` or a 100+ card
+plan, `groom`'s sequencing, and `groom strategy`.
+- **Fable 5.2, then 5.1**, whichever the deployment serves; with neither, judgment runs on Opus
+  and the run says so in one line, never silently.
+- **Settings `models`** (`route`, `ground`, `judge`; a model or a list tried in order) overrides it.
+- **Checked:** `scripts/test-backlog-with-deps.sh` pins the table, the order and the fallback.
+
 ### v1.50.1 -- The Confluence docs match the published pages
 
 The /backlog-it and overview pages on Confluence were updated, and their sources here now match
