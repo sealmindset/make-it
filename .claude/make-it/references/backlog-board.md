@@ -38,6 +38,31 @@ Every key is optional. The first file found wins **as a whole** (keys are not mi
 | `repo` | the project root | The code that `reconcile`, `groom`, and `groom strategy` check cards against. Set it in the user file when the board is used from anywhere. |
 | `lane_cap` | `3` | The most bugs fixed at once (see [Parallel lanes](#parallel-lanes)). |
 | `serial` | `[]` | Card `category:` values that always run **one at a time** -- work whose mistakes reach people or systems outside the team (payments, outgoing email, anything filed with an outside party). |
+| `models` | `{"route": "opus", "ground": "opus", "judge": ["claude-fable-5-2", "claude-fable-5-1"]}` | Which model does which AI step (see [Which model does what](#which-model-does-what)). Each value is a model or a list tried in order. Any key left out keeps its default. |
+
+### Which model does what
+
+The board's AI work is split by what a mistake costs, not run on whatever the session uses.
+Mechanical and gated steps take **`route`/`ground`** (default Opus): a checker or a script catches
+their slips. Pure-judgment steps that nothing downstream can check take **`judge`** (default Fable
+5.2, then Fable 5.1). Pass the name as `claude -p --model <name>` or as the agent's / Workflow
+agent's `model`.
+
+**Availability.** A list is tried in order: the first model the deployment serves wins (a
+"not available on your deployment" error means try the next). Check once per run with a one-word
+`claude -p --model <name>` call, not per agent. When no `judge` model is served, judge steps run on
+`route` and the run says so in one line ("Fable isn't enabled on this deployment -- grooming on
+Opus"); never a silent switch.
+
+| Step | Model | Why |
+|------|-------|-----|
+| `plan` routing call | `route` | `check-plan.py` gates every hard rule; a slip costs one re-run |
+| `plan --with-deps`, or 100+ candidates | `judge` | suggested links and long chains are judgment the gate only shape-checks |
+| `groom` grounders (one per card, the reconcile ladder) | `ground` | evidence gathering against code and tests; many cards |
+| `groom` steps 2-5 (clean, sequence, tag, persist) | `judge` | one agent with every grounder's verdict decides what unblocks the most and what to cut |
+| `groom strategy` analysts and the map | `judge` | inferred epic dependencies and foundation-vs-polish calls go wrong quietly |
+
+Capture triage, `reconcile` and `info` keep the session's model.
 
 **Slack (optional).** The webhook URL is a secret, so it is **never** in the settings file. It is
 read from `$BACKLOG_SLACK_WEBHOOK`, else `<board>/.slack-webhook` (gitignored). With neither,
@@ -665,7 +690,8 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
    `lane_cap` and `serial`, and the High-stakes gate's signal list. A card with `mode_by: you`
    keeps its mode. **Release bookkeeping** that every change touches (version file, changelog,
    generated manifest) never counts as shared files -- the serial ship queue reconciles it.
-2. **Route** with `claude -p --allowedTools "Read,Glob,Grep"` (cwd = settings `repo`), passing
+2. **Route** with `claude -p --model <route> --allowedTools "Read,Glob,Grep"` (cwd = settings `repo`;
+   `<judge>` instead with `--with-deps` or 100+ candidates -- [Which model does what](#which-model-does-what)), passing
    all of the above, the rubric, and today's date. Look up files only for cards that could share
    a dispatch wave; give them as repo-relative paths, and `data` as the exact tables, buckets, or
    queues the change *writes*. It returns **strict JSON only**:
@@ -778,8 +804,9 @@ the burn-down. A missing link a grounder finds is a 📋 proposed Board delta, w
 only under `--apply` and not re-grounded this run (the next `plan --with-deps` pulls it in).
 
 **AI-powered by default.** Running `groom` (or `groom strategy`) is itself the opt-in to
-multi-agent, high-effort reasoning: fan out one grounder per card with the **Workflow** tool and
-think at high effort. Don't ask permission for it; the user doesn't need any extra keyword.
+multi-agent, high-effort reasoning: fan out one grounder per card with the **Workflow** tool (model
+`ground`), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
+([Which model does what](#which-model-does-what)). Don't ask permission for it; the user doesn't need any extra keyword.
 
 1. **Ground in code (reuse `reconcile`).** Run the reconcile ladder for every card in scope --
    `--dry-run` by default; `--apply` lets reconcile auto-apply as usual. For `partial`, name why:
@@ -844,7 +871,7 @@ re-grounding (run a full `groom` to re-ground). The pin sticks until `groom unpi
 The strategic pass over **all epics**: which work is **foundational leverage** and which is
 **polish**, and the order that lets later epics build on the right foundations. Tactical `groom`
 answers *what next and how*; `groom strategy` answers *what to build and why*. Always the deep
-multi-agent pass (one analyst per epic via Workflow, high effort). Run it weekly or when choosing
+multi-agent pass (one analyst per epic via Workflow, high effort, model `judge`). Run it weekly or when choosing
 direction, not on every check.
 
 1. **State digest** -- Started · Finished · Not-started · Stalled, across every epic.

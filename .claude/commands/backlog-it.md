@@ -48,7 +48,9 @@ user's go, and every other skill reads the same board.
    defaults. Resolve: `BOARD` = `$BACKLOG_DIR`, else `board`, else `.claude/backlog` (expand `~`;
    relative paths from the project root); `PROJECT` = `project`, else `<board>/.project`, else the
    project folder's name; `REPO` = `repo`, else the project root; `LANE_CAP` = `lane_cap`, else 3;
-   `SERIAL` = `serial`, else `[]`.
+   `SERIAL` = `serial`, else `[]`;
+   `MODELS` = `models` over the defaults `{"route": "opus", "ground": "opus", "judge": ["claude-fable-5-2", "claude-fable-5-1"]}` (a list = first one the deployment serves; no `judge`
+   served -> `route`, said in one line).
 2. Export `BACKLOG_DIR=$BOARD` for the helpers.
 3. **No board yet?** Say in one line that you'll set one up, then create `$BOARD/items/`, a
    `$BOARD/.gitignore` containing `.slack-webhook`, and render an empty `BOARD.md`. Write
@@ -79,7 +81,9 @@ user's go, and every other skill reads the same board.
 | `regen-board` | Rebuild `BOARD.md` |
 
 Ids are case-insensitive (`e02` → `E02`). Next id = highest existing + 1. `groom` and
-`groom strategy` fan out with Workflow at high effort -- running them is the opt-in.
+`groom strategy` fan out with Workflow at high effort -- running them is the opt-in. Each AI step runs on the
+model the reference's "Which model does what" names (settings `models`; default Opus for routing and
+grounding, Fable 5.2 then 5.1 for judgment, Opus when neither is served).
 
 ## Step 3 -- Adding work
 
