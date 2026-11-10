@@ -23,7 +23,7 @@ d1f0c100d96f1f26ac952683585dec8716a07dd277614b4362ce399abc5e5237  commands/wrap-
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
 c93e808d1672faee9baf2b8228ceaac7aab1963397179b16f2214cc7a46bd45b  make-it/backlog/bin/status.py
 a7daa6fe8f53a303677d5b6ed982fa25145281e61a9db799535b856d118fbdeb  make-it/backlog/bin/sync-prs.py
-a9cb045674e97f64b893c050ade253395ead4dac4abbb6273b793419fbfaf40f  make-it/confluence-docs/00-make-it-framework-overview.md
+61d147e508c43961d3b271c78c846712b8b51e035b7166ceb45807a35334f254  make-it/confluence-docs/00-make-it-framework-overview.md
 ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md
 2801a0d1290c161d69e160e3f432c847137ecd10489f3b730d3e4558db3c16d1  make-it/confluence-docs/03-retrofit-it.md
@@ -39,7 +39,7 @@ b133b7b7c9b90c981c3359a75e3d2679ab11c6e524fb13b177d0aa7d73061a91  make-it/conflu
 22f8dddf2f6f401bc89463b7af91e0153fe760f7c3a5617388b50866e67c6e35  make-it/confluence-docs/13-wrap-it.md
 8dd8411f4de8479a267aff0b1f3f8b978b99d6679a1c0ef9ce1cdeb979c634b1  make-it/confluence-docs/14-dispatch-it.md
 28aa838660009254110654238589bc1e923a111d35714ed2e30224dee0bf0aa3  make-it/confluence-docs/15-subagent-it.md
-00281e9378269a8ebfe6b3a6bf71ee3b5b0edefb5ebcf5e1d373e60321458b4b  make-it/confluence-docs/16-backlog-it.md
+cd4eacdf833341bf2e14b152f8542835bb06b3fcce49b59ce114be3c31e8ff12  make-it/confluence-docs/16-backlog-it.md
 cf3c7e9a34e134cb5f865a39dc34ba16f53fc8413ff2d86672288e7e12b5dd6f  make-it/confluence-docs/17-threats-it.md
 6e8f9f7d9f20289c05c33f09f8deeb9252da4126d3aef3eb360146d0fd3a42c8  make-it/confluence-docs/18-deadcode-it.md
 c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/references/ai-accounting.md

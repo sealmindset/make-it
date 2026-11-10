@@ -959,6 +959,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.50.1 -- The Confluence docs match the published pages
+
+The /backlog-it and overview pages on Confluence were updated, and their sources here now match
+them, so the next publish doesn't undo those edits.
+- **`16-backlog-it.md`** covers every /backlog-it change since mid-October: `info`, Waiting on
+  you, `status`, `reconcile --prs`, the plan keeping its lead, Live checks, and a new **Putting
+  one epic first** section for `plan --with-deps`, plus a dated "What's changed" list.
+- **`00-make-it-framework-overview.md`** keeps the wording edited on Confluence (the skills link,
+  Claude Desktop, "tasks, processes, workflows", the vibe-coding sentence).
+- Docs only: no skill behaviour changes.
+
 ### v1.50.0 -- /backlog-it plan --with-deps: put one epic first, with what it needs from other epics
 
 `/backlog-it plan E04 --with-deps` plans epic E04 **and** the cards in other epics it waits on --

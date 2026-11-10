@@ -6,7 +6,7 @@
 
 ## What is the make-it framework?
 
-The **make-it framework** is a set of "skills" for Claude Code that let you build, test, secure, ship, and maintain real software **by describing what you want in plain English** — no coding knowledge required.
+The **make-it framework** is a set of "[skills](https://sntech.atlassian.net/wiki/spaces/AC/pages/670400517/Claude+Code+Skills)" for Claude Code + Claude Desktop that let you build, test, secure, ship, and maintain real ideas such as software, or a set of tasks, processes, workflows **by describing what you want in plain English** — no coding knowledge required.
 
 Each skill is a command you type that starts with a slash, like `/make-it` or `/ship-it`. You type the command, answer a few friendly questions, and Claude does the technical work behind the scenes.
 
@@ -85,7 +85,7 @@ You don't need to memorize this. Each skill tells you the natural next step when
 
 ## What "vibe coding" means here
 
-**Vibe coding** = building software by describing the *outcome you want* in everyday language, and letting the AI make all the technical decisions. The make-it framework is built for exactly this: every skill talks to you in plain language, never shows you raw code unless you ask, and never asks you to pick a framework or configure infrastructure.
+**Vibe coding** = building software by describing the *outcome you want* in everyday language and letting the AI handle technical decisions. The make-it framework ensures each skill speaks in plain language, never shows raw code unless you ask, never asks you to choose a framework or configure infrastructure, and follows defined technical rules to avoid making things up.
 
 ---
 
