@@ -51,6 +51,11 @@ notifications are a silent no-op and the board works the same.
   moves cards forward from their PRs' real state (needs `gh`; writes the cards, the caller syncs).
 - `~/.claude/make-it/backlog/bin/card.py {append <id> <section> | set <id> k=v … | new <epic>}` -- the
   one way to write a card (see [Writing a card](#writing-a-card)).
+- `~/.claude/make-it/backlog/bin/scope.py <board> [<filter>] [--with-deps]` -- which cards a `plan` or
+  `groom` covers: the filter's cards and, with `--with-deps`, the chain they wait on across epics
+  (read-only JSON; shares `regen-board.py`'s waiting rule).
+- `~/.claude/make-it/backlog/bin/check-plan.py <board> <plan.json> --scope <scope.json> …` -- the
+  `plan` gate (see [`plan`](#plan-filter---with-deps---apply---dry-run)).
 - `~/.claude/make-it/backlog/bin/slack-notify.sh {started|done|raw} ...` -- reads `$BACKLOG_DIR`;
   needs `jq` and `curl`.
 
@@ -95,7 +100,7 @@ parent:    E04            # children only
 design:    design.md      # epics with a design doc
 pin:       1              # optional rank override set by `groom move`; dropped on done
 stakes:    critical       # optional -- never auto-started (see the High-stakes gate)
-dependsOn: [E02]          # optional -- not dispatched until these are done
+dependsOn: [E02]          # optional -- not started until these are done (see What a card waits on)
 conflictsWith: [E07]      # optional -- not dispatched while these are in progress
 decision:  3 import rows failed twice; the rest went in. Retry them, or refile by hand?   # optional -- plain context, then the one question this card waits on (see Waiting on you)
 answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
@@ -112,7 +117,15 @@ updated:   YYYY-MM-DD
 ```
 
 Status flow: `backlog → designing → ready → in-progress → blocked ⇄ in-progress → done`.
-Unknown keys are kept; missing optional keys are fine. Never delete a card on `done` -- the
+Unknown keys are kept; missing optional keys are fine.
+
+**What a card waits on** -- one rule, the same for `BOARD.md`'s Next up, `status`, `plan`, `groom`
+and `dispatch` (`regen-board.py`'s `needs`): the cards named in its own `dependsOn` **and in every
+ancestor's** -- an epic's `dependsOn` holds for each card under it. An id with children stands for
+its open cards: `dependsOn: [E02]` waits until every open card under E02 is done, and an epic whose
+cards are all done waits on nothing. A card never waits on itself or its own ancestors; an id not
+on this board doesn't block (it may live on another board). A story with no `parent:` belongs to
+its folder's epic. Never delete a card on `done` -- the
 history is the point.
 
 **Types:**
@@ -246,8 +259,8 @@ reporter per finished card.
   since a day's release can land hours into the day, or not at all
 - **Live, waits** -- Live with a `checkAfter:` still ahead, grouped by it (`v2026.10.17 → S85, S87`); only
   shown when some card waits
-- **Next up** -- the top `backlog` bug that can start (not high-stakes, no unfinished
-  `dependsOn`, not waiting on you), by priority, then age
+- **Next up** -- the top `backlog` bug that can start (not high-stakes, nothing it waits on
+  unfinished, not waiting on you), by priority, then age
 
 **Waiting on you** -- one block at the top of `BOARD.md`: every open card, of any type, that
 waits on the human's answer, each readable cold (`approval-block.md`, A list of asks): `id · title
@@ -307,9 +320,9 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `done <id>` | End summary, `status: done` |
 | `reconcile [<id>\|all]` | Check cards against the code, tests, and live system |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
-| `plan [filter] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md` |
+| `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md`; `--with-deps` also plans the cards the filter waits on, across epics |
 | `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
-| `groom [filter]` | Propose the order that finishes the most, soonest |
+| `groom [filter] [--with-deps]` | Propose the order that finishes the most, soonest; `--with-deps` adds the chain behind the filter |
 | `groom move <id> <pos>` · `groom pin` · `groom unpin <id>` | Pin / release an item's rank |
 | `groom strategy` | Which work is foundation and which is polish, and why |
 | `undo` | `git revert` the last board commit (board in its own repo) |
@@ -327,7 +340,7 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 1. **Build the prompt.** A raw card → its own text, as-is. A design-backed card → a **precap**: a
    prompt distilled from the design doc and card. (The design doc stays a communication artifact,
    never a gate.) **Always prepend the standing preamble** below, for every type, then the
-   card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---apply---dry-run)); for
+   card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---with-deps---apply---dry-run)); for
    `solo` and `spike`, drop the preamble's opening **Launch subagents.**
 2. **Show the assembled prompt and let the user edit it** -- anything, including the preamble.
    This is an edit step, not an approval gate.
@@ -570,8 +583,9 @@ green gate or the harm gate** in the standing preamble.
 2. **No bugs waiting -- start one item.** Improvements wait behind bugs, and run one at a time:
    - Filter to reconcile verdict `not-built` or `partial` (if reconcile hasn't run: `status:
      ready` or `backlog`).
-   - Exclude: high-stakes cards (never auto-selected -- log the skip and why); unfinished
-     `dependsOn`; an open `decision:` (waiting on you); a `conflictsWith` card in progress; file
+   - Exclude: high-stakes cards (never auto-selected -- log the skip and why); anything it
+     waits on unfinished (its own `dependsOn` or an ancestor's -- see What a card waits on); an
+     open `decision:` (waiting on you); a `conflictsWith` card in progress; file
      overlap with any in-progress card's reconcile evidence.
    - Sort: P1 → P3, then never-reconciled first, then oldest `updated:` first. Pick the top.
 3. **Announce** each pick -- `Dispatching <id> -- <title> [category] P# · <verdict> · confidence
@@ -591,7 +605,7 @@ green gate or the harm gate** in the standing preamble.
 Armed by default; `--dry-run` prints the picks without starting anything; everything is logged
 and reversible.
 
-### `plan [filter] [--apply] [--dry-run]`
+### `plan [filter] [--with-deps] [--apply] [--dry-run]`
 
 **How and in what order.** One AI pass reads the project's `handoff.md` and the board, routes
 each card that could start to an execution mode, and orders them into **waves** -- the path that
@@ -599,6 +613,21 @@ each card that could start to an execution mode, and orders them into **waves** 
 run it*. It does no per-card code check of its own (it reuses recorded evidence; run `groom` to
 re-ground). One headless call: about a minute on a small board, ~10 on a 100-card board. The plan
 then leads `dispatch` for the cards it names until its waves are merged (see `dispatch` step 0).
+
+**Scope -- the filter, and `--with-deps`.** `filter` = a card id (an epic, or one story -- a card
+with children means its open cards), a status, a priority, or a category; none = every open card.
+`scope.py` resolves it, so the gate knows exactly which cards the plan owes. Without `--with-deps`,
+a filter card that waits on an open card outside the filter is skipped ("waits on E02-S3, outside
+the filter -- `--with-deps` pulls it in"). **`--with-deps`** pulls that chain in instead: every
+open card the filter's cards wait on ([What a card waits on](#card-frontmatter)), across epics,
+then what those wait on, all the way down. Only upstream -- never the cards that wait on the
+filter -- and `conflictsWith` is not followed. Pulled-in cards are planned like any other, under
+the same order (finish soonest, so a chain on the critical path usually lands early), and the plan
+holds the filter plus its chain and nothing else from the board. The use: put one epic first --
+`plan E04 --with-deps` -- without its cross-epic prerequisites falling out of the plan. A chain
+card that can't run (held, waiting on you, in progress, blocked, or in a loop) skips the cards that
+need it, and the reason names the chain. Written `dependsOn` is often missing, so a `--with-deps`
+call also **suggests links** (step 2); `--apply` writes them and plans what they pull in.
 
 **The mode rubric:**
 - **spike** -- unknowns dominate: open questions that change the approach, no code evidence, an
@@ -611,18 +640,24 @@ then leads `dispatch` for the cards it names until its waves are merged (see `di
   `solo` `/debug-it`, never parallel lanes.
 - **held** (not a mode) -- high-stakes: `stakes: critical` or a [High-stakes gate](#high-stakes-gate)
   signal. Never in a wave; it needs the alignment brief and an explicit go.
-- **skipped** (not a mode) -- a candidate that must wait: an open `dependsOn` not planned in an
-  earlier wave, files an in-progress card is changing, or an open `decision:` (waits on you). Its
-  reason names what it waits on.
+- **skipped** (not a mode) -- a candidate that must wait: an open card it waits on that isn't
+  planned in an earlier wave (in progress, blocked, held, waiting on you, in a loop, or outside the
+  filter without `--with-deps`), files an in-progress card is changing, or an open `decision:`
+  (waits on you). Its reason names what it waits on, down the chain: `waits on E02-S3 → E05-S1
+  (held)`.
 - **Order** -- bugs before improvements (the bug queue rule), then most-unblocking first, a spike
   before the work it de-risks, near-done wins, then the parallel waves. Shipping stays one PR at
   a time. A **wave** is one step: a `dispatch-it` wave runs its cards side by side; any other
   wave is one card. Waves run in list order.
 
-1. **Gather.** **Candidates** are the open leaf cards in scope (no card names them as `parent`
-   -- an epic whose children are all done is a container, not work) with status `backlog`,
-   `ready`, or `designing`: pass each one's frontmatter and full text except the Captured and
-   triage blocks, plus the repo files it cites. **Context:** the
+1. **Gather.** **Scope first:** `python3 ~/.claude/make-it/backlog/bin/scope.py <board> [filter]
+   [--with-deps] > <tmp>/scope.json` (read-only; exit 2 = the filter names a card that isn't on the
+   board -- say so and stop; a `notes` entry that nothing matches -- say so and stop). **Candidates**
+   are its `scope` list: open leaf cards (no card names them as `parent` -- an epic whose children
+   are all done is a container, not work) with status `backlog`, `ready`, or `designing`. Pass each
+   one's frontmatter and full text except the Captured and triage blocks, plus the repo files it
+   cites, and the scope JSON itself (`pulled_in` with what each is for, `outside`, `waits`, `loops`,
+   `notes`). **Context:** the
    in-progress cards (id, stage, and the files they change -- their branch diff when there is
    one, else the files they cite), the
    **Live, to check** list, `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the
@@ -644,33 +679,49 @@ then leads `dispatch` for the cards it names until its waves are merged (see `di
                       "plan_tasks": ["Task 1 title", "Task 2 title", "Task 3 title"] } ] }
      ],
      "held":    [ { "id": "E09-S1", "why": "high-stakes: <signal>" } ],
-     "skipped": [ { "id": "E04-S5", "why": "waits on E04-S1" } ]
+     "skipped": [ { "id": "E04-S5", "why": "waits on E04-S1" } ],
+     "links":   [ { "id": "E04-S2", "needs": "E07-S1", "why": "one line",
+                    "evidence": "src/orders.py: E07-S1 creates table:orders, which E04-S2 reads" } ]
    }
    ```
    A spike that isn't a card yet has `"proposed": true` and a new id (next free under the epic).
+   **`links`** -- `--with-deps` only: a scope card that plainly needs an open card **outside** the
+   scope that no `dependsOn` names (a table it reads that the other creates, an API the other
+   builds), each with the evidence. A card already in the plan isn't a link -- the waves order it.
 3. **Gate.** `python3 ~/.claude/make-it/backlog/bin/check-plan.py <board> <plan.json> --lane-cap
-   N` (add `--serial a,b` when settings has any; `--partial` with a filter). It enforces the hard
+   N --scope <tmp>/scope.json` (add `--serial a,b` when settings has any). It enforces the hard
    rules: waves in list order; a dispatch wave is 3..`lane_cap` cards that share no files, data,
    or serial category and each name repo-relative files; `stakes: critical` cards are never in a
-   wave; every unfinished `dependsOn` comes in an earlier wave; only candidates sit in waves, and
-   every candidate is accounted for. Violations → re-run the call once with them appended; still
+   wave; every open card a card waits on (an ancestor's `dependsOn` included) comes in an earlier
+   wave; only scope candidates sit in waves, and every one is accounted for; each link goes from a
+   scope card to an open card outside the scope that it doesn't already wait on, wouldn't make a
+   loop, and gives its evidence. Violations → re-run the call once with them appended; still
    failing → stop, print them, write nothing.
 4. **Write.** `PLAN.md` at the board root; `mode:` on each planned card (never over
    `mode_by: you`); for each `subagent-it` card with no plan, a **draft** plan at
    `items/<epic>/plans/<id>.md` (Plan format, `status: draft`) linked as `plan:`. Proposed spikes
    are filed only under `--apply` (a `type: spike` card, plus the target card's `dependsOn:` on
-   it). Drafts never run without the user's go. Bump `updated:` on touched cards, regenerate,
+   it). **Suggested links**, too, are written only under `--apply` and before `PLAN.md`: for
+   each, `card.py set <id> dependsOn=[<what it had>, <new id>]` and an `append <id> Links` line
+   (`<new id> -- <why> · <evidence> · via plan --with-deps`), then re-run `scope.py`; if the
+   scope grew, route and gate **once more** so the newly pulled-in cards get their waves. Links
+   that second pass finds are listed, not written -- one round, no chase. A written link stays
+   even if that second gate fails (it's true either way; only the plan isn't written). Without
+   `--apply` they're listed under Proposed links and the card that would wait keeps its place.
+   Drafts never run without the user's go. Bump `updated:` on touched cards, regenerate,
    sync (commit `plan: <summary>`). `--dry-run` prints and writes nothing.
-5. **Report.** The waves, one line each, then the held block, what's skipped and why, and the
-   proposals.
+5. **Report.** The waves, one line each, then the held block, what's skipped and why (the chain,
+   for a pulled-in wait), what was pulled in and for which filter cards, and the proposals --
+   spikes and links, with the `--apply` command that files them.
 
 **`PLAN.md`:**
 ```markdown
-# Run Plan -- YYYY-MM-DD  (scope: <filter>)
+# Run Plan -- YYYY-MM-DD  (scope: <filter>[ + N pulled in])
 > /backlog-it plan · handoff.md + N open cards · finish soonest, every gate held · start/dispatch run it
 
 ## Waves
 1. **solo** · E02-S1 · <title> -- <reason>
+   (a pulled-in card: `1. **solo** · E07-S4 · <title> -- pulled in for E04-S2 -- <reason>`)
 2. **dispatch-it** ×3 · E05-S1 · E05-S2 · E05-S3 -- <why they're independent>
    - E05-S1 -- <reason> · files: src/a.ts
 3. **spike** (2h) · E04-S9 (proposed) → de-risks E04-S3 -- <question>
@@ -679,7 +730,12 @@ then leads `dispatch` for the cards it names until its waves are merged (see `di
 ## Live, to check first   (verify against the original report before wave 1)
 ## ⚠️ Held -- needs the alignment brief and an explicit go
 ## Skipped -- waits on
+- E04-S6 -- waits on E02-S3 → E05-S1 (held)
+## Pulled in -- the chain behind the filter   (--with-deps)
+- E07-S4 · <title> -- for E04-S2 (needed by E04-S2)
 ## Proposed (filed with `plan --apply`)
+- spike E04-S9 -- <question> (2h)
+- link E04-S2 → E07-S1 -- <why> · <evidence>
 ```
 
 **`mode <id> <mode|auto>`** -- the human override: sets `mode:` and `mode_by: you`; `auto` removes
@@ -709,12 +765,17 @@ _Card: <id> · drafted YYYY-MM-DD · status: draft_
 `/subagent-it` runs only an approved plan: `status: draft` → the user's go → `status: approved`.
 `task-brief PLAN_FILE N` reads the `## Task N` headings.
 
-### `groom [filter] [--apply] [--dry-run] [--dispatch]`
+### `groom [filter] [--with-deps] [--apply] [--dry-run] [--dispatch]`
 
 **Throughput grooming:** reorder and reshape the board so more finishes sooner -- sequenced by
 what **unblocks the most**, not by the priority field. **groom proposes; it changes the board
-only under `--apply`** (and even then never splits or kills on its own). `filter` = a status,
-category, priority, or epic id (default: all open cards).
+only under `--apply`** (and even then never splits or kills on its own). `filter` = a card id (an
+epic, or one story), a status, category, or priority, resolved by `scope.py` as for
+[`plan`](#plan-filter---with-deps---apply---dry-run) (default: all open cards). **`--with-deps`**
+adds the chain behind the filter (`scope.py --with-deps`): the pulled-in cards are grounded and
+ranked too -- one grounder each, so a long chain costs more -- and marked `pulled in for <id>` in
+the burn-down. A missing link a grounder finds is a 📋 proposed Board delta, written as `dependsOn:`
+only under `--apply` and not re-grounded this run (the next `plan --with-deps` pulls it in).
 
 **AI-powered by default.** Running `groom` (or `groom strategy`) is itself the opt-in to
 multi-agent, high-effort reasoning: fan out one grounder per card with the **Workflow** tool and
@@ -737,7 +798,7 @@ think at high effort. Don't ask permission for it; the user doesn't need any ext
    (e) **cut ruthlessly** -- name what's not worth doing now. `STRATEGY.md`, if present, makes
    foundational work outrank polish in (a) unless a card is pinned.
 4. **Tag the ship track** from the standing preamble: **safe** (ships on the normal path) or
-   **gated** (stops at the PR), and the **mode** from the [`plan`](#plan-filter---apply---dry-run)
+   **gated** (stops at the PR), and the **mode** from the [`plan`](#plan-filter---with-deps---apply---dry-run)
    rubric (a card's own `mode:` wins). Keep in-progress small.
 5. **Persist.** Write `GROOM-PLAN.md` at the board root; regenerate only if `--apply` changed
    something; sync (commit `groom: <summary>`); post a one-line digest with `slack-notify.sh
@@ -750,7 +811,7 @@ think at high effort. Don't ask permission for it; the user doesn't need any ext
 
 **`GROOM-PLAN.md`:**
 ```markdown
-# Groom Plan -- YYYY-MM-DD  (scope: <filter>)
+# Groom Plan -- YYYY-MM-DD  (scope: <filter>[ + N pulled in])
 > /backlog-it groom · grounded via reconcile (code+tests+live) · advisory (start/dispatch are the only ways work starts)
 
 ## Board deltas   (✅ applied · 📋 proposed)

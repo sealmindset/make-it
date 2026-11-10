@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check a /backlog-it run plan (the AI pass's JSON) against the board's hard rules.
 
-Usage: check-plan.py <board> <plan.json> [--lane-cap N] [--serial a,b] [--partial]
+Usage: check-plan.py <board> <plan.json> [--lane-cap N] [--serial a,b] [--scope scope.json | --partial]
        check-plan.py --self-test
 
 The AI picks modes and order; this script is the gate. It prints one line per violation and
@@ -15,12 +15,21 @@ exits 1 if there are any -- then nothing is written. Rules:
     conflictsWith between them, and each names its files as repo-relative paths (unknown or
     absolute files = assume overlap; "src/*" covers src/)
   - a high-stakes card (stakes: critical) is held, never in a wave
-  - every unfinished dependsOn is planned in an earlier wave
+  - every open card a card waits on is planned in an earlier wave -- the board's one rule
+    (regen-board.needs): its own dependsOn and its ancestors', an id with children meaning its
+    open cards
   - a spike names its question and timebox (a not-yet-filed spike says "proposed": true);
     a subagent-it card lists 3+ plan tasks
-  - every candidate leaf card is planned, held, or skipped (unless --partial)
+  - with --scope (scope.py's JSON): only scope cards sit in waves, and every scope card is
+    planned, held, or skipped; without it, every candidate leaf card is (unless --partial)
+  - "links" (a --with-deps plan's suggested dependsOn, written by `plan --apply`): each goes from
+    a scope card to an open card outside the scope that it doesn't already wait on, would not make
+    a loop, and says why with its evidence
 """
-import glob, json, os, re, sys, tempfile
+import glob, importlib.util, json, os, re, sys, tempfile
+
+_spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
+R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
 
 MODES = {'solo', 'spike', 'subagent-it', 'dispatch-it'}
 CANDIDATE = {'backlog', 'ready', 'designing'}
@@ -45,12 +54,12 @@ def overlap(a, b):  # same path, or one is a folder holding the other
     return a == b or not a or not b or a.startswith(b + '/') or b.startswith(a + '/')
 
 
-def check(board, plan, lane_cap=3, serial=(), partial=False):
-    cards = {}
-    for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md'):
-        d = fm(p)
-        if d.get('id'): cards[d['id'].upper()] = d
+def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
+    raw = {p: fm(p) for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md')}
+    cards = {d['id'].upper(): d for d in raw.values() if d.get('id')}
+    T = R.tree(raw)  # what each card waits on, by the board's one rule
     is_open = lambda i: i in cards and cards[i].get('status') != 'done'
+    S = {i.upper() for i in scope['scope']} if scope is not None else None
     errs, seen, wave_of = [], set(), {}
 
     waves = list(enumerate(plan.get('waves', []), 1))
@@ -90,11 +99,14 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
                 continue
             if not is_open(i): errs.append(f'{i}: not an open card on the board'); continue
             if cards[i].get('status') not in CANDIDATE: errs.append(f"{i}: already {cards[i].get('status')} -- not a candidate"); continue
+            if S is not None and i not in S:
+                errs.append(f"{i}: outside this plan's scope (the filter{' and its chain' if scope.get('with_deps') else ''})"); continue
             if mode not in MODES: errs.append(f'{i}: unknown mode {mode!r}')
             if cards[i].get('stakes') == 'critical': errs.append(f'{i}: high-stakes -- hold it, never put it in a wave')
-            for d in ids(cards[i].get('dependsOn', '')):
-                if is_open(d) and not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
-                    errs.append(f'{i}: depends on {d}, which is not planned in an earlier wave')
+            for d, src, named in R.needs(i, T):
+                if not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
+                    via = '' if (src, named) == (i, d) else f' (via {src}: dependsOn {named})'
+                    errs.append(f'{i}: depends on {d}{via}, which is not planned in an earlier wave')
             if mode == 'spike' and not ((it.get('spike') or {}).get('question') and (it.get('spike') or {}).get('timebox')):
                 errs.append(f'{i}: spike needs a question and a timebox')
             if mode == 'subagent-it' and len(it.get('plan_tasks') or []) < 3:
@@ -105,11 +117,28 @@ def check(board, plan, lane_cap=3, serial=(), partial=False):
             i = it.get('id', '').upper()
             if i in seen: errs.append(f'{i}: planned twice')
             seen.add(i)
-    if not partial:
-        parents = {c.get('parent', '').upper() for c in cards.values()}  # done children still make a container
+    if S is not None or not partial:
+        parents = T[1]  # done children still make a container
         for i in sorted(cards):
-            if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen:
+            if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen and (S is None or i in S):
                 errs.append(f'{i}: candidate card not planned, held, or skipped')
+
+    def upstream(i):  # every open card i waits on, down the chain
+        out, todo = set(), [i]
+        while todo:
+            for d, _, _ in R.needs(todo.pop(), T):
+                if d not in out: out.add(d); todo.append(d)
+        return out
+    links = plan.get('links', [])
+    if links and not (scope or {}).get('with_deps'): errs.append('links: only a --with-deps plan (with its --scope) suggests links')
+    for l in links:
+        a, b = l.get('id', '').upper(), l.get('needs', '').upper()
+        if not is_open(a) or (S is not None and a not in S): errs.append(f"link {a} -> {b}: {a} is not a card in this plan's scope"); continue
+        if not is_open(b): errs.append(f'link {a} -> {b}: {b} is not an open card on the board'); continue
+        if S is not None and b in S: errs.append(f'link {a} -> {b}: {b} is already in the plan -- the waves order it, nothing to pull in')
+        if b in upstream(a): errs.append(f'link {a} -> {b}: {a} already waits on {b}')
+        if a in upstream(b) or a == b: errs.append(f'link {a} -> {b}: {b} already waits on {a} -- the link would make a loop')
+        if not (l.get('why') and l.get('evidence')): errs.append(f'link {a} -> {b}: needs a why and its evidence')
     return errs
 
 
@@ -175,6 +204,37 @@ def self_test():
         assert any('exactly one card' in e for e in check(b, bad, partial=True))
         bad = {'waves': [{'wave': 1, 'items': [D('E01-S1', 'a'), D('E01-S2', 'b')]}]}
         assert any('needs 3..3' in e for e in check(b, bad, partial=True))
+    # --with-deps: an epic's dependsOn holds for its cards; the scope bounds the waves and is fully placed; links are checked
+    with tempfile.TemporaryDirectory() as b:
+        def card(epic, name, **kv):
+            os.makedirs(f'{b}/items/{epic}/stories', exist_ok=True)
+            open(f'{b}/items/{epic}/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+        card('EPIC-01-a', 'epic.md', id='E01', status='in-progress')
+        card('EPIC-01-a', 'stories/S1.md', id='E01-S1', status='backlog', parent='E01')
+        card('EPIC-01-a', 'stories/S2.md', id='E01-S2', status='backlog', parent='E01')
+        card('EPIC-02-b', 'epic.md', id='E02', status='backlog', dependsOn='[E01-S1]')
+        card('EPIC-02-b', 'stories/S1.md', id='E02-S1', status='backlog', parent='E02')
+        card('EPIC-03-c', 'epic.md', id='E03', status='backlog')
+        card('EPIC-03-c', 'stories/S1.md', id='E03-S1', status='backlog', parent='E03', dependsOn='[E02-S1]')
+        SC = {'filter': 'E02', 'with_deps': True, 'scope': ['E02-S1', 'E01-S1']}
+        solo = lambda *i: [{'items': [{'id': x, 'mode': 'solo'}]} for x in i]
+        good = {'waves': solo('E01-S1', 'E02-S1')}
+        assert check(b, good, scope=SC) == [], check(b, good, scope=SC)
+        e = check(b, {'waves': solo('E02-S1', 'E01-S1')}, scope=SC)  # the epic's link holds for E02-S1
+        assert any('E02-S1: depends on E01-S1 (via E02: dependsOn E01-S1)' in x for x in e), e
+        e = check(b, {'waves': solo('E01-S1', 'E02-S1', 'E03-S1')}, scope=SC)
+        assert any("E03-S1: outside this plan's scope (the filter and its chain)" in x for x in e), e
+        e = check(b, {'waves': [], 'skipped': [{'id': 'E02-S1', 'why': 'waits on E01-S1'}]}, scope=SC)  # exact coverage: E01-S1 is in scope
+        assert e == ['E01-S1: candidate card not planned, held, or skipped'], e
+        L = lambda a, n, **kv: dict(id=a, needs=n, why='it reads the orders table', evidence='src/orders.py', **kv)
+        ok = dict(good, links=[L('E02-S1', 'E01-S2')])
+        assert check(b, ok, scope=SC) == [], check(b, ok, scope=SC)
+        for link, err in ((L('E02-S1', 'E01-S1'), 'already in the plan'), (L('E02-S1', 'E03-S1'), 'would make a loop'),
+                          (L('E03-S1', 'E01-S2'), "not a card in this plan's scope"), (L('E02-S1', 'E09-S1'), 'not an open card'),
+                          ({'id': 'E02-S1', 'needs': 'E01-S2', 'why': 'x'}, 'needs a why and its evidence')):
+            e = check(b, dict(good, links=[link]), scope=SC); assert any(err in x for x in e), (link, e)
+        assert any('only a --with-deps plan' in x for x in check(b, ok, scope=dict(SC, with_deps=False)))
+        assert any('only a --with-deps plan' in x for x in check(b, ok, partial=True))
     print('check-plan self-test: OK')
 
 
@@ -186,8 +246,9 @@ if __name__ == '__main__':
             i = a.index(name); val = a[i + 1]; del a[i:i + 2]; return val
         return default
     lane_cap = int(opt('--lane-cap', 3)); serial = tuple(x for x in opt('--serial', '').split(',') if x)
+    sc = opt('--scope', None); sc = json.load(open(sc)) if sc else None
     partial = '--partial' in a; a = [x for x in a if x != '--partial']
     if len(a) != 2: sys.exit(__doc__)
-    errs = check(os.path.expanduser(a[0]), json.load(open(a[1])), lane_cap, serial, partial)
+    errs = check(os.path.expanduser(a[0]), json.load(open(a[1])), lane_cap, serial, partial, sc)
     print('\n'.join(errs) if errs else 'plan OK')
     sys.exit(1 if errs else 0)

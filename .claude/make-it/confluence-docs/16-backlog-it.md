@@ -42,6 +42,12 @@ and waiting to be checked, and what's next.
   card whether to do it directly, investigate first (a spike), build it step by step from a plan,
   or fix several side by side -- in the order that gets everything done soonest, without skipping
   any safety check. You can change any card's choice with `mode`.
+- **Putting one epic first**: `plan E04 --with-deps` plans that epic **plus** the cards in other
+  epics it can't finish without -- and the cards those wait on, all the way down. Without
+  `--with-deps`, a card waiting on another epic's work is left out of the plan and the plan says
+  what it waits on. When a card plainly needs another card that nobody linked, the plan suggests
+  the link and why; `--apply` saves it and plans that card too. `groom E04 --with-deps` does the
+  same for the burn-down.
 
 ---
 
@@ -64,6 +70,7 @@ we?". With one, every session -- and every AI helper -- works from the same list
 /backlog-it info E02-S4            # what it solves, what happens if it isn't, why it's fixed this way
 /backlog-it dispatch               # start the next bugs that can be fixed side by side
 /backlog-it groom                  # what to do next, in order
+/backlog-it plan E04 --with-deps   # put epic E04 first, with what it needs from other epics
 /backlog-it groom move E05 1       # pin E05 to the top
 ```
 

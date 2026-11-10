@@ -35,10 +35,47 @@ def ask(d):
 def age(d):
     try: return f" · {max(0, (datetime.date.today() - datetime.date.fromisoformat(v(d, 'updated'))).days)}d"  # UTC can be a day ahead
     except ValueError: return ''
-def blocked(s, status):  # can't start: high-stakes, waiting on you, or waiting on an unfinished card
-    deps = [x.strip().upper() for x in v(s, 'dependsOn').strip('[]').split(',') if x.strip()]
-    # ponytail: an id not on this board doesn't block -- it may live on another board
-    return bool(warn(s)) or waiting(s) or not all(status.get(d, 'done') == 'done' for d in deps)
+def ids(x): return [i.strip().upper() for i in x.strip('[] ').split(',') if i.strip()]  # "[E01-S1, e02]" -> ['E01-S1', 'E02']
+def tree(cards):
+    """(id -> card, id -> its child ids, id -> its parent id): what `needs` walks. `cards` is load()'s
+    {path: card} or a plain list; with paths, a story with no `parent:` belongs to its folder's epic."""
+    items = list(cards.items()) if isinstance(cards, dict) else [('', d) for d in cards]
+    epic_of = {os.path.dirname(p): v(d, 'id').upper() for p, d in items if p.endswith('/epic.md')}
+    byid, kids, up = {}, {}, {}
+    for p, d in items:
+        i = v(d, 'id').upper()
+        if not i: continue
+        byid[i] = d
+        par = v(d, 'parent').upper() or (epic_of.get(os.path.dirname(os.path.dirname(p)), '') if '/stories/' in p else '')
+        if par and par != i: up[i] = par; kids.setdefault(par, []).append(i)
+    return byid, kids, up
+def leaves(d, T):  # what waiting on d means: d itself if it's an open leaf, else the open leaf cards under it
+    byid, kids, _ = T
+    out, todo, seen = [], [d], set()
+    while todo:
+        c = todo.pop()
+        # ponytail: an id not on this board doesn't block -- it may live on another board; a done card is
+        # finished even with open children (an epic whose children are all done is finished too)
+        if c in seen or c not in byid or v(byid[c], 'status') == 'done': continue
+        seen.add(c)
+        if c in kids: todo += kids[c]
+        else: out.append(c)
+    return sorted(out)
+def needs(i, T):
+    """What card i waits on: [(open leaf, the card whose dependsOn says so, the id it names)]. Its own
+    dependsOn and every ancestor's (an epic's dependsOn holds for each card under it); an id with
+    children stands for its open leaf cards. A card never waits on itself or its own ancestors."""
+    byid, _, up = T
+    line, p = [], i.upper()
+    while p in byid and p not in line: line.append(p); p = up.get(p, '')
+    out, got = [], set()
+    for a in line:
+        for d in ids(v(byid[a], 'dependsOn')):
+            for leaf in [] if d in line else leaves(d, T):
+                if leaf not in got and leaf not in line: got.add(leaf); out.append((leaf, a, d))
+    return out
+def blocked(s, T):  # can't start: high-stakes, waiting on you, or waiting on an unfinished card
+    return bool(warn(s)) or waiting(s) or bool(needs(v(s, 'id'), T))
 DATED = r'v?(\d{4})[.-](\d{2})[.-](\d{2})(?:[.-]\d+)?'
 def due(s, T=None):  # a Live card's check can be done now: no checkAfter, or its date (a date, or a release tag named for it) has come
     # ponytail: a release tag counts as out on the date in its name (v2026.10.17); an undated tag waits -- use a date there
@@ -52,14 +89,14 @@ def bucket(s):  # which bug-queue status line an open card sits on, if any
     if v(s, 'stage') in ('Reported', 'Cause found'): return 'Now fixing' if v(s, 'status') == 'in-progress' and not waiting(s) else None
     if v(s, 'stage') == 'Live': return 'Live, to check' if due(s) else 'Live, waits'
     return {'Fix ready': 'Shipping'}.get(v(s, 'stage'))
-def startable(s, status): return v(s, 'status') == 'backlog' and not blocked(s, status)  # Next up
-def next_up(stories, status):
+def startable(s, T): return v(s, 'status') == 'backlog' and not blocked(s, T)  # Next up
+def next_up(stories, T):
     return next((v(s, 'id').split('-')[-1] for s in sorted(stories, key=lambda s: (v(s, 'priority') or 'P9', num(s)))
-                 if v(s, 'type') == 'breakfix' and startable(s, status)), '—')
+                 if v(s, 'type') == 'breakfix' and startable(s, T)), '—')
 
 def render(B, proj):
-    CARDS = list(load(B).values())
-    STATUS = {v(d, 'id').upper(): v(d, 'status') for d in CARDS}
+    L = load(B); CARDS = list(L.values())
+    TREE = tree(L)
     out = [f'# BACKLOG BOARD — {proj}', '']
     wait = sorted(filter(waiting, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
     if wait:
@@ -78,7 +115,7 @@ def render(B, proj):
         if any(v(s, 'type') == 'breakfix' for s in stories):
             # The bug queue status line: Reported -> Cause found -> Fix ready -> Live -> Checked.
             def ids(pred): return ', '.join(v(s, 'id').split('-')[-1] for s in stories if pred(s)) or '—'
-            nxt = next_up(stories, STATUS)
+            nxt = next_up(stories, TREE)
             waits = sorted({v(s, 'checkAfter') for s in stories if bucket(s) == 'Live, waits'}, key=soon)
             out += [f'**{k}:** ' + ids(lambda s: bucket(s) == k) for k in ('Now fixing', 'Shipping', 'Live, to check')] + [
                     '**Live, waits:** ' + ' · '.join(f"{w} → {ids(lambda s: bucket(s) == 'Live, waits' and v(s, 'checkAfter') == w)}" for w in waits)] * bool(waits) + [
@@ -169,6 +206,30 @@ def main(args):
             b = board()
             assert re.search(r'\*\*Live, to check:\*\* S21, S23, S24\n', b), b
             assert '**Live, waits:** 2026-02-30 → S25 · v2098.12.31 → S26 · 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b  # in date order
+            # what a card waits on: an id with children means its open cards; an epic's dependsOn holds for every card under it
+            os.makedirs(f'{t}/items/EPIC-03-later/stories')
+            open(f'{t}/items/EPIC-03-later/epic.md', 'w').write('---\nid: E03\nstatus: backlog\n---\n')
+            later = lambda n, st: open(f'{t}/items/EPIC-03-later/stories/S{n}.md', 'w').write(f'---\nid: E03-S{n}\nstatus: {st}\nparent: E03\n---\n')
+            later(1, 'done')
+            card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2', dependsOn='[E03]')
+            assert '**Next up:** S3' in board()  # an open epic whose cards are all done is finished
+            later(2, 'backlog'); assert '**Next up:** —' in board()  # now it has an open card to wait on
+            later(2, 'done'); card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2')
+            assert '**Next up:** S3' in board()
+            later(3, 'in-progress'); card('epic.md', id='E01', title='Bugs', status='in-progress', dependsOn='[E03-S3]')
+            assert '**Next up:** —' in board()  # S3 inherits its epic's dependsOn
+        # needs(), directly: (leaf, whose dependsOn, the id it names); never itself or its ancestors; a parent loop ends
+        C = lambda i, **kv: dict(id=i, status=kv.pop('status', 'backlog'), **kv)
+        T = tree([C('E01', dependsOn='[E01-S1, E02]'), C('E01-S1', parent='E01'), C('E01-S2', parent='E01', dependsOn='E01'),
+                  C('E02'), C('E02-S1', parent='E02'), C('E02-S2', parent='E02', status='done'), C('E02-S3', parent='E02', dependsOn='[E03-S1]'),
+                  C('E02-S4', parent='E02-S3'), C('E03-S1', parent='E03-S2'), C('E03-S2', parent='E03-S1'), C('E04', status='done'), C('E04-S1', parent='E04')])
+        assert needs('E01-S1', T) == [('E02-S1', 'E01', 'E02'), ('E02-S4', 'E01', 'E02')], needs('E01-S1', T)  # E02-S3 is a container: its open leaf
+        assert needs('e01-s2', T) == [('E01-S1', 'E01', 'E01-S1'), ('E02-S1', 'E01', 'E02'), ('E02-S4', 'E01', 'E02')], needs('E01-S2', T)  # E01 named: its own ancestor
+        assert needs('E02-S4', T) == [], needs('E02-S4', T)  # E03-S1 <-> E03-S2 parent loop: no open leaf, and no hang
+        assert leaves('E04', T) == [] and leaves('E09', T) == [] and leaves('E02', T) == ['E02-S1', 'E02-S4']  # done epic; not on this board
+        F = tree({'b/items/EPIC-05-x/epic.md': C('E05', dependsOn='E02-S1'), 'b/items/EPIC-05-x/stories/S1.md': C('E05-S1'),
+                  'b/items/EPIC-02-y/stories/S1.md': C('E02-S1')})  # a story with no `parent:` belongs to its folder's epic
+        assert needs('E05-S1', F) == [('E02-S1', 'E05', 'E02-S1')] and leaves('E05', F) == ['E05-S1'], needs('E05-S1', F)
         print('regen-board self-test: OK'); return
     proj = None
     if '--project' in args:

@@ -67,6 +67,7 @@ def facts(B, T=None):
     H, first, src = history(B)
     h = lambda p: H.get(p, {})
     status = {v(d, 'id').upper(): v(d, 'status') for d in cards.values()}
+    TREE = R.tree(cards)  # what each card waits on, by the board's one rule (regen-board.needs)
     leaf = {p: d for p, d in cards.items() if '/stories/' in p}
     op = {p: d for p, d in leaf.items() if v(d, 'status') != 'done'}
     title = lambda d: v(d, 'title').strip('"')
@@ -95,11 +96,11 @@ def facts(B, T=None):
     next_bugs = []  # the board's own Next up, per bug epic
     for e in sorted(epics):
         if any(bug(leaf[p]) for p in kids(e)):
-            short = R.next_up([leaf[p] for p in kids(e)], status)
+            short = R.next_up([leaf[p] for p in kids(e)], TREE)
             next_bugs += [p for p in kids(e) if v(leaf[p], 'id').split('-')[-1] == short]
     parents = {v(d, 'parent').upper() for d in cards.values()}
     can = sorted((p for p, d in op.items() if not bug(d) and v(d, 'status') in ('backlog', 'ready')
-                  and v(d, 'id').upper() not in parents and not R.blocked(d, status)),
+                  and v(d, 'id').upper() not in parents and not R.blocked(d, TREE)),
                  key=lambda p: (v(op[p], 'priority') or 'P9', opened(p, op[p]), p))
     plan, pf = None, os.path.join(B, 'PLAN.md')
     if os.path.exists(pf):
