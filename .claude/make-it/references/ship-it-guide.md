@@ -382,7 +382,8 @@ one).
 
 Before asking, /ship-it reads main's copy: it fetches the default branch, then reads the record
 from it with `git show origin/<default branch>:.ship-it-go-live.json`. This is a read only:
-nothing is checked out, merged or pushed. /ship-it never starts a merge or rebase itself.
+nothing is checked out, merged or pushed. To read main's copy, /ship-it never starts a merge or
+rebase itself.
 
 When the branch has no record, the checklist starts from main's. When both have an item, the one
 with the newer `date` counts, and a tie goes to the branch's. An item only one side has comes from

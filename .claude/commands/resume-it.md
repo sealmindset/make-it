@@ -946,8 +946,8 @@ added to TODO.md, and is not counted or offered as something to tackle.
   hold up the user's work. Tell the user once per session in all, in one plain line that names no
   value: "A safety warning is about an answer in your go-live record. /ship-it owns that file, so
   I didn't change it; you can change that answer in the file yourself."
-- If the user says to go on without removing the password or key, go on. A go-on given once holds for the session,
-  for the scanner step and the catch-up alike; list the finding as open in that session's wrap-up
+- If the user says to go on without removing the password or key, go on. A go-on given once
+  holds for the session, for the scanner step and the catch-up alike; list the finding as open in that session's wrap-up
   summary, and never suggest going on yourself.
 (`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
 
@@ -998,7 +998,7 @@ added to TODO.md, and is not counted or offered as something to tackle.
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
 - If a finding belongs to a left-out item: the one plain line above.
-- If a finding is on `.ship-it-go-live.json`: its one plain line above, by how serious it is.
+- If a finding is on `.ship-it-go-live.json`: its words above, by how serious it is.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>
