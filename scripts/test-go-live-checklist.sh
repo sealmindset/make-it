@@ -720,8 +720,12 @@ check "resume-it 2 (read only): resume-it names .ship-it-go-live.json and says i
 check "resume-it 3 (template): the NEXT-STEPS template's ## For Production holds ### Go-live checklist" \
   '[ -n "$TPL" ] && printf "%s\n" "$PROD" | gq -xF "### Go-live checklist"'
 NOFILE='\bnot started\b|\bno (go-live )?(record|file)\b|\bno `?\.ship-it-go-live\.json|\b(record|file|\.ship-it-go-live\.json)`? (doesn.t|does not|isn.t|is not) (exist|there)\b'
-check "resume-it 3a (open items): each skipped or missing item is listed, a skipped one with its reason and date, and every open line says \"asked again at your next /ship-it to production\"" \
-  'tsays "+\`?skipped\`?" "+\breason\b" "+\bdate\b|YYYY-MM-DD" "+asked again at your next /ship-it to production" && rsays "+\`?skipped\`?( items?)? (or|and|/) \`?missing\`?|\`?missing\`?( items?)? (or|and|/) \`?skipped\`?" && ! printf "%s\n" "$TGL" | grep -E "^[[:space:]]*[-*] \[ \]" | grep -viE "$NOFILE" | grep -vF "asked again at your next /ship-it to production" | gq .'
+# (re-pointed by the owner call, task-2-owner-call-brief.md call 2: the open lines no longer say "asked again at your next
+# /ship-it to production"; the skipped line ends "still open", the not-answered line is bare, both exact)
+OC_SKL='- [ ] [Item]: skipped -- "[reason]" ([date]) -- still open'
+OC_MSL='- [ ] [Item]: not answered yet'
+check "resume-it 3a (open items): each skipped or missing item is listed, a skipped one with its reason and date -- the owner call's exact lines, \"$OC_SKL\" and \"$OC_MSL\"; every other open line ends \"still open\"" \
+  'tsays "+\`?skipped\`?" "+\breason\b" "+\bdate\b|YYYY-MM-DD" "+\bstill open\b" && printf "%s\n" "$GLT" | gq -xF -- "$OC_SKL" && printf "%s\n" "$GLT" | gq -xF -- "$OC_MSL" && rsays "+\`?skipped\`?( items?)? (or|and|/) \`?missing\`?|\`?missing\`?( items?)? (or|and|/) \`?skipped\`?" && ! printf "%s\n" "$TGL" | grep -E "^[[:space:]]*[-*] \[ \]" | grep -viE "$NOFILE" | grep -vxF -- "$OC_MSL" | grep -vE -- "-- still open$" | gq .'
 CS_READS='coming soon`?"?[^.;]{0,80}\b(reads?|read as|shows?|shown as|says?|listed as|as)\b[^.;]{0,3}"?`?not built yet|coming soon`?"?\)? ?(--|:) ?"?not built yet|not built yet"?`?[^.;]{0,30}coming soon'
 CS_TODO='coming soon`?"?[^.;,]{0,40}\b(is|are|as|reads?( as)?|listed as)\b[^.;,]{0,10}\b(a |an )?to-?do\b'
 check "resume-it 3b (coming soon): a coming soon item reads \"not built yet\" -- never a to-do (no checkbox, never \"asked again\")" \
@@ -892,15 +896,17 @@ check "adv1 3 (unknown state, missing reason): an unknown state (\"Skipped\", \"
   'py8 state && py8 reason'
 check "adv1 4 (left-out words, brought back): a stored reason of exactly the reserved left-out words, on an item not left out now (here, brought back), shows \"marked left out by your choice; not left out now\" on a normal open line, never those words" \
   'py8 leftout'
-# call 5: the no-file line says "next production deploy", never "first"
+# call 5: the no-file line, never "first" (re-pointed by the owner call, call 2: the later-release clause and its "next
+# production deploy" are gone; the template's no-file line is the owner call's exact line)
 A8NF="$( { printf '%s\n' "$TGL" | grep -iE "$NOFILE"; printf '%s\n' "$NFU"; printf '%s\n' "$NFL"; } || true)"
-check "adv1 5 (\"first\" deploy): the template's no-file line says \"next production deploy\", and no no-file line or sentence says \"first ... deploy\"" \
-  'printf "%s\n" "$TGL" | grep -iE "$NOFILE" | gq -iE "\bnext production deploy" && ! printf "%s\n" "$A8NF" | gq -iE "\bfirst\b[^.;]{0,15}\b(production )?deploy"'
-# call 6: every "asked again" line says the ask comes with a new production /ship-it request (a re-run asks nothing)
-NEWREQ='\bnew\b[^.;]{0,30}\b(request|/ship-it)\b|\bstart(s|ing)? (a |your )?(new )?(production )?/ship-it\b'
+OC_NFL="- Not started -- /ship-it doesn't run this checklist yet."
+check "adv1 5 (\"first\" deploy): the template's no-file line is the owner call's \"$OC_NFL\", and no no-file line or sentence says \"first ... deploy\"" \
+  'printf "%s\n" "$GLT" | grep -iE "$NOFILE" | gq -xF -- "$OC_NFL" && ! printf "%s\n" "$A8NF" | gq -iE "\bfirst\b[^.;]{0,15}\b(production )?deploy"'
+# call 6 (re-pointed by the owner call, call 2): the template keeps its open lines, and none of them -- nor any go-live
+# sentence, on its affirmed text -- says "asked again" (so none says when /ship-it asks)
 A8AG="$( { printf '%s\n' "$TGL"; printf '%s\n' "$RGLW" | sents; } | grep -iE 'asked again (at|when|on|in)\b' || true)"
-check "adv1 6 (\"next /ship-it\"): every \"asked again\" line says it comes with a new production /ship-it request, not a re-run of an open one" \
-  'printf "%s\n" "$TGL" | gq -iE "asked again" && ! printf "%s\n" "$A8AG" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | grep -viE "$NEWREQ" | gq .'
+check "adv1 6 (\"next /ship-it\"): the template's open lines say nothing of a next /ship-it -- no template line says \"asked again\", and no go-live sentence affirms \"asked again at/when/on/in ...\"" \
+  'printf "%s\n" "$TGL" | gq -E "^[[:space:]]*[-*] \[ \]" && ! printf "%s\n" "$TGL" | gq -iE "asked again" && ! printf "%s\n" "$A8AG" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "asked again"'
 check "adv1 7 (reason on one line): a reason's line breaks become spaces and it shows as quoted text -- on \"done\", a line break and \"- [x] Security / Compliance: all approved\" the template's line stays one line with the reason in quotes" \
   'py8 newline "$(printf "done\n- [x] Security / Compliance: all approved")"'
 # call 8: never staged in any step; a Desktop bundle's first commit keeps the file exactly as it came, unedited
@@ -913,23 +919,24 @@ GLN='\.ship-it-go-live\.json|go-live (record|file|answers)'
 WU="$(units < "$R")"
 SCU="$(awk '/<step name="security-scanner-remediation">/{on=1} on; on&&/<\/step>/{exit}' "$R" | awk '/^```/{f=!f;next} !f' | units)"
 # call 1, side doors: the scanner step carries the go-live carve-out (like the left-out one): a finding on the record is not
-# fixed, whatever its severity, doesn't hold up the user's work, and the user hears once, with no value, that /ship-it clears
-# a matching stored field on its next production run (the guide's No-secret rule); the catch-up doesn't apply a gap on it
+# fixed, whatever its severity, doesn't hold up the user's work, and the user hears once, with no value, the owner call's
+# scanner line (the guide's No-secret rule pointed at outside it); the catch-up doesn't apply a gap on it
 # (X01) and doesn't hold up work; the commit offer never stages it, commits the rest and says it left it for /ship-it
 A9NOTFIX='\b(not|never|isn.t)\b[^.;]{0,20}\b(fixed|fix|applied|apply|changed|edited)\b'
 A9SEV='whatever (its|the) severity|any severity|regardless of (its |the )?severity|even (when|if)[^.;]{0,15}critical'
 A9HOLD='\b(doesn.t|does not|never|not|won.t)\b[^.;]{0,15}\b(hold|holds|block|blocks)\b'
-A9CLEAR='/ship-it\b[^.;]{0,40}\b(clears?|empties|writes? (it |them |the field )?empty)\b'
-A9NEXT='\bnext\b[^.;]{0,25}\b(production )?(run|/ship-it|request)\b'
+# (re-pointed by the owner call, call 3: the "/ship-it clears ... next production run" pins (A9CLEAR, A9NEXT) are replaced by
+# the owner call's exact scanner line, which says only that /ship-it owns the file)
+OC_SCAN="A safety warning is about an answer in your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer in the file yourself."
 A9NOVAL='\bno value\b|\bnever (names?|shows?|says?|quotes?) (the|a|any|its) value\b|\bwithout (the|a|any) value\b|\bnames? no value\b|\bno scan detail\b'
 A9APPLY='\b(apply|applies|applying)\b[^.;]{0,30}\b(it|the (diff|fix|record|file))\b|\bfix(es)? (it|the (record|file|finding))\b'
 a9_scan() { printf '%s\n' "$SCU" | grep -iE "$GLN" | grep -iE '\bfindings?\b' | grep -iE "$A9NOTFIX" | grep -iE "$A9SEV" | grep -iE "$A9HOLD" \
-  | grep -iE "$A9CLEAR" | grep -iE "$A9NEXT" | grep -iE 'No.secret' | grep -iE '\bonce\b' | grep -iE "$A9NOVAL" | grep -viE '\[(the )?(value|secret|key|token)\]' | gq .; }
+  | grep -F -- "\"$OC_SCAN\"" | grep -iE 'No.secret' | grep -iE '\bonce\b' | grep -iE "$A9NOVAL" | grep -viE '\[(the )?(value|secret|key|token)\]' | gq .; }
 a9_catchup() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' | grep -iE "$A9NOTFIX" \
   | grep -iE "$A9HOLD|scanner step|security.scanner|as (for|with) (a )?(scanner )?finding" | gq .; }
 a9_commit() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'uncommitted|unsaved|commit (them|offer)' | grep -iE '\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,25}\bstag' \
   | grep -iE '\bthe rest\b' | grep -iE '\b(left|leaves?|leaving)\b[^.;]{0,40}\bfor /ship-it\b' | grep -iE '\bone (plain )?line\b|"[^"]*for /ship-it[^"]*"' | gq .; }
-check "adv2 1 (side doors): the scanner step doesn't fix a finding on .ship-it-go-live.json, whatever its severity, nor hold up work, and tells the user once, with no value, that /ship-it clears it on its next production run (No-secret rule); the catch-up doesn't apply a gap on it (X01); the commit offer never stages it, commits the rest and says it left it for /ship-it" \
+check "adv2 1 (side doors): the scanner step doesn't fix a finding on .ship-it-go-live.json, whatever its severity, nor hold up work, and tells the user once, with no value, the owner call's line (/ship-it owns that file; the user can change the answer) (No-secret rule); the catch-up doesn't apply a gap on it (X01); the commit offer never stages it, commits the rest and says it left it for /ship-it" \
   'a9_scan && a9_catchup && a9_commit && ! printf "%s\n" "$WU" | grep -iE "$GLN" | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$A9APPLY"'
 
 # calls 2 and 3 render the template's own line for the counterexample's item, the rule's switches read from the go-live text
@@ -973,6 +980,52 @@ while (<STDIN>) { next unless /unreadable|can.t be read|COULDNTREAD/i;
 exit $bad;'
 check "adv2 4 (unreadable record, chat line): resume-it says it never repeats the guide's \"I couldn't read your go-live record, so I'm going through it again\", and no quoted line of its own says it goes through it again" \
   'printf "%s\n" "$A9P" | grep -iE "unreadable|can.t be read|COULDNTREAD" | sents | gq -iE "\b(never|not|doesn.t|does not|don.t)\b[^.;]{0,25}\b(repeats?|says?|uses?|copies|quotes?)\b[^.;]{0,40}(GOINGAGAIN|COULDNTREAD|(the guide.s|/ship-it.s) (line|notice|words|sentence))" && printf "%s\n" "$A9P" | perl -e "$A9QG"'
+
+# ---- Task 2 owner call (task-2-owner-call-brief.md, 2026-11-11): /resume-it never says what /ship-it will do ----
+# The user-facing go-live lines: every "..." or `...` span in a unit of resume-it.md that names the go-live record (a span
+# right after a negated speech verb -- "never repeats /ship-it's line ("...")" -- is a quoted counter-example, not resume-it's
+# line; "names no value: "..."" is not such a negation),
+# every template go-live line, and what the prose tells the user about it (the words after "tell the user" or "say in one
+# line", quotes taken out). On the affirmed
+# text none may say what /ship-it will do: ask, ask again, clear, go through, run later, a later release.
+OCU="$(printf '%s\n' "$WU" | grep -iE 'go-live|\.ship-it-go-live\.json' || true)"
+OC_SPANS='
+while (<STDIN>) { chomp; my $u = $_;
+  while ($u =~ /"([^"]*)"|`([^`]*)`/g) { my ($q, $s) = (defined $1 ? $1 : $2, $-[0]);
+    my $pre = substr($u, 0, $s); $pre =~ s/^.*[.!?]\s//s; $pre = substr($pre, -45) if length($pre) > 45;
+    print "$q\n" unless $pre =~ /(\b(never|not)\b|n\x27t\b)[^"]{0,30}\b(repeat|say|use|quote|copy|write|show)s?\b[^"]{0,30}$/i } }'
+OC_UF="$( { printf '%s\n' "$OCU" | perl -e "$OC_SPANS"; printf '%s\n' "$TGL"
+  printf '%s\n' "$OCU" | sed -E 's/"[^"]*"//g' | sents \
+  | perl -ne 'print "$1\n" if /\b(?:tells? (?:the user|them|you)|the user hears|says? (?:to the user|in one line))\b(.*)$/i'; } | grep . || true)"
+OC_FUT='\basked again\b|\b(asks?|asked|asking)\b|\bwill\b|\b[a-z]+[^[:alnum:][:space:]]ll\b|\bclear(s|ed|ing)?\b|\bgo(es|ing)? through\b|\bruns? (it|them|this checklist|the checklist)? ?later\b|\b(later|next|future|newer|upcoming)\b[^.;"]{0,25}\b(release|version|/ship-it|production (run|request|deploy))\b'
+OC_RULE='\b(never|doesn.t|does not|don.t|do not)\b[^.;]{0,30}\bsays?\b[^.;]{0,15}\bwhat /ship-it will do\b'
+check "owner call 1 (own words only): beside the read-only rule a sentence says resume-it never says what /ship-it will do, and no user-facing go-live line (a quoted or template line, or what it tells the user) says what /ship-it will do -- asks, asked again, clears, goes through, a later release (\"/ship-it doesn't run this checklist yet\" is allowed)" \
+  'rwusays "\bonly reads the go-live record\b" "$OC_RULE" && [ -n "$OC_UF" ] && ! printf "%s\n" "$OC_UF" | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_FUT"'
+# call 3: the scanner line, exact, with no value or scan detail in it, said once per session in all -- the scanner step says
+# it once per session, and the catch-up says it only if the scanner step hasn't (never a second time)
+OC_CU="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' || true)"
+OC_ONCE='\bonce per session in all\b|\b(doesn.t|does not|don.t|do not|never|not)\b[^.;]{0,20}\b(say|says|said|repeat|repeats|repeated|tell|tells)\b[^.;]{0,20}\b(it )?again\b|\bonly (if|when|unless)\b[^.;]{0,40}\bscanner step\b[^.;]{0,25}\b(didn.t|did not|hasn.t|has not|hadn.t)\b'
+OC_TWICE='\b(also|again|too|as well)\b[^.;]{0,30}\b(say|says|tell|tells|repeat|repeats)\b|\b(say|says|tell|tells|repeat|repeats)\b[^.;]{0,60}\b(again|too|as well|a second time|each time)\b'
+check "owner call 3 (scanner line): the scanner step says, once per session, exactly \"$OC_SCAN\" -- no value, no scan detail, no placeholder -- and the catch-up never says it a second time (once per session in all)" \
+  'printf "%s\n" "$SCU" | grep -F -- "\"$OC_SCAN\"" | grep -iE "\bonce per session\b" | grep -iE "$A9NOVAL" | grep -viE "\[(the )?(value|secret|key|token|field|item)\]" | gq . && [ -n "$OC_CU" ] && printf "%s\n" "$OC_CU" | sents | gq -iE "$OC_ONCE" && ! printf "%s\n" "$OC_CU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_TWICE"'
+# call 4: the user asks resume-it to fix it -- one line that /ship-it owns that file and the user can change the answer in
+# the file themselves; nothing else offered; resume-it still never writes the record
+OC_FIXU="$(printf '%s\n' "$WU" | grep -iE '\b(the user|they|you)\b[^.;]{0,25}\basks?\b[^.;]{0,50}\b(fix|change|correct|clear|edit)' | grep -iE '/?ship-it\b[^.;]{0,10}\bowns\b|\bowned by /?ship-it\b' | grep -iE '\b(the user|they|you)\b[^.;]{0,15}\bcan (change|edit)\b[^.;]{0,40}\b(themselves|yourself|in the file)\b' || true)"
+OC_DOIT='(^|[.;:,] |\b(and|then|so) )(change|edit|fix|update|write|rewrite|clear|correct)\b|\b(resume-it|I)\b (will )?(change|edit|fix|update|write|rewrite|clear|correct)(s|es)?\b'
+check "owner call 4 (asked to fix it): when the user asks resume-it to fix the record, it answers in one line that /ship-it owns that file and the user can change the answer in the file themselves, offers nothing else, and never writes the record" \
+  '[ -n "$OC_FIXU" ] && printf "%s\n" "$OC_FIXU" | gq -iE "\bone (plain )?line\b" && printf "%s\n" "$OC_FIXU" | gq -iE "\b(offers?|offering) nothing else\b|\bnothing else\b" && ! printf "%s\n" "$OC_FIXU" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OFFER|$OC_DOIT" && [ -z "$(printf "%s\n" "$OC_FIXU" | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS"'
+# call 5: one name for the file in what the user reads -- "go-live record"; the commit-offer line is exact
+OC_COMMIT='I left your go-live record for /ship-it, which owns it.'
+check "owner call 5 (one name): the commit offer says \"$OC_COMMIT\", and no line of resume-it.md says \"go-live answers file\"" \
+  'printf "%s\n" "$WU" | gq -F -- "\"$OC_COMMIT\"" && ! gq -iF "go-live answers file" "$R"'
+# call 6: the unreadable line, exact, said only when no copy of the record can be read; when main's copy can be read,
+# nothing is said about the branch's file
+OC_UNR="I couldn't read your go-live record, so the list shows none of its answers."
+OC_UNRU="$(printf '%s\n' "$WU" | grep -F -- "\"$OC_UNR\"" || true)"
+OC_SCOPE='\bno copy\b[^.;]{0,30}\b(can be read|is readable|readable)\b|\bonly when\b[^.;]{0,80}\bmain\b[^.;]{0,30}\b(has none|none|unreadable|can.t be read)\b|\bmain has none or (it is |is )?unreadable\b'
+OC_UNSCOPED='\b(even (when|if)|whenever|whether or not|always)\b[^.;]{0,60}\b(main|copy|readable)\b|\b(main.s copy|main)\b[^.;]{0,25}\b(can be read|is readable)\b[^.;]{0,40}\b(say|says|tell|tells)\b[^.;]{0,15}\b(it|that|this|the line|so)\b'
+check "owner call 6 (unreadable line): resume-it says \"$OC_UNR\" only when no copy of the record can be read, and when main's copy can be read it says nothing about the branch's file" \
+  '[ -n "$OC_UNRU" ] && printf "%s\n" "$OC_UNRU" | gq -iE "$OC_SCOPE" && ! printf "%s\n" "$OC_UNRU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_UNSCOPED" && printf "%s\n" "$OCU" | sents | grep -iE "main.s copy[^.;]{0,20}\b(can be read|is readable)\b" | gq -iE "\bsays nothing\b|\bnothing about\b|\bno line\b"'
 
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
