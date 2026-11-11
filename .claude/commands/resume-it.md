@@ -517,35 +517,29 @@ On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the
 file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
 That ordinary line is for a record that is merely changed, not conflicted.
 
-**A conflicted go-live record:** when `.ship-it-go-live.json` is unmerged (a merge or rebase
-stopped with that file in conflict), resume-it never resolves, edits, stages, removes or checks
-out either side of `.ship-it-go-live.json`.
-- When an update of the branch that resume-it began itself (the rebase `git-operations.md` tells
-  it to use) stops with the record in conflict, resume-it aborts that update (`git rebase
-  --abort`) so the branch is exactly as it was before, and says this line once: "I couldn't
-  update your branch from main: your go-live record has a merge conflict with main's copy.
-  /ship-it owns that file, so I didn't touch it and put your branch back as it was."
-- When the record is already in conflict from an update the user ran (still unmerged: untouched,
-  or edited but not staged), resume-it does not abort that update, resolves nothing and commits
-  nothing: on a yes to Uncommitted changes (or anywhere else it would commit for the user) it says
-  this line once instead of committing: "Your go-live record has a merge conflict. /ship-it owns
-  that file, so I didn't touch it, and I can't save your other changes until your update is
-  finished. Resolve it in the file and finish the update yourself, or tell me to undo the update."
-- While an update the user began (a merge or a rebase) is in progress and `.ship-it-go-live.json`
-  is part of it -- in conflict, or already resolved and staged by the user -- resume-it commits
-  nothing and does not continue the update (no commit, no `git rebase --continue`, no staging).
-  Finishing it is the user's step.
-- When the user has resolved and staged the record and the update is still in progress, and
-  resume-it would commit for the user, it says this exact line instead: "Your update isn't
-  finished, and it includes your go-live record, which /ship-it owns, so I didn't finish it.
-  Finish the update yourself, or tell me to undo it."
-- Without the user's ask, resume-it never aborts the user's update. When the user tells it to undo
-  the update, resume-it aborts it with the abort that matches the update (`git merge --abort` for
-  a merge, `git rebase --abort` for a rebase) and says this exact line: "I undid your update, so
-  your branch is as it was before it."
-- Once no update is in progress, resume-it behaves as usual, and every ordinary rule about the
-  record applies again (it is never staged; the ordinary commit-offer line is for a record that is
-  merely changed).
+**A go-live record in an unfinished update:** when `.ship-it-go-live.json` is unmerged (a merge or
+rebase stopped with that file in conflict), resume-it never resolves, edits, stages, removes or
+checks out either side of `.ship-it-go-live.json`.
+- While the go-live record is in conflict, or a merge, rebase or other update that includes it is
+  unfinished, resume-it makes no commit, stages nothing, and runs nothing that finishes, continues
+  or undoes it. An update includes the record when its changes touch `.ship-it-go-live.json` or it
+  leaves the record in conflict. This covers every update but resume-it's own rebase below: one the
+  user began, or one already unfinished when resume-it started. Finishing or undoing the update is
+  the user's, also when they ask resume-it to do it.
+- Wherever this rule stops resume-it from saving for the user (a yes to Uncommitted changes, or
+  anywhere else it would commit), and whenever the user asks it to finish or undo the update,
+  resume-it says this line instead: "An update of your branch isn't finished, and it involves your
+  go-live record, which /ship-it owns. I haven't touched it and I'm not saving anything until it is
+  finished. Finishing or undoing the update is yours."
+- The one exception: when an update of the branch that resume-it began itself (the rebase
+  `git-operations.md` tells it to use) stops with the record in conflict, resume-it aborts that
+  update (`git rebase --abort`) at once, before the user has done anything in it, so the branch is
+  exactly as it was before, and says this line: "I couldn't update your branch from main: your
+  go-live record has a merge conflict with main's copy. /ship-it owns that file, so I didn't touch
+  it and put your branch back as it was."
+- Once the record is no longer in conflict and no update that includes it is unfinished, resume-it
+  behaves as usual, and every ordinary rule about the record applies again (it is never staged;
+  "I left your go-live record for /ship-it, which owns it." is for a record that is merely changed).
 
 **When standards gaps are found, present them in plain language:**
 
@@ -770,7 +764,8 @@ For **production**, detect the org's preferred approach:
 Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
 (The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
 resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
-writes, stages or commits it, because /ship-it owns it. About the go-live record, resume-it says
+writes, stages or commits it, because /ship-it owns it. Wherever resume-it would commit for the user, the rule under
+**A go-live record in an unfinished update** (Greet + Suggest) applies. About the go-live record, resume-it says
 only what it did, what the record holds, and that /ship-it owns the file; it never says what
 /ship-it will do. If the user asks resume-it to fix or change an answer in the record, say in one
 line that /ship-it owns that file and they can change the answer in the file themselves, and offer
