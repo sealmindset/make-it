@@ -79,8 +79,11 @@ check "placement: one \"$H\" heading, the first heading after \"### Left-out ite
 # 1. the trigger
 check "rule 1 (trigger): in SHIP MODE a request into main runs it, whatever its intent label, when the repo's workflow deploys to production" \
   'says "SHIP MODE" "+\bmain\b" "+\b(whatever|any|regardless of|every)\b[^.]{0,20}\bintent\b" "+deploys? to production"'
-check "rule 1 (trigger): a production workflow is a job on deployment.environments.production (default production), a deploy-prod job, a reusable caller's environment-prod, or none yet (every one ship-it generates deploys to production on merge)" \
-  'says "deployment\.environments\.production" "+default[^.]{0,5}production" && says "+deploy-prod" && says "+environment-prod" && says "no workflow" "+generat" "+deploys? to production on merge"'
+# (re-pointed by R3, final review: the owner's 2026-10-18 answer counts a workflow with a production deploy job, so the
+# no-workflow bullet may say either "deploys to production on merge" or "has a production deploy job"; R3's own check
+# below pins that it agrees with the Workflow Generation table)
+check "rule 1 (trigger): a production workflow is a job on deployment.environments.production (default production), a deploy-prod job, a reusable caller's environment-prod, or none yet (every one ship-it generates deploys to production on merge, or has a production deploy job)" \
+  'says "deployment\.environments\.production" "+default[^.]{0,5}production" && says "+deploy-prod" && says "+environment-prod" && says "no workflow" "+generat" "+deploys? to production on merge|\bproduction deploy job\b"'
 check "rule 1 (trigger): AWS and VLF modes always run it; SAVE mode never does" \
   'says "\bAWS\b" "\bVLF\b" "+\balways\b" && says "(\bSAVE\b|/ship-it save\b)[^.;]{0,30}\b(never|not|doesn.t|does not)\b" && ! says "+(\bSAVE\b|/ship-it save\b)[^.;]{0,30}\b(runs?|triggers?|asks?|shows?)\b"'
 check "rule 1 (trigger): a re-run (RE-RUN, a request already open) asks nothing -- only a new request asks -- and the PR section stays as written (owner, 2026-10-21)" \
@@ -432,7 +435,13 @@ check "adv2 8 (step 7): the PR step says the heading holds the five go-live line
 # ---- owner call on adversarial round 3, finding 1: "Start from main's copy" (task-1-owner-call-brief.md) ----
 # A scratch git fixture with a bare origin; the guide's own read command (`git show origin/<default branch>:...`) runs on it,
 # and the merge rule the guide states (its switches read from the wording, as in rounds 1-2) decides what the record holds.
-gx() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -c user.name=t -c user.email=t@example.com -c init.defaultBranch=main -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@" 2>/dev/null; }
+# (R9, final review: isolated as test-left-out-record.sh's fixtures are -- run from a git hook, an exported GIT_DIR,
+# GIT_WORK_TREE or GIT_INDEX_FILE would make every `gx -C <fixture>` act on the real repository; a subshell unsets them,
+# and no repo above the scratch folder is ever found)
+TMPP="$(cd "$TMPD" && pwd -P)"
+gx() ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CEILING_DIRECTORIES="$TMPD:$TMPP"
+  git -c user.name=t -c user.email=t@example.com -c init.defaultBranch=main -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@" 2>/dev/null )
 OCREC='.ship-it-go-live.json'
 oc_rec() { python3 -I -c 'import json, sys; print(json.dumps({"schema": 1, "items": json.loads(sys.argv[1])}))' "$1"; }
 oc_put() { printf '%s\n' "$2" > "$1/$OCREC" && gx -C "$1" add "$OCREC" && gx -C "$1" commit -qm "$3"; }
@@ -543,9 +552,12 @@ oc_case4() { local fetched shown lines
 check "owner 4 (GitHub unreachable): with no file on main the checklist goes on with the branch's record and says nothing; with origin unreachable it goes on, says so in one plain line, and nothing stops the request" 'oc_case4'
 
 # rule 4: a clash in .ship-it-go-live.json on the second PR is settled per item by the newer date (a real add/add-free
-# content conflict: two branches change item 1 and item 2 differently); re-running /ship-it after updating from main
-# settles it too; never a gate
-OCC=0; usays 'conflict|clash' '+\b(per|each) item\b' '+\bnewer date\b' '+\bkeep' && OCC=1
+# content conflict: two branches change item 1 and item 2 differently); never a gate
+# (re-pointed by R1, final review: the by-hand line, exact, is the rule the fixture runs; "re-running /ship-it after
+# updating from main settles it" left with the rest of /ship-it settling its own file)
+OC_BYHAND='"Your go-live record changed on two branches. To settle it, keep, for each item, the line with the newer date."'
+OC_CLASH='A clash is still possible: when two open branches both change an answer, git shows a conflict in `.ship-it-go-live.json` on the second PR.'
+OCC=0; printf '%s' "$FLAT" | gq -F -- "$OC_BYHAND" && OCC=1
 oc_case5() { local base ours theirs
   oc_origin c5 && base="$(oc_rec "$OC1M")" && oc_put "$OC/c5/a" "$base" "record" && gx -C "$OC/c5/a" push -q origin main || return 1
   gx -C "$OC/c5/b" checkout -q main && gx -C "$OC/c5/b" pull -q origin main && gx -C "$OC/c5/b" checkout -qb feature-d || return 1
@@ -554,16 +566,22 @@ oc_case5() { local base ours theirs
   gx -C "$OC/c5/b" fetch -q origin main; ! gx -C "$OC/c5/b" merge -q origin/main >/dev/null || return 1
   ours="$(gx -C "$OC/c5/b" show ":2:$OCREC")"; theirs="$(gx -C "$OC/c5/b" show ":3:$OCREC")"; [ -n "$ours" ] && [ -n "$theirs" ] || return 1
   oc_merge "norec=1,newer=$OCC,tie=1,oneside=1,unread=1" "$theirs" "$ours" "$OC5W"; }
-check "owner 5 (a clash): two branches change the record and git shows a conflict on the second PR; keeping, per item, the line with the newer date settles it (item 1 from this branch, item 2 from main); re-running /ship-it after updating the branch from main settles it too; never a gate" \
-  'oc_case5 && says "+re-?run(ning)? /ship-it|/ship-it again" "+\bupdat\w* (the |your )?branch from main\b|\bafter (updating|merging)\b" "+\bsettles?\b" && usays "conflict|clash" "\bnever a gate\b|\bnot a gate\b"'
+check "owner 5 (a clash; re-pointed by R1): two branches change the record and git shows a conflict on the second PR -- the guide's exact clash sentence, never a gate; its exact by-hand line (keep, for each item, the line with the newer date) settles it (item 1 from this branch, item 2 from main)" \
+  'oc_case5 && printf "%s" "$FLAT" | gq -F -- "$OC_CLASH" && usays "conflict|clash" "\bnever a gate\b|\bnot a gate\b"'
+# R1 (final review, owner): how the skills handle that conflict is not designed yet; until then it is settled by hand.
+# Nothing in the section has /ship-it settle its own file, read the two sides, stage the result, complete or continue the
+# user's update, or stop on other conflicted files.
+R1_SHIPV='/ship-it\b[^.;:]{0,40}\b(settles?|settling|resolves?|completes?|continues?|stages?|finishes?)\b|\b(two|both) sides\b|--diff-filter=U|\bconflict markers\b|\bstage numbers\b|\bother (conflicted )?files?\b[^.;]{0,20}\b(in conflict|conflicted)\b|\bany other file is conflicted\b|\bwhen /ship-it isn.t run\b'
+check "R1 (guide, the clash settled by hand): a sentence says how the skills handle that conflict is not designed yet and that until it is, it is settled by hand; no sentence has /ship-it settle, resolve, stage, complete or continue it, read the two sides, or stop on other conflicted files" \
+  'says "\bnot designed yet\b" "conflict|clash" "+\bby hand\b" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$R1_SHIPV"'
 
 # rule 5: a re-run, like a new request, reads main's copy the same way when it runs
 check "owner 6 (re-run): a re-run that runs the checklist reads main's copy the same way a new request does" \
   'usays "\bre-?run\b|RE-RUN" "+main.s copy|the default branch" "+\bthe same way\b"'
 
 # ---- owner call 2: "Settle its own file" (task-1-owner-call-brief.md, "## Owner call 2"; re-review 6) ----
-# On the same git setup: the user merges main into the branch and git stops. The settle rule's switches are read from the
-# wording; the guide's own `git diff --name-only --diff-filter=U` lists the conflicted files.
+# (R1, final review: the settle rule left this release -- its checks 1-3 and their git-conflict helpers are removed;
+# checks 4 and 5 pin the which-answer-counts rule, which stays)
 PY6='
 import json, sys
 m_ = sys.argv[1]; f = dict(x.split("=") for x in sys.argv[2].split(",") if x); on = lambda k: f.get(k) == "1"
@@ -586,71 +604,13 @@ def merge(m, b):
         if x and y: out[k] = (y if y["date"] > x["date"] else x if y["date"] < x["date"] else (y if on("tie") else x)) if on("newer") else y
         else: out[k] = y or x
     return out
-if m_ == "settle": print(json.dumps({"schema": 1, "items": merge(load(sys.argv[3]), load(sys.argv[4]))})); sys.exit(0)
-got = merge(load(sys.argv[3]), load(sys.argv[4])) if m_ == "merge" else load(sys.argv[3])
+got = merge(load(sys.argv[3]), load(sys.argv[4]))
 want = json.loads(sys.argv[-1])
 sys.exit(0 if isinstance(got, dict) and {k: (v["state"], v["date"]) for k, v in got.items()} == {k: tuple(v) for k, v in want.items()} else 1)
 '
 py6() { python3 -I -c "$PY6" "$@" 2>/dev/null; }
-OS_DIFF=0; OS_SOLE=0; OS_NOWT=0; OS_SIDES=0; OS_NEW=0; OS_TIE=0; OS_STAGE=0; OS_RULES=0; OS_STOP=0; OS_NONE=0; OS_UBR=0
-printf '%s' "$FLAT" | gq -F '`git diff --name-only --diff-filter=U`' && OS_DIFF=1
-says '\bonly conflicted file\b|\bthe only file in conflict\b|\blists only it\b' && OS_SOLE=1
-says 'working tree' '\bconflict markers\b|\b(doesn.t|does not|never|not) read\b' && OS_NOWT=1
-says '+\breads?\b' '\b(two|both) sides\b|\beach side\b' '\bgit\b' && OS_SIDES=1
-says '\bkeeps\b' '+\bnewer `?date`?\b' '\b(per|each) item\b' && OS_NEW=1
-says '\bkeeps\b' "+\btie\b[^.;]{0,15}\bbranch.s\b" && OS_TIE=1
-says '+\bwrites?\b' '+\bstages?\b' && OS_STAGE=1
-says '\bresult\b' '+\bshape\b' 'secret' '\bkeeps\b|\btie\b|\bsettl|\bconflict|\bsides?\b' && OS_RULES=1
-says '\bother (conflicted )?files?\b[^.;]{0,20}\b(in conflict|conflicted)\b|\b(any other|another|other) conflicted\b' '+\bstops?\b' '+\bnames?\b' && OS_STOP=1
-says '\btouches none\b|\btouches? none of them\b|\bnever settles a file it doesn.t own\b' && OS_NONE=1
+OS_UBR=0
 says 'unreadable' '\bbranch' '\bcounts? as no branch record\b' '+\bmain supplies\b' && OS_UBR=1
-OS1C='{"terms_privacy": {"state": "skipped", "reason": "pages next week", "date": "2026-10-23", "evidence": ""}, "security_audit": {"state": "done", "reason": "audit passed", "date": "2026-10-25", "evidence": ""}, "load_test": {"state": "done", "reason": "load test passed", "date": "2026-10-22", "evidence": ""}}'
-OS1D='{"terms_privacy": {"state": "na", "reason": "does not apply", "date": "2026-10-24", "evidence": ""}, "security_audit": {"state": "skipped", "reason": "coming soon", "date": "2026-10-20", "evidence": ""}, "load_test": {"state": "skipped", "reason": "coming soon", "date": "2026-10-22", "evidence": ""}}'
-OS1W='{"terms_privacy": ["na", "2026-10-24"], "security_audit": ["done", "2026-10-25"], "load_test": ["skipped", "2026-10-22"]}'
-OSMSG=""
-# /ship-it after the user's update stopped on conflicts, in clone $1, as the guide's rule says
-oc_settle() { local d="$1" f others br mn res
-  [ "$OS_DIFF" = 1 ] || return 1
-  f="$(gx -C "$d" diff --name-only --diff-filter=U)"; printf '%s\n' "$f" | gq -xF "$OCREC" || return 1
-  others="$(printf '%s\n' "$f" | grep -vxF "$OCREC" | grep . || true)"
-  if [ -n "$others" ] && [ "$OS_STOP" = 1 ]; then OSMSG="stopped: $(printf '%s' "$others" | tr '\n' ' ')"; return 0; fi
-  if [ "$OS_SIDES" = 1 ]; then br="$(gx -C "$d" show ":2:$OCREC")"; mn="$(gx -C "$d" show ":3:$OCREC")"
-  else br="$(cat "$d/$OCREC")"; mn="$(oc_main "$d")"; fi
-  res="$(py6 settle "newer=$OS_NEW,tie=$OS_TIE,ubr=$OS_UBR" "${mn:--}" "${br:--}")" || return 1
-  printf '%s\n' "$res" > "$d/$OCREC"; [ "$OS_STAGE" = 1 ] && gx -C "$d" add "$OCREC"; return 0; }
-# two branches change the record; branch C reaches main; branch D's user merges main in ($2 = also conflict README)
-os_clash() { local s="$1"
-  oc_origin "$s" && oc_put "$OC/$s/a" "$(oc_rec "$OC1M")" record && gx -C "$OC/$s/a" push -q origin main || return 1
-  gx -C "$OC/$s/b" checkout -q main && gx -C "$OC/$s/b" pull -q origin main && gx -C "$OC/$s/b" checkout -qb feature-d || return 1
-  if [ -n "${2:-}" ]; then printf 'app\nfrom C\n' > "$OC/$s/a/README"; gx -C "$OC/$s/a" add README; printf 'app\nfrom D\n' > "$OC/$s/b/README"; gx -C "$OC/$s/b" add README; fi
-  oc_put "$OC/$s/a" "$(oc_rec "$OS1C")" "branch c, merged" && gx -C "$OC/$s/a" push -q origin main || return 1
-  oc_put "$OC/$s/b" "$(oc_rec "$OS1D")" "branch d" || return 1
-  gx -C "$OC/$s/b" fetch -q origin main; ! gx -C "$OC/$s/b" merge -q origin/main >/dev/null; }
-
-# 1. the record is the only conflicted file: /ship-it reads the two sides from git (not the working-tree file with its
-# markers), keeps the newer date per item (a tie to the branch), applies the record rules, writes and stages the result
-os_case1() { os_clash s1 && [ "$(gx -C "$OC/s1/b" diff --name-only --diff-filter=U)" = "$OCREC" ] && oc_settle "$OC/s1/b" || return 1
-  [ -z "$(gx -C "$OC/s1/b" diff --name-only --diff-filter=U)" ] && py6 want "" "$(gx -C "$OC/s1/b" show ":0:$OCREC")" "$OS1W"; }
-check "owner call 2, 1 (settled clash): with .ship-it-go-live.json the only conflicted file after the user merges main in, /ship-it reads both sides from git (not the file with its markers), keeps per item the newer date (a tie to the branch), applies the record rules, writes and stages it; no conflict is left, and the branch's newer na survives" \
-  '[ "$OS_SOLE" = 1 ] && [ "$OS_NOWT" = 1 ] && [ "$OS_RULES" = 1 ] && os_case1'
-
-# 2. another file is conflicted too: nothing is settled -- that file is untouched, the record stays in conflict, the stop
-# names the other file
-os_case2() { local before
-  os_clash s2 readme || return 1; before="$(cksum < "$OC/s2/b/README")"; OSMSG=""
-  oc_settle "$OC/s2/b" || return 1
-  [ "$(cksum < "$OC/s2/b/README")" = "$before" ] && gx -C "$OC/s2/b" diff --name-only --diff-filter=U | gq -xF README && gx -C "$OC/s2/b" diff --name-only --diff-filter=U | gq -xF "$OCREC" && printf '%s' "$OSMSG" | gq -F README; }
-check "owner call 2, 2 (another conflicted file): with README conflicted too, nothing is settled -- README is untouched, the record stays in conflict, and the stop names README; /ship-it never settles a file it doesn't own" \
-  '[ "$OS_NONE" = 1 ] && os_case2'
-
-# 3. wording: /ship-it never starts a merge or rebase, it only completes the user's; the guide leads with the no-hands route,
-# and the hand route ("keep, for each item, the line with the newer date") is only the fallback when /ship-it isn't run
-os_lead() { local si hi
-  si="$(printf '%s\n' "$PAIRS" | cut -d $'\x1f' -f1 | grep -niE '/ship-it settles\b' | head -1 | cut -d: -f1)"
-  hi="$(printf '%s\n' "$PAIRS" | cut -d $'\x1f' -f1 | grep -niE '\bkeep,? (for )?(each|per) item\b' | head -1 | cut -d: -f1)"
-  [ -n "$si" ] && [ -n "$hi" ] && [ "$si" -lt "$hi" ]; }
-check "owner call 2, 3 (wording): /ship-it never starts a merge or rebase itself, only completes the user's update; the guide leads with /ship-it settling its own file, and the hand route comes after it, only as the fallback when /ship-it isn't run" \
-  'says "\bnever starts? a merge or (a )?rebase\b|\b(doesn.t|does not|never) start (a )?(merge|rebase)\b" && says "+\bcompletes?\b" "\buser (started|began)\b|\bthe user.s (update|merge)\b" && ! says "+/ship-it\b[^.;]{0,20}\b(merges|rebases|pulls)\b" && os_lead && usays "\bkeep,? (for )?(each|per) item\b" "\bfallback\b|\bwhen /ship-it isn.t run\b|\bif /ship-it isn.t run\b|\bwithout (running )?/ship-it\b"'
 
 # 4. an unreadable branch file beside a readable main copy counts as no branch record: main supplies the items
 os_case4() { local mc
@@ -663,6 +623,48 @@ check "owner call 2, 4 (unreadable branch file): a truncated branch record besid
 # 5. an unreadable main copy: nothing is said about it (and it never gets the unreadable notice)
 check "owner call 2, 5 (unreadable main copy): nothing is said about an unreadable main copy, and the \"I couldn't read your go-live record\" notice is never about it" \
   'says "unreadable" "main(.s)? copy" "\bnothing (is )?said\b|\bsays nothing\b|\bsilently\b" && ! says "main(.s)? copy" "couldn.t read your go-live record"'
+
+# ---- final review (final-review-fix-brief.md, 2026-11-11): R3-R7, the guide's spec fixes ----
+# R3: the trigger's no-workflow bullet and the Workflow Generation table agree -- the empty-provider (placeholder) row
+# says, on its affirmed text, that the placeholder still has the production deploy job (`deploy-prod`), as the
+# workflow /ship-it generates does; a "deploys to production" bullet beside a bare "placeholder / pending" row is red
+WGROW="$(awk '/^```/{f=!f} !f&&/^#/{on=($0=="### Workflow Generation")} on' "$G" | grep -E '^\|[^|]*infra\.provider: ""' || true)"
+WGAFF="$(printf '%s\n' "$WGROW" | cut -d '|' -f3- | pair | cut -d $'\x1f' -f2)"
+TRIGB="$(printf '%s\n' "$SEC" | units | grep -iE '^- no workflow' || true)"
+check "R3 (generated workflow): the no-workflow trigger bullet claims a production deploy and the Workflow Generation table's empty-provider placeholder row says it still has the production deploy job (deploy-prod), so the two agree" \
+  '[ -n "$WGROW" ] && [ -n "$TRIGB" ] && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "deploys? to production|\bproduction deploy job\b|deploy-prod" && { ! printf "%s\n" "$WGROW" | gq -iE "placeholder|pending" || printf "%s\n" "$WGAFF" | gq -iE "\`?deploy-prod\`?( job)?|\bproduction deploy job\b"; } && printf "%s\n" "$WGAFF" | gq -iE "deploy-prod|\bproduction deploy job\b"'
+# R4: the re-run exception keys on the five item lines, not the heading: a re-run runs the checklist as a new request
+# does when its PR has no five go-live item lines -- no section, or one whose Go-live items list only says the five
+# weren't asked; a PR that already carries the five item lines is not asked again
+check "R4 (re-run, the five lines): a re-run whose PR has no five go-live item lines -- no section, or one whose Go-live items list only says the five weren't asked -- runs the checklist as a new request does; a PR that already carries the five lines is not asked again on a re-run" \
+  'says "\bre-?runs?\b|RE-RUN" "\bfive\b[^.;]{0,25}\blines\b" "## Go-live checklist" "weren.t asked|were not asked" "+\bas a new request\b" && says "\balready (carries|has|holds|shows)\b[^.;]{0,20}\bfive\b" "\bre-?run\b" "\b(not|never|isn.t)\b[^.;]{0,10}\basked( again)?\b|\basks nothing\b"'
+# R5: the long-run pattern is not applied to evidence (an ordinary path matches it); every other pattern and the URL
+# rules still apply to it; reason is unchanged. The rule's switch is read from the guide, then run on a URL with a long
+# path (not flagged), a ghp_-style value built at run time in evidence (still flagged) and a long run in a reason (flagged)
+R5E=0; says '\bevidence\b' 'long-run|\b32\b|hex or base64 run' '\b(not|never)\b[^.;]{0,15}\b(applied|appl(y|ies)|used|checked)\b[^.;]{0,15}\bevidence\b|\bexcept\b[^.;]{0,20}\bevidence\b' && R5E=1
+PY10='
+import re, sys
+e5, anch = sys.argv[1] == "1", sys.argv[2] == "1"; pre = [p for p in sys.argv[3].split("\n") if p]; a = sys.argv[4:]
+alt = "|".join(re.escape(p) for p in pre)
+lead = re.compile(("(?:^|[^A-Za-z0-9])(?:" + alt + ")") if anch else "(?:" + alt + ")"); run = re.compile("[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{32,}")
+ev = lambda x: bool(lead.search(x)) or (not e5 and bool(run.search(x)))
+rs = lambda x: bool(lead.search(x)) or bool(run.search(x))
+sys.exit(0 if pre and not ev(a[0]) and ev(a[1]) and rs(a[2]) else 1)
+'
+R5LONG="https://dev.example.com/legal/termsofservice/currentversion2026"
+R5GHP="https://dev.example.com/r/ghp""_$(printf 'Zx9%.0s' {1..12})"
+R5RUN="see run $(printf 'q%.0s' {1..40})"
+check "R5 (evidence and the long-run pattern): the long-run pattern is not applied to evidence, every other pattern and the URL rules still are, reason keeps every pattern -- on evidence a URL with a long path isn't flagged, a run-time ghp_ value still is; a long run in a reason still is" \
+  'python3 -I -c "$PY10" "$R5E" "$A5A" "$A5P" "$R5LONG" "$R5GHP" "$R5RUN" 2>/dev/null && says "\bevidence\b|\bit\b" "\b(every|all|each) other pattern|\bother patterns\b" "\bURL rules\b|\bquery\b" "+\bstill appl(y|ies)\b" && ! says "\breason\b" "long-run|\b32\b" "\b(not|never)\b[^.;]{0,15}\b(applied|appl(y|ies))\b[^.;]{0,15}\`?reason\b"'
+# R6: the frontend is the app.services entry named frontend when .ship-it.yml exists and has one -- never "the one
+# app.services names" (the guide's own example lists backend and frontend, so that picks none)
+check "R6 (which service is the frontend): the frontend is the app.services entry named frontend, when .ship-it.yml exists and has one; nothing says it is \"the one app.services names\"" \
+  'says "+app\.services\`?[^.;]{0,15}\b(entry|service) (named|called) \`?frontend\b" "\.ship-it\.yml" "+\bhas one\b|\bexists\b" && ! says "+\bthe one\b[^.;]{0,30}app\.services\`? names\b"'
+# R7: Asking's first paragraph says what the section means -- only item 1 is asked; items 2-5 are recorded coming soon
+ASK1="$(printf '%s\n' "$SEC" | awk '/^```/{f=!f} !f&&/^#/{on=($0=="### Asking")} on' | units | sed -n 1p)"
+ASK1P="$(printf '%s\n' "$ASK1" | sents | pair)"
+check "R7 (Asking, first paragraph): it says only item 1 is asked and items 2-5 are recorded coming soon, and none of its sentences affirms that an item 2-5 is asked" \
+  'PAIRS="$ASK1P" says "+\bonly item 1\b[^.;]{0,20}\b(is )?asked\b|\bitem 1 is the only (item|one)\b[^.;]{0,15}\basked\b" && PAIRS="$ASK1P" says "\bitems? 2.{1,4}5\b" "\`coming soon\`" "+\brecorded\b" && ! printf "%s\n" "$ASK1P" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bitems? 2.{1,4}5\b[^.;]{0,15}\b(are|is|get|gets) asked\b"'
 
 # ---- E05-S2 Task 2: resume-it's readiness check lists the open go-live items (task-2-brief.md) ----
 # resume-it only reads `.ship-it-go-live.json` (/ship-it owns it), the way the guide's Go-live checklist says the answer
@@ -712,9 +714,17 @@ while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
     next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\bonly it\b|\b(?:the user|you|they)\b/i;
     print "$raw\n"; last } }'
 RFILE="$( { units < "$R"; printf '%s\n' "$TGL"; } | grep -iE '\.ship-it-go-live\.json|go-live record' || true)"
+# (R2, final review: the owner's exact serious line tells the user to "remove it from the file"; that quoted line, and
+# only it, word for word, is taken out before the write guard reads -- the same words anywhere else still turn it red.
+# R8: in a sentence about a bundle committed "exactly as" received, "the only case/time ... resume-it commits" is the one
+# commit R8 states; it is taken out of that sentence alone (here and in owner call 4's write guard) -- any other write
+# verb there, or a commit outside it, is red)
+OD_SER="A serious safety warning says a password or key is in your go-live record. /ship-it owns that file, so I didn't change it. Before we go on: remove it from the file, and replace that password or key with a new one -- the old one is already in your saved history."
+r8_mask() { sents | perl -pe 's/\bonly (case|time)\b[^.;]{0,50}\bcommits?\b/ONLYCASE/gi if /\bbundle\b/i && /\bexactly as\b/i'; }
+RFILEW="$(printf '%s\n' "$RFILE" | L="$OD_SER" perl -pe 's/"\Q$ENV{L}\E"/SERLINE/g' | r8_mask)"
 FENCEW="$(awk '/^```/{f=!f;next} f' "$R" | grep -F '.ship-it-go-live.json' | grep -E '\bgit (add|commit|rm|mv|checkout|restore|stash)\b|>>? *.?(\./)?\.ship-it-go-live\.json|\btee\b|\bsed -i\b' || true)"
 check "resume-it 2 (read only): resume-it names .ship-it-go-live.json and says it never writes or stages it (/ship-it owns it); nothing that names the file tells it to write, stage, commit or change it, in prose or in code" \
-  'printf "%s\n" "$RFILE" | gq -F ".ship-it-go-live.json" && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS" && [ -z "$(printf "%s\n" "$RFILE" | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && [ -z "$FENCEW" ]'
+  'printf "%s\n" "$RFILE" | gq -F ".ship-it-go-live.json" && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS" && [ -z "$(printf "%s\n" "$RFILEW" | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && [ -z "$FENCEW" ]'
 
 # 3. the NEXT-STEPS template: "### Go-live checklist" inside "## For Production", with its lines
 check "resume-it 3 (template): the NEXT-STEPS template's ## For Production holds ### Go-live checklist" \
@@ -919,9 +929,9 @@ GLN='\.ship-it-go-live\.json|go-live (record|file|answers)'
 WU="$(units < "$R")"
 SCU="$(awk '/<step name="security-scanner-remediation">/{on=1} on; on&&/<\/step>/{exit}' "$R" | awk '/^```/{f=!f;next} !f' | units)"
 # call 1, side doors: the scanner step carries the go-live carve-out (like the left-out one): a finding on the record is not
-# fixed, whatever its severity, doesn't hold up the user's work, and the user hears once, with no value, the owner call's
-# scanner line (the guide's No-secret rule pointed at outside it); the catch-up doesn't apply a gap on it
-# (X01) and doesn't hold up work; the commit offer never stages it, commits the rest and says it left it for /ship-it
+# fixed, whatever its severity, and the user hears once, with no value, the line for its tier (the guide's No-secret rule
+# pointed at outside it); the catch-up doesn't apply a gap on it (X01); whether either holds up work is R2's two tiers,
+# below; the commit offer never stages it, commits the rest and says it left it for /ship-it
 A9NOTFIX='\b(not|never|isn.t)\b[^.;]{0,20}\b(fixed|fix|applied|apply|changed|edited)\b'
 A9SEV='whatever (its|the) severity|any severity|regardless of (its |the )?severity|even (when|if)[^.;]{0,15}critical'
 A9HOLD='\b(doesn.t|does not|never|not|won.t)\b[^.;]{0,15}\b(hold|holds|block|blocks)\b'
@@ -930,13 +940,34 @@ A9HOLD='\b(doesn.t|does not|never|not|won.t)\b[^.;]{0,15}\b(hold|holds|block|blo
 OC_SCAN="A safety warning is about an answer in your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer in the file yourself."
 A9NOVAL='\bno value\b|\bnever (names?|shows?|says?|quotes?) (the|a|any|its) value\b|\bwithout (the|a|any) value\b|\bnames? no value\b|\bno scan detail\b'
 A9APPLY='\b(apply|applies|applying)\b[^.;]{0,30}\b(it|the (diff|fix|record|file))\b|\bfix(es)? (it|the (record|file|finding))\b'
-a9_scan() { printf '%s\n' "$SCU" | grep -iE "$GLN" | grep -iE '\bfindings?\b' | grep -iE "$A9NOTFIX" | grep -iE "$A9SEV" | grep -iE "$A9HOLD" \
-  | grep -F -- "\"$OC_SCAN\"" | grep -iE 'No.secret' | grep -iE '\bonce\b' | grep -iE "$A9NOVAL" | grep -viE '\[(the )?(value|secret|key|token)\]' | gq .; }
-a9_catchup() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' | grep -iE "$A9NOTFIX" \
-  | grep -iE "$A9HOLD|scanner step|security.scanner|as (for|with) (a )?(scanner )?finding" | gq .; }
+# (re-pointed by R2, final review, owner: two tiers. Less serious (Medium or Low): not fixed, doesn't hold up the work,
+# the scanner line. Serious (Critical or High, or a [BLOCK] catch-up gap): not fixed, holds up the work as any Critical or
+# High finding does, the serious line. SCG: the scanner step's go-live units, from a unit that names the record up to the
+# next bold lead; the two exact lines become LESSLINE / SERLINE, and TIER_PL names the tier each one is said under (the
+# last tier word before it in its unit; "less serious" is the lower tier, never "serious")
+SCG="$(printf '%s\n' "$SCU" | L1="$OC_SCAN" L2="$OD_SER" perl -pe 's/"\Q$ENV{L1}\E"/LESSLINE/g; s/"\Q$ENV{L2}\E"/SERLINE/g' \
+  | G="$GLN" awk '{m=(tolower($0) ~ ENVIRON["G"]) || /LESSLINE|SERLINE/} m{on=1} on&&!m&&/^\*\*/{on=0} on')"
+SCS="$(printf '%s\n' "$SCG" | sed -E 's/[Ll]ess serious/LESSSER/g' | sents)"
+TIER_PL='while (<STDIN>) { my $u = $_; while ($u =~ /(LESSLINE|SERLINE)/g) { my ($m, $pre, $t) = ($1, substr($u, 0, $-[0]), "none");
+  while ($pre =~ /\b(LESSSER|less serious|medium|low)\b|\b(serious|critical|high)\b|(\[BLOCK\])/gi) { $t = defined $1 ? "less" : "serious" }
+  print "$m $t\n" } }'
+LESST='LESSSER|\bMedium\b|\bLow\b'
+SERT='\bCritical\b|\bHigh\b|\bserious\b|\[BLOCK\]'
+HOLDA='\bhold(s|ing)? (up|back)\b|\bblocks?\b'
+tiers() { printf '%s\n' "$1" | sed -E 's/[Ll]ess serious/LESSSER/g' | perl -e "$TIER_PL" | sort -u | tr '\n' ' '; }
+a9_scan() { printf '%s\n' "$SCG" | grep -iE "$GLN" | grep -iE '\bfindings?\b' | grep -iE "$A9NOTFIX" | grep -iE "$A9SEV" | gq . \
+  && [ "$(tiers "$SCG")" = "LESSLINE less SERLINE serious " ] \
+  && printf '%s\n' "$SCS" | grep -iE "$LESST" | gq -iE "$A9HOLD" && ! printf '%s\n' "$SCS" | grep -iE "$LESST" | rpair | cut -d $'\x1f' -f2 | gq -iE "$HOLDA" \
+  && printf '%s\n' "$SCS" | grep -iE "$SERT" | grep -viE "$LESST" | rpair | cut -d $'\x1f' -f2 | gq -iE "$HOLDA" \
+  && printf '%s\n' "$SCG" | gq -iE 'No.secret' && printf '%s\n' "$SCG" | gq -iE "$A9NOVAL" && ! printf '%s\n' "$SCG" | gq -iE '\[(the )?(value|secret|key|token)\]'; }
+CUS2="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' | sed -E 's/[Ll]ess serious/LESSSER/g' | sents)"
+a9_catchup() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' | gq -iE "$A9NOTFIX" \
+  && printf '%s\n' "$CUS2" | grep -viE '\[BLOCK\]' | gq -iE "$A9HOLD" \
+  && printf '%s\n' "$CUS2" | grep -F '[BLOCK]' | rpair | cut -d $'\x1f' -f2 | gq -iE "$HOLDA" \
+  && ! printf '%s\n' "$CUS2" | grep -F '[BLOCK]' | gq -iE "$A9HOLD"; }
 a9_commit() { printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'uncommitted|unsaved|commit (them|offer)' | grep -iE '\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,25}\bstag' \
   | grep -iE '\bthe rest\b' | grep -iE '\b(left|leaves?|leaving)\b[^.;]{0,40}\bfor /ship-it\b' | grep -iE '\bone (plain )?line\b|"[^"]*for /ship-it[^"]*"' | gq .; }
-check "adv2 1 (side doors): the scanner step doesn't fix a finding on .ship-it-go-live.json, whatever its severity, nor hold up work, and tells the user once, with no value, the owner call's line (/ship-it owns that file; the user can change the answer) (No-secret rule); the catch-up doesn't apply a gap on it (X01); the commit offer never stages it, commits the rest and says it left it for /ship-it" \
+check "adv2 1 (side doors; re-pointed by R2): the scanner step never fixes a finding on .ship-it-go-live.json, whatever its severity; a less serious one (Medium or Low) doesn't hold up work and gets the scanner line, a serious one (Critical or High) holds up work and gets the serious line, with no value (No-secret rule); the catch-up doesn't apply a gap on it (X01): a less serious gap doesn't hold up work, a [BLOCK] gap does; the commit offer never stages it, commits the rest and says it left it for /ship-it" \
   'a9_scan && a9_catchup && a9_commit && ! printf "%s\n" "$WU" | grep -iE "$GLN" | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$A9APPLY"'
 
 # calls 2 and 3 render the template's own line for the counterexample's item, the rule's switches read from the go-live text
@@ -1006,14 +1037,16 @@ check "owner call 1 (own words only): beside the read-only rule a sentence says 
 OC_CU="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE 'catch-up|build-standards|\bX01\b|\bgaps?\b' || true)"
 OC_ONCE='\bonce per session in all\b|\b(doesn.t|does not|don.t|do not|never|not)\b[^.;]{0,20}\b(say|says|said|repeat|repeats|repeated|tell|tells)\b[^.;]{0,20}\b(it )?again\b|\bonly (if|when|unless)\b[^.;]{0,40}\bscanner step\b[^.;]{0,25}\b(didn.t|did not|hasn.t|has not|hadn.t)\b'
 OC_TWICE='\b(also|again|too|as well)\b[^.;]{0,30}\b(say|says|tell|tells|repeat|repeats)\b|\b(say|says|tell|tells|repeat|repeats)\b[^.;]{0,60}\b(again|too|as well|a second time|each time)\b'
-check "owner call 3 (scanner line): the scanner step says, once per session, exactly \"$OC_SCAN\" -- no value, no scan detail, no placeholder -- and the catch-up never says it a second time (once per session in all)" \
-  'printf "%s\n" "$SCU" | grep -F -- "\"$OC_SCAN\"" | grep -iE "\bonce per session\b" | grep -iE "$A9NOVAL" | grep -viE "\[(the )?(value|secret|key|token|field|item)\]" | gq . && [ -n "$OC_CU" ] && printf "%s\n" "$OC_CU" | sents | gq -iE "$OC_ONCE" && ! printf "%s\n" "$OC_CU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_TWICE"'
+# (re-pointed by R2, final review: two exact lines now -- the scanner line for a less serious finding, the serious line
+# for a serious one -- each said once per session in all, scanner step and catch-up together)
+check "owner call 3 (scanner line; re-pointed by R2): the scanner step says exactly \"$OC_SCAN\" for a less serious finding and the serious line for a serious one, each once per session in all -- no value, no scan detail, no placeholder -- and the catch-up never says one a second time" \
+  '( for m in LESSLINE SERLINE; do printf "%s\n" "$SCG" | grep -F "$m" | grep -iE "\bonce per session in all\b" | grep -iE "$A9NOVAL" | grep -viE "\[(the )?(value|secret|key|token|field|item)\]" | gq . || exit 1; done ) && [ -n "$OC_CU" ] && printf "%s\n" "$OC_CU" | sents | gq -iE "$OC_ONCE" && ! printf "%s\n" "$OC_CU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_TWICE"'
 # call 4: the user asks resume-it to fix it -- one line that /ship-it owns that file and the user can change the answer in
 # the file themselves; nothing else offered; resume-it still never writes the record
 OC_FIXU="$(printf '%s\n' "$WU" | grep -iE '\b(the user|they|you)\b[^.;]{0,25}\basks?\b[^.;]{0,50}\b(fix|change|correct|clear|edit)' | grep -iE '/?ship-it\b[^.;]{0,10}\bowns\b|\bowned by /?ship-it\b' | grep -iE '\b(the user|they|you)\b[^.;]{0,15}\bcan (change|edit)\b[^.;]{0,40}\b(themselves|yourself|in the file)\b' || true)"
 OC_DOIT='(^|[.;:,] |\b(and|then|so) )(change|edit|fix|update|write|rewrite|clear|correct)\b|\b(resume-it|I)\b (will )?(change|edit|fix|update|write|rewrite|clear|correct)(s|es)?\b'
 check "owner call 4 (asked to fix it): when the user asks resume-it to fix the record, it answers in one line that /ship-it owns that file and the user can change the answer in the file themselves, offers nothing else, and never writes the record" \
-  '[ -n "$OC_FIXU" ] && printf "%s\n" "$OC_FIXU" | gq -iE "\bone (plain )?line\b" && printf "%s\n" "$OC_FIXU" | gq -iE "\b(offers?|offering) nothing else\b|\bnothing else\b" && ! printf "%s\n" "$OC_FIXU" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OFFER|$OC_DOIT" && [ -z "$(printf "%s\n" "$OC_FIXU" | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS"'
+  '[ -n "$OC_FIXU" ] && printf "%s\n" "$OC_FIXU" | gq -iE "\bone (plain )?line\b" && printf "%s\n" "$OC_FIXU" | gq -iE "\b(offers?|offering) nothing else\b|\bnothing else\b" && ! printf "%s\n" "$OC_FIXU" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OFFER|$OC_DOIT" && [ -z "$(printf "%s\n" "$OC_FIXU" | r8_mask | RP_STRONG=1 rpair | perl -e "$WRITE_PL")" ] && printf "%s\n" "$RGL" | grep -iE "$NEVERW" | gq -iE "$OWNS"'
 # call 5: one name for the file in what the user reads -- "go-live record"; the commit-offer line is exact
 OC_COMMIT='I left your go-live record for /ship-it, which owns it.'
 check "owner call 5 (one name): the commit offer says \"$OC_COMMIT\", and no line of resume-it.md says \"go-live answers file\"" \
@@ -1027,176 +1060,44 @@ OC_UNSCOPED='\b(even (when|if)|whenever|whether or not|always)\b[^.;]{0,60}\b(ma
 check "owner call 6 (unreadable line): resume-it says \"$OC_UNR\" only when no copy of the record can be read, and when main's copy can be read it says nothing about the branch's file" \
   '[ -n "$OC_UNRU" ] && printf "%s\n" "$OC_UNRU" | gq -iE "$OC_SCOPE" && ! printf "%s\n" "$OC_UNRU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_UNSCOPED" && printf "%s\n" "$OCU" | sents | grep -iE "main.s copy[^.;]{0,20}\b(can be read|is readable)\b" | gq -iE "\bsays nothing\b|\bnothing about\b|\bno line\b"'
 
-# ---- Task 2 owner calls after adversarial round 3 (task-2-owner-call-2-brief.md, 2026-11-11) ----
-# Call A: a conflicted go-live record -- hands off, say so. The two exact lines (A2, A3) are matched with their double
-# quotes; units of resume-it.md join wrapped lines with one space. CU: the units that name the record and a conflict.
-OC2_A2="I couldn't update your branch from main: your go-live record has a merge conflict with main's copy. /ship-it owns that file, so I didn't touch it and put your branch back as it was."
-# (re-pointed by owner call D, task-2-owner-call-4-brief.md: one general rule, D1, and one line, D2, replace owner call C's
-# three lines and A3's line)
-OD1="While the go-live record is in conflict, or a merge, rebase or other update that includes it is unfinished, resume-it makes no commit, stages nothing, and runs nothing that finishes, continues or undoes it."
-OD2="An update of your branch isn't finished, and it involves your go-live record, which /ship-it owns. I haven't touched it and I'm not saving anything until it is finished. Finishing or undoing the update is yours."
-noq() { sed -E 's/"[^"]*"//g'; }
-# (owner call D, review 7 I2: a quoted line leaves a marker and a full stop, so the sentence after it is read on its own)
-noqs() { sed -E 's/"[^"]*"/QUOTED./g'; }
-CU="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE '\bconflict' || true)"
-# (strengthened after review 6, I2: the conflict passage -- the "A conflicted go-live record" paragraph and the units after
-# it up to the next bold lead -- is read too, so a sentence anywhere in it counts, not only in the units that say "conflict")
-# (owner call D: the passage is found by D1's sentence -- the bold-lead unit holding it or the nearest one above it, up to
-# the next bold lead -- so it follows a renamed heading; with no D1 sentence, the "A conflicted go-live record" lead as before)
-CP="$( { printf '%s\n' "$WU" | D="$OD1" awk 'BEGIN{d=ENVIRON["D"]} {u[NR]=$0; if(!t && index($0,d)) t=NR; if(!o && $0 ~ /^\*\*A conflicted go-live record/) o=NR}
-  END{if(!t) t=o; if(!t) exit; s=t; while(s>1 && u[s] !~ /^\*\*/) s--; if(u[s] !~ /^\*\*/) exit
-    print u[s]; for(i=s+1; i<=NR && u[i] !~ /^\*\*/; i++) print u[i]}'; printf '%s\n' "$CU"; } | grep . || true)"
-CUS="$(printf '%s\n' "$CP" | noq | sents)"
-CUSM="$(printf '%s\n' "$CP" | noqs | sents)"
-# a write on the conflicted record, on the affirmed text: resolve, edit, stage, remove, check out or take a side of it, a
-# git add/rm/checkout/restore, --ours/--theirs, or continuing the merge or rebase -- unless the user or /ship-it does it
-# (strengthened after review 6, m10: plain synonyms too -- accept, pick, choose, use, merge, fix, settle, mark; a "version")
-CONF_PL='
-my $v = qr/\b(?:resolve|resolves|resolving|edit|edits|stage|stages|remove|removes|delete|deletes|rewrite|rewrites|check out|checks out|take|takes|keep|keeps|accept|accepts|pick|picks|choose|chooses|use|uses|merge|merges|fix|fixes|settle|settles|mark|marks)\b/i;
-my $o = qr/\s+(?:it\b|the (?:go-live )?(?:record|file|conflict)\b|(?:either|one|our|their|main.s|the branch.s|its|the user.s) (?:side|copy|version)\b|`?\.ship-it-go-live\.json)/i;
-while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
-  while ($aff =~ /$v$o|\bgit (?:add|rm|checkout|restore|mergetool)\b|--(?:ours|theirs)\b|\b(?:rebase|merge) --continue\b|\bcontinues? the (?:rebase|merge|update)\b/g) {
-    my $pre = substr($aff, 0, $-[0]); $pre =~ s/^.*(?:[,;:()]|\. | -- )//s;
-    next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\b(?:the user|you|they)\b/i;
-    print "$raw\n"; last } }'
-a1_ok() { printf '%s\n' "$CUS" | grep -iE "$GLN" | grep -iE '\bconflict' | grep -iE '\b(never|not|doesn.t|does not|won.t|don.t)\b' \
-  | grep -iE '\bresolv' | grep -iE '\bedit' | grep -iE '\bstag' | grep -iE '\bremov' | grep -iE '\bcheck(s|ing)? out\b' \
-  | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | grep -viE '\b(resolv|edit|stag|remov|check(s|ing)? out)' | gq . \
-  && [ -z "$(printf '%s\n' "$CUS" | RP_STRONG=1 rpair | perl -e "$CONF_PL")" ]; }
-check "owner call A1 (hands off a conflicted record): a sentence says resume-it never resolves, edits, stages, removes or checks out either side of a conflicted .ship-it-go-live.json, and nothing about a conflict tells it to (no resolve/stage/remove/take-a-side of it, no git add/rm/checkout, no --ours/--theirs, no continuing the merge or rebase)" 'a1_ok'
+# ---- Task 2 owner calls A-D (conflicted go-live record): removed by R1, final review (the owner took the conflict
+# rules out of this release; they get their own design card) ----
 
-# A2: the unit with A2's exact line is about an update resume-it began itself, aborts it (affirmed) and puts the branch
-# back as it was
-UA2="$(printf '%s\n' "$WU" | grep -F -- "\"$OC2_A2\"" || true)"
-# (strengthened after review 6, I2: a bare mention of git-operations.md no longer counts as "resume-it began it", and the
-# unit may not affirm that the user began, ran or started the update)
-a2_ok() { [ -n "$UA2" ] && printf '%s\n' "$UA2" | noq | gq -iE '\bresume-it\b[^.;]{0,15}\b(itself )?(began|begins|started|starts|ran|runs)\b|\bresume-it.s own\b|\bits own (update|rebase)\b' \
-  && ! printf '%s\n' "$UA2" | noq | sents | raff | gq -iE '\bthe user\b[^.;]{0,30}\b(ran|run|runs|started|starts|began|begins|made)\b|\bthe user.s (own )?(update|merge|rebase)\b' \
-  && printf '%s\n' "$UA2" | noq | gq -iE '\b(exactly )?as it was\b' \
-  && printf '%s\n' "$UA2" | noq | sents | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE '\babort(s|ed|ing)?\b'; }
-check "owner call A2 (its own update): when an update resume-it began stops with the record in conflict, resume-it aborts it so the branch is as it was, and says \"$OC2_A2\"" 'a2_ok'
-
-# ---- Task 2 owner call after review 7 (task-2-owner-call-4-brief.md, 2026-11-11): one general rule (call D) ----
-# USERUPD: a sentence about the user's update; OWNUPD: one about the update resume-it began itself (A2, D4)
-# (strengthened after review 8, I1: "began / started" is resume-it's own update only beside "itself", and "already
-# unfinished" -- D4's words for an update resume-it did not begin -- marks the user's side, so it is never excused)
-USERUPD='\bthe user\b[^.;]{0,30}\b(ran|run|started|began|made)\b|\bthe user.s (own )?(update|merge|rebase)\b|\balready in conflict\b|\bhalf-done\b|\balready unfinished\b|\bunfinished when resume-it (started|starts|began)\b'
-OWNUPD='\bresume-it\b[^.;]{0,15}\b(itself (began|begins|started|starts)|(began|begins|started|starts) itself)\b|\bresume-it.s own\b|\bits own (update|rebase)\b'
-UD2="$(printf '%s\n' "$WU" | grep -F -- "\"$OD2\"" || true)"
-# the replaced lines (owner call C's three lines, A3's old line): none may remain, whole or in part
-OC_GONE=( -e "or tell me to undo the update" -e "Resolve it in the file and finish the update yourself" -e "Your update isn't finished, and it includes your go-live record" -e "I undid your update" -e "You can resolve it in the file yourself" )
-
-# (re-pointed from owner call A3, "the user's own update": D2's line, not C1's, said instead of saving)
-# (restored after review 8, C1: A3's passage-wide guard -- no sentence of the passage about the user's update affirms
-# that resume-it commits the rest, everything, them, it, all or your other changes; read both with each quoted line cut out
-# (CUS, so a sentence runs on past the quote, as the dropped guard read it) and with it ending the sentence (CUSM), after
-# review 9, I1. The commit offer's ordinary "commit the rest" passes only because its unit holds no user's-update words
-# today; it is not exempt -- add such words there and this turns red)
-# D2, instead of saving: D2's exact line sits in the passage; its unit says it is said instead, where the rule stops a save
-# (a yes to Uncommitted changes, or anywhere resume-it would commit); the unit affirms no commit of the rest
-d2_instead_ok() { [ -n "$UD2" ] && printf '%s\n' "$CP" | gq -F -- "\"$OD2\"" \
-  && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\binstead\b' | gq -iE '\bUncommitted changes\b|\bwould commit\b|\bsav(e|es|ing)\b' \
-  && printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\b(stops?|keeps?|holds?)\b[^.;]{0,30}\bfrom sav(e|ing)\b|\bUncommitted changes\b' \
-  && ! printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\bcommit(s|ting)? (the rest|everything|them|all|your other)\b|\b(saves?|saving) (the rest|everything|them|all)\b|\bafter (committing|saving)\b' \
-  && ! { printf '%s\n' "$CUS"; printf '%s\n' "$CUSM"; } | grep -iE "$USERUPD" | raff | gq -iE '\bcommits? (the rest|everything|them|it|all|your other)\b'; }
-check "owner call A3 -> D2 (the one line, instead of saving): wherever the rule stops resume-it from saving for the user (a yes to Uncommitted changes, or anywhere else it would commit), it says \"$OD2\" instead, and commits nothing of the rest -- nor does any sentence of the passage about the user's update" 'd2_instead_ok'
-# A3, last sentence: the commit offer's ordinary line is for a record merely changed, never the one said for a conflicted one
-WUO="$(printf '%s\n' "$WU" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noq | sents)"
-ORDL='\bORDLINE\b|\bordinary (commit(-offer)? )?line\b|\bcommit offer.s (ordinary )?line\b'
-a3b_ok() { printf '%s\n' "$WUO" | grep -iE "$ORDL" | gq -iE '\bmerely changed\b|\b(not|isn.t|never) (in )?(a )?conflict(ed)?\b' \
-  && ! printf '%s\n' "$WUO" | grep -iE "$ORDL" | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "($ORDL)[^.;]{0,60}\bconflict"; }
-check "owner call A3 (the ordinary line): the commit offer's ordinary line (\"$OC_COMMIT\") is for a record that is merely changed, not conflicted, and no sentence says it for a conflicted one" 'a3b_ok'
-
-# A4 (re-pointed by owner call D2): both lines are there verbatim -- A2's and D2's -- (nothing added inside the quotes: no
-# value, no forecast), and no sentence of their units that names /ship-it says, on its affirmed text, what /ship-it will do
-a4_ok() { [ -n "$UA2" ] && [ -n "$UD2" ] && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UD2"; } | noq | sents | grep -iE '/ship-it' | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "$OC_FUT"; }
-check "owner call A4 (own words only): both lines (A2's and D2's) are said verbatim, and no sentence around them says what /ship-it will do" 'a4_ok'
-
-# D1, the rule (re-pointed from owner call C2): D1's exact sentence is in the passage (it covers a record in conflict with no
-# update open); a sentence says an update includes the record when it changes it or leaves it in conflict; the rule has no
-# "unless the user asks" and needs no open update; finishing or undoing is the user's, also when they ask resume-it to; no
-# sentence of the passage has resume-it finish, continue, conclude, complete or commit an update, or stage the record
-DFIN_PL='
-my $v = qr/\b(?:continues?|finish(?:es)?|completes?|concludes?|wraps? up|finali[sz]es?|closes?|carr(?:y|ies) on(?: with)?|resumes?)\b/i;
-my $o = qr/\s+(?:it\b|the\b|that\b|their\b|your\b|whatever\b|what\b|its\b)/i;
-while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
-  while ($aff =~ /$v$o|--continue\b|\bcommits? (?:it\b|(?:the|that|their|your) (?:update|merge|rebase|record|resolution)\b)|\bgit commit\b|\bstages? (?:it|the|that|their)\b/gi) {
-    my $pre = substr($aff, 0, $-[0]); $pre =~ s/^.*(?:[,;:()]|\. | -- )//s;
-    next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\b(?:the user|you|they)\b/i;
-    print "$raw\n"; last } }'
-D_INCL='\binclud(es|ing)?\b([^.;]|\.\w){0,60}\b(when|if|means|whenever)\b([^.;]|\.\w){0,40}\b(chang|touch|modif)([^.;]|\.\w){0,80}\bconflict'
-D_UNLESS='\b(unless|except (when|if)|but (when|if)|save (when|if))\b[^.;]{0,40}\b(asks?|asked|tells?|told|wants?|says so)\b|\bunless asked\b'
-D_NEEDOPEN='\bonly (while|when|if|during)\b[^.;]{0,40}\b(merge|rebase|update)\b[^.;]{0,25}\b(open|in progress|unfinished|running)\b'
-D_ALSO='\b(the user.s|theirs|yours|the user to (finish|do|undo))\b[^.;]{0,40}\b(also|even) (when|if)\b[^.;]{0,25}\b(they|the user|you)\b[^.;]{0,10}\b(asks?|tells?)\b'
-d1_ok() { printf '%s\n' "$CP" | gq -F -- "$OD1" \
-  && printf '%s\n' "$CUSM" | rpair | cut -d $'\x1f' -f2 | gq -iE "$D_INCL" \
-  && ! printf '%s\n' "$CUSM" | gq -iE "$D_UNLESS|$D_NEEDOPEN" \
-  && printf '%s\n' "$CUSM" | rpair | cut -d $'\x1f' -f2 | gq -iE "$D_ALSO" \
-  && [ -z "$(printf '%s\n' "$CUSM" | RP_STRONG=1 rpair | perl -e "$DFIN_PL")" ]; }
-check "owner call C2 -> D1 (the rule): \"$OD1\" -- also for a record in conflict with no update open, and an update includes the record when it changes it or leaves it in conflict; no \"unless the user asks\": finishing or undoing is the user's, also when they ask resume-it; nothing in the passage has resume-it finish, continue, conclude, complete or commit the update" 'd1_ok'
-
-# D1's guard (re-pointed from owner call C4 and A3's no-abort guard, with no exception for an ask): every sentence of the
-# passage, read on its own (a quoted line leaves a full stop), affirms no abort, undo or roll-back unless it is the update
-# resume-it began itself (A2 / D4) and not the user's; none affirms git reset/stash/checkout --/restore/clean, a discard, or
-# "does so" for an ask. The user's ask to finish or undo, and "finishing or undoing ... is the user's", are taken out first.
-D_ASKP='\b(the user|they|you)\b[^.;]{0,15}\b(asks?|tells?)\b[^.;]{0,15}\bto (finish|undo)( or (finish|undo))?( it| the update| their update)?'
-D_THEIRS='\b(finishing|undoing)( or (finishing|undoing))? (it|the update|their update) (is|stays|remains) (the user.s|theirs|yours)\b'
-D_ABORT='\babort(s|ed|ing)?\b|--abort\b|\bund(o|oes|id|oing)\b|\broll(s|ed|ing)? (it |that update |the update )?back\b|\breverts?\b'
-D_DESTR='\bgit (reset|stash|clean|restore)\b|\breset --hard\b|\bgit checkout --|\bstash(es|ed|ing)?\b|\bdiscards?\b|\bthrows? away\b|\b(resume-it|it) (does|do) (so|it|that)\b|\bgoes ahead\b'
-# (a second pass reads the comma-bounded cut, so a negation earlier in the sentence -- "If the user tells it nothing,
-# resume-it aborts ..." -- can't hide the main clause; there only resume-it/it as the subject counts, as D1's own "runs
-# nothing that finishes, continues or undoes it" leaves "undoes it" without one)
-D_SUBJ='\b(resume-it|it)\s+((then|also|first|still|just|simply)\s+)?(aborts?|undoes|undid|rolls (it |that update |the update )?back|reverts?|discards?|stashes|resets?)\b|\bruns? `?git (reset|stash|checkout --|restore|clean)\b'
-d_guard() { local l a p r=0
-  while IFS= read -r l; do [ -n "$l" ] || continue
-    a="$(printf '%s\n' "$l" | raff | A="$D_ASKP" T="$D_THEIRS" perl -pe 's/$ENV{A}//gi; s/$ENV{T}//gi')"
-    p="$(printf '%s\n' "$l" | rpair | cut -d $'\x1f' -f2 | A="$D_ASKP" T="$D_THEIRS" perl -pe 's/$ENV{A}//gi; s/$ENV{T}//gi')"
-    if printf '%s\n' "$a" | gq -iE "$D_DESTR"; then r=1; fi
-    if printf '%s\n' "$a" | gq -iE "$D_ABORT" || printf '%s\n' "$p" | gq -iE "$D_SUBJ"; then
-      { printf '%s\n' "$l" | gq -iE "$OWNUPD" && ! printf '%s\n' "$l" | gq -iE "$USERUPD"; } || r=1; fi
-  done <<< "$CUSM"
-  return $r; }
-check "owner call C4 -> D1 (the rule's guard): no sentence of the passage -- one right after a quoted line included -- aborts, undoes, resets, stashes or checks out the user's update or the record, on the user's ask or not; only the update resume-it began itself is aborted" '[ -n "$CUSM" ] && d_guard'
-
-# D2, the ask (re-pointed from owner call C3): D2's unit says the line is the answer whenever the user asks resume-it to
-# finish or undo the update -- each time, not "once" -- and none of the replaced lines remains in resume-it.md
-d2_ask_ok() { [ -n "$UD2" ] && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\b(the user|they|you)\b[^.;]{0,15}\b(asks?|tells?)\b[^.;]{0,20}\b(finish[^.;]{0,6}\bor undo|undo[^.;]{0,6}\bor finish)\b' | gq -iE '\bsays?\b[^.;]{0,30}\bline\b|QUOTED' \
-  && ! printf '%s\n' "$UD2" | noq | gq -iE '\bline once\b|\b(says?|said) (it )?once\b|\bonly once\b|\bonce per\b|\bthe first time\b' \
-  && ! printf '%s\n' "$WU" | gq -F "${OC_GONE[@]}"; }
-check "owner call C3 -> D2 (asked to finish or undo): whenever the user asks resume-it to finish or undo the update, it answers with \"$OD2\" -- each time, not once -- and none of owner call C's three lines (nor A3's old one) remains" 'd2_ask_ok'
-
-# D4: A2's abort is for an update resume-it began itself: at once, before the user has done anything in it, with
-# `git rebase --abort` and A2's exact line; it never waits for the user or asks first
-d4_ok() { [ -n "$UA2" ] && printf '%s\n' "$UA2" | noq | gq -F 'git rebase --abort' \
-  && printf '%s\n' "$UA2" | noq | sents | raff | grep -iE '\babort(s|ed)?\b' | gq -iE '\bat once\b|\bimmediately\b|\bright away\b' \
-  && printf '%s\n' "$UA2" | noq | sents | rpair | cut -d $'\x1f' -f2 | gq -iE '\bbefore the user (has )?(done|does|touched|touches|changed|changes)\b' \
-  && ! printf '%s\n' "$UA2" | noq | sents | raff | gq -iE '\bwaits?\b|\basks? (the user|first|them)\b|\bafter the user\b|\bonce the user\b|\bif the user (agrees|says|wants)\b'; }
-check "owner call D4 (its own update, at once): an update resume-it began itself that stops with the record in conflict is aborted at once (git rebase --abort), before the user has done anything in it, with A2's exact line" 'd4_ok'
-
-# D5 (re-pointed from owner call C5): once the record is no longer in conflict and no update that includes it is
-# unfinished, resume-it behaves as usual and the ordinary rules apply again (never staged; the ordinary commit-offer line)
-D_DONE='\b(once|when|after)\b[^.;]{0,30}\bno longer in conflict\b[^.;]{0,15}\band no (update|merge|rebase)\b[^.;]{0,40}\b(is )?(unfinished|in progress|open)\b'
-d5_ok() { local u; u="$(printf '%s\n' "$CP" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noqs | grep -iE "$D_DONE" || true)"
-  [ -n "$u" ] && printf '%s\n' "$u" | sents | grep -iE "$D_DONE" | rpair | cut -d $'\x1f' -f2 | gq -iE '\bas usual\b|\bappl(y|ies) again\b' \
-  && printf '%s\n' "$u" | gq -iE '\bnever staged\b|\b(never|not|isn.t)\b[^.;]{0,15}\bstag|\bORDLINE\b|\bordinary (commit(-offer)? )?line\b' \
-  && ! printf '%s\n' "$u" | sents | grep -iE "$D_DONE" | raff | gq -iE '\b(conflict|unfinished|update) line\b|\bthe (same|first|second|one) line\b|\bkeeps? (refusing|holding)\b|\bholds? back\b|\bstill\b'; }
-check "owner call C5 -> D5 (carrying on): once the record is no longer in conflict and no update that includes it is unfinished, resume-it behaves as usual and every ordinary rule about the record applies again (never staged; the ordinary commit-offer line)" 'd5_ok'
-
-# D own words (re-pointed from owner call C, own words): A2's and D2's lines are verbatim; no sentence of the passage that
-# names /ship-it affirms what it will do -- owner call 1's list plus the guide's verbs for this case (settle, complete,
-# finish, resolve, fix, continue, conclude, handle, take care of); no unit of the two lines holds a value or placeholder
-D_SHIPV='\b(settl|complet|finish|resolv|fix|continu|conclud|handl)(e|es|ed|ing|s)?\b|\btakes? care\b'
-d_own_ok() { [ -n "$UA2" ] && [ -n "$UD2" ] \
-  && ! printf '%s\n' "$CUSM" | grep -iE '/ship-it' | raff | gq -iE "$OC_FUT|$D_SHIPV" \
-  && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UD2"; } | gq -iE '\[[^]]*(value|answer|reason|evidence|state|date|item)[^]]*\]|\bthe stored\b|\bwith (its|the) (value|answer|reason|evidence|state|date)\b'; }
-check "owner call C -> D (own words only): A2's and D2's lines are said verbatim, nothing in the passage says what /ship-it will do (settles, completes, finishes, will ...), and neither line names a stored value" 'd_own_ok'
-
-# D6: the readiness check's read-only rule ("resume-it only reads the go-live record ...") points at the rule by its
-# heading -- the bold lead of the passage that holds D1's sentence -- on its affirmed text
-DHEAD="$(printf '%s\n' "$CP" | awk 'NR==1' | sed -nE 's/^\*\*([^*]+)\*\*.*/\1/p' | sed -E 's/[[:space:]:]+$//')"
-d6_ok() { [ -n "$DHEAD" ] && printf '%s\n' "$CP" | gq -F -- "$OD1" \
-  && printf '%s\n' "$RGL" | grep -iE '\bonly reads the go-live record\b' | sents | raff | gq -iF -- "$DHEAD"; }
-check "owner call D6 (reachable from every commit point): the read-only rule (\"resume-it only reads the go-live record ...\") points at the rule by its heading" 'd6_ok'
+# ---- final review (final-review-fix-brief.md, 2026-11-11): R1, R2 and R8 in resume-it ----
+# R1: the conflict passage, its lead-in sentence and the read-only rule's pointer are gone; the commit offer stays word
+# for word
+R1_COMMIT='On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."'
+R1_CONF='\bconflict|\bunmerged\b|\bunfinished\b|--abort\b|\bmerely changed\b'
+check "R1 (resume-it, the conflict rules out): the commit offer's sentence stays word for word; no unit that names the go-live record speaks of a conflict, an unmerged or unfinished update, an abort, or a record \"merely changed\"" \
+  'printf "%s\n" "$WU" | gq -F -- "$R1_COMMIT" && ! printf "%s\n" "$WU" | grep -iE "$GLN" | gq -iE "$R1_CONF"'
+# R2: the serious line, exact, said under the serious tier in the scanner step; the catch-up gives it for a [BLOCK] gap
+check "R2 (the serious line): the scanner step says exactly \"$OD_SER\" for a serious (Critical or High) finding on the record, never for a less serious one; the catch-up gives the serious line for a [BLOCK] gap" \
+  '[ "$(tiers "$SCG")" = "LESSLINE less SERLINE serious " ] && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | gq -iE "\bserious (line|finding|warning)\b|SERLINE|$(printf "%s" "$OD_SER" | cut -c1-40)"'
+# R2: the hold and how it ends -- a serious finding holds up the work until it no longer shows for that file (the scanner
+# step and the catch-up's [BLOCK] gap); nothing says a finding on the record "whatever its severity" doesn't hold up the
+# work, and step 3 no longer sets the go-live record's findings aside
+check "R2 (the hold and how it ends): resume-it goes on once the serious finding no longer shows for that file, in the scanner step and for a [BLOCK] gap; no sentence says a finding of any severity doesn't hold up the work; step 3 no longer sets the record's findings aside" \
+  'printf "%s\n" "$SCS" | grep -iE "\bno longer shows?\b[^.;]{0,30}\b(that|the|this) file\b" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bgo(es)? on\b|\bcontinues?\b|\bresolved\b" && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | gq -iE "\bno longer shows?\b" && ! { printf "%s\n" "$SCS"; printf "%s\n" "$CUS2"; } | grep -iE "$A9SEV" | gq -iE "$A9HOLD" && ! printf "%s\n" "$WU" | grep -E "^\*\*3\. After all critical/high" | gq -iE "go-live record.s findings aside|go-live record[^.;)]{0,40}\baside\b"'
+# R2: the user's own "go on" -- if the user says to go on without removing it, resume-it goes on and lists the finding as
+# open in its summary; it never suggests that itself
+GOSUG='\b(suggest|suggests|offer|offers|propose|proposes|recommend|recommends)\b[^.;]{0,40}\b(go(ing)? on|to go on|skip(ping)?|mov(e|ing) on|leav(e|ing) it)\b'
+check "R2 (the user's go on): if the user says to go on without removing it, resume-it goes on and lists the finding as open in its summary; a sentence says it never suggests that itself, and none affirms it suggests going on" \
+  'printf "%s\n" "$SCS" | grep -iE "\b(the user|they|you)\b[^.;]{0,15}\bsays? to go on\b" | grep -iE "\bwithout removing\b" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "\bgo(es)? on\b[^.;]{0,15}\b(and )?lists?\b|\blists?\b" | grep -iE "\bopen\b" | gq -iE "\bsummary\b" && printf "%s\n" "$SCS" | gq -iE "\b(never|not|doesn.t|does not|don.t)\b[^.;]{0,15}\b(suggest|offer|propose)s?\b" && ! printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$GOSUG"'
+# R2b: while a finding or gap is open on the record, every stored reason from it shows as (reason not shown) in
+# NEXT-STEPS.md, whatever the guide's patterns say (otherwise the flagged value is copied into a file made for sharing)
+check "R2b (open finding, reasons hidden): while a finding or gap is open on the record, the readiness check shows every stored reason from it as (reason not shown) in NEXT-STEPS.md, whatever the guide's patterns say -- never only the matching ones" \
+  'prsays "+\b(finding|gap)\b[^.;]{0,30}\bis open\b" "RNOTSHOWN" "+\b(every|each|all|any)\b[^.;]{0,15}\b(stored )?reasons?\b" "\b(whatever|regardless of|no matter)\b[^.;]{0,30}\bpatterns?\b" && ! prsays "\b(finding|gap)\b[^.;]{0,30}\bis open\b" "RNOTSHOWN" "+\bonly (when|if)\b[^.;]{0,30}\b(match|pattern)"'
+# R2c: a finding or gap on the record is never added to TODO.md and never counted or offered as something to tackle
+R2C_TODO='\b(never|not|isn.t)\b[^.;]{0,25}\b(added|put|written|listed)\b[^.;]{0,10}\b(to|in|on|into)\b[^.;]{0,5}`?TODO\.md'
+R2C_CNT='\b(never|not|isn.t)\b[^.;]{0,20}\bcounted\b[^.;]{0,25}\boffered\b|\b(never|not|isn.t)\b[^.;]{0,20}\boffered\b[^.;]{0,25}\bcounted\b'
+r2c_ok() { local f g; f="$(printf '%s\n' "$SCS")"; g="$( { printf '%s\n' "$CUS2"; printf '%s\n' "$SCS" | grep -iE '\bgaps?\b'; } )"
+  printf '%s\n' "$f" | gq -iE "$R2C_TODO" && printf '%s\n' "$f" | gq -iE "$R2C_CNT" && printf '%s\n' "$g" | gq -iE "$R2C_TODO" && printf '%s\n' "$g" | gq -iE "$R2C_CNT" \
+  && ! { printf '%s\n' "$SCS"; printf '%s\n' "$CUS2"; } | rpair | cut -d $'\x1f' -f2 | gq -iE '\b(add|adds|added|put|puts|write|writes|list|lists)\b[^.;]{0,30}TODO\.md'; }
+check "R2c (no to-do): a finding or gap on the record is never added to TODO.md and never counted or offered as something to tackle -- in the scanner step and in the catch-up -- and no sentence adds one to TODO.md" 'r2c_ok'
+# R8: a Desktop bundle's first commit -- committing a bundle exactly as it was received is not a change to the record,
+# and it is the only case in which resume-it commits the file
+check "R8 (the bundle's first commit): committing a Claude Desktop bundle exactly as it was received is not a change to the go-live record, and it is the only case in which resume-it commits the file" \
+  'rwusays "\bbundle" "\b(first|initial) commit" "\bexactly as (it was received|it came|received)\b" "\b(is not|isn.t|not) a change to the (go-live )?record\b" "+\bonly (case|time)\b[^.;]{0,50}\bcommits?\b"'
 
 # Call B: the guide's record rules ("### The record") say /ship-it writes the record ending in a single newline, with no
 # trailing spaces, so formatters leave it as written; then a fixture record is written the way they say and run through
