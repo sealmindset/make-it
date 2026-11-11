@@ -321,9 +321,9 @@ any of these:
 - a job whose `environment` is `deployment.environments.production` (default `production`);
 - a `deploy-prod` job;
 - a caller of a reusable workflow that passes `environment-prod`;
-- no workflow yet: /ship-it generates one, and every workflow it generates has a production
-  deploy job (`deploy-prod`) that runs on merge; with an empty `infra.provider` that job is a
-  placeholder until DevOps configures it.
+- no workflow yet: /ship-it generates one, and every workflow it generates carries a production
+  deploy on merge to main -- a `deploy-prod` job, a caller that passes `environment-prod`, or, for
+  an empty `infra.provider`, the placeholder job until DevOps configures it.
 
 AWS and VLF modes (`/ship-it --aws`, a direct production deploy to AWS; `/ship-it --vlf`, a
 frontend-only deploy through the `frontend` branch) always run it. SAVE mode (`/ship-it save`)
@@ -382,7 +382,7 @@ one).
 
 Before asking, /ship-it reads main's copy: it fetches the default branch, then reads the record
 from it with `git show origin/<default branch>:.ship-it-go-live.json`. This is a read only:
-nothing is checked out, merged or pushed.
+nothing is checked out, merged or pushed. /ship-it never starts a merge or rebase itself.
 
 When the branch has no record, the checklist starts from main's. When both have an item, the one
 with the newer `date` counts, and a tie goes to the branch's. An item only one side has comes from
@@ -400,7 +400,7 @@ branch's go-live record." No file on main is normal, and nothing is said about i
 
 A clash is still possible: when two open branches both change an answer, git shows a conflict in
 `.ship-it-go-live.json` on the second PR. It is never a gate. How the skills handle that conflict
-is not designed yet; until it is, it is settled by hand: "Your go-live record changed on two
+is not designed yet; until it is, the user settles it by hand: "Your go-live record changed on two
 branches. To settle it, keep, for each item, the line with the newer date."
 
 The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
@@ -436,10 +436,11 @@ item and which field was cleared, never the value.
 
 ### Asking
 
-Only item 1 is asked in this release; items 2-5 are recorded `coming soon` (below). An item that
-is `skipped` or missing is asked again on every production /ship-it, except items 2-5 skipped
-with the reason `coming soon` (below), or an item skipped with "Left out (your choice)" while its item is still left out (The record). The `coming soon` exception covers items
-2-5 only: a `skipped` item 1 is asked at every production /ship-it, whatever its reason says
+Only item 1 is asked in this release; items 2-5 are recorded `coming soon` (below). Item 1, when
+it is `skipped` or missing, is asked again on every production /ship-it, except when it is
+skipped with "Left out (your choice)" while its item is still left out (The record); items 2-5
+skipped with the reason `coming soon` are never asked (below). The `coming soon` exception covers
+items 2-5 only: a `skipped` item 1 is asked at every production /ship-it, whatever its reason says
 (`coming soon` too); only the left-out exception keeps it quiet. A `done` or `na` item is not
 asked: it stays quiet and gets one PR line. An
 `na` is remembered. A `done` or `na` item changes only when the user asks for it; then it is asked

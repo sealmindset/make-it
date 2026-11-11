@@ -550,11 +550,12 @@ improvements groups, or the ask; the status summary (2) already mentions each on
 
 A catch-up gap found in `.ship-it-go-live.json` (X01, for example) is not fixed or applied in any
 group: it isn't in [N], the counts or the ask, it is never added to TODO.md, and it is not
-counted or offered as something to tackle. A `[FIX]` or `[WARN]` gap doesn't hold up the
-catch-up. A `[BLOCK]` gap holds up the user's work, as a serious finding does, until it no longer
-shows for that file, or the user says to go on (as in the scanner step). Tell the user the scanner step's go-live line for it instead
-(security-scanner-remediation: the serious line for a `[BLOCK]` gap), once per session in all: if
-the scanner step said it, don't say it again.
+counted or offered as something to tackle. The X01 `[BLOCK]` gap (a password or key in the
+record) gets the scanner step's serious line and holds up the user's work, as a serious finding
+does, until the record on disk no longer holds that password or key, or the user says to go on (a
+go-on from the scanner step stands). Any other gap gets the less serious line and doesn't hold up
+the catch-up. Each line is said once per session in all: if the scanner step said it, don't say
+it again.
 
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
@@ -933,17 +934,21 @@ one is serious] are about [item], which you left out, so I didn't change it."
 A finding on `.ship-it-go-live.json` is never fixed by resume-it, whatever its severity: /ship-it
 owns that file (readiness check step 2, Go-live checklist). A finding or gap on the record is never
 added to TODO.md, and is not counted or offered as something to tackle.
-- A less serious one (Medium or Low) doesn't hold up the user's work. Tell the user once per
-  session in all, in one plain line that names no value: "A safety warning is about an answer in
-  your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer
-  in the file yourself."
-- A serious one (Critical or High) holds up the user's work, as any Critical or High finding does.
-  Tell the user once per session in all, in one plain line that names no value: "A serious safety
-  warning says a password or key is in your go-live record. /ship-it owns that file, so I didn't
-  change it. Before we go on: remove it from the file, and replace that password or key with a new
-  one -- the old one is already in your saved history." Go on once the finding no longer shows
-  for that file. If the user says to go on without removing it, go on, and list the finding as
-  open in your summary; never suggest that yourself.
+- A Critical or High finding that a password or key is in the record is serious: it holds up the
+  user's work, as any Critical or High finding does. Tell the user once per session in all, in
+  these words, which name no value: "A serious safety warning says a password or key is in your
+  go-live record. /ship-it owns that file, so I didn't change it. Before we go on: remove it from
+  the file, and replace that password or key with a new one -- it may already be in your saved
+  history." Re-read the file: go on once the record on disk no longer holds the password or key
+  the finding names; don't wait for the scanner's report to close. A finding whose value is no
+  longer in the record on disk doesn't hold, and it is not said again.
+- Any other finding on the record, Critical and High ones included, is less serious: it doesn't
+  hold up the user's work. Tell the user once per session in all, in one plain line that names no
+  value: "A safety warning is about an answer in your go-live record. /ship-it owns that file, so
+  I didn't change it; you can change that answer in the file yourself."
+- If the user says to go on without removing the password or key, go on. A go-on given once holds for the session,
+  for the scanner step and the catch-up alike; list the finding as open in that session's wrap-up
+  summary, and never suggest going on yourself.
 (`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
 
 **2. For each finding (critical/high first):**
@@ -985,7 +990,7 @@ added to TODO.md, and is not counted or offered as something to tackle.
 4. If tests pass: commit, push, update CHANGELOG.md
 5. Do NOT close the GitHub Issue manually -- scanner will auto-close after rescan confirms the fix
 
-**3. After all critical/high findings are resolved (a left-out item's findings aside; a serious one on the go-live record counts as resolved once it no longer shows for that file, or the user said to go on):**
+**3. After all critical/high findings are resolved (a left-out item's findings aside; a serious one on the go-live record counts as resolved once the record on disk no longer holds that password or key, or the user said to go on):**
 
 - Continue to the user's requested work (greet-and-suggest or execute-work)
 
