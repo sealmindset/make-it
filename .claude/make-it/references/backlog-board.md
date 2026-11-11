@@ -368,7 +368,10 @@ exception: it still runs on the user's go; it only leads with the alignment brie
    card's **mode line** if it has a `mode:` (see [`plan`](#plan-filter---with-deps---apply---dry-run)); for
    `solo` and `spike`, drop the preamble's opening **Launch subagents.**
 2. **Show the assembled prompt and let the user edit it** -- anything, including the preamble.
-   This is an edit step, not an approval gate.
+   This is an edit step, not an approval gate. End with one line on what `go` starts -- the card,
+   its mode, where it runs (a branch or worktree) -- and the answers `Go -- runs it as shown` or
+   `Edit first -- say what to change`; no bare "OK to proceed?". A high-stakes card's go is the
+   pick its alignment brief asks for ([High-stakes gate](#high-stakes-gate)).
 3. On the user's **go**, run the (possibly edited) prompt as the active instruction, start to
    finish. Ground facts when it's cheap (see [Grounding](#grounding-verify-never-block)) -- never
    block on it.
@@ -395,9 +398,15 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 > - **Safe / reversible** -- additive features, UI/cosmetic, docs, tests, internal refactors,
 >   local tooling → commit → push → PR → merge → deploy on the project's normal path, **without a
 >   human step where the project has granted standing approval for it**; otherwise stop at the
->   open PR.
+>   open PR with one ask: what the PR changes, the evidence (the green run), what it touches and
+>   how to roll it back, anything unusual, and the one thing to check -- answered `Merge -- ships
+>   on the normal path` or `Hold -- stays an open PR`.
 > - **Potentially harmful or app-impacting** → everything up to the **open PR**, then **STOP for
->   explicit human approval before merge or deploy.** Triggers (non-exhaustive): anything
+>   explicit human approval before merge or deploy.** Ask once: what the PR changes, the evidence
+>   (the green run), what it touches and how to roll it back, what is unusual (which trigger below
+>   it hit), and the one thing to check. The human picks or types the specific -- `Merge only --
+>   no deploy` or `Merge and deploy -- to <environment>`, naming the environment -- never a plain
+>   yes; no answer, no merge. Triggers (non-exhaustive): anything
 >   destructive or hard to reverse (data deletion, migrations, schema changes, rewriting
 >   production data); auth, permissions, security, secrets, networking/infra; changes to a live
 >   customer-facing product; externally visible side effects (customer emails or notifications,
@@ -411,8 +420,8 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 > - `spike` -- **Mode: spike (timebox <T>).** Answer: <question>. Append the answer to the card as
 >   `## Finding`; ship no code. Then run `/backlog-it plan` again.
 > - `subagent-it` -- **Mode: subagent-it.** Run the card's approved plan (`plan:`) with
->   `/subagent-it`. No approved plan yet: draft it first (Plan format), show it, wait for the go,
->   mark it `status: approved`, then run it.
+>   `/subagent-it`. No approved plan yet: draft it first, show it, and ask for the go
+>   as [Plan format](#plan-format) says; on the go, mark it `status: approved`, then run it.
 > - `dispatch-it` -- **Mode: dispatch-it (one lane).** This card is one lane of a parallel wave:
 >   its own worktree, the `/debug-it` method for a bug, no files outside its lane. `dispatch`
 >   launches the whole wave; `start` runs just this lane.
@@ -789,6 +798,10 @@ _Card: <id> · drafted YYYY-MM-DD · status: draft_
 ```
 
 `/subagent-it` runs only an approved plan: `status: draft` → the user's go → `status: approved`.
+The go is one ask: what the plan changes (its tasks and the files they touch), the evidence (what
+the card and the code show), what it touches and how to undo it, anything unusual (a migration, a
+sign-in or permission change), and the one thing to check -- answered `Approve -- runs it` |
+`Change first -- say what` | `Not now -- stays a draft`. A draft with no go stays a draft.
 `task-brief PLAN_FILE N` reads the `## Task N` headings.
 
 ### `groom [filter] [--with-deps] [--apply] [--dry-run] [--dispatch]`
@@ -910,7 +923,11 @@ critical` is set, or it touches -- by signal, not guesswork -- any of:
 3. `start` leads with an **alignment brief**, grounded in code, ahead of the standing preamble:
    what exists now, what already works (and the proof), what would change (touch the working
    path vs. add alongside it), the blast radius, and a safe place to rehearse (never live data).
-   Then wait for an explicit go.
+   Then wait for an explicit go, asked as active confirmation: the brief adds what is unusual
+   (the signal that made it high-stakes) and the one thing to check, and the user picks or types
+   the specific -- `Add alongside -- rehearse on <place>`, `Change the working path -- rehearse on
+   <place>`, or `Not now -- stays on the board`, naming the place -- never a plain yes. Not
+   batched with any other ask; no pick, no start.
 
 It renders with ⚠️ on the board and in its own block of the groom plan, outside the runnable
 lane. It only removes cards from auto-run paths -- it never starts or changes anything itself.
@@ -918,7 +935,9 @@ lane. It only removes cards from auto-run paths -- it never starts or changes an
 ### `undo`
 
 Revert the last board commit with `git -C <board> revert --no-edit HEAD` (never a history
-rewrite), regenerate, sync, and print `✓ Reverted the last board change.` It reverts whatever
+rewrite), regenerate, sync, and print `✓ Reverted the last board change: <its commit message>.`
+No ask: the user typed `undo`, and it is undone the same way; the message names what was
+reverted, so a change from another session is noticed. It reverts whatever
 the last commit was; running it twice reverts the revert. Board in its own repo only.
 
 ### `regen-board`
