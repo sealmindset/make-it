@@ -525,11 +525,27 @@ out either side of `.ship-it-go-live.json`.
   --abort`) so the branch is exactly as it was before, and says this line once: "I couldn't
   update your branch from main: your go-live record has a merge conflict with main's copy.
   /ship-it owns that file, so I didn't touch it and put your branch back as it was."
-- When the record is already in conflict from an update the user ran, resume-it does not abort
-  that update, resolves nothing and commits nothing: on a yes to Uncommitted changes (or anywhere
-  else it would commit for the user) it says this line once instead of committing: "Your go-live
-  record has a merge conflict. /ship-it owns that file, so I didn't touch it, and I can't save
-  your other changes until it is resolved. You can resolve it in the file yourself."
+- When the record is already in conflict from an update the user ran (still unmerged: untouched,
+  or edited but not staged), resume-it does not abort that update, resolves nothing and commits
+  nothing: on a yes to Uncommitted changes (or anywhere else it would commit for the user) it says
+  this line once instead of committing: "Your go-live record has a merge conflict. /ship-it owns
+  that file, so I didn't touch it, and I can't save your other changes until your update is
+  finished. Resolve it in the file and finish the update yourself, or tell me to undo the update."
+- While an update the user began (a merge or a rebase) is in progress and `.ship-it-go-live.json`
+  is part of it -- in conflict, or already resolved and staged by the user -- resume-it commits
+  nothing and does not continue the update (no commit, no `git rebase --continue`, no staging).
+  Finishing it is the user's step.
+- When the user has resolved and staged the record and the update is still in progress, and
+  resume-it would commit for the user, it says this exact line instead: "Your update isn't
+  finished, and it includes your go-live record, which /ship-it owns, so I didn't finish it.
+  Finish the update yourself, or tell me to undo it."
+- Without the user's ask, resume-it never aborts the user's update. When the user tells it to undo
+  the update, resume-it aborts it with the abort that matches the update (`git merge --abort` for
+  a merge, `git rebase --abort` for a rebase) and says this exact line: "I undid your update, so
+  your branch is as it was before it."
+- Once no update is in progress, resume-it behaves as usual, and every ordinary rule about the
+  record applies again (it is never staged; the ordinary commit-offer line is for a record that is
+  merely changed).
 
 **When standards gaps are found, present them in plain language:**
 
