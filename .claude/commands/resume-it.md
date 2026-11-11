@@ -515,31 +515,6 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
 file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
-That ordinary line is for a record that is merely changed, not conflicted.
-
-**A go-live record in an unfinished update:** when `.ship-it-go-live.json` is unmerged (a merge or
-rebase stopped with that file in conflict), resume-it never resolves, edits, stages, removes or
-checks out either side of `.ship-it-go-live.json`.
-- While the go-live record is in conflict, or a merge, rebase or other update that includes it is
-  unfinished, resume-it makes no commit, stages nothing, and runs nothing that finishes, continues
-  or undoes it. An update includes the record when its changes touch `.ship-it-go-live.json` or it
-  leaves the record in conflict. This covers every update but resume-it's own rebase below: one the
-  user began, or one already unfinished when resume-it started. Finishing or undoing the update is
-  the user's, also when they ask resume-it to do it.
-- Wherever this rule stops resume-it from saving for the user (a yes to Uncommitted changes, or
-  anywhere else it would commit), and whenever the user asks it to finish or undo the update,
-  resume-it says this line instead: "An update of your branch isn't finished, and it involves your
-  go-live record, which /ship-it owns. I haven't touched it and I'm not saving anything until it is
-  finished. Finishing or undoing the update is yours."
-- The one exception: when an update of the branch that resume-it began itself (the rebase
-  `git-operations.md` tells it to use) stops with the record in conflict, resume-it aborts that
-  update (`git rebase --abort`) at once, before the user has done anything in it, so the branch is
-  exactly as it was before, and says this line: "I couldn't update your branch from main: your
-  go-live record has a merge conflict with main's copy. /ship-it owns that file, so I didn't touch
-  it and put your branch back as it was."
-- Once the record is no longer in conflict and no update that includes it is unfinished, resume-it
-  behaves as usual, and every ordinary rule about the record applies again (it is never staged;
-  "I left your go-live record for /ship-it, which owns it." is for a record that is merely changed).
 
 **When standards gaps are found, present them in plain language:**
 
@@ -574,9 +549,12 @@ Items left out by your choice (step 8) are not in [N] or the other counts, the m
 improvements groups, or the ask; the status summary (2) already mentions each one.
 
 A catch-up gap found in `.ship-it-go-live.json` (X01, for example) is not fixed or applied in any
-group and doesn't hold up the catch-up: it isn't in [N], the counts or the ask. Tell the user the
-scanner step's go-live line instead (security-scanner-remediation), once per session in all: if the
-scanner step said it, don't say it again.
+group: it isn't in [N], the counts or the ask, it is never added to TODO.md, and it is not
+counted or offered as something to tackle. A `[FIX]` or `[WARN]` gap doesn't hold up the
+catch-up. A `[BLOCK]` gap holds up the user's work, as a serious finding does, until it no longer
+shows for that file, or the user says to go on (as in the scanner step). Tell the user the scanner step's go-live line for it instead
+(security-scanner-remediation: the serious line for a `[BLOCK]` gap), once per session in all: if
+the scanner step said it, don't say it again.
 
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
@@ -764,14 +742,15 @@ For **production**, detect the org's preferred approach:
 Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
 (The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
 resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
-writes, stages or commits it, because /ship-it owns it. Wherever resume-it would commit for the user, the rule under
-**A go-live record in an unfinished update** (Greet + Suggest) applies. About the go-live record, resume-it says
+writes, stages or commits it, because /ship-it owns it. About the go-live record, resume-it says
 only what it did, what the record holds, and that /ship-it owns the file; it never says what
 /ship-it will do. If the user asks resume-it to fix or change an answer in the record, say in one
 line that /ship-it owns that file and they can change the answer in the file themselves, and offer
 nothing else. No step of resume-it stages a change to
 `.ship-it-go-live.json`, scanner fixes and feature commits included. A Claude Desktop bundle's
-first commit (step 0) keeps the file exactly as it came in the bundle, without editing it.
+first commit (step 0) keeps the file exactly as it came in the bundle, without editing it:
+committing a bundle exactly as it was received is not a change to the go-live record, and it is
+the only case in which resume-it commits the file.
 Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
 file's `### Go-live checklist` (step 6), list:
 - each `skipped` or missing item that the guide's Asking asks again, with its reason and date. An
@@ -800,6 +779,8 @@ part of one:
   ever left out.
 - A reason's line breaks become spaces, so it stays on one line, and it shows as quoted text.
 - A `date` that isn't a real `YYYY-MM-DD` date shows as `(no date)`.
+- While a scanner finding or a catch-up gap is open on the go-live record, every stored reason
+  in the record shows as `(reason not shown)` in NEXT-STEPS.md, whatever the guide's patterns say.
 
 `done` and `na` items are not listed. A go-live item whose check belongs to an item left out now
 (`left-out-record.md`, read step 3) is kept quiet, whatever its stored reason says: never listed,
@@ -949,11 +930,20 @@ read step 3) is not fixed, whatever its severity, and doesn't hold up the user's
 user once per session, one plain line per item, with no scan detail: "[N] safety warning(s)[ --
 one is serious] are about [item], which you left out, so I didn't change it."
 
-A finding on `.ship-it-go-live.json` is not fixed, whatever its severity, and doesn't hold up the
-user's work: /ship-it owns that file (readiness check step 2, Go-live checklist). Tell the user
-once per session, in one plain line that names no value: "A safety warning is about an answer in
-your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer in
-the file yourself."
+A finding on `.ship-it-go-live.json` is never fixed by resume-it, whatever its severity: /ship-it
+owns that file (readiness check step 2, Go-live checklist). A finding or gap on the record is never
+added to TODO.md, and is not counted or offered as something to tackle.
+- A less serious one (Medium or Low) doesn't hold up the user's work. Tell the user once per
+  session in all, in one plain line that names no value: "A safety warning is about an answer in
+  your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer
+  in the file yourself."
+- A serious one (Critical or High) holds up the user's work, as any Critical or High finding does.
+  Tell the user once per session in all, in one plain line that names no value: "A serious safety
+  warning says a password or key is in your go-live record. /ship-it owns that file, so I didn't
+  change it. Before we go on: remove it from the file, and replace that password or key with a new
+  one -- the old one is already in your saved history." Go on once the finding no longer shows
+  for that file. If the user says to go on without removing it, go on, and list the finding as
+  open in your summary; never suggest that yourself.
 (`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
 
 **2. For each finding (critical/high first):**
@@ -995,7 +985,7 @@ the file yourself."
 4. If tests pass: commit, push, update CHANGELOG.md
 5. Do NOT close the GitHub Issue manually -- scanner will auto-close after rescan confirms the fix
 
-**3. After all critical/high findings are resolved (a left-out item's and the go-live record's findings aside):**
+**3. After all critical/high findings are resolved (a left-out item's findings aside; a serious one on the go-live record counts as resolved once it no longer shows for that file, or the user said to go on):**
 
 - Continue to the user's requested work (greet-and-suggest or execute-work)
 
@@ -1003,7 +993,7 @@ the file yourself."
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
 - If a finding belongs to a left-out item: the one plain line above.
-- If a finding is on `.ship-it-go-live.json`: its one plain line above.
+- If a finding is on `.ship-it-go-live.json`: its one plain line above, by how serious it is.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>

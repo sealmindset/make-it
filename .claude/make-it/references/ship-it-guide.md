@@ -321,15 +321,19 @@ any of these:
 - a job whose `environment` is `deployment.environments.production` (default `production`);
 - a `deploy-prod` job;
 - a caller of a reusable workflow that passes `environment-prod`;
-- no workflow yet: /ship-it generates one, and every workflow it generates deploys to production
-  on merge.
+- no workflow yet: /ship-it generates one, and every workflow it generates has a production
+  deploy job (`deploy-prod`) that runs on merge; with an empty `infra.provider` that job is a
+  placeholder until DevOps configures it.
 
-AWS and VLF modes (`/ship-it --aws`, `/ship-it --vlf`) always run it. SAVE mode (`/ship-it save`)
+AWS and VLF modes (`/ship-it --aws`, a direct production deploy to AWS; `/ship-it --vlf`, a
+frontend-only deploy through the `frontend` branch) always run it. SAVE mode (`/ship-it save`)
 never runs it. A re-run (RE-RUN: the branch has an open request) asks nothing: only a new request
 asks, and the PR's five go-live lines stay as written. The one exception is a re-run whose PR has
-no `## Go-live checklist` section: it never asked, so it runs the checklist as a new request does,
-for example on the draft PR that `/ship-it save` opened, shipped later. That re-run reads main's
-copy the same way a new request does (The record). Each run that goes through the checklist is a
+no five go-live item lines -- either no `## Go-live checklist` section, or one whose **Go-live
+items** list only says the five weren't asked -- it never asked, so it runs the checklist as a new
+request does, for example on the draft PR that `/ship-it save` opened, shipped later. That re-run
+reads main's copy the same way a new request does (The record). A PR that already carries the five
+go-live item lines is not asked again on a re-run. Each run that goes through the checklist is a
 production /ship-it.
 
 In SHIP MODE it runs after intent classification and the left-out ask (when there is one), before
@@ -395,20 +399,8 @@ plain line only when GitHub couldn't be reached: "I couldn't reach GitHub, so I 
 branch's go-live record." No file on main is normal, and nothing is said about it.
 
 A clash is still possible: when two open branches both change an answer, git shows a conflict in
-`.ship-it-go-live.json` on the second PR. It is never a gate. Re-running /ship-it after updating
-the branch from main settles it: /ship-it settles its own file. When the user's update from main
-has left the record in conflict and `git diff --name-only --diff-filter=U` lists only it, so it is
-the only conflicted file, /ship-it doesn't read the file in the working tree, which holds conflict
-markers; it reads the two sides from git, the branch's side and main's side, told apart by whether
-the user merged main in or rebased onto it, never by git's stage numbers. It keeps, per item, the
-newer date, a tie goes to the branch's side, and the record's rules (shape, no-secret check) apply
-to the result. It writes the result and stages it, so /ship-it's normal commit completes the
-user's update (in a rebase, it continues the one the user started). /ship-it never starts a merge
-or rebase itself; it only completes the one the user started. When any other file is conflicted,
-/ship-it stops as before, names those files, and touches none of them: it never settles a file it
-doesn't own.
-
-Only when /ship-it isn't run, the user can settle it by hand: "Your go-live record changed on two
+`.ship-it-go-live.json` on the second PR. It is never a gate. How the skills handle that conflict
+is not designed yet; until it is, it is settled by hand: "Your go-live record changed on two
 branches. To settle it, keep, for each item, the line with the newer date."
 
 The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
@@ -433,7 +425,9 @@ or after a character that isn't a letter or digit, so "risk-based" or "task-forc
 `evidence` is a URL with no query string and no `user:pass@`, or a
 repo-relative path. Every `evidence` URL is written as scheme, host, port (when the URL has one)
 and path only: any `user:pass@`, query and fragment are removed before it is written, and they
-are never shown either. The record never holds amounts, card, bank or account details, or row data.
+are never shown either. The long-run pattern (a hex or base64 run of 32 or more characters) is
+not applied to `evidence`, since an ordinary path can match it; every other pattern and the URL
+rules still apply to it. The record never holds amounts, card, bank or account details, or row data.
 /ship-it runs this check itself on every item's `reason` and `evidence`, items 2-5 included,
 before the commit. On an item that is asked, a matching reason is asked again, as above, and a
 matching `evidence` is written empty. A stored field that matches, on an item that isn't asked, is
@@ -442,9 +436,9 @@ item and which field was cleared, never the value.
 
 ### Asking
 
-An item that is `skipped` or missing is asked again on every production /ship-it, except items
-2-5 skipped with the reason `coming soon` (below), or an item skipped with "Left out (your
-choice)" while its item is still left out (The record). The `coming soon` exception covers items
+Only item 1 is asked in this release; items 2-5 are recorded `coming soon` (below). An item that
+is `skipped` or missing is asked again on every production /ship-it, except items 2-5 skipped
+with the reason `coming soon` (below), or an item skipped with "Left out (your choice)" while its item is still left out (The record). The `coming soon` exception covers items
 2-5 only: a `skipped` item 1 is asked at every production /ship-it, whatever its reason says
 (`coming soon` too); only the left-out exception keeps it quiet. A `done` or `na` item is not
 asked: it stays quiet and gets one PR line. An
@@ -465,8 +459,8 @@ overwritten. The one line names only the items it recorded `coming soon` this ti
 ### Item 1: terms and privacy pages
 
 /ship-it looks at `deployment.dev_url` in `.ship-it.yml` when DevOps has filled it in; otherwise
-at the local app. The frontend service is the one `.ship-it.yml` `app.services` names, when that
-file exists; otherwise the `docker-compose.yml` service named `frontend`; otherwise the only
+at the local app. The frontend service is the `app.services` entry named
+`frontend`, when `.ship-it.yml` exists and has one; otherwise the `docker-compose.yml` service named `frontend`; otherwise the only
 service that publishes a port. Its container port is the `port` `app.services` gives it, else the
 container side of its `ports` entry in `docker-compose.yml`. The local app is at
 `http://localhost:[host port]`, the host port Docker publishes for the frontend, as
@@ -919,7 +913,7 @@ overwrites one). A `deployment.reusable_workflow` comes first; otherwise the `in
 |-------------|-------------------|
 | `infra.provider: aws` | ECR login, Docker build per service, ECS update-service |
 | `infra.provider: azure` | ACR login, Docker build, kubectl set image |
-| `infra.provider: ""` (empty) | Placeholder with "Deployment pending DevOps configuration" |
+| `infra.provider: ""` (empty) | Placeholder with a `deploy-dev` and a `deploy-prod` job, whose steps only say "Deployment pending -- DevOps infrastructure not yet configured" until DevOps fills in `infra` |
 | `deployment.reusable_workflow` set | Thin caller referencing the shared workflow |
 
 ---
