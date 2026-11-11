@@ -1031,14 +1031,23 @@ check "owner call 6 (unreadable line): resume-it says \"$OC_UNR\" only when no c
 # Call A: a conflicted go-live record -- hands off, say so. The two exact lines (A2, A3) are matched with their double
 # quotes; units of resume-it.md join wrapped lines with one space. CU: the units that name the record and a conflict.
 OC2_A2="I couldn't update your branch from main: your go-live record has a merge conflict with main's copy. /ship-it owns that file, so I didn't touch it and put your branch back as it was."
-# (re-pointed by owner call C1, task-2-owner-call-3-brief.md: the user's-update line is C1's exact line, replacing A3's)
-OC2_A3="Your go-live record has a merge conflict. /ship-it owns that file, so I didn't touch it, and I can't save your other changes until your update is finished. Resolve it in the file and finish the update yourself, or tell me to undo the update."
+# (re-pointed by owner call D, task-2-owner-call-4-brief.md: one general rule, D1, and one line, D2, replace owner call C's
+# three lines and A3's line)
+OD1="While the go-live record is in conflict, or a merge, rebase or other update that includes it is unfinished, resume-it makes no commit, stages nothing, and runs nothing that finishes, continues or undoes it."
+OD2="An update of your branch isn't finished, and it involves your go-live record, which /ship-it owns. I haven't touched it and I'm not saving anything until it is finished. Finishing or undoing the update is yours."
 noq() { sed -E 's/"[^"]*"//g'; }
+# (owner call D, review 7 I2: a quoted line leaves a marker and a full stop, so the sentence after it is read on its own)
+noqs() { sed -E 's/"[^"]*"/QUOTED./g'; }
 CU="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE '\bconflict' || true)"
 # (strengthened after review 6, I2: the conflict passage -- the "A conflicted go-live record" paragraph and the units after
 # it up to the next bold lead -- is read too, so a sentence anywhere in it counts, not only in the units that say "conflict")
-CP="$( { printf '%s\n' "$WU" | awk 'p&&/^\*\*/{exit} /^\*\*A conflicted go-live record/{p=1} p'; printf '%s\n' "$CU"; } | grep . || true)"
+# (owner call D: the passage is found by D1's sentence -- the bold-lead unit holding it or the nearest one above it, up to
+# the next bold lead -- so it follows a renamed heading; with no D1 sentence, the "A conflicted go-live record" lead as before)
+CP="$( { printf '%s\n' "$WU" | D="$OD1" awk 'BEGIN{d=ENVIRON["D"]} {u[NR]=$0; if(!t && index($0,d)) t=NR; if(!o && $0 ~ /^\*\*A conflicted go-live record/) o=NR}
+  END{if(!t) t=o; if(!t) exit; s=t; while(s>1 && u[s] !~ /^\*\*/) s--; if(u[s] !~ /^\*\*/) exit
+    print u[s]; for(i=s+1; i<=NR && u[i] !~ /^\*\*/; i++) print u[i]}'; printf '%s\n' "$CU"; } | grep . || true)"
 CUS="$(printf '%s\n' "$CP" | noq | sents)"
+CUSM="$(printf '%s\n' "$CP" | noqs | sents)"
 # a write on the conflicted record, on the affirmed text: resolve, edit, stage, remove, check out or take a side of it, a
 # git add/rm/checkout/restore, --ours/--theirs, or continuing the merge or rebase -- unless the user or /ship-it does it
 # (strengthened after review 6, m10: plain synonyms too -- accept, pick, choose, use, merge, fix, settle, mark; a "version")
@@ -1067,23 +1076,22 @@ a2_ok() { [ -n "$UA2" ] && printf '%s\n' "$UA2" | noq | gq -iE '\bresume-it\b[^.
   && printf '%s\n' "$UA2" | noq | sents | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE '\babort(s|ed|ing)?\b'; }
 check "owner call A2 (its own update): when an update resume-it began stops with the record in conflict, resume-it aborts it so the branch is as it was, and says \"$OC2_A2\"" 'a2_ok'
 
-# A3: the unit with A3's exact line is about the user's own update: not aborted, nothing committed, the line said instead;
-# its user-update sentences affirm no abort and no commit of the rest
-UA3="$(printf '%s\n' "$WU" | grep -F -- "\"$OC2_A3\"" || true)"
+# ---- Task 2 owner call after review 7 (task-2-owner-call-4-brief.md, 2026-11-11): one general rule (call D) ----
+# USERUPD: a sentence about the user's update; OWNUPD: one about the update resume-it began itself (A2, D4)
 USERUPD='\bthe user\b[^.;]{0,30}\b(ran|run|started|began|made)\b|\bthe user.s (own )?(update|merge|rebase)\b|\balready in conflict\b|\bhalf-done\b'
-a3_ok() { local s; s="$(printf '%s\n' "$UA3" | noq | sents | grep -iE "$USERUPD" || true)"
-  [ -n "$s" ] && printf '%s\n' "$s" | gq -iE '\b(not|never|doesn.t|does not|won.t|don.t)\b[^.;]{0,20}\babort' \
-  && printf '%s\n' "$UA3" | noq | gq -iE '\bcommits? nothing\b|\bnothing (is )?committed\b|\b(never|not|doesn.t|does not|won.t|don.t) commit' \
-  && printf '%s\n' "$UA3" | noq | gq -iE '\binstead\b' \
-  && ! printf '%s\n' "$s" | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE '\babort(s|ed|ing)?\b|\bcommits? (the rest|everything|them|it|all|your other)\b' \
-  && a3_noabort; }
-# (strengthened after review 6, I2: every user's-update sentence of the conflict passage, not only A3's unit, affirms no abort
-# or undo and no commit of the rest -- except an abort said on the user's ask, owner call C4)
-C_ASK='\b(when|if|once|after|only (when|if))\b[^.;]{0,15}\b(the user|they|you)\b[^.;]{0,20}\b(asks?|tells?)\b'
-a3_noabort() { local u; u="$(printf '%s\n' "$CUS" | grep -iE "$USERUPD" || true)"
-  ! printf '%s\n' "$u" | rpair | grep -viE $'\x1f'".*($C_ASK)" | cut -d $'\x1f' -f1 | raff | gq -iE '\babort(s|ed|ing)?\b|\bund(o|oes|id|oing)\b' \
-  && ! printf '%s\n' "$u" | raff | gq -iE '\bcommits? (the rest|everything|them|it|all|your other)\b'; }
-check "owner call A3 (the user's own update): a record already in conflict from the user's update is not aborted and nothing is committed; on a yes to Uncommitted changes resume-it says \"$OC2_A3\" instead; no sentence of the conflict passage aborts or undoes the user's update except on the user's ask" 'a3_ok'
+OWNUPD='\bresume-it\b[^.;]{0,15}\b(itself )?(began|begins|started|starts)\b|\bresume-it.s own\b|\bits own (update|rebase)\b'
+UD2="$(printf '%s\n' "$WU" | grep -F -- "\"$OD2\"" || true)"
+# the replaced lines (owner call C's three lines, A3's old line): none may remain, whole or in part
+OC_GONE=( -e "or tell me to undo the update" -e "Resolve it in the file and finish the update yourself" -e "Your update isn't finished, and it includes your go-live record" -e "I undid your update" -e "You can resolve it in the file yourself" )
+
+# (re-pointed from owner call A3, "the user's own update": D2's line, not C1's, said instead of saving)
+# D2, instead of saving: D2's exact line sits in the passage; its unit says it is said instead, where the rule stops a save
+# (a yes to Uncommitted changes, or anywhere resume-it would commit); the unit affirms no commit of the rest
+d2_instead_ok() { [ -n "$UD2" ] && printf '%s\n' "$CP" | gq -F -- "\"$OD2\"" \
+  && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\binstead\b' | gq -iE '\bUncommitted changes\b|\bwould commit\b|\bsav(e|es|ing)\b' \
+  && printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\b(stops?|keeps?|holds?)\b[^.;]{0,30}\bfrom sav(e|ing)\b|\bUncommitted changes\b' \
+  && ! printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\bcommit(s|ting)? (the rest|everything|them|all|your other)\b|\b(saves?|saving) (the rest|everything|them|all)\b|\bafter (committing|saving)\b'; }
+check "owner call A3 -> D2 (the one line, instead of saving): wherever the rule stops resume-it from saving for the user (a yes to Uncommitted changes, or anywhere else it would commit), it says \"$OD2\" instead, and commits nothing of the rest" 'd2_instead_ok'
 # A3, last sentence: the commit offer's ordinary line is for a record merely changed, never the one said for a conflicted one
 WUO="$(printf '%s\n' "$WU" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noq | sents)"
 ORDL='\bORDLINE\b|\bordinary (commit(-offer)? )?line\b|\bcommit offer.s (ordinary )?line\b'
@@ -1091,64 +1099,96 @@ a3b_ok() { printf '%s\n' "$WUO" | grep -iE "$ORDL" | gq -iE '\bmerely changed\b|
   && ! printf '%s\n' "$WUO" | grep -iE "$ORDL" | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "($ORDL)[^.;]{0,60}\bconflict"; }
 check "owner call A3 (the ordinary line): the commit offer's ordinary line (\"$OC_COMMIT\") is for a record that is merely changed, not conflicted, and no sentence says it for a conflicted one" 'a3b_ok'
 
-# A4: both lines are there verbatim (nothing added inside the quotes: no value, no forecast), and no sentence of their units
-# that names /ship-it says, on its affirmed text, what /ship-it will do (owner call 1's list); owner call 1 still runs on both
-a4_ok() { [ -n "$UA2" ] && [ -n "$UA3" ] && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UA3"; } | noq | sents | grep -iE '/ship-it' | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "$OC_FUT"; }
-check "owner call A4 (own words only): both conflict lines are said verbatim, and no sentence around them says what /ship-it will do" 'a4_ok'
+# A4 (re-pointed by owner call D2): both lines are there verbatim -- A2's and D2's -- (nothing added inside the quotes: no
+# value, no forecast), and no sentence of their units that names /ship-it says, on its affirmed text, what /ship-it will do
+a4_ok() { [ -n "$UA2" ] && [ -n "$UD2" ] && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UD2"; } | noq | sents | grep -iE '/ship-it' | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "$OC_FUT"; }
+check "owner call A4 (own words only): both lines (A2's and D2's) are said verbatim, and no sentence around them says what /ship-it will do" 'a4_ok'
 
-# ---- Task 2 owner call after review 6 (task-2-owner-call-3-brief.md, 2026-11-11): the user finishes their own update ----
-OC3_C3="Your update isn't finished, and it includes your go-live record, which /ship-it owns, so I didn't finish it. Finish the update yourself, or tell me to undo it."
-OC3_C4="I undid your update, so your branch is as it was before it."
-UC3="$(printf '%s\n' "$WU" | grep -F -- "\"$OC3_C3\"" || true)"
-UC4="$(printf '%s\n' "$WU" | grep -F -- "\"$OC3_C4\"" || true)"
-C_PROG='\bin progress\b|\bunfinished\b|\b(isn.t|is not|not) (yet )?finished\b|\bstill open\b|\bhalf-done\b'
-# C2: a unit of the passage about the user's update in progress, with the record in conflict or resolved and staged by the
-# user, commits nothing, doesn't continue it and stages nothing; finishing it is the user's step. No sentence of the passage
-# has resume-it finish it: continue it, --continue, finish/complete it, commit the update/merge/record, git commit, stage it
-FIN_PL='
+# D1, the rule (re-pointed from owner call C2): D1's exact sentence is in the passage (it covers a record in conflict with no
+# update open); a sentence says an update includes the record when it changes it or leaves it in conflict; the rule has no
+# "unless the user asks" and needs no open update; finishing or undoing is the user's, also when they ask resume-it to; no
+# sentence of the passage has resume-it finish, continue, conclude, complete or commit an update, or stage the record
+DFIN_PL='
+my $v = qr/\b(?:continues?|finish(?:es)?|completes?|concludes?|wraps? up|finali[sz]es?|closes?|carr(?:y|ies) on(?: with)?|resumes?)\b/i;
+my $o = qr/\s+(?:it\b|the\b|that\b|their\b|your\b|whatever\b|what\b|its\b)/i;
 while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
-  while ($aff =~ /\bcontinues? (?:it|the (?:update|rebase|merge))\b|--continue\b|\bfinish(?:es)? (?:it|the|that|their|your)\b|\bcompletes? (?:it|the|that|their)\b|\bcommits? (?:the|that|their|your) (?:update|merge|rebase|record|resolution)\b|\bgit commit\b|\bstages? (?:it|the|that|their)\b/gi) {
+  while ($aff =~ /$v$o|--continue\b|\bcommits? (?:it\b|(?:the|that|their|your) (?:update|merge|rebase|record|resolution)\b)|\bgit commit\b|\bstages? (?:it|the|that|their)\b/gi) {
     my $pre = substr($aff, 0, $-[0]); $pre =~ s/^.*(?:[,;:()]|\. | -- )//s;
     next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\b(?:the user|you|they)\b/i;
     print "$raw\n"; last } }'
-c2_ok() { printf '%s\n' "$CP" | noq | grep -iE "$USERUPD" | grep -iE "$C_PROG" | grep -iE '\bconflict' | grep -iE '\bresolved\b[^.;]{0,25}\bstaged\b' \
-  | grep -iE '\bcommits? nothing\b|\bno commit\b|\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,20}\bcommit' \
-  | grep -iE '\b(never|not|no|doesn.t|does not|won.t)\b[^.;]{0,30}\b(continu|finish)' \
-  | grep -iE '\bno staging\b|\bstages? nothing\b|\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,20}\bstag(e|es|ing)\b' \
-  | gq -iE '\bthe user.s (own )?(step|job|to do)\b|\bthe user finishes\b|\b(left|up) to the user\b|\bfor the user to (finish|do)\b' \
-  && [ -z "$(printf '%s\n' "$CUS" | RP_STRONG=1 rpair | perl -e "$FIN_PL")" ]; }
-check "owner call C2 (never finishes the user's update): while the user's update is in progress with the record in it -- in conflict, or resolved and staged by the user -- resume-it commits nothing, doesn't continue it and stages nothing; finishing it is the user's step, and nothing in the conflict passage has resume-it continue, finish or commit it" 'c2_ok'
-# C3: the unit with C3's exact line says the user resolved and staged the record and the update is still in progress, and
-# that the line is said instead; none of its sentences affirms the record still in conflict
-c3_ok() { [ -n "$UC3" ] && printf '%s\n' "$UC3" | noq | rpair | cut -d $'\x1f' -f2 | grep -iE '\bresolved\b[^.;]{0,25}\bstaged\b' | grep -iE "$C_PROG" | gq -iE '\binstead\b' \
-  && ! printf '%s\n' "$UC3" | noq | sents | raff | gq -iE '\bconflict(ed|s)?\b|\bunmerged\b'; }
-check "owner call C3 (resolved, unfinished): once the user has resolved and staged the record and the update is still in progress, resume-it says \"$OC3_C3\" instead of committing -- and not while the record is still in conflict" 'c3_ok'
-# C4: the unit with C4's exact line aborts the user's update when the user asks to undo it, with the matching abort (git
-# merge --abort for a merge, git rebase --abort for a rebase); every abort or undo it affirms is on that ask; the passage says
-# without the ask it never aborts (and never "even without asking")
-C_NOASK='\b(without|unless)\b[^.;]{0,30}\b(ask|asks|asked|tells?)\b[^.;]{0,50}\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,15}\b(abort|undo)|\b(never|not|doesn.t|does not|won.t)\b[^.;]{0,15}\b(abort|undo)[^.;]{0,60}\b(unless|without|except when|only (when|if))\b[^.;]{0,30}\b(ask|asks|tells?)\b|\bonly (when|if|on)\b[^.;]{0,25}\b(asks?|tells?|ask)\b'
-c4_ok() { [ -n "$UC4" ] && printf '%s\n' "$UC4" | noq | sents | rpair | cut -d $'\x1f' -f2 | grep -iE "$C_ASK[^.;]{0,40}\bundo\b" | gq -iE '\babort(s|ed)?\b' \
-  && printf '%s\n' "$UC4" | noq | gq -iE 'git merge --abort`?\)?,? (for|on) (a|the) merge\b|\b(for|on) (a|the) merge\b[^.;]{0,12}`git merge --abort' \
-  && printf '%s\n' "$UC4" | noq | gq -iE 'git rebase --abort`?\)?,? (for|on) (a|the) rebase\b|\b(for|on) (a|the) rebase\b[^.;]{0,12}`git rebase --abort' \
-  && ! printf '%s\n' "$UC4" | noq | gq -iE 'git rebase --abort`?\)?,? (for|on) (a|the) merge\b|git merge --abort`?\)?,? (for|on) (a|the) rebase\b' \
-  && ! printf '%s\n' "$UC4" | noq | sents | rpair | grep -viE $'\x1f'".*($C_ASK)" | cut -d $'\x1f' -f1 | raff | gq -iE '\babort(s|ed|ing)?\b|\bund(o|oes|id|oing)\b' \
-  && { printf '%s\n' "$UC4"; printf '%s\n' "$CP"; } | noq | gq -iE "$C_NOASK" \
-  && ! { printf '%s\n' "$UC4"; printf '%s\n' "$CP"; } | noq | gq -iE '\beven (without|if|when|though)\b[^.;]{0,30}\b(ask|asks|asked|tells?)\b|\bwhether or not\b[^.;]{0,30}\b(ask|asks|asked|tells?)\b'; }
-check "owner call C4 (undo on the user's ask): only when the user tells it to undo their update does resume-it abort it, with the abort that matches it (git merge --abort for a merge, git rebase --abort for a rebase), and says \"$OC3_C4\"; without the ask it never aborts" 'c4_ok'
-# C5: once no update is in progress, resume-it behaves as usual and the ordinary rules about the record apply again (never
-# staged; the ordinary commit-offer line); that sentence names no conflict or unfinished-update line
-C_DONE='\b(once|when|after|if)\b[^.;]{0,10}\bno (update|merge|rebase) is (in progress|open)\b|\b(once|when|after)\b[^.;]{0,15}\b(the|that|their|an?|your) update is (no longer in progress|finished|over|done|undone)\b'
-c5_ok() { local u; u="$(printf '%s\n' "$CP" | noq | grep -iE "$C_DONE" || true)"
-  [ -n "$u" ] && printf '%s\n' "$u" | sents | grep -iE "$C_DONE" | rpair | cut -d $'\x1f' -f2 | gq -iE '\bas usual\b|\bappl(y|ies) again\b' \
-  && printf '%s\n' "$u" | gq -iE '\bnever staged\b|\b(never|not|isn.t)\b[^.;]{0,15}\bstag|\bordinary (commit(-offer)? )?line\b' \
-  && ! printf '%s\n' "$u" | sents | grep -iE "$C_DONE" | raff | gq -iE '\b(conflict|unfinished|update) line\b|\b(C1|C3).s line\b|\bthe (same|first|second) line\b|\bkeeps? (refusing|holding)\b|\bholds? back\b'; }
-check "owner call C5 (carrying on): once no update is in progress, resume-it behaves as usual and every ordinary rule about the record applies again (it is never staged; the ordinary commit-offer line)" 'c5_ok'
-# own words only (C1, C3, C4): the three lines are said verbatim, no sentence of their units that names /ship-it says what it
-# will do (owner call 1's list), and no unit of theirs puts a stored value or placeholder in or beside them
-c_own_ok() { [ -n "$UA3" ] && [ -n "$UC3" ] && [ -n "$UC4" ] \
-  && ! { printf '%s\n' "$UA3"; printf '%s\n' "$UC3"; printf '%s\n' "$UC4"; } | noq | sents | grep -iE '/ship-it' | raff | gq -iE "$OC_FUT" \
-  && ! { printf '%s\n' "$UA3"; printf '%s\n' "$UC3"; printf '%s\n' "$UC4"; } | gq -iE '\[[^]]*(value|answer|reason|evidence|state|date|item)[^]]*\]|\bthe stored\b|\bwith (its|the) (value|answer|reason|evidence|state|date)\b'; }
-check "owner call C (own words only): the three lines (C1, C3, C4) are said verbatim, none says what /ship-it will do, and none names a stored value" 'c_own_ok'
+D_INCL='\binclud(es|ing)?\b([^.;]|\.\w){0,60}\b(when|if|means|whenever)\b([^.;]|\.\w){0,40}\b(chang|touch|modif)([^.;]|\.\w){0,80}\bconflict'
+D_UNLESS='\b(unless|except (when|if)|but (when|if)|save (when|if))\b[^.;]{0,40}\b(asks?|asked|tells?|told|wants?|says so)\b|\bunless asked\b'
+D_NEEDOPEN='\bonly (while|when|if|during)\b[^.;]{0,40}\b(merge|rebase|update)\b[^.;]{0,25}\b(open|in progress|unfinished|running)\b'
+D_ALSO='\b(the user.s|theirs|yours|the user to (finish|do|undo))\b[^.;]{0,40}\b(also|even) (when|if)\b[^.;]{0,25}\b(they|the user|you)\b[^.;]{0,10}\b(asks?|tells?)\b'
+d1_ok() { printf '%s\n' "$CP" | gq -F -- "$OD1" \
+  && printf '%s\n' "$CUSM" | rpair | cut -d $'\x1f' -f2 | gq -iE "$D_INCL" \
+  && ! printf '%s\n' "$CUSM" | gq -iE "$D_UNLESS|$D_NEEDOPEN" \
+  && printf '%s\n' "$CUSM" | rpair | cut -d $'\x1f' -f2 | gq -iE "$D_ALSO" \
+  && [ -z "$(printf '%s\n' "$CUSM" | RP_STRONG=1 rpair | perl -e "$DFIN_PL")" ]; }
+check "owner call C2 -> D1 (the rule): \"$OD1\" -- also for a record in conflict with no update open, and an update includes the record when it changes it or leaves it in conflict; no \"unless the user asks\": finishing or undoing is the user's, also when they ask resume-it; nothing in the passage has resume-it finish, continue, conclude, complete or commit the update" 'd1_ok'
+
+# D1's guard (re-pointed from owner call C4 and A3's no-abort guard, with no exception for an ask): every sentence of the
+# passage, read on its own (a quoted line leaves a full stop), affirms no abort, undo or roll-back unless it is the update
+# resume-it began itself (A2 / D4) and not the user's; none affirms git reset/stash/checkout --/restore/clean, a discard, or
+# "does so" for an ask. The user's ask to finish or undo, and "finishing or undoing ... is the user's", are taken out first.
+D_ASKP='\b(the user|they|you)\b[^.;]{0,15}\b(asks?|tells?)\b[^.;]{0,15}\bto (finish|undo)( or (finish|undo))?( it| the update| their update)?'
+D_THEIRS='\b(finishing|undoing)( or (finishing|undoing))? (it|the update|their update) (is|stays|remains) (the user.s|theirs|yours)\b'
+D_ABORT='\babort(s|ed|ing)?\b|--abort\b|\bund(o|oes|id|oing)\b|\broll(s|ed|ing)? (it |that update |the update )?back\b|\breverts?\b'
+D_DESTR='\bgit (reset|stash|clean|restore)\b|\breset --hard\b|\bgit checkout --|\bstash(es|ed|ing)?\b|\bdiscards?\b|\bthrows? away\b|\b(resume-it|it) (does|do) (so|it|that)\b|\bgoes ahead\b'
+# (a second pass reads the comma-bounded cut, so a negation earlier in the sentence -- "If the user tells it nothing,
+# resume-it aborts ..." -- can't hide the main clause; there only resume-it/it as the subject counts, as D1's own "runs
+# nothing that finishes, continues or undoes it" leaves "undoes it" without one)
+D_SUBJ='\b(resume-it|it)\s+((then|also|first|still|just|simply)\s+)?(aborts?|undoes|undid|rolls (it |that update |the update )?back|reverts?|discards?|stashes|resets?)\b|\bruns? `?git (reset|stash|checkout --|restore|clean)\b'
+d_guard() { local l a p r=0
+  while IFS= read -r l; do [ -n "$l" ] || continue
+    a="$(printf '%s\n' "$l" | raff | A="$D_ASKP" T="$D_THEIRS" perl -pe 's/$ENV{A}//gi; s/$ENV{T}//gi')"
+    p="$(printf '%s\n' "$l" | rpair | cut -d $'\x1f' -f2 | A="$D_ASKP" T="$D_THEIRS" perl -pe 's/$ENV{A}//gi; s/$ENV{T}//gi')"
+    if printf '%s\n' "$a" | gq -iE "$D_DESTR"; then r=1; fi
+    if printf '%s\n' "$a" | gq -iE "$D_ABORT" || printf '%s\n' "$p" | gq -iE "$D_SUBJ"; then
+      { printf '%s\n' "$l" | gq -iE "$OWNUPD" && ! printf '%s\n' "$l" | gq -iE "$USERUPD"; } || r=1; fi
+  done <<< "$CUSM"
+  return $r; }
+check "owner call C4 -> D1 (the rule's guard): no sentence of the passage -- one right after a quoted line included -- aborts, undoes, resets, stashes or checks out the user's update or the record, on the user's ask or not; only the update resume-it began itself is aborted" '[ -n "$CUSM" ] && d_guard'
+
+# D2, the ask (re-pointed from owner call C3): D2's unit says the line is the answer whenever the user asks resume-it to
+# finish or undo the update -- each time, not "once" -- and none of the replaced lines remains in resume-it.md
+d2_ask_ok() { [ -n "$UD2" ] && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\b(the user|they|you)\b[^.;]{0,15}\b(asks?|tells?)\b[^.;]{0,20}\b(finish[^.;]{0,6}\bor undo|undo[^.;]{0,6}\bor finish)\b' | gq -iE '\bsays?\b[^.;]{0,30}\bline\b|QUOTED' \
+  && ! printf '%s\n' "$UD2" | noq | gq -iE '\bline once\b|\b(says?|said) (it )?once\b|\bonly once\b|\bonce per\b|\bthe first time\b' \
+  && ! printf '%s\n' "$WU" | gq -F "${OC_GONE[@]}"; }
+check "owner call C3 -> D2 (asked to finish or undo): whenever the user asks resume-it to finish or undo the update, it answers with \"$OD2\" -- each time, not once -- and none of owner call C's three lines (nor A3's old one) remains" 'd2_ask_ok'
+
+# D4: A2's abort is for an update resume-it began itself: at once, before the user has done anything in it, with
+# `git rebase --abort` and A2's exact line; it never waits for the user or asks first
+d4_ok() { [ -n "$UA2" ] && printf '%s\n' "$UA2" | noq | gq -F 'git rebase --abort' \
+  && printf '%s\n' "$UA2" | noq | sents | raff | grep -iE '\babort(s|ed)?\b' | gq -iE '\bat once\b|\bimmediately\b|\bright away\b' \
+  && printf '%s\n' "$UA2" | noq | sents | rpair | cut -d $'\x1f' -f2 | gq -iE '\bbefore the user (has )?(done|does|touched|touches|changed|changes)\b' \
+  && ! printf '%s\n' "$UA2" | noq | sents | raff | gq -iE '\bwaits?\b|\basks? (the user|first|them)\b|\bafter the user\b|\bonce the user\b|\bif the user (agrees|says|wants)\b'; }
+check "owner call D4 (its own update, at once): an update resume-it began itself that stops with the record in conflict is aborted at once (git rebase --abort), before the user has done anything in it, with A2's exact line" 'd4_ok'
+
+# D5 (re-pointed from owner call C5): once the record is no longer in conflict and no update that includes it is
+# unfinished, resume-it behaves as usual and the ordinary rules apply again (never staged; the ordinary commit-offer line)
+D_DONE='\b(once|when|after)\b[^.;]{0,30}\bno longer in conflict\b[^.;]{0,15}\band no (update|merge|rebase)\b[^.;]{0,40}\b(is )?(unfinished|in progress|open)\b'
+d5_ok() { local u; u="$(printf '%s\n' "$CP" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noqs | grep -iE "$D_DONE" || true)"
+  [ -n "$u" ] && printf '%s\n' "$u" | sents | grep -iE "$D_DONE" | rpair | cut -d $'\x1f' -f2 | gq -iE '\bas usual\b|\bappl(y|ies) again\b' \
+  && printf '%s\n' "$u" | gq -iE '\bnever staged\b|\b(never|not|isn.t)\b[^.;]{0,15}\bstag|\bORDLINE\b|\bordinary (commit(-offer)? )?line\b' \
+  && ! printf '%s\n' "$u" | sents | grep -iE "$D_DONE" | raff | gq -iE '\b(conflict|unfinished|update) line\b|\bthe (same|first|second|one) line\b|\bkeeps? (refusing|holding)\b|\bholds? back\b|\bstill\b'; }
+check "owner call C5 -> D5 (carrying on): once the record is no longer in conflict and no update that includes it is unfinished, resume-it behaves as usual and every ordinary rule about the record applies again (never staged; the ordinary commit-offer line)" 'd5_ok'
+
+# D own words (re-pointed from owner call C, own words): A2's and D2's lines are verbatim; no sentence of the passage that
+# names /ship-it affirms what it will do -- owner call 1's list plus the guide's verbs for this case (settle, complete,
+# finish, resolve, fix, continue, conclude, handle, take care of); no unit of the two lines holds a value or placeholder
+D_SHIPV='\b(settl|complet|finish|resolv|fix|continu|conclud|handl)(e|es|ed|ing|s)?\b|\btakes? care\b'
+d_own_ok() { [ -n "$UA2" ] && [ -n "$UD2" ] \
+  && ! printf '%s\n' "$CUSM" | grep -iE '/ship-it' | raff | gq -iE "$OC_FUT|$D_SHIPV" \
+  && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UD2"; } | gq -iE '\[[^]]*(value|answer|reason|evidence|state|date|item)[^]]*\]|\bthe stored\b|\bwith (its|the) (value|answer|reason|evidence|state|date)\b'; }
+check "owner call C -> D (own words only): A2's and D2's lines are said verbatim, nothing in the passage says what /ship-it will do (settles, completes, finishes, will ...), and neither line names a stored value" 'd_own_ok'
+
+# D6: the readiness check's read-only rule ("resume-it only reads the go-live record ...") points at the rule by its
+# heading -- the bold lead of the passage that holds D1's sentence -- on its affirmed text
+DHEAD="$(printf '%s\n' "$CP" | awk 'NR==1' | sed -nE 's/^\*\*([^*]+)\*\*.*/\1/p' | sed -E 's/[[:space:]:]+$//')"
+d6_ok() { [ -n "$DHEAD" ] && printf '%s\n' "$CP" | gq -F -- "$OD1" \
+  && printf '%s\n' "$RGL" | grep -iE '\bonly reads the go-live record\b' | sents | raff | gq -iF -- "$DHEAD"; }
+check "owner call D6 (reachable from every commit point): the read-only rule (\"resume-it only reads the go-live record ...\") points at the rule by its heading" 'd6_ok'
 
 # Call B: the guide's record rules ("### The record") say /ship-it writes the record ending in a single newline, with no
 # trailing spaces, so formatters leave it as written; then a fixture record is written the way they say and run through
