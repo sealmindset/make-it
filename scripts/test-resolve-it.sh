@@ -60,6 +60,15 @@ check "the variations table has its columns"         has 'Columns: **Variation**
 check "owner rules are quoted verbatim"              gq -F 'quoted verbatim into the project' "$REF"
 check "never a silent drop"                          has 'never a silent drop' "$REF"
 
+# --- dry-run fixes (blind run on the origin incident, 2026-11-11)
+check "walk forward from the break to the outcome"   bash -c "grep -qF 'walk forward' '$REF' && grep -qF 'walk forward' '$INV'"
+check "a signal is a candidate until confirmed"      has 'Signals are symptoms, not shapes' "$REF"
+check "prior fixes go to the investigator"           has 'list every card and commit since the report' "$REF"
+check "deleted evidence is looked for"               has 'a log id with no row is **deleted evidence**' "$INV"
+check "no read-only path: proceed, disclose, card"   has 'never stop the investigation for it' "$REF"
+check "existing alerts must reach a person"          has 'check that the alerts that already exist reach a person' "$REF"
+check "no past answer is loaded at run time"         bash -c "! grep -qiE 'origin \\(2026|five stacked causes' '$REF' '$CMD' '$INV' '$WRI'"
+
 # --- records (owner, 2026-11-11: all four)
 check "four records are defined"                     bash -c "for r in Card 'Incident report' 'Memory and doctrine' 'Pattern library'; do grep -qE \"^\| \*\*\$r\*\* \|\" '$REF' || exit 1; done"
 check "learned patterns are user-level, kept"        bash -c "grep -qF '~/.claude/resolve-it/patterns/' '$REF' && grep -qF 'never overwritten by an install' '$REF'"

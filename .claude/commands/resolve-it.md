@@ -46,7 +46,7 @@ cause, the variations, the review, the live proof, the prevention and the record
 project version wins inside that repo.
 
 ## Arguments
-`/resolve-it <report text | alert | job id | card id> [--propose | --end-to-end]`
+`/resolve-it <report text | alert | job id | card id> [--propose | --end-to-end] [--no-patterns]`
 No argument: ask once what isn't working and for whom.
 
 ## Step 0 -- Settle the run
@@ -61,8 +61,9 @@ No argument: ask once what isn't working and for whom.
 2. **Evidence** -- dispatch the investigator (`~/.claude/make-it/resolve-it/investigator-prompt.md`),
    read-only, model per the project's ladder. Never investigate on a path that can write (§3.1).
 3. **Patterns** -- match the evidence against `~/.claude/make-it/resolve-it/patterns/` and
-   `~/.claude/resolve-it/patterns/` (§10). A match is a hypothesis.
-4. **Root cause** -- run `/debug-it` on the evidence. The cause names the exact point and its proof.
+   `~/.claude/resolve-it/patterns/` (§10). A signal makes a candidate; only its confirm check makes a match.
+4. **Root cause** -- run `/debug-it` on the evidence. The cause names the exact point and its proof;
+   then walk forward to the outcome to find the stacked causes before shipping.
 5. **Today's outcome** -- the writer (`~/.claude/make-it/resolve-it/writer-prompt.md`) drafts the
    update and the workaround for the owner to send (§5). Never send it.
 6. **Variations, then fix** -- the §8 table first, then test-first through the project's gates; fix
@@ -71,7 +72,7 @@ No argument: ask once what isn't working and for whom.
    the strongest model the ladder allows; rounds until "ship"; accepted Minors listed.
 8. **Ship and verify the outcome** (§7) -- the outcome sentence observed true on the live system,
    counts reconciled. Not true: back to step 2 with the new evidence (a stacked cause).
-9. **Prevent** -- detection for every silent failure, refusals for every easy human mistake, a card
+9. **Prevent** -- first, check the alerts that exist reach a person; then detection for every silent failure, refusals for every easy human mistake, a card
    for every manual unblock (§3.6) and every deferred item.
 10. **Record** -- card, `docs/incidents/<date>-<slug>.md` (§12), memory and doctrine, patterns (§9-10).
     Then the owner report (§11).

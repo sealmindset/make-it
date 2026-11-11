@@ -4,12 +4,8 @@ Loaded by `/resolve-it`. This file is the contract; the command is its outline. 
 names no stack, cloud, mail system or firm. A project's own facts (where its logs live, how it
 ships, what it may change alone) come from that project's `CLAUDE.md`, memory and doctrine.
 
-Origin (2026-11-11): one missing-evidence report took five stacked causes to resolve -- a login saved
-under the wrong address; an intake that dropped the system's own replies; a mail redirect that hid
-the sender's authentication; a rule the owner then stated ("only the court number decides"); and a
-worker that dropped its own protection between two jobs. Each cause hid the next. `/debug-it` found
-each one; nothing carried the loop from the person's report to the person's outcome, or kept the
-lessons. This skill is that loop.
+Why it exists, and the incidents that shaped it: `docs/resolve-it-origin.md` (not loaded at run time,
+so no past answer primes an investigation).
 
 ---
 
@@ -24,7 +20,7 @@ a merged PR and a clean deploy are steps, never the finish.
 
 | Level | What it may do without asking |
 |---|---|
-| **propose** | Investigate (read-only), then stop with the cause, the fix plan, the variations table and the prevention plan. |
+| **propose** | Investigate (read-only), then stop with the cause, the fix plan, the variations table (its Proof column holds the *planned* test names), the prevention plan, and the Phase 5 draft. |
 | **project** | Everything the project's own doctrine allows without asking (its PR/CI/review gates, its standing authorizations for merge, deploy, release). It stops exactly where that doctrine says to stop. |
 | **end-to-end** | Fix, review, ship and verify without stopping, still inside every safety rail in §3. |
 
@@ -37,7 +33,10 @@ its level once, at intake, with where it came from.
 
 1. **Investigation never writes.** Reading a live system is read-only by construction (a read-only
    session or role, not a flag the tool may ignore; a "read-only" helper that can still write is a
-   finding to file). A data change is a fix (§6), never part of looking.
+   finding to file). When the project has no read-only path at all, make each session read-only
+   yourself (e.g. a read-only transaction setting), disclose every run in the SAFEGUARDS line, file
+   the helper as a card, and carry on: never stop the investigation for it. A data change is a fix
+   (§6), never part of looking.
 2. **No message reaches a person outside the team.** Updates to the affected person are drafts the
    owner sends (§5). The skill never sends, posts or replies on anyone's behalf.
 3. **No secret is printed, logged or stored** -- not in chat, cards, reports or patterns. Check that a
@@ -59,22 +58,33 @@ new evidence (§7). Record each phase on the card as it ends (§9), so a cleared
 
 **Phase 1 -- Intake.** From the trigger (a person's report, an alert or failed job, a backlog card),
 write: the outcome sentence (§1); who is affected; what they already tried; the autonomy level.
-Find the card or file one (Bugs epic, `/backlog-it` capture rules). Never ask the affected person
-anything; ask the owner only what changes the run.
+Map every action the person says they took to a record ("I saved my login, then tried again" → the
+save rows, the retry jobs): a claimed action with no record is a lead. Find the card or file one (Bugs
+epic, `/backlog-it` capture rules), and list every card and commit since the report's date that
+touches the same records, hosts or flow: they go to the investigator as prior findings, each to be
+said live or not and whether it changed what the person sees. Never contact the affected person; when
+only they hold a deciding fact, ask the owner one decision-ready question to put to them.
 
 **Phase 2 -- Evidence (investigator agent).** Dispatch the investigator (`resolve-it/investigator-prompt.md`)
+(or, when the run is itself a subagent or the evidence is one thread, investigate inline under the
+same template and rules)
 with the outcome, the trigger, and the project's evidence sources as its notes list them (database,
 logs, queues, mail, audit trail, cloud APIs, the system's own job records). It returns a timeline of
 observed facts with their sources, the narrowest point reached, and what it could not see. Facts and
 inferences stay labelled.
 
 **Phase 3 -- Known patterns first.** Before theorizing, match the evidence against the pattern
-library (§10): shipped seeds plus the owner's learned patterns. A match is a hypothesis to prove,
-never a conclusion.
+library (§10): shipped seeds plus the owner's learned patterns (a missing learned folder means none
+yet). Signals are symptoms, not shapes: a signal that fires makes the pattern a candidate, and it
+counts as a match only after its *How to confirm* check passes. Candidates ruled out go on the card.
+The library can be skipped for a blind run (`--no-patterns`).
 
 **Phase 4 -- Root cause (`/debug-it`).** Hand the evidence to `/debug-it` for the method: Iron Law,
 both hypothesis families, the circuit-breaker. The cause must name the exact point (file and line,
-the config value, the record) and the evidence that proves it.
+the config value, the record) and the evidence that proves it. One pass may show several causes at
+once: order them by the person's timeline, each with its own proof. Then **walk forward**: from the
+broken step to the outcome, read each remaining step's code and record whether it will work once
+this cause is fixed. Each "no" is a stacked cause found before shipping, not after.
 
 **Phase 5 -- Today's outcome (writer agent).** In parallel with the fix: the fastest safe way for the
 affected person to get their outcome now (a manual step, a workaround), drafted for the owner to send
@@ -97,8 +107,10 @@ Important findings.
 level. Then verify the **outcome sentence** on the live system (§7). Not true yet? The next cause
 was hiding behind this one: back to Phase 2 with what the live system now shows.
 
-**Phase 9 -- Prevent.** For every cause: what would have told someone sooner? A failure that was
-silent gets detection (an alert to the owner, or a message to the sender when the sender can act);
+**Phase 9 -- Prevent.** First check that the alerts that already exist reach a person (a channel the
+app can post to, mail that is sent rather than only recorded); one that reaches nobody is a cause of
+the silence and gets its card. Then, for every cause: what would have told someone sooner? A failure
+that was silent gets detection (an alert to the owner, or a message to the sender when the sender can act);
 a failure a person could cause gets a refusal with plain words at the moment they cause it; a
 manual unblock from the run gets its card (§3.6). File follow-ups for anything deferred.
 

@@ -972,7 +972,7 @@ cause reveals the next one.
   shipping); `end-to-end` removes stops, never gates. At every level: no write while investigating,
   nothing sent to a person, no secret printed, every bypass disclosed, every manual unblock a card.
 - **Records:** the card, `docs/incidents/<date>-<slug>.md`, memory and doctrine (owner rules verbatim),
-  and the pattern library (8 generic seeds; learned patterns in `~/.claude/resolve-it/patterns/`).
+  and the pattern library (11 generic seeds; learned patterns in `~/.claude/resolve-it/patterns/`).
 - **Checked:** `scripts/test-resolve-it.sh` (CI) pins the rails, the autonomy default, the records and a
   project-agnostic library.
 
