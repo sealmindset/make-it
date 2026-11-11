@@ -46,13 +46,33 @@ a "can't be built as shown" agreement -- updates both, so later features build o
    - /resume-it features: the existing shell plus only the new or changed screens.
    - `variant: mobile`: add `<meta name="viewport" content="width=device-width, initial-scale=1">`
      and collapse the sidebar behind a menu button below 1024px, as the scaffold does.
-3. **Open it** (`open` on macOS, `xdg-open` on Linux, `start` on Windows) and ask one question:
+3. **Open it** (`open` on macOS, `xdg-open` on Linux, `start` on Windows) and ask one question.
+   It is also the go-ahead to build, so it is one decision-ready ask (consequential, per
+   `approval-block.md`): the preview question, then a few plain lines, then the close.
    "I made a clickable preview of your app -- nothing is built yet. Click around. Does it look and
    work the way you pictured? Tell me anything you'd change."
-4. **Changes** -> update the preview and design.md, re-open, ask again. Repeat until the user says
-   yes. No cap: the user drives. Don't offer learnings here -- queue any reusable rule and offer it
-   after the Part 2 yes (`learnings.md`).
-5. **On yes:** set `Preview: approved <date> (round <N>)`. That yes is the go-ahead to build.
+   - **What a go starts:** the whole build -- every screen in the preview, built to match it, in a
+     few minutes. /resume-it: this feature's screens, built into their app.
+   - **The evidence** is the preview in front of them: the screens, sample data and who sees what
+     are the ones that get built.
+   - **What it touches, and the undo:** /make-it -- a new folder on their computer
+     ([PROJECT_DIR]); nothing is published or shared; to undo, they ask you to remove the folder
+     and the copy that's running. /resume-it -- only this app's code; nothing is published, and
+     the change can be taken back.
+   - **What is unusual:** what the preview changes from the plan they saw (a screen added or
+     dropped, a role that sees more), or "Nothing unusual -- it matches the plan you saw."
+   - **The one thing to check:** who sees which screen -- name the roles for each screen, from
+     design.md.
+   Close: "Tell me what to change, or say 'build it' and I'll start."
+4. **Changes** -> update the preview and design.md, re-open, ask again (the same message, its lines
+   updated). No cap: the user drives. Don't offer learnings here -- queue any reusable rule and
+   offer it after the Part 2 yes (`learnings.md`).
+5. **On their go** ("build it", or a yes with no changes): set
+   `Preview: approved <date> (round <N>)` and build; don't ask again before building.
+   **High-stakes:** a /resume-it feature that changes who can see or do something the app already
+   has (an existing screen or role). The user names those screens and roles in their go (active
+   confirmation, `approval-block.md`); a plain "yes" or "build it" is not enough -- ask them to
+   name them, and build only the access they named.
 
 ## Build to the preview
 
@@ -101,7 +121,8 @@ SDD: every UI task's brief names the preview file and its screen ids.
    Tell me anything you'd change." Changes -> fix (updating the preview and design.md if the
    agreed look changed), retake, regenerate, ask again. Yes -> set `Screens as built: approved
    <date>`.
-6. Then offer the learnings queued in Part 1 and Part 2, per `learnings.md` (its own question).
+6. Then offer the learnings queued in Part 1 and Part 2, per `learnings.md`: one batched ask, each
+   learning numbered with its evidence and what it would change, sent on its own.
 
 ## Desktop / Cowork
 
