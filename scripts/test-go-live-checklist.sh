@@ -1088,14 +1088,17 @@ OC_GONE=( -e "or tell me to undo the update" -e "Resolve it in the file and fini
 
 # (re-pointed from owner call A3, "the user's own update": D2's line, not C1's, said instead of saving)
 # (restored after review 8, C1: A3's passage-wide guard -- no sentence of the passage about the user's update affirms
-# that resume-it commits the rest, everything, them, it, all or your other changes; the commit offer's own unit is not one)
+# that resume-it commits the rest, everything, them, it, all or your other changes; read both with each quoted line cut out
+# (CUS, so a sentence runs on past the quote, as the dropped guard read it) and with it ending the sentence (CUSM), after
+# review 9, I1. The commit offer's ordinary "commit the rest" passes only because its unit holds no user's-update words
+# today; it is not exempt -- add such words there and this turns red)
 # D2, instead of saving: D2's exact line sits in the passage; its unit says it is said instead, where the rule stops a save
 # (a yes to Uncommitted changes, or anywhere resume-it would commit); the unit affirms no commit of the rest
 d2_instead_ok() { [ -n "$UD2" ] && printf '%s\n' "$CP" | gq -F -- "\"$OD2\"" \
   && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\binstead\b' | gq -iE '\bUncommitted changes\b|\bwould commit\b|\bsav(e|es|ing)\b' \
   && printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\b(stops?|keeps?|holds?)\b[^.;]{0,30}\bfrom sav(e|ing)\b|\bUncommitted changes\b' \
   && ! printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\bcommit(s|ting)? (the rest|everything|them|all|your other)\b|\b(saves?|saving) (the rest|everything|them|all)\b|\bafter (committing|saving)\b' \
-  && ! printf '%s\n' "$CUSM" | grep -iE "$USERUPD" | raff | gq -iE '\bcommits? (the rest|everything|them|it|all|your other)\b'; }
+  && ! { printf '%s\n' "$CUS"; printf '%s\n' "$CUSM"; } | grep -iE "$USERUPD" | raff | gq -iE '\bcommits? (the rest|everything|them|it|all|your other)\b'; }
 check "owner call A3 -> D2 (the one line, instead of saving): wherever the rule stops resume-it from saving for the user (a yes to Uncommitted changes, or anywhere else it would commit), it says \"$OD2\" instead, and commits nothing of the rest -- nor does any sentence of the passage about the user's update" 'd2_instead_ok'
 # A3, last sentence: the commit offer's ordinary line is for a record merely changed, never the one said for a conflicted one
 WUO="$(printf '%s\n' "$WU" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noq | sents)"
