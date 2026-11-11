@@ -28,6 +28,7 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 | `/nemo-it` | Security attestation scan (OWASP + NeMo Guardrails AI safety) |
 | `/retrofit-it` | Add production foundations (auth, RBAC, Docker, security) to an existing app |
 | `/backlog-it` | Project board: Epic → Story → Task cards, bug queue, parallel fix lanes (see `references/backlog-board.md`) |
+| `/resolve-it` | From a person's report to their outcome on the live system: read-only investigator, pattern library, `/debug-it` per cause, variations table, adversarial review, ship and verify, loop on stacked causes, prevention, four records (see `references/resolve-it.md`) |
 | `/deadcode-it` | Remove dead code: tools + AI search prove it unused, SAFE/CAUTION/DANGER grading, verified batches with rollback, `docs/DELETION_LOG.md` (see `references/deadcode.md`) |
 | `/threats-it` | Threat feed → archived sources, verified CVE/KEV facts, ATT&CK attack chains, read-only tenant IOC hunt, Sentinel coverage, VEX + OpenVEX, briefing + technical report pair with PDFs (see `threats-it/`) |
 

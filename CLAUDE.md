@@ -166,6 +166,28 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Never weakens a check to make it pass; never deletes a branch; never pushes
 - Wired in through build-standards Q14, a tool-free upkeep reminder (no kept cleanup on the current branch, or 30+ days and 20+ commits since the last, or a cleanup waiting to be kept or dropped): /resume-it turns it into a suggestion; nothing else runs the tools
 
+## /resolve-it
+
+`/resolve-it` takes a problem from a person's report, an alert or failed job, or a backlog card to the person's outcome observed on the live system, then prevents a silent repeat. The contract is `references/resolve-it.md`; its agents' templates are in `resolve-it/`.
+
+1. **Intake** -- the outcome as one checkable sentence from the person's side; card found or filed; autonomy stated
+2. **Evidence** -- investigator agent, read-only, from the project's own evidence sources
+3. **Patterns** -- matched against the shared library before theorizing
+4. **Root cause** -- `/debug-it`
+5. **Today's outcome** -- writer agent drafts the update and workaround; the owner sends
+6. **Variations, then fix** -- the variations table, then test-first through the project's gates
+7. **Adversarial review** -- the SDD adversarial reviewer, rounds until ship
+8. **Ship and verify** -- the outcome observed live; not true means a stacked cause: back to 2
+9. **Prevent** -- detection for silent failures, refusals for easy mistakes, a card per manual unblock
+10. **Record** -- card, incident report, memory and doctrine, pattern library
+
+### Key Principles
+
+- Done means the person's outcome is observed on the live system, counts reconciled -- never green tests alone
+- Autonomy propose / project (default) / end-to-end; `end-to-end` removes stops, never gates
+- Never: a write while investigating, a message to a person outside the team, a printed secret, an undisclosed bypass, a manual unblock without a card
+- The pattern library is project-agnostic; learned patterns live in `~/.claude/resolve-it/patterns/`
+
 ## Explaining a card (`/backlog-it info`, and `/btw`)
 
 Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side question -- answer in plain English under three headings: **The problem**, **Impact if it's not fixed** (Who it hits, The wider risk, How far it reaches), and **Why it's being fixed this way** (each choice and its reason, in the order the work runs; "no fix chosen yet" when none is). Keep it to about one screen, for quick understanding: no history of the card (how it was found, review rounds, dated calls) and no status unless asked. The full shape is `info` in `backlog-board.md`. `/btw` can't read files: answer only from what this session has already read, and if it hasn't read the card, say so and suggest `/backlog-it info <id>`.
@@ -182,6 +204,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
     argo-it.md                    # Argo CD skill -- generate K8s manifests, deploy via GitOps
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
     deadcode-it.md                # Dead-code skill -- prove unused, delete in verified batches, deletion log
+    resolve-it.md                 # Incident skill -- report to verified outcome, stacked causes, prevention, four records
     threats-it.md                 # Threat skill -- threat feed to verified IOC hunt, attack chains, VEX, report pair
   make-it/
     references/
@@ -198,7 +221,12 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
       hostile-code.md            # X09: check for code that attacks the computer running it, before anything runs; a stop, never a fix
       deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
+      resolve-it.md              # /resolve-it contract: outcome, autonomy, rails, phases, variations, records, pattern format
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
+    resolve-it/
+      investigator-prompt.md      # read-only evidence agent template
+      writer-prompt.md            # plain-English drafts template (never sent by the agent)
+      patterns/                   # shipped seed root-cause patterns (generic)
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check
       references/                 # report standard, attack-chain format, VEX, sources, tenant assessment, pitfalls, fact-check, profile template
