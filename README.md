@@ -191,6 +191,7 @@ bash install.sh
 | `/fix-it` | Automatically fixes security findings from a `/nemo-it` attestation report | After `/nemo-it` identifies vulnerabilities you want to resolve |
 | `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
 | `/deadcode-it` | Finds code your app no longer uses, proves it with tools and a search, and removes it in small checked steps with a deletion log; asks you about anything it can't fully prove | Routine upkeep, or when `/resume-it` says unused code has piled up |
+| `/resolve-it` | Takes a problem someone reported (or an alert, a failed job, a bug card) all the way to the person's outcome, checked on the live system: finds every cause behind it, fixes each one test-first with an independent review, drafts what to tell the person, and records what it learned so the next one is caught sooner | Something a person needed didn't happen, especially when the first fix didn't make it happen |
 | `/threats-it` | Turns a threat advisory, CVE list or IOC list into a verified assessment: archived sources, attack chains, a read-only hunt of your Microsoft tenant, VEX, and a leadership briefing plus technical companion (Markdown + PDF) | A new threat lands and someone asks "does this affect us, and do we have indicators?" |
 
 ---
@@ -958,6 +959,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.52.0 -- /resolve-it: from a person's report to their outcome, and never silently again
+
+A new skill. `/resolve-it` starts from a person's report, an alert or failed job, or a backlog card and
+carries the problem until the person's outcome is observed on the live system -- looping when a fixed
+cause reveals the next one.
+- **Agents:** an investigator gathers evidence read-only and checks a shared **pattern library** of known
+  root causes; `/debug-it` finds each cause; a writer drafts the plain-English update for the owner to
+  send; the SDD adversarial reviewer breaks each fix until it says ship.
+- **Autonomy:** propose, project (default) or end-to-end (where a project's doctrine says nothing about
+  shipping); `end-to-end` removes stops, never gates. At every level: no write while investigating,
+  nothing sent to a person, no secret printed, every bypass disclosed, every manual unblock a card.
+- **Records:** the card, `docs/incidents/<date>-<slug>.md`, memory and doctrine (owner rules verbatim),
+  and the pattern library (11 generic seeds; learned patterns in `~/.claude/resolve-it/patterns/`).
+- **Checked:** `scripts/test-resolve-it.sh` (CI) pins the rails, the autonomy default, the records and a
+  project-agnostic library.
 
 ### v1.51.0 -- /backlog-it runs each AI step on the model it needs
 

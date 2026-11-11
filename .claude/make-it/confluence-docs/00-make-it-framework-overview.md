@@ -58,6 +58,7 @@ The skills fall into natural groups. Each has its own detailed page in this spac
 | [`/git-it`](11-git-it.md) | Keep your saved work clean, safe, and reversible. |
 | [`/clear-it`](12-clear-it.md) | Save a checkpoint mid-session so Claude can reset and stay sharp. |
 | [`/wrap-it`](13-wrap-it.md) | End your work session cleanly and save everything. |
+| [`/resolve-it`](19-resolve-it.md) | Take a problem someone reported all the way to their outcome, then make sure it can't fail silently again. |
 | [`/deadcode-it`](18-deadcode-it.md) | Safely clear out code your app no longer uses, checking it still works after every step. |
 
 ### Power tools (advanced)

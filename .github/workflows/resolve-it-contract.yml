@@ -1,0 +1,22 @@
+name: resolve-it contract
+
+# /resolve-it investigates live systems and can ship fixes at the project's autonomy level.
+# scripts/test-resolve-it.sh pins what must never happen (a write while investigating, a message
+# sent to a person, a secret printed, an undisclosed bypass, "done" before the outcome is observed)
+# and that the pattern library stays project-agnostic. Run in CI so a later edit can't loosen it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: resolve-it contract test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-resolve-it.sh

@@ -35,6 +35,9 @@ no user prompt; work in character to that persona's output standard. See the ref
 
 # /debug-it -- root cause first, no looping until 1AM
 
+> A problem a person reported, that needs carrying to their outcome on the live system (stacked
+> causes, review, prevention, records)? Use `/resolve-it`, which runs this skill for each cause.
+>
 > A project may ship its own `/debug-it` that shadows this one (capture tools, live-system
 > safety rails, ship ritual). Inside such a repo, the project version wins. This is the core.
 
