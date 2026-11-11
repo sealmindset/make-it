@@ -365,6 +365,9 @@ on VLF's allowed list. It can't go in `.ship-it.yml`, since DevOps owns that fil
 - `date`: the day the state or reason last changed, as `YYYY-MM-DD`.
 - `evidence`: what the check looked at; empty when there is none.
 
+/ship-it writes the record ending in a single newline, with no trailing spaces, so a repo's
+formatters leave it as written.
+
 There is no history array: the git log is the history. No file on the branch or on main means every
 item is missing. An
 unknown key is ignored. A missing item or an item with an unknown state is asked. The file is

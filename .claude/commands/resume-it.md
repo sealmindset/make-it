@@ -515,6 +515,21 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
 file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
+That ordinary line is for a record that is merely changed, not conflicted.
+
+**A conflicted go-live record:** when `.ship-it-go-live.json` is unmerged (a merge or rebase
+stopped with that file in conflict), resume-it never resolves, edits, stages, removes or checks
+out either side of `.ship-it-go-live.json`.
+- When an update of the branch that resume-it began itself (the rebase `git-operations.md` tells
+  it to use) stops with the record in conflict, resume-it aborts that update (`git rebase
+  --abort`) so the branch is exactly as it was before, and says this line once: "I couldn't
+  update your branch from main: your go-live record has a merge conflict with main's copy.
+  /ship-it owns that file, so I didn't touch it and put your branch back as it was."
+- When the record is already in conflict from an update the user ran, resume-it does not abort
+  that update, resolves nothing and commits nothing: on a yes to Uncommitted changes (or anywhere
+  else it would commit for the user) it says this line once instead of committing: "Your go-live
+  record has a merge conflict. /ship-it owns that file, so I didn't touch it, and I can't save
+  your other changes until it is resolved. You can resolve it in the file yourself."
 
 **When standards gaps are found, present them in plain language:**
 
