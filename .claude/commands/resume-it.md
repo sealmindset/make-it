@@ -514,7 +514,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
-file has changes, say in one line: "I left your go-live answers file for /ship-it, which owns it."
+file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
 
 **When standards gaps are found, present them in plain language:**
 
@@ -550,7 +550,8 @@ improvements groups, or the ask; the status summary (2) already mentions each on
 
 A catch-up gap found in `.ship-it-go-live.json` (X01, for example) is not fixed or applied in any
 group and doesn't hold up the catch-up: it isn't in [N], the counts or the ask. Tell the user the
-scanner step's go-live line instead (security-scanner-remediation).
+scanner step's go-live line instead (security-scanner-remediation), once per session in all: if the
+scanner step said it, don't say it again.
 
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
@@ -738,7 +739,11 @@ For **production**, detect the org's preferred approach:
 Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
 (The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
 resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
-writes, stages or commits it, because /ship-it owns it. No step of resume-it stages a change to
+writes, stages or commits it, because /ship-it owns it. About the go-live record, resume-it says
+only what it did, what the record holds, and that /ship-it owns the file; it never says what
+/ship-it will do. If the user asks resume-it to fix or change an answer in the record, say in one
+line that /ship-it owns that file and they can change the answer in the file themselves, and offer
+nothing else. No step of resume-it stages a change to
 `.ship-it-go-live.json`, scanner fixes and feature commits included. A Claude Desktop bundle's
 first commit (step 0) keeps the file exactly as it came in the bundle, without editing it.
 Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
@@ -752,9 +757,11 @@ file's `### Go-live checklist` (step 6), list:
   guide's Safety steps /ship-it doesn't run yet). When the branch's record is unreadable and
   main's copy can't be read either, a record still exists: treat all five items as missing, by the
   guide's count, and list them as above, never with the "Not started" line. resume-it never
-  repeats /ship-it's line ("I couldn't read your go-live record, so I'm going through it again");
-  if it says anything, it's one line: "I couldn't read your go-live answers file, so every item is
-  listed as open."
+  repeats /ship-it's line ("I couldn't read your go-live record, so I'm going through it again").
+  Only when no copy of the record can be read (the branch's is unreadable, and main has none or it
+  is unreadable too), it says one line: "I couldn't read your go-live record, so the list shows
+  none of its answers." When main's copy can be read, resume-it uses it as the guide says and says
+  nothing about the branch's file.
 
 Values from the go-live record are shown only as these rules allow, never a hidden value or any
 part of one:
@@ -857,10 +864,10 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 - [ ] [Security item] -- [What needs to happen]
 
 ### Go-live checklist
-- [ ] [Item]: skipped -- "[reason]" ([date]) -- asked again at your next /ship-it to production (a new request, not a re-run)
-- [ ] [Item]: not answered yet -- asked again at your next /ship-it to production (a new request, not a re-run)
+- [ ] [Item]: skipped -- "[reason]" ([date]) -- still open
+- [ ] [Item]: not answered yet
 - [Item]: not built yet in /ship-it (coming soon)
-- Not started -- /ship-it doesn't run this checklist yet; a later /ship-it release goes through it with you before your next production deploy.
+- Not started -- /ship-it doesn't run this checklist yet.
 
 ## Secrets & Environment Variables
 
@@ -919,7 +926,8 @@ one is serious] are about [item], which you left out, so I didn't change it."
 A finding on `.ship-it-go-live.json` is not fixed, whatever its severity, and doesn't hold up the
 user's work: /ship-it owns that file (readiness check step 2, Go-live checklist). Tell the user
 once per session, in one plain line that names no value: "A safety warning is about an answer in
-your go-live answers file; /ship-it clears it on its next production run, so I didn't change it."
+your go-live record. /ship-it owns that file, so I didn't change it; you can change that answer in
+the file yourself."
 (`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
 
 **2. For each finding (critical/high first):**
