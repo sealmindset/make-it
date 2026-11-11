@@ -513,6 +513,9 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Standards gaps found (important) | "There are [N] improvements available since your app was built ([name each]) and no must-do updates -- say 'apply the improvements' or 'not now'." (active confirmation -- the ask below, one group) |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
+On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
+file has changes, say in one line: "I left your go-live answers file for /ship-it, which owns it."
+
 **When standards gaps are found, present them in plain language:**
 
 If the catch-up scan found gaps, include a brief summary in the status:
@@ -544,6 +547,10 @@ updates / improvements]' or 'not now'."
 
 Items left out by your choice (step 8) are not in [N] or the other counts, the must-do or
 improvements groups, or the ask; the status summary (2) already mentions each one.
+
+A catch-up gap found in `.ship-it-go-live.json` (X01, for example) is not fixed or applied in any
+group and doesn't hold up the catch-up: it isn't in [N], the counts or the ask. Tell the user the
+scanner step's go-live line instead (security-scanner-remediation).
 
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
@@ -743,8 +750,11 @@ file's `### Go-live checklist` (step 6), list:
 - with no record on the branch and none readable on main (none there, unreadable, or GitHub
   unreachable), only the "Not started" line: today's /ship-it doesn't run the checklist yet (the
   guide's Safety steps /ship-it doesn't run yet). When the branch's record is unreadable and
-  main's copy can't be read either, a record still exists: treat all five items as missing, as the
-  guide does, and list them as above, never with the "Not started" line.
+  main's copy can't be read either, a record still exists: treat all five items as missing, by the
+  guide's count, and list them as above, never with the "Not started" line. resume-it never
+  repeats /ship-it's line ("I couldn't read your go-live record, so I'm going through it again");
+  if it says anything, it's one line: "I couldn't read your go-live answers file, so every item is
+  listed as open."
 
 Values from the go-live record are shown only as these rules allow, never a hidden value or any
 part of one:
@@ -752,12 +762,15 @@ part of one:
   line reads `skipped -- (reason not shown) ([date])`. A stored reason over 200 characters counts
   as missing.
 - A `skipped` item with no reason, or an empty one, shows `(no reason given)`.
-- A stored reason in the guide's left-out words (The record), on an item no longer left out, shows
-  as "left out earlier, since brought back", on a normal open line.
+- A stored reason in the guide's left-out words (The record), on an item not left out now, shows
+  "marked left out by your choice; not left out now", on a normal open line, whether or not it was
+  ever left out.
 - A reason's line breaks become spaces, so it stays on one line, and it shows as quoted text.
 - A `date` that isn't a real `YYYY-MM-DD` date shows as `(no date)`.
 
-`done` and `na` items are not listed, nor is an item kept quiet while its item is left out. When a
+`done` and `na` items are not listed. A go-live item whose check belongs to an item left out now
+(`left-out-record.md`, read step 3) is kept quiet, whatever its stored reason says: never listed,
+never asked again. When a
 record leaves nothing open, leave the subsection out. List go-live items only there, never under
 "What you can do right now", and never offer a fix unless the user asks.
 
@@ -903,6 +916,12 @@ read step 3) is not fixed, whatever its severity, and doesn't hold up the user's
 user once per session, one plain line per item, with no scan detail: "[N] safety warning(s)[ --
 one is serious] are about [item], which you left out, so I didn't change it."
 
+A finding on `.ship-it-go-live.json` is not fixed, whatever its severity, and doesn't hold up the
+user's work: /ship-it owns that file (readiness check step 2, Go-live checklist). Tell the user
+once per session, in one plain line that names no value: "A safety warning is about an answer in
+your go-live answers file; /ship-it clears it on its next production run, so I didn't change it."
+(`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
+
 **2. For each finding (critical/high first):**
 
 **If scanner API is available** (`SECURITY_SCANNER_API_KEY` set in `.env`):
@@ -942,7 +961,7 @@ one is serious] are about [item], which you left out, so I didn't change it."
 4. If tests pass: commit, push, update CHANGELOG.md
 5. Do NOT close the GitHub Issue manually -- scanner will auto-close after rescan confirms the fix
 
-**3. After all critical/high findings are resolved (a left-out item's findings aside):**
+**3. After all critical/high findings are resolved (a left-out item's and the go-live record's findings aside):**
 
 - Continue to the user's requested work (greet-and-suggest or execute-work)
 
@@ -950,6 +969,7 @@ one is serious] are about [item], which you left out, so I didn't change it."
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
 - If a finding belongs to a left-out item: the one plain line above.
+- If a finding is on `.ship-it-go-live.json`: its one plain line above.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>
