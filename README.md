@@ -960,6 +960,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.53.0 -- Go-live checklist: the contract, and /resume-it lists what's open
+
+`ship-it-guide.md` gains the **Go-live checklist** contract: five go-live items (terms and privacy
+pages, security audit, backup restore test, load test, live payment walk-through) that every
+production /ship-it goes through and records in a committed `.ship-it-go-live.json`. It is a
+checklist, not a gate: no answer stops a request. /ship-it's own side ships separately; until then
+the guide lists the checklist under "Safety steps /ship-it doesn't run yet".
+- **The contract:** when it runs (a PR into `main` whose workflow deploys to production; `--aws`
+  and `--vlf` always), the record's shape, starting from main's copy so an answer given on another
+  branch stays quiet, each ask as active confirmation with a typed reason for a skip, item 1 (the
+  terms and privacy pages are served and mention user content, arbitration and personal data --
+  never a legal review), the PR section, and no secret in the record.
+- **/resume-it:** the readiness check lists the open items in NEXT-STEPS.md, read-only. It says
+  what it did and who owns the file, never what /ship-it will do. A serious finding that a
+  password or key is in the record holds up work and says to remove it and replace the key.
+- **Not in this release:** how the skills handle a go-live record caught in a merge conflict (it
+  is settled by hand for now), and items 2-5, which are recorded "coming soon".
+- **Checked:** `scripts/test-go-live-checklist.sh` pins the contract and the listing.
+
 ### v1.52.0 -- /resolve-it: from a person's report to their outcome, and never silently again
 
 A new skill. `/resolve-it` starts from a person's report, an alert or failed job, or a backlog card and
