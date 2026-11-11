@@ -27,6 +27,7 @@ The user just types /wrap-it when they're done. Everything else is automatic.
 @~/.claude/make-it/references/git-operations.md
 @~/.claude/make-it/references/learnings.md
 @~/.claude/make-it/references/left-out-record.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -117,17 +118,23 @@ into the state files you update below -- do not delete it; /resume-it reads it f
 numbered with its evidence and what it would change; the user answers per item. Write the kept
 ones to `LEARNINGS.md` now so step 2 saves them.
 
-**2. If there are uncommitted changes, ask:**
+**2. If there are uncommitted changes, save them -- routine, per the approval block:**
 
-"You have some unsaved changes:
-[list changed files in plain language, e.g., 'Updated the dashboard page', 'Modified the settings API']
-
-Want me to save these before shutting down?"
-
-- If yes: stage and commit with a descriptive message summarizing the changes.
+Saving is what the user ran /wrap-it for, it stays on this computer, and it can be taken back,
+so save without asking:
+- Leave out any changed or new file that may hold a password or key: a `.env` file, a key or
+  certificate file (`*.pem`, `*.key`, `*.p12`), or a file whose name says secret, credential,
+  token or password. Never stage it; it stays on disk, unsaved.
+- Stage the rest by name and commit locally with a descriptive message.
   Use format: "WIP: [plain description of changes]"
-- If no: note that changes are unsaved in the wrap-up summary.
 - Do NOT push to remote -- just commit locally.
+- Tell the user in one line: "Saved your changes on this computer: [list them in plain language,
+  e.g., 'Updated the dashboard page', 'Changed the settings screen']. Nothing was sent anywhere;
+  if you'd rather I hadn't saved any of it, say so before you go and I'll take the save back --
+  your changes stay." If a file was left out, add: "I left [file] unsaved because it may hold a
+  password -- it's still on your computer, just not in the save."
+- If they ask to take it back: `git reset --soft HEAD~1` (the changes return, unsaved, exactly
+  as they were) and say so in the summary.
 
 **3. Update TODO.md:**
 
@@ -242,12 +249,30 @@ git worktree list 2>/dev/null
 ```
 
 If worktrees exist beyond the main checkout, check each for unsaved work
-(`git -C <path> status --short`). For any worktree that is BOTH fully merged into the default
-branch AND has no unsaved changes, offer to clean it up:
+(`git -C <path> status --short`). For the worktrees you own (not another session's or a tool's)
+that are BOTH fully merged into the default branch AND have no unsaved changes, ask once. Removing
+one deletes a folder, so this is high-stakes per the approval block: the user picks or names each
+one to remove, never a plain yes. Before asking, list each candidate's local-only files
+(`git -C <path> status --short --ignored`, e.g. a `.env`): they go with the folder.
+
+"You have [N] extra copies of this project that I made for work that's now finished:
+[for each: its name -- what it was for]. I checked: everything saved in them is already in your
+main project, and none has unsaved changes. Removing a copy deletes only that folder -- its work
+stays in your main project, but the folder itself can't be brought back (I can make a fresh one
+any time). What's unusual: [for each copy holding local-only files: 'the copy [name] also holds
+[files], which would be deleted with it'; otherwise 'nothing']. The one thing to check: you're
+not still using any of these. Which should I remove? Pick them or name them, or say 'keep them
+all'."
+
+Offer each copy as its own choice (or have them type the names). A plain "yes" or "ok" is not a
+pick: ask which ones. "All" counts only with the number in it ("all 3"), matching the list.
+Remove only the ones they named, one at a time:
 
 ```bash
 scripts/worktree.sh rm <branch>   # removes the worktree directory and prunes
 ```
+
+If a removal fails, leave that copy and mention it in the summary -- never retry with `--force`.
 
 NEVER remove a worktree that has uncommitted changes or an unmerged branch -- leave it and
 mention it in the summary so the user can return to it. If the project has no extra worktrees,
@@ -259,8 +284,23 @@ skip this step silently.
 git fetch origin --prune 2>/dev/null   # drop tracking refs for deleted remote branches
 ```
 
-Offer to delete LOCAL branches that are merged into the default branch AND not checked out in any
-worktree (`git branch --merged origin/main`). This is local-only and reflog-recoverable.
+Then ask once about LOCAL branches you own that are merged into the default branch AND not
+checked out in any worktree (`git branch --merged origin/main`, after step 4's removals; never
+the default branch itself); none
+→ skip silently. Deleting is high-stakes per the approval block: the user picks or names each
+branch, never a plain yes.
+
+"[N] of your work labels ('branches') are finished: [for each: its name -- what it was for].
+I checked: all their work is already in your main project. Deleting a label removes only the
+name -- the work stays, and the label can be brought back from it any time you want it.
+What's unusual: [anything that sets one apart, e.g. 'the label [name] hasn't been used for
+months'; otherwise 'nothing']. The one thing to check: none of these is something you still
+plan to add to. Which should I delete? Pick them or name them, or say 'keep them all'."
+
+Offer each branch as its own choice (or have them type the names). A plain "yes" or "ok" is not
+a pick: ask which ones. "All" counts only with the number in it ("all 4"), matching the list.
+Delete only the ones they named, with `git branch -d <name>` (it refuses anything unmerged; if
+it does, keep that branch and mention it in the summary). This is local-only.
 **Do NOT** delete branches or worktrees you don't own — in a shared/multi-session checkout, other
 sessions' branches and tool-managed worktrees (audit caches, agent-isolation worktrees) are
 off-limits; report them, don't remove them. Never `git push` deletes of remote branches here.
@@ -278,13 +318,14 @@ off-limits; report them, don't remove them. Never `git push` deletes of remote b
 "All wrapped up! Here's your summary:
 
 **Saved:**
-- [x] [Changes committed / No uncommitted changes]
+- [x] [Changes saved on this computer / No unsaved changes]
 - [x] TODO list updated ([N] items remaining)
 - [x] Progress saved to .make-it-state.md
 
 **Shut down:**
 - [x] [App stopped / App was already stopped]
 - [x] [Data preserved for fast restart next time]
+- [x] [Only if any: Removed the copies / deleted the labels you picked: [names]]
 
 **Next time you're ready to work, just run /resume-it** -- it'll pick up right where you left off.
 
@@ -297,7 +338,8 @@ Have a good one!"
 
 **If there were issues:**
 
-- Uncommitted changes the user declined to save: "Heads up: you have unsaved changes in [files]. They'll still be there next time."
+- Files left unsaved because they may hold a password: "Heads up: I didn't save [files] -- they may hold a password. They're still on your computer."
+- Copies or labels kept because they still have unsaved or unfinished work: "I left [names] alone -- there's still work in them."
 - Containers that wouldn't stop: "I couldn't stop [container] -- you may want to check on that."
 - Orphaned port processes: "Port [N] is still in use by another process -- probably not related to this app."
 
@@ -319,7 +361,7 @@ Have a good one!"
 
 **If no .make-it-state.md or app-context.json exists:**
 - This might not be a /make-it project -- that's fine
-- Still offer to save uncommitted work and update TODO.md
+- Still save uncommitted work (save step 2) and update TODO.md
 - Create .make-it-state.md from what you can infer
 
 **If git is not initialized:**
@@ -335,6 +377,8 @@ Have a good one!"
 - NEVER run `docker system prune` or `docker volume prune`
 - NEVER kill processes -- only report orphaned ports
 - NEVER remove a worktree that has uncommitted changes or an unmerged branch
+- NEVER remove a worktree or delete a branch the user didn't name in their pick
+- NEVER save a file that may hold a password or key (leave it unsaved and say so)
 - NEVER push to remote -- only local commits
 - NEVER start new work or suggest adding features
 - ALWAYS preserve data for fast restart
