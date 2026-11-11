@@ -81,9 +81,9 @@ check "rule 1 (trigger): in SHIP MODE a request into main runs it, whatever its 
   'says "SHIP MODE" "+\bmain\b" "+\b(whatever|any|regardless of|every)\b[^.]{0,20}\bintent\b" "+deploys? to production"'
 # (re-pointed by R3, final review: the owner's 2026-10-18 answer counts a workflow with a production deploy job, so the
 # no-workflow bullet may say either "deploys to production on merge" or "has a production deploy job"; R3's own check
-# below pins that it agrees with the Workflow Generation table)
-check "rule 1 (trigger): a production workflow is a job on deployment.environments.production (default production), a deploy-prod job, a reusable caller's environment-prod, or none yet (every one ship-it generates deploys to production on merge, or has a production deploy job)" \
-  'says "deployment\.environments\.production" "+default[^.]{0,5}production" && says "+deploy-prod" && says "+environment-prod" && says "no workflow" "+generat" "+deploys? to production on merge|\bproduction deploy job\b"'
+# below pins that it agrees with the Workflow Generation table; A4 adds "carries a production deploy on merge")
+check "rule 1 (trigger): a production workflow is a job on deployment.environments.production (default production), a deploy-prod job, a reusable caller's environment-prod, or none yet (every one ship-it generates deploys to production on merge, has a production deploy job, or carries a production deploy on merge)" \
+  'says "deployment\.environments\.production" "+default[^.]{0,5}production" && says "+deploy-prod" && says "+environment-prod" && says "no workflow" "+generat" "+deploys? to production on merge|\bproduction deploy (job|on merge)\b"'
 check "rule 1 (trigger): AWS and VLF modes always run it; SAVE mode never does" \
   'says "\bAWS\b" "\bVLF\b" "+\balways\b" && says "(\bSAVE\b|/ship-it save\b)[^.;]{0,30}\b(never|not|doesn.t|does not)\b" && ! says "+(\bSAVE\b|/ship-it save\b)[^.;]{0,30}\b(runs?|triggers?|asks?|shows?)\b"'
 check "rule 1 (trigger): a re-run (RE-RUN, a request already open) asks nothing -- only a new request asks -- and the PR section stays as written (owner, 2026-10-21)" \
@@ -631,8 +631,16 @@ check "owner call 2, 5 (unreadable main copy): nothing is said about an unreadab
 WGROW="$(awk '/^```/{f=!f} !f&&/^#/{on=($0=="### Workflow Generation")} on' "$G" | grep -E '^\|[^|]*infra\.provider: ""' || true)"
 WGAFF="$(printf '%s\n' "$WGROW" | cut -d '|' -f3- | pair | cut -d $'\x1f' -f2)"
 TRIGB="$(printf '%s\n' "$SEC" | units | grep -iE '^- no workflow' || true)"
-check "R3 (generated workflow): the no-workflow trigger bullet claims a production deploy and the Workflow Generation table's empty-provider placeholder row says it still has the production deploy job (deploy-prod), so the two agree" \
-  '[ -n "$WGROW" ] && [ -n "$TRIGB" ] && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "deploys? to production|\bproduction deploy job\b|deploy-prod" && { ! printf "%s\n" "$WGROW" | gq -iE "placeholder|pending" || printf "%s\n" "$WGAFF" | gq -iE "\`?deploy-prod\`?( job)?|\bproduction deploy job\b"; } && printf "%s\n" "$WGAFF" | gq -iE "deploy-prod|\bproduction deploy job\b"'
+# (made whole by A4/M3: beside a placeholder row, the trigger bullet must name the placeholder too -- "every workflow it
+# generates deploys to production on merge." put back is red)
+check "R3 (generated workflow): the no-workflow trigger bullet claims a production deploy and the Workflow Generation table's empty-provider placeholder row says it still has the production deploy job (deploy-prod); beside that placeholder row the bullet names the placeholder, so the two agree" \
+  '[ -n "$WGROW" ] && [ -n "$TRIGB" ] && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "deploys? to production|\bproduction deploy (job|on merge)\b|deploy-prod" && { ! printf "%s\n" "$WGROW" | gq -iE "placeholder|pending" || { printf "%s\n" "$WGAFF" | gq -iE "\`?deploy-prod\`?( job)?|\bproduction deploy job\b" && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bplaceholder\b"; }; } && printf "%s\n" "$WGAFF" | gq -iE "deploy-prod|\bproduction deploy job\b"'
+# M1 (A4): the bullet names the three forms every generated workflow takes -- a deploy-prod job, a caller passing
+# environment-prod, the placeholder job for an empty infra.provider -- and never claims a deploy-prod job (or "a production
+# deploy job") for every generated workflow (the reusable caller and the Container Apps set have none)
+M1_ALL='\bevery\b[^.;]{0,50}\b(has|have|carries|gets|includes)\b (a |its |one )?(`?deploy-prod`? job|production deploy job)'
+check "M1 (the three forms): the no-workflow trigger bullet names a deploy-prod job, a caller that passes environment-prod, and the placeholder job for an empty infra.provider, and never claims a deploy-prod job for every generated workflow" \
+  'printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "deploy-prod.? job" && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bcaller\b[^.;]{0,30}environment-prod" && printf "%s\n" "$TRIGB" | pair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "infra\.provider[^.;]{0,40}\bplaceholder( job)?\b|\bplaceholder( job)?\b[^.;]{0,40}infra\.provider" && ! printf "%s\n" "$TRIGB" | gq -iE "$M1_ALL"'
 # R4: the re-run exception keys on the five item lines, not the heading: a re-run runs the checklist as a new request
 # does when its PR has no five go-live item lines -- no section, or one whose Go-live items list only says the five
 # weren't asked; a PR that already carries the five item lines is not asked again
@@ -665,6 +673,17 @@ ASK1="$(printf '%s\n' "$SEC" | awk '/^```/{f=!f} !f&&/^#/{on=($0=="### Asking")}
 ASK1P="$(printf '%s\n' "$ASK1" | sents | pair)"
 check "R7 (Asking, first paragraph): it says only item 1 is asked and items 2-5 are recorded coming soon, and none of its sentences affirms that an item 2-5 is asked" \
   'PAIRS="$ASK1P" says "+\bonly item 1\b[^.;]{0,20}\b(is )?asked\b|\bitem 1 is the only (item|one)\b[^.;]{0,15}\basked\b" && PAIRS="$ASK1P" says "\bitems? 2.{1,4}5\b" "\`coming soon\`" "+\brecorded\b" && ! printf "%s\n" "$ASK1P" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bitems? 2.{1,4}5\b[^.;]{0,15}\b(are|is|get|gets) asked\b"'
+# M5 (A4): Asking's asked-again sentence after the lead can no longer be read as "a missing item 2-5 is asked": every
+# sentence of its first paragraph that affirms a "skipped or missing" item is asked names item 1 as its subject, never "an
+# item" or "any item"
+M5_GEN='(^|[.;:] )(an|any|each|every) item\b[^.;]{0,40}\bmissing\b|\b(an|any|each|every) (item|one) that is `?skipped`? or missing\b'
+check "M5 (Asking, asked again): in Asking's first paragraph, each sentence that affirms a skipped or missing item is asked is about item 1, and none says \"an item that is skipped or missing\" is asked" \
+  'm5=$(printf "%s\n" "$ASK1P" | grep -iE "skipped.? or missing|missing or .?skipped" | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "\b(is|are|gets?) asked\b" || true); [ -n "$m5" ] && ! printf "%s\n" "$m5" | grep -viE "\bitem 1\b" | gq . && ! printf "%s\n" "$ASK1P" | cut -d $'"'"'\x1f'"'"' -f1 | gq -iE "$M5_GEN"'
+# A3: the record rules say /ship-it never starts a merge or rebase itself; no sentence of the section has /ship-it merge,
+# rebase or pull (the guard that went with "owner call 2, 3 (wording)", re-homed)
+A3P="$(printf '%s\n' "$SEC" | awk '/^```/{f=!f} !f&&/^#/{on=($0=="### The record")} on' | units | sents | pair)"
+check "A3 (no merge or rebase): the guide's record rules say \"/ship-it never starts a merge or rebase itself\", and no sentence of the Go-live checklist section has /ship-it merge, rebase or pull" \
+  'PAIRS="$A3P" says "/ship-it never starts a merge or (a )?rebase itself" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "/ship-it\b[^.;:]{0,25}\b(merges|merging|rebases|rebasing|pulls|pulling)\b"'
 
 # ---- E05-S2 Task 2: resume-it's readiness check lists the open go-live items (task-2-brief.md) ----
 # resume-it only reads `.ship-it-go-live.json` (/ship-it owns it), the way the guide's Go-live checklist says the answer
@@ -719,7 +738,8 @@ RFILE="$( { units < "$R"; printf '%s\n' "$TGL"; } | grep -iE '\.ship-it-go-live\
 # R8: in a sentence about a bundle committed "exactly as" received, "the only case/time ... resume-it commits" is the one
 # commit R8 states; it is taken out of that sentence alone (here and in owner call 4's write guard) -- any other write
 # verb there, or a commit outside it, is red)
-OD_SER="A serious safety warning says a password or key is in your go-live record. /ship-it owns that file, so I didn't change it. Before we go on: remove it from the file, and replace that password or key with a new one -- the old one is already in your saved history."
+# (A2, addendum: the line's last clause is now "-- it may already be in your saved history.")
+OD_SER="A serious safety warning says a password or key is in your go-live record. /ship-it owns that file, so I didn't change it. Before we go on: remove it from the file, and replace that password or key with a new one -- it may already be in your saved history."
 r8_mask() { sents | perl -pe 's/\bonly (case|time)\b[^.;]{0,50}\bcommits?\b/ONLYCASE/gi if /\bbundle\b/i && /\bexactly as\b/i'; }
 RFILEW="$(printf '%s\n' "$RFILE" | L="$OD_SER" perl -pe 's/"\Q$ENV{L}\E"/SERLINE/g' | r8_mask)"
 FENCEW="$(awk '/^```/{f=!f;next} f' "$R" | grep -F '.ship-it-go-live.json' | grep -E '\bgit (add|commit|rm|mv|checkout|restore|stash)\b|>>? *.?(\./)?\.ship-it-go-live\.json|\btee\b|\bsed -i\b' || true)"
@@ -1071,18 +1091,24 @@ R1_CONF='\bconflict|\bunmerged\b|\bunfinished\b|--abort\b|\bmerely changed\b'
 check "R1 (resume-it, the conflict rules out): the commit offer's sentence stays word for word; no unit that names the go-live record speaks of a conflict, an unmerged or unfinished update, an abort, or a record \"merely changed\"" \
   'printf "%s\n" "$WU" | gq -F -- "$R1_COMMIT" && ! printf "%s\n" "$WU" | grep -iE "$GLN" | gq -iE "$R1_CONF"'
 # R2: the serious line, exact, said under the serious tier in the scanner step; the catch-up gives it for a [BLOCK] gap
-check "R2 (the serious line): the scanner step says exactly \"$OD_SER\" for a serious (Critical or High) finding on the record, never for a less serious one; the catch-up gives the serious line for a [BLOCK] gap" \
-  '[ "$(tiers "$SCG")" = "LESSLINE less SERLINE serious " ] && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | gq -iE "\bserious (line|finding|warning)\b|SERLINE|$(printf "%s" "$OD_SER" | cut -c1-40)"'
-# R2: the hold and how it ends -- a serious finding holds up the work until it no longer shows for that file (the scanner
-# step and the catch-up's [BLOCK] gap); nothing says a finding on the record "whatever its severity" doesn't hold up the
-# work, and step 3 no longer sets the go-live record's findings aside
-check "R2 (the hold and how it ends): resume-it goes on once the serious finding no longer shows for that file, in the scanner step and for a [BLOCK] gap; no sentence says a finding of any severity doesn't hold up the work; step 3 no longer sets the record's findings aside" \
-  'printf "%s\n" "$SCS" | grep -iE "\bno longer shows?\b[^.;]{0,30}\b(that|the|this) file\b" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bgo(es)? on\b|\bcontinues?\b|\bresolved\b" && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | gq -iE "\bno longer shows?\b" && ! { printf "%s\n" "$SCS"; printf "%s\n" "$CUS2"; } | grep -iE "$A9SEV" | gq -iE "$A9HOLD" && ! printf "%s\n" "$WU" | grep -E "^\*\*3\. After all critical/high" | gq -iE "go-live record.s findings aside|go-live record[^.;)]{0,40}\baside\b"'
-# R2: the user's own "go on" -- if the user says to go on without removing it, resume-it goes on and lists the finding as
-# open in its summary; it never suggests that itself
+# (re-pointed by A2: the serious tier is a Critical or High finding that a password or key is in the record, and the X01
+# [BLOCK] gap; any other finding or gap takes the less serious line; the serious line is introduced "in these words", not
+# "in one plain line"; made whole by M3: the catch-up's [BLOCK] sentence must name the serious line itself -- "as a
+# serious finding does", or "the less serious line, also for a [BLOCK] gap", is red)
+check "R2 (the serious line): the scanner step says exactly \"$OD_SER\", in these words, for a Critical or High finding that a password or key is in the record, never for a less serious one; any other finding takes the less serious line; the catch-up gives the serious line for the X01 [BLOCK] gap and the less serious line for any other gap" \
+  '[ "$(tiers "$SCG")" = "LESSLINE less SERLINE serious " ] && printf "%s\n" "$SCS" | grep -F SERLINE | gq -iE "\bin these words\b" && ! printf "%s\n" "$SCS" | grep -F SERLINE | gq -iE "\bone (plain )?line\b" && printf "%s\n" "$SCS" | grep -iE "\bCritical or High\b" | grep -viE "$LESST" | gq -iE "\bpassword or key\b" && printf "%s\n" "$SCS" | grep -iE "\bany other finding\b" | gq -iE "LESSSER|LESSLINE" && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | grep -F X01 | gq -iE "\bserious line\b|SERLINE" && printf "%s\n" "$CUS2" | grep -iE "\bany other gaps?\b|\bother gaps\b" | gq -iE "LESSSER line|\bscanner line\b"'
+# R2: the hold and how it ends (re-pointed by A1: resume-it re-reads the file and goes on once the record on disk no
+# longer holds the password or key the finding names -- it does not wait for the scanner's report -- or on the user's
+# go-on; a finding whose value is gone from the record on disk doesn't hold and is not said again; the catch-up's [BLOCK]
+# gap ends the same way; "no longer shows" is red anywhere; step 3 no longer sets the record's findings aside)
+A1_END='\bon disk\b[^.;]{0,15}\bno longer (holds?|has|contains)\b[^.;]{0,40}\bpassword or key\b'
+check "R2 (the hold and how it ends): resume-it re-reads the file and goes on once the record on disk no longer holds the password or key the finding names, without waiting for the scanner's report; a finding whose value is gone from the record on disk doesn't hold and isn't said again; the catch-up's [BLOCK] gap ends the same way; nothing says \"no longer shows\"; no sentence says a finding of any severity doesn't hold up the work; step 3 no longer sets the record's findings aside" \
+  'printf "%s\n" "$SCS" | grep -iE "$A1_END" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bgo(es)? on\b|\bresolved\b|\bends?\b" && printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bre-?reads?\b[^.;:]{0,15}\b(the )?(file|record)\b" && printf "%s\n" "$SCS" | gq -iE "\b(not|never|doesn.t|does not|don.t)\b[^.;]{0,15}\bwait\b[^.;]{0,30}\bscanner" && printf "%s\n" "$SCS" | grep -iE "\bon disk\b" | grep -iE "\b(doesn.t|does not|not|never) hold\b" | gq -iE "\b(not|never|isn.t) said again\b|\b(doesn.t|does not|don.t) say it again\b" && printf "%s\n" "$CUS2" | grep -F "[BLOCK]" | gq -iE "$A1_END" && ! printf "%s\n" "$WU" | grep -iE "$GLN|\bfindings?\b" | gq -iE "\bno longer shows?\b" && ! { printf "%s\n" "$SCS"; printf "%s\n" "$CUS2"; } | grep -iE "$A9SEV" | gq -iE "$A9HOLD" && ! printf "%s\n" "$WU" | grep -E "^\*\*3\. After all critical/high" | gq -iE "go-live record.s findings aside|go-live record[^.;)]{0,40}\baside\b"'
+# R2: the user's own "go on" (re-pointed by A1: a go-on given once holds for the session, scanner step and catch-up
+# alike; the finding is listed as open in that session's wrap-up summary -- "your summary" is red; never suggested)
 GOSUG='\b(suggest|suggests|offer|offers|propose|proposes|recommend|recommends)\b[^.;]{0,40}\b(go(ing)? on|to go on|skip(ping)?|mov(e|ing) on|leav(e|ing) it)\b'
-check "R2 (the user's go on): if the user says to go on without removing it, resume-it goes on and lists the finding as open in its summary; a sentence says it never suggests that itself, and none affirms it suggests going on" \
-  'printf "%s\n" "$SCS" | grep -iE "\b(the user|they|you)\b[^.;]{0,15}\bsays? to go on\b" | grep -iE "\bwithout removing\b" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "\bgo(es)? on\b[^.;]{0,15}\b(and )?lists?\b|\blists?\b" | grep -iE "\bopen\b" | gq -iE "\bsummary\b" && printf "%s\n" "$SCS" | gq -iE "\b(never|not|doesn.t|does not|don.t)\b[^.;]{0,15}\b(suggest|offer|propose)s?\b" && ! printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$GOSUG"'
+check "R2 (the user's go on): if the user says to go on without removing it, resume-it goes on; that go-on holds for the session, in the scanner step and the catch-up alike; the finding is listed as open in that session's wrap-up summary; a sentence says it never suggests going on, and none affirms it does" \
+  'printf "%s\n" "$SCS" | grep -iE "\b(the user|they|you)\b[^.;]{0,15}\bsays? to go on\b" | grep -iE "\bwithout removing\b" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bgo(es)? on\b" && printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "\bgo-?on\b|\bgo on\b" | grep -iE "\b(holds?|stands?|counts?) for the (whole )?session\b|\bfor the rest of the session\b" | gq -iE "\bscanner step\b[^.;]{0,30}\bcatch-up\b|\bcatch-up\b[^.;]{0,30}\bscanner step\b" && printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "\bopen\b[^.;]{0,40}\bwrap-up summary\b" && ! printf "%s\n" "$SCS" | gq -iE "\byour summary\b" && printf "%s\n" "$SCS" | gq -iE "\b(never|not|doesn.t|does not|don.t)\b[^.;]{0,15}\b(suggest|offer|propose)s?\b" && ! printf "%s\n" "$SCS" | rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$GOSUG"'
 # R2b: while a finding or gap is open on the record, every stored reason from it shows as (reason not shown) in
 # NEXT-STEPS.md, whatever the guide's patterns say (otherwise the flagged value is copied into a file made for sharing)
 check "R2b (open finding, reasons hidden): while a finding or gap is open on the record, the readiness check shows every stored reason from it as (reason not shown) in NEXT-STEPS.md, whatever the guide's patterns say -- never only the matching ones" \
