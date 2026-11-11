@@ -1027,6 +1027,85 @@ OC_UNSCOPED='\b(even (when|if)|whenever|whether or not|always)\b[^.;]{0,60}\b(ma
 check "owner call 6 (unreadable line): resume-it says \"$OC_UNR\" only when no copy of the record can be read, and when main's copy can be read it says nothing about the branch's file" \
   '[ -n "$OC_UNRU" ] && printf "%s\n" "$OC_UNRU" | gq -iE "$OC_SCOPE" && ! printf "%s\n" "$OC_UNRU" | sents | RP_STRONG=1 rpair | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$OC_UNSCOPED" && printf "%s\n" "$OCU" | sents | grep -iE "main.s copy[^.;]{0,20}\b(can be read|is readable)\b" | gq -iE "\bsays nothing\b|\bnothing about\b|\bno line\b"'
 
+# ---- Task 2 owner calls after adversarial round 3 (task-2-owner-call-2-brief.md, 2026-11-11) ----
+# Call A: a conflicted go-live record -- hands off, say so. The two exact lines (A2, A3) are matched with their double
+# quotes; units of resume-it.md join wrapped lines with one space. CU: the units that name the record and a conflict.
+OC2_A2="I couldn't update your branch from main: your go-live record has a merge conflict with main's copy. /ship-it owns that file, so I didn't touch it and put your branch back as it was."
+OC2_A3="Your go-live record has a merge conflict. /ship-it owns that file, so I didn't touch it, and I can't save your other changes until it is resolved. You can resolve it in the file yourself."
+noq() { sed -E 's/"[^"]*"//g'; }
+CU="$(printf '%s\n' "$WU" | grep -iE "$GLN" | grep -iE '\bconflict' || true)"
+CUS="$(printf '%s\n' "$CU" | noq | sents)"
+# a write on the conflicted record, on the affirmed text: resolve, edit, stage, remove, check out or take a side of it, a
+# git add/rm/checkout/restore, --ours/--theirs, or continuing the merge or rebase -- unless the user or /ship-it does it
+CONF_PL='
+my $v = qr/\b(?:resolve|resolves|resolving|edit|edits|stage|stages|remove|removes|delete|deletes|rewrite|rewrites|check out|checks out|take|takes|keep|keeps)\b/i;
+my $o = qr/\s+(?:it\b|the (?:go-live )?(?:record|file|conflict)\b|(?:either|one|our|their|main.s|the branch.s) (?:side|copy)\b|`?\.ship-it-go-live\.json)/i;
+while (<STDIN>) { chomp; my ($raw, $aff) = split /\x1f/, $_, 2;
+  while ($aff =~ /$v$o|\bgit (?:add|rm|checkout|restore|mergetool)\b|--(?:ours|theirs)\b|\b(?:rebase|merge) --continue\b|\bcontinues? the (?:rebase|merge|update)\b/g) {
+    my $pre = substr($aff, 0, $-[0]); $pre =~ s/^.*(?:[,;:()]|\. | -- )//s;
+    next if $pre =~ /(?<![.\w-])\/?ship-it(?![-\w])|\b(?:the user|you|they)\b/i;
+    print "$raw\n"; last } }'
+a1_ok() { printf '%s\n' "$CUS" | grep -iE "$GLN" | grep -iE '\bconflict' | grep -iE '\b(never|not|doesn.t|does not|won.t|don.t)\b' \
+  | grep -iE '\bresolv' | grep -iE '\bedit' | grep -iE '\bstag' | grep -iE '\bremov' | grep -iE '\bcheck(s|ing)? out\b' \
+  | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | grep -viE '\b(resolv|edit|stag|remov|check(s|ing)? out)' | gq . \
+  && [ -z "$(printf '%s\n' "$CUS" | RP_STRONG=1 rpair | perl -e "$CONF_PL")" ]; }
+check "owner call A1 (hands off a conflicted record): a sentence says resume-it never resolves, edits, stages, removes or checks out either side of a conflicted .ship-it-go-live.json, and nothing about a conflict tells it to (no resolve/stage/remove/take-a-side of it, no git add/rm/checkout, no --ours/--theirs, no continuing the merge or rebase)" 'a1_ok'
+
+# A2: the unit with A2's exact line is about an update resume-it began itself, aborts it (affirmed) and puts the branch
+# back as it was
+UA2="$(printf '%s\n' "$WU" | grep -F -- "\"$OC2_A2\"" || true)"
+a2_ok() { [ -n "$UA2" ] && printf '%s\n' "$UA2" | noq | gq -iE '\bresume-it\b[^.;]{0,15}\b(itself )?(began|begins|started|starts|ran|runs)\b|\bresume-it.s own\b|\bits own (update|rebase)\b|git-operations\.md' \
+  && printf '%s\n' "$UA2" | noq | gq -iE '\b(exactly )?as it was\b' \
+  && printf '%s\n' "$UA2" | noq | sents | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE '\babort(s|ed|ing)?\b'; }
+check "owner call A2 (its own update): when an update resume-it began stops with the record in conflict, resume-it aborts it so the branch is as it was, and says \"$OC2_A2\"" 'a2_ok'
+
+# A3: the unit with A3's exact line is about the user's own update: not aborted, nothing committed, the line said instead;
+# its user-update sentences affirm no abort and no commit of the rest
+UA3="$(printf '%s\n' "$WU" | grep -F -- "\"$OC2_A3\"" || true)"
+USERUPD='\bthe user\b[^.;]{0,30}\b(ran|run|started|began|made)\b|\bthe user.s (own )?(update|merge|rebase)\b|\balready in conflict\b|\bhalf-done\b'
+a3_ok() { local s; s="$(printf '%s\n' "$UA3" | noq | sents | grep -iE "$USERUPD" || true)"
+  [ -n "$s" ] && printf '%s\n' "$s" | gq -iE '\b(not|never|doesn.t|does not|won.t|don.t)\b[^.;]{0,20}\babort' \
+  && printf '%s\n' "$UA3" | noq | gq -iE '\bcommits? nothing\b|\bnothing (is )?committed\b|\b(never|not|doesn.t|does not|won.t|don.t) commit' \
+  && printf '%s\n' "$UA3" | noq | gq -iE '\binstead\b' \
+  && ! printf '%s\n' "$s" | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE '\babort(s|ed|ing)?\b|\bcommits? (the rest|everything|them|it|all|your other)\b'; }
+check "owner call A3 (the user's own update): a record already in conflict from the user's update is not aborted and nothing is committed; on a yes to Uncommitted changes resume-it says \"$OC2_A3\" instead" 'a3_ok'
+# A3, last sentence: the commit offer's ordinary line is for a record merely changed, never the one said for a conflicted one
+WUO="$(printf '%s\n' "$WU" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noq | sents)"
+ORDL='\bORDLINE\b|\bordinary (commit(-offer)? )?line\b|\bcommit offer.s (ordinary )?line\b'
+a3b_ok() { printf '%s\n' "$WUO" | grep -iE "$ORDL" | gq -iE '\bmerely changed\b|\b(not|isn.t|never) (in )?(a )?conflict(ed)?\b' \
+  && ! printf '%s\n' "$WUO" | grep -iE "$ORDL" | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "($ORDL)[^.;]{0,60}\bconflict"; }
+check "owner call A3 (the ordinary line): the commit offer's ordinary line (\"$OC_COMMIT\") is for a record that is merely changed, not conflicted, and no sentence says it for a conflicted one" 'a3b_ok'
+
+# A4: both lines are there verbatim (nothing added inside the quotes: no value, no forecast), and no sentence of their units
+# that names /ship-it says, on its affirmed text, what /ship-it will do (owner call 1's list); owner call 1 still runs on both
+a4_ok() { [ -n "$UA2" ] && [ -n "$UA3" ] && ! { printf '%s\n' "$UA2"; printf '%s\n' "$UA3"; } | noq | sents | grep -iE '/ship-it' | RP_STRONG=1 rpair | cut -d $'\x1f' -f2 | gq -iE "$OC_FUT"; }
+check "owner call A4 (own words only): both conflict lines are said verbatim, and no sentence around them says what /ship-it will do" 'a4_ok'
+
+# Call B: the guide's record rules ("### The record") say /ship-it writes the record ending in a single newline, with no
+# trailing spaces, so formatters leave it as written; then a fixture record is written the way they say and run through
+# an end-of-file check and a trailing-whitespace check, modelled on pre-commit-hooks' fixers (nothing installed)
+RECS="$(printf '%s\n' "$SEC" | awk '/^```/{f=!f} !f&&/^#/{on=($0=="### The record")} on' | units | sents | pair)"
+recsays() { local PAIRS="$RECS"; says "$@"; }
+B_NL='+\bend(s|ing)? (in|with) (a )?(single|one)( final)? newline\b'
+B_TS='\b(no|without( any)?) trailing (spaces|whitespace)\b'
+check "owner call B1 (the record's last byte): the guide's record rules say /ship-it writes the record ending in a single newline, with no trailing spaces, so a repo's formatters leave it as written" \
+  'recsays "+/ship-it\b[^.;]{0,10}\bwrites?\b" "$B_NL" "$B_TS" "+\bformatters?\b[^.;]{0,20}\bleave\b"'
+BNL=0; recsays "+/ship-it\b[^.;]{0,10}\bwrites?\b" "$B_NL" && BNL=1
+BTS=0; recsays "+/ship-it\b[^.;]{0,10}\bwrites?\b" "$B_TS" && BTS=1
+PYB='
+import json, sys
+nl, ts = sys.argv[1] == "1", sys.argv[2] == "1"
+s = json.dumps(json.loads(sys.argv[3]), indent=2, separators=(", ", ": "))   # leaves ", " at line ends, no final newline
+if ts: s = "\n".join(l.rstrip() for l in s.split("\n"))
+if nl: s = s.rstrip("\n") + "\n"
+eof = lambda t: t if t == "" else t.rstrip("\r\n") + "\n"                                      # end-of-file-fixer
+tw = lambda t: "".join(l.rstrip("\r\n").rstrip() + l[len(l.rstrip("\r\n")):] for l in t.splitlines(True))  # trailing-whitespace
+bare = s.rstrip("\n")
+sys.exit(0 if eof(s) == s and tw(s) == s and eof(bare) != bare else 1)
+'
+check "owner call B2 (fixer-proof): the guide's example record, written the way its record rules say, is left unchanged by an end-of-file check and a trailing-whitespace check; the same record without its final newline is not" \
+  '[ -n "$JSON" ] && python3 -I -c "$PYB" "$BNL" "$BTS" "$JSON" 2>/dev/null'
+
 # controls (the real guide only)
 if [ -z "${1:-}" ]; then
   CLEAN='{"schema": 1, "items": {
