@@ -1078,20 +1078,25 @@ check "owner call A2 (its own update): when an update resume-it began stops with
 
 # ---- Task 2 owner call after review 7 (task-2-owner-call-4-brief.md, 2026-11-11): one general rule (call D) ----
 # USERUPD: a sentence about the user's update; OWNUPD: one about the update resume-it began itself (A2, D4)
-USERUPD='\bthe user\b[^.;]{0,30}\b(ran|run|started|began|made)\b|\bthe user.s (own )?(update|merge|rebase)\b|\balready in conflict\b|\bhalf-done\b'
-OWNUPD='\bresume-it\b[^.;]{0,15}\b(itself )?(began|begins|started|starts)\b|\bresume-it.s own\b|\bits own (update|rebase)\b'
+# (strengthened after review 8, I1: "began / started" is resume-it's own update only beside "itself", and "already
+# unfinished" -- D4's words for an update resume-it did not begin -- marks the user's side, so it is never excused)
+USERUPD='\bthe user\b[^.;]{0,30}\b(ran|run|started|began|made)\b|\bthe user.s (own )?(update|merge|rebase)\b|\balready in conflict\b|\bhalf-done\b|\balready unfinished\b|\bunfinished when resume-it (started|starts|began)\b'
+OWNUPD='\bresume-it\b[^.;]{0,15}\b(itself (began|begins|started|starts)|(began|begins|started|starts) itself)\b|\bresume-it.s own\b|\bits own (update|rebase)\b'
 UD2="$(printf '%s\n' "$WU" | grep -F -- "\"$OD2\"" || true)"
 # the replaced lines (owner call C's three lines, A3's old line): none may remain, whole or in part
 OC_GONE=( -e "or tell me to undo the update" -e "Resolve it in the file and finish the update yourself" -e "Your update isn't finished, and it includes your go-live record" -e "I undid your update" -e "You can resolve it in the file yourself" )
 
 # (re-pointed from owner call A3, "the user's own update": D2's line, not C1's, said instead of saving)
+# (restored after review 8, C1: A3's passage-wide guard -- no sentence of the passage about the user's update affirms
+# that resume-it commits the rest, everything, them, it, all or your other changes; the commit offer's own unit is not one)
 # D2, instead of saving: D2's exact line sits in the passage; its unit says it is said instead, where the rule stops a save
 # (a yes to Uncommitted changes, or anywhere resume-it would commit); the unit affirms no commit of the rest
 d2_instead_ok() { [ -n "$UD2" ] && printf '%s\n' "$CP" | gq -F -- "\"$OD2\"" \
   && printf '%s\n' "$UD2" | noqs | sents | raff | grep -iE '\binstead\b' | gq -iE '\bUncommitted changes\b|\bwould commit\b|\bsav(e|es|ing)\b' \
   && printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\b(stops?|keeps?|holds?)\b[^.;]{0,30}\bfrom sav(e|ing)\b|\bUncommitted changes\b' \
-  && ! printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\bcommit(s|ting)? (the rest|everything|them|all|your other)\b|\b(saves?|saving) (the rest|everything|them|all)\b|\bafter (committing|saving)\b'; }
-check "owner call A3 -> D2 (the one line, instead of saving): wherever the rule stops resume-it from saving for the user (a yes to Uncommitted changes, or anywhere else it would commit), it says \"$OD2\" instead, and commits nothing of the rest" 'd2_instead_ok'
+  && ! printf '%s\n' "$UD2" | noqs | sents | raff | gq -iE '\bcommit(s|ting)? (the rest|everything|them|all|your other)\b|\b(saves?|saving) (the rest|everything|them|all)\b|\bafter (committing|saving)\b' \
+  && ! printf '%s\n' "$CUSM" | grep -iE "$USERUPD" | raff | gq -iE '\bcommits? (the rest|everything|them|it|all|your other)\b'; }
+check "owner call A3 -> D2 (the one line, instead of saving): wherever the rule stops resume-it from saving for the user (a yes to Uncommitted changes, or anywhere else it would commit), it says \"$OD2\" instead, and commits nothing of the rest -- nor does any sentence of the passage about the user's update" 'd2_instead_ok'
 # A3, last sentence: the commit offer's ordinary line is for a record merely changed, never the one said for a conflicted one
 WUO="$(printf '%s\n' "$WU" | L="$OC_COMMIT" perl -pe 's/"\Q$ENV{L}\E"/ORDLINE/g' | noq | sents)"
 ORDL='\bORDLINE\b|\bordinary (commit(-offer)? )?line\b|\bcommit offer.s (ordinary )?line\b'
