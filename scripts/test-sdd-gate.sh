@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Regression test for .claude/make-it/sdd/scripts/sdd-gate.
-# Exit 2 from the gate = it blocks the stop (run still armed); 0 = no-op.
+# "2" below = the gate blocks the stop (run still armed); 0 = no-op.
+# A block is exit 0 with {"decision": "block", "reason": "SDD gate: ..."} on stdout. Exit 2 + stderr was
+# the old form: Claude Code 2.1.322 reports it as "Hook script appears to be missing" and does not block.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 GATE="$root/.claude/make-it/sdd/scripts/sdd-gate"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 export SDD_GATE_REGISTRY="$T/sdd-runs"
 fail=0
-expect() { # expect <label> <want-exit> <payload-json>
-  printf '%s' "$3" | python3 "$GATE" >/dev/null 2>&1; got=$?
+expect() { # expect <label> <want: 2 = block, 0 = no-op> <payload-json>
+  out=$(printf '%s' "$3" | python3 "$GATE" 2>/dev/null); rc=$?
+  if [ "$rc" = 0 ] && [ -z "$out" ]; then got=0
+  elif [ "$rc" = 0 ] && printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("decision")=="block" and d.get("reason","").startswith("SDD gate:") else 1)'; then got=2
+  else got="exit $rc, stdout '${out:0:60}'"; fi
   if [ "$got" = "$2" ]; then echo "ok   $1"; else echo "FAIL $1 (want $2, got $got)"; fail=1; fi
 }
 arm() { mkdir -p "$1/.make-it/sdd"; printf 'RUN: plan=p.md tasks=2\n' > "$1/.make-it/sdd/progress.md"; }
