@@ -3,8 +3,10 @@
 
 A rule in a prompt is advice the controller can forget mid-run; a Stop hook is a
 gate it cannot talk its way out of. When the main agent tries to end its turn
-while an SDD run is open, this exits 2 with a reminder on stderr, which Claude
-Code feeds back as the next instruction. It is a no-op outside an active run.
+while an SDD run is open, this prints {"decision": "block", "reason": <reminder>} and
+exits 0; Claude Code feeds the reason back as the next instruction. (It used to exit 2
+with the reminder on stderr; Claude Code 2.1.322 reports that as a missing script and
+does not block.) It is a no-op outside an active run.
 
 Ledger: <repo>/.make-it/sdd/progress.md (append-only lines)
   RUN: plan=<path> tasks=<N>     controller writes this when a run starts
@@ -208,13 +210,16 @@ def check(ledger, transcript=None):
     else:
         todo = (f"all {total} checkpoints complete but the run is still open. Run the final "
                 "whole-branch review, fix its findings, then append `STATUS: DONE`.")
-    sys.stderr.write(
+    # Block through the JSON decision (exit 0). Claude Code 2.1.322 reports a Stop hook's exit 2 as
+    # "Hook script appears to be missing" and lets the turn end, so the old stderr + exit 2 never blocked.
+    reason = (
         f"SDD gate: {todo} Do not stop to ask whether to continue. "
         f"Escape hatches (append ONE line to {ledger}): "
         "`STATUS: BLOCKED <why>` if you cannot proceed; `STATUS: AWAITING_HUMAN <what>` if only "
         "the user can answer; `STATUS: DONE` when finished. After the user answers, append "
         f"`RUN: resume` to re-arm the gate. Nudge {nudges + 1}/{CAP}; after nudge {CAP} the gate releases.")
-    return 2
+    print(json.dumps({"decision": "block", "reason": reason}))
+    return 0
 
 
 try:
