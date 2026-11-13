@@ -960,6 +960,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.56.0 -- /wrap-it asks through the approval block
+
+- **Saving is no longer asked:** /wrap-it saves the session's changes as a local commit, says in
+  one line what it saved and how to take it back, and never saves a file that may hold a password
+  or key (it is left on disk, unsaved, and the user is told). Nothing is pushed.
+- **Deletions stay active confirmation:** removing finished worktrees and deleting merged local
+  branches each says what is deleted and whether it comes back, and the user names each one; "all"
+  counts only with the number in it. Worktrees are never forced; branches use `git branch -d` only.
+- **Every other gate kept:** data volumes are never removed, processes are never killed, nothing is
+  pushed, no new work is started, and the state file is always updated.
+- **Checked:** `scripts/test-wrap-it-asks.sh`.
+
 ### v1.55.0 -- /backlog-it asks through the approval block
 
 /backlog-it's five approval points now follow `approval-block.md`; every gate is kept.
