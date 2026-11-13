@@ -79,6 +79,9 @@ Nothing in this skill puts a left-out item back on its own (step 6b's dependency
 and the test phase's fixes included), and the test phase's pass/fail report reads a left-out
 item's tests as `left-out-record.md` says.
 
+**The go-live record, everywhere in this skill:** follow the readiness check's read-only rule
+(step 2, Go-live checklist).
+
 **0. Look for a /clear-it handoff (highest-priority context):**
 
 Check for `handoff.md` in the project root. This file is left by /clear-it as a
@@ -510,6 +513,9 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Standards gaps found (important) | "There are [N] improvements available since your app was built ([name each]) and no must-do updates -- say 'apply the improvements' or 'not now'." (active confirmation -- the ask below, one group) |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
+On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
+file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
+
 **When standards gaps are found, present them in plain language:**
 
 If the catch-up scan found gaps, include a brief summary in the status:
@@ -541,6 +547,15 @@ updates / improvements]' or 'not now'."
 
 Items left out by your choice (step 8) are not in [N] or the other counts, the must-do or
 improvements groups, or the ask; the status summary (2) already mentions each one.
+
+A catch-up gap found in `.ship-it-go-live.json` (X01, for example) is not fixed or applied in any
+group: it isn't in [N], the counts or the ask, it is never added to TODO.md, and it is not
+counted or offered as something to tackle. The X01 `[BLOCK]` gap (a password or key in the
+record) gets the scanner step's serious line and holds up the user's work, as a serious finding
+does, until the record on disk no longer holds that password or key, or the user says to go on (a
+go-on from the scanner step stands). Any other gap gets the less serious line and doesn't hold up
+the catch-up. Each line is said once per session in all: if the scanner step said it, don't say
+it again.
 
 The user names the group(s). The must-do group can change sign-in and permissions and the
 improvements can add database tables, so this is active confirmation, per the approval block: a
@@ -723,6 +738,57 @@ For **production**, detect the org's preferred approach:
 - If none detected, ask the user: "Where does your organization store production secrets -- a cloud secrets manager, HashiCorp Vault, or another secrets manager?"
 - Default recommendation: Use the secrets manager native to the chosen cloud provider
 
+**Go-live checklist:**
+
+Read `.ship-it-go-live.json` the way `ship-it-guide.md`'s Go-live checklist says the answer counts
+(The record): main's copy merged with the branch's, read only. When GitHub can't be reached,
+resume-it adds no line of its own about that. resume-it only reads the go-live record: it never
+writes, stages or commits it, because /ship-it owns it. About the go-live record, resume-it says
+only what it did, what the record holds, and that /ship-it owns the file; it never says what
+/ship-it will do. If the user asks resume-it to fix or change an answer in the record, say in one
+line that /ship-it owns that file and they can change the answer in the file themselves, and offer
+nothing else. No step of resume-it stages a change to
+`.ship-it-go-live.json`, scanner fixes and feature commits included. A Claude Desktop bundle's
+first commit (step 0) keeps the file exactly as it came in the bundle, without editing it:
+committing a bundle exactly as it was received is not a change to the go-live record, and it is
+the only case in which resume-it commits the file.
+Go-live items are normal open items, not left-out items (`left-out-record.md`). In the checklist
+file's `### Go-live checklist` (step 6), list:
+- each `skipped` or missing item that the guide's Asking asks again, with its reason and date. An
+  item that isn't an object, or whose state is unknown, counts as missing;
+- each item that Asking marks `coming soon` instead (items 2-5), which reads "not built yet", not
+  as a step for the user;
+- with no record on the branch and none readable on main (none there, unreadable, or GitHub
+  unreachable), only the "Not started" line: today's /ship-it doesn't run the checklist yet (the
+  guide's Safety steps /ship-it doesn't run yet). When the branch's record is unreadable and
+  main's copy can't be read either, a record still exists: treat all five items as missing, by the
+  guide's count, and list them as above, never with the "Not started" line. resume-it never
+  repeats /ship-it's line ("I couldn't read your go-live record, so I'm going through it again").
+  Only when no copy of the record can be read (the branch's is unreadable, and main has none or it
+  is unreadable too), it says one line: "I couldn't read your go-live record, so the list shows
+  none of its answers." When main's copy can be read, resume-it uses it as the guide says and says
+  nothing about the branch's file.
+
+Values from the go-live record are shown only as these rules allow, never a hidden value or any
+part of one:
+- A stored reason the guide's No secret rule would refuse is never copied into NEXT-STEPS.md: the
+  line reads `skipped -- (reason not shown) ([date])`. A stored reason over 200 characters counts
+  as missing.
+- A `skipped` item with no reason, or an empty one, shows `(no reason given)`.
+- A stored reason in the guide's left-out words (The record), on an item not left out now, shows
+  "marked left out by your choice; not left out now", on a normal open line, whether or not it was
+  ever left out.
+- A reason's line breaks become spaces, so it stays on one line, and it shows as quoted text.
+- A `date` that isn't a real `YYYY-MM-DD` date shows as `(no date)`.
+- While a scanner finding or a catch-up gap is open on the go-live record, every stored reason
+  in the record shows as `(reason not shown)` in NEXT-STEPS.md, whatever the guide's patterns say.
+
+`done` and `na` items are not listed. A go-live item whose check belongs to an item left out now
+(`left-out-record.md`, read step 3) is kept quiet, whatever its stored reason says: never listed,
+never asked again. When a
+record leaves nothing open, leave the subsection out. List go-live items only there, never under
+"What you can do right now", and never offer a fix unless the user asks.
+
 **3. Check .env file (or .env.example) for missing values:**
 
 ```bash
@@ -805,6 +871,12 @@ Write a `NEXT-STEPS.md` file to the project root that the user can share with th
 ### Security / Compliance
 - [ ] [Security item] -- [What needs to happen]
 
+### Go-live checklist
+- [ ] [Item]: skipped -- "[reason]" ([date]) -- still open
+- [ ] [Item]: not answered yet
+- [Item]: not built yet in /ship-it (coming soon)
+- Not started -- /ship-it doesn't run this checklist yet.
+
 ## Secrets & Environment Variables
 
 **Local:** All secrets stored in `.env` (never committed to git)
@@ -859,6 +931,26 @@ read step 3) is not fixed, whatever its severity, and doesn't hold up the user's
 user once per session, one plain line per item, with no scan detail: "[N] safety warning(s)[ --
 one is serious] are about [item], which you left out, so I didn't change it."
 
+A finding on `.ship-it-go-live.json` is never fixed by resume-it, whatever its severity: /ship-it
+owns that file (readiness check step 2, Go-live checklist). A finding or gap on the record is never
+added to TODO.md, and is not counted or offered as something to tackle.
+- A Critical or High finding that a password or key is in the record is serious: it holds up the
+  user's work, as any Critical or High finding does. Tell the user once per session in all, in
+  these words, which name no value: "A serious safety warning says a password or key is in your
+  go-live record. /ship-it owns that file, so I didn't change it. Before we go on: remove it from
+  the file, and replace that password or key with a new one -- it may already be in your saved
+  history." Re-read the file: go on once the record on disk no longer holds the password or key
+  the finding names; don't wait for the scanner's report to close. A finding whose value is no
+  longer in the record on disk doesn't hold, and it is not said again.
+- Any other finding on the record, Critical and High ones included, is less serious: it doesn't
+  hold up the user's work. Tell the user once per session in all, in one plain line that names no
+  value: "A safety warning is about an answer in your go-live record. /ship-it owns that file, so
+  I didn't change it; you can change that answer in the file yourself."
+- If the user says to go on without removing the password or key, go on. A go-on given once
+  holds for the session, for the scanner step and the catch-up alike; list the finding as open in that session's wrap-up
+  summary, and never suggest going on yourself.
+(`ship-it-guide.md`'s Go-live checklist, No-secret rule.)
+
 **2. For each finding (critical/high first):**
 
 **If scanner API is available** (`SECURITY_SCANNER_API_KEY` set in `.env`):
@@ -898,7 +990,7 @@ one is serious] are about [item], which you left out, so I didn't change it."
 4. If tests pass: commit, push, update CHANGELOG.md
 5. Do NOT close the GitHub Issue manually -- scanner will auto-close after rescan confirms the fix
 
-**3. After all critical/high findings are resolved (a left-out item's findings aside):**
+**3. After all critical/high findings are resolved (a left-out item's findings aside; a serious one on the go-live record counts as resolved once the record on disk no longer holds that password or key, or the user said to go on):**
 
 - Continue to the user's requested work (greet-and-suggest or execute-work)
 
@@ -906,6 +998,7 @@ one is serious] are about [item], which you left out, so I didn't change it."
 - If fixes are invisible (dependency updates, security headers, config changes): Nothing. The user is never told.
 - If fixes change behavior: A simple request to verify via /try-it.
 - If a finding belongs to a left-out item: the one plain line above.
+- If a finding is on `.ship-it-go-live.json`: its words above, by how serious it is.
 - They NEVER see scan reports, CVE numbers, or technical details about findings.
 
 </step>
