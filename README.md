@@ -960,6 +960,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.54.0 -- /make-it's web-app build go asks through the approval block
+
+The preview question in `ui-gate.md` is also the go-ahead to build, and it was a plain "yes". It is
+now one decision-ready ask: what a go starts, the evidence (the preview), what it touches and the
+undo, what is unusual against the plan, and the one thing to check (who sees which screen). The
+user answers "build it" or says what to change.
+- **High-stakes case:** a /resume-it feature that changes who can see or do something the app
+  already has needs the user to name those screens and roles; a plain yes is not enough.
+- **Learnings:** the offer after the build follows `learnings.md` (one batched ask, each item with
+  its evidence).
+- **Checked:** `scripts/test-ui-gate-go.sh`.
+
 ### v1.53.0 -- Go-live checklist: the contract, and /resume-it lists what's open
 
 `ship-it-guide.md` gains the **Go-live checklist** contract: five go-live items (terms and privacy
