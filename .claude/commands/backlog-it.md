@@ -29,6 +29,7 @@ Full doctrine (settings, layout, frontmatter, capture, bug queue, lanes, every s
 <execution_context>
 
 @~/.claude/make-it/references/backlog-board.md
+@~/.claude/make-it/references/approval-block.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/worktree-workflow.md
 

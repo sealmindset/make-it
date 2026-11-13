@@ -960,6 +960,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.55.0 -- /backlog-it asks through the approval block
+
+/backlog-it's five approval points now follow `approval-block.md`; every gate is kept.
+- **`start`'s go** stays an edit step and ends with what `go` starts: `Go` or `Edit first`.
+- **The standing preamble** (every started card and every dispatch lane gets it): the stop at the
+  open PR is one decision-ready ask, `Merge` or `Hold`; the harm gate is active confirmation --
+  `Merge only` or `Merge and deploy -- to <environment>`, never a plain yes.
+- **A draft plan's go** is one ask: `Approve`, `Change first` or `Not now`.
+- **The high-stakes alignment brief** ends in active confirmation: `Add alongside` or `Change the
+  working path`, each naming where it is rehearsed, or `Not now`. Never batched.
+- **`undo`** still asks nothing; its message names the commit it reverted.
+- **Checked:** `scripts/test-backlog-it-asks.sh`.
+
 ### v1.54.0 -- /make-it's web-app build go asks through the approval block
 
 The preview question in `ui-gate.md` is also the go-ahead to build, and it was a plain "yes". It is
