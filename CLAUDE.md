@@ -131,7 +131,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 `/wrap-it` cleanly wraps up a work session. The user runs it when they're done for the day.
 
 0. **Discover** -- Check what's running (containers), what's changed (git status), read state files
-1. **Save** -- Offer to commit uncommitted changes, update TODO.md, CHANGELOG.md, and .make-it-state.md
+1. **Save** -- Commit uncommitted changes locally (never a file that may hold a password or key; the user can take the save back), update TODO.md, CHANGELOG.md, and .make-it-state.md
 2. **Shutdown** -- `docker compose down` (preserves data volumes for fast restart), check for orphaned ports
 3. **Report** -- Summary of what was saved, what was shut down, and top 3 items for next session
 
