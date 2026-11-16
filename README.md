@@ -430,7 +430,8 @@ Depending on what's missing, `/retrofit-it` can add:
 
 | Command | What It Scans |
 |---------|--------------|
-| `/nemo-it` or `/nemo-it full` | Everything: NeMo AI safety + OWASP + Dependencies + Static Analysis |
+| `/nemo-it` or `/nemo-it full` | Everything: NeMo AI safety + OWASP + Dependencies + Static Analysis + Deep Code Audit |
+| `/nemo-it audit` | Deep code audit only: reads the code for logic flaws (no running app needed) |
 | `/nemo-it guardrails` | NeMo Guardrails AI safety testing only (6 categories) |
 | `/nemo-it owasp` | OWASP Testing Guide (all 11 categories) + dynamic analysis |
 | `/nemo-it deps` | Dependency vulnerabilities + container image scanning |
@@ -441,6 +442,7 @@ Depending on what's missing, `/retrofit-it` can add:
 1. **Preflight** -- Detects your project type, installs security tools (with permission), checks if the app is running
 2. **Static Analysis** -- Scans source code with semgrep, Bandit (Python), ESLint security (JS/TS) for vulnerability patterns
 3. **Dependency Scanning** -- Runs npm audit, pip-audit, and Trivy to find vulnerable libraries and container images
+   - **Deep Code Audit** -- Several reviewers read the code for flaws in the app's own logic (a login that can be skipped, one customer reading another's records); a separate reviewer tries to disprove each one. Only what survives is reported with a severity; a lead that needs a fact the code can't show is listed as "needs validation". It reads only: nothing is run, installed or sent. Uses Cloudflare's [security-audit skill](https://github.com/cloudflare/security-audit-skill) (MIT), vendored at a pinned commit in `.claude/make-it/security-audit/`. This is the longest phase and uses many agents; say `quick` for a shorter, partial pass
 4. **Dynamic Analysis** -- Tests the running app with OWASP ZAP, Playwright, and pytest for auth bypass, XSS, injection, and more
 5. **AI Safety Testing** -- If AI features are detected, runs NeMo Guardrails tests across 6 categories (prompt injection, jailbreak, toxicity/bias, topic boundaries, PII leakage, hallucination). If no AI features, marks all as N/A
 6. **Attestation Generation** -- Produces a versioned report at `docs/attestations/nemo-it/YYYY-MM-DD-vN.md`
@@ -497,9 +499,13 @@ claude
 5. **Re-scan** -- Runs `/nemo-it` again to produce an updated attestation with before/after delta
 6. **Report** -- Presents what was fixed, what remains, and the risk posture change
 
+### Deep-audit findings: fixed without asking, on a branch
+
+Critical and High findings from the deep code audit change who can do what in the app, so they get their own path. `/fix-it` fixes each one without asking: a test that shows the flaw first (it must fail), the smallest fix, then a fresh agent tries to get in another way. Each fix is its own commit on a new `fix-it/YYYY-MM-DD` branch. The skill never merges that branch: the report shows before, after, the test and the reviewer's check for each, and you keep or drop it. A fix that fails twice is undone and goes on the manual list. "Needs validation" leads are never fixed.
+
 ### Fix Strategies
 
-The skill includes 12 automated fix strategies:
+The skill includes 13 automated fix strategies:
 
 | Strategy | Example |
 |----------|---------|
@@ -515,6 +521,7 @@ The skill includes 12 automated fix strategies:
 | Config fixes | Terraform TLS versions, file permissions |
 | Temp file fixes | `mktemp()` to `mkstemp()` |
 | Hardcoded secrets | Extract to env vars + `.env.example` |
+| Deep-audit findings | Missing permission check, cross-customer read: regression test, smallest fix, independent re-check |
 
 ### Git Strategy
 
@@ -522,6 +529,8 @@ Before making changes, `/fix-it` creates a rollback point (`git tag pre-fix-it`)
 1. New `fix-it/YYYY-MM-DD` branch
 2. Current branch, single commit
 3. Current branch, one commit per fix category
+
+When deep-audit findings are in scope there is no choice: the run uses a new `fix-it/YYYY-MM-DD` branch.
 
 ### Usage
 
@@ -959,6 +968,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.57.0 -- /nemo-it deep code audit, and /fix-it fixes its Critical and High findings
+
+- **New phase in `/nemo-it`:** a deep code audit runs by default (and alone as `/nemo-it audit`). It
+  maps the app, hunts for flaws in its own logic, and has a separate reviewer try to disprove each
+  one. Confirmed flaws become `AUDIT-` findings; leads it cannot settle from the code are listed as
+  "needs validation" with no severity. It only reads the code.
+- **Vendored, pinned:** Cloudflare's security-audit skill (MIT) at commit `c1c8a8c`, unmodified, in
+  `.claude/make-it/security-audit/` with its licence and a checksum list.
+- **`/fix-it` fixes them without asking:** each Critical and High `AUDIT-` finding gets a failing
+  test, the smallest fix, and a fresh agent's re-check, as its own commit on a `fix-it/<date>`
+  branch. Nothing is merged; you keep or drop the branch. Two failed tries: undone, listed as manual.
+- **Not included:** a sandbox for running the project's code during the audit. Without one, leads
+  that need the code run stay "needs validation". /make-it's silent build scan is unchanged.
+- **Checked:** `scripts/test-nemo-audit.sh`.
 
 ### v1.56.0 -- /wrap-it asks through the approval block
 

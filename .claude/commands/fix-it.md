@@ -41,6 +41,11 @@ Auto-selected from `app-context.json` + this skill; no user prompt. See
 - Work on the current branch with a single commit
 - Work on the current branch with one commit per finding category
 
+**Deep-audit findings** (`AUDIT-`, from /nemo-it's deep code audit): every CRITICAL and HIGH one is
+fixed without asking -- a test that shows the flaw first, the smallest fix, then a fresh agent
+re-checks it. That always happens on a new `fix-it/YYYY-MM-DD` branch, which is never merged by
+this skill: the user keeps or drops it from the report.
+
 This skill has 6 phases:
 0. **Preflight** -- Locate attestation, parse findings, detect project stack
 1. **Triage** -- Classify every finding as auto-fixable or manual-only, present plan, get approval
@@ -112,12 +117,16 @@ If found:
 Read the attestation file and extract all findings into a structured list:
 
 For each finding, extract:
-- **ID** (e.g., CRIT-001, HIGH-003, MED-007)
+- **ID** (e.g., CRIT-001, HIGH-003, MED-007, AUDIT-002)
 - **Severity** (CRITICAL, HIGH, MEDIUM, LOW, INFO)
 - **Title** (short description)
 - **Where** (file path, line number, package name)
-- **Category** (dependency, code-pattern, config, ai-safety, infrastructure)
+- **Category** (dependency, code-pattern, config, ai-safety, infrastructure, code-logic)
 - **Remediation type** (PROGRAMMATIC_FIX, TECHNOLOGICAL_CONTROL, PROCESS_CONTROL, ACCEPT_RISK)
+
+For an `AUDIT-` finding (the deep code audit), also keep its **fingerprint** and the attestation's
+**Run folder**: the full record is the entry with that fingerprint in `[Run folder]/findings.json`.
+Rows in the attestation's "Needs validation" table are not findings. They are never in scope.
 
 **3. Parse the scan mode from user input:**
 
@@ -175,6 +184,11 @@ reference (fix-strategies.md). Each finding gets one of these classifications:
 | **SEMI-AUTO** | Can be fixed automatically but needs user review of the change | Will fix, then show diff |
 | **MANUAL** | Cannot be safely auto-fixed; requires human understanding of business logic | Skip, add to manual list |
 | **SKIP** | Finding is informational or accepted risk | Skip |
+| **AUDIT** | An `AUDIT-` finding rated CRITICAL or HIGH whose remediation is a code change | Will fix without asking, on a `fix-it/[date]` branch (Step 7) |
+
+An `AUDIT-` finding rated MEDIUM or lower that is in scope is SEMI-AUTO and goes through Step 7 the
+same way, with its diff shown. One whose remediation is not a code change (PROCESS_CONTROL, a setting
+outside the code) is MANUAL. One marked ACCEPT_RISK is SKIP.
 
 **Auto-fixable categories** (reference fix-strategies.md for full details):
 
@@ -217,6 +231,16 @@ These I can fix, but I will show you the changes for review.
 | 1 | [title] | [sev]    | [fix] | [reason] |
 | ... | ... | ... | ... | ... |
 
+**Deep-audit fixes ([N] findings):**
+Flaws in how the app decides who may do what. I fix each one without asking: a test that shows
+the flaw first, then the smallest fix, then a separate reviewer checks the hole is closed. All of
+it stays on a separate branch until you decide to keep it.
+
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| 1 | [title] | [sev]    | [one-line fix description] |
+| ... | ... | ... | ... |
+
 **Manual ([N] findings):**
 These need human judgment. I will add them to TODO.md.
 
@@ -237,6 +261,14 @@ How would you like me to handle git?
 Ready to proceed?"
 
 **Wait for user approval before making any changes.**
+
+**When any AUDIT finding is in scope**, the plan above is a note, not a question: leave out the
+git strategy list and "Ready to proceed?", say "Everything goes on a new branch, `fix-it/[date]`.
+Nothing reaches your current branch unless you keep it.", and start. The `fix-it/[date]` branch is
+not asked for and is not a choice here: it is what makes fixing without asking safe to undo. Create
+it before the first change (`git checkout -b fix-it/YYYY-MM-DD`; a second run the same day adds
+`-2`). Uncommitted changes already in the project are left as they are and never committed by this
+run; if a fix has to touch one of those files, that finding is MANUAL.
 
 </step>
 
@@ -346,7 +378,55 @@ Add rate limiting middleware to AI endpoints:
 
 Report: "Added rate limiting to [N] AI endpoints."
 
-**Step 7: Commit changes**
+**Step 7: Deep-audit findings (AUDIT class)**
+
+Runs last, after every step above has passed its verification, so a library upgrade or a config fix
+that already closed a hole is seen first. Work through the findings one at a time, CRITICAL before
+HIGH. Never in parallel: two fixes to the same permission check undo each other.
+
+For each finding:
+
+1. **Read the record** in `[Run folder]/findings.json` by its fingerprint: the path from entry point
+   to the missing check, the rule the code should enforce, and the smallest fix it recommends. If the
+   code at that path has changed since the audited commit, or an earlier step already closed it, the
+   reviewer in point 4 decides; do not fix from a stale record.
+2. **Write the test first.** One regression test in the project's own test framework that does what
+   the record says an attacker can do, with made-up users and data, and asserts it is refused. Run
+   it: the test must fail before the fix, for the reason the record gives. If it passes, the flaw is
+   not there as described -- the finding is MANUAL with that note, and nothing is changed. If the
+   project has no way to run such a test, the finding is MANUAL: a fix that cannot be shown to work
+   is not applied.
+3. **Make the smallest fix** at the last point the code can still be trusted to decide (the record
+   names it). No refactor, no tidy-up of nearby code, no new dependency. The new test passes and the
+   project's whole test suite still passes. An existing test is never changed, skipped or deleted to
+   get there: if one fails, either the fix is wrong or that test pinned the flaw, and the finding is
+   MANUAL with the test named.
+4. **A fresh agent re-checks it** -- never the one that wrote the fix, and on Fable (Opus if Fable is
+   unavailable), never Sonnet or Haiku. Give it the record, the diff and the test, not your
+   reasoning. It tries to reach the same result another way (a sibling route, another role, another
+   way of sending the same input) and checks that nothing changed for the people who were always
+   allowed. It answers closed or not closed, with the path it tried.
+5. **Commit that finding on its own:** `git commit -m "fix-it: AUDIT-NNN [title]"`, test and fix
+   together.
+6. **Not closed, or the suite went red:** find the cause again (/debug-it) and try once more. If the
+   second try also fails, revert that finding's changes (`git revert` its commit, or `git checkout --
+   <files>` if nothing was committed) and mark it MANUAL with what was tried and why it failed.
+   Never a third try on a guess.
+
+Report after each: "[AUDIT-NNN]: closed. [What an attacker could do before, in one line]; now
+[what happens instead]. Test: [test name]." or "[AUDIT-NNN]: not fixed, [reason]. It is on the
+manual list."
+
+Limits that hold throughout:
+- `needs_validation` rows are never fixed here: nobody has shown they are real.
+- Never merge the `fix-it/[date]` branch, push it, or delete it. Keeping or dropping it is the
+  user's call in the report.
+- If the fix is a setting outside the code (a proxy rule, a cloud permission), it is MANUAL.
+
+**Step 8: Commit changes**
+
+When Step 7 ran, the branch already exists and each audit fix is committed: commit the earlier
+steps' changes on it the same way (option 1 below, without the `checkout -b`).
 
 Based on user's chosen git strategy:
 
@@ -455,6 +535,10 @@ Report: "Verification complete. [N] checks passed, [M] issues resolved during se
 
 **Run /nemo-it in the same mode as the original scan.**
 
+If the original scan included the deep code audit, the re-scan's audit reads the earlier run (its
+own prior-runs rule) and re-checks the code that changed, so it costs less than the first one. A
+fixed finding counts as fixed only when this new audit no longer confirms it.
+
 Parse the original attestation to determine what mode was used (full, sast, deps, etc.)
 and re-run with the same mode.
 
@@ -512,6 +596,19 @@ The new attestation will be saved with an incremented version number
 These remaining items have been added to `TODO.md` under a '## Security Fixes (Manual)' section.
 [If the project has a board (`/backlog-it`), also file each as a `breakfix` card, `stage: Reported`.]
 
+[If deep-audit fixes ran:]
+## Fixed without asking ([N] deep-audit findings):
+
+| Finding | Before | Now | Test that proves it | Reviewer's check |
+|---------|--------|-----|---------------------|------------------|
+| [AUDIT-NNN title] | [what an attacker could do] | [what happens instead] | [test name] | [the other way in it tried] |
+
+These change who can do what in your app, so they are on the branch `fix-it/[date]` and nowhere
+else. The one thing to check: sign in as an ordinary user and do the everyday things from the
+table above -- they should work exactly as before.
+- **Keep it:** merge `fix-it/[date]` into [original branch] (or say "keep it" and I will).
+- **Drop it:** `git checkout [original branch]`. The branch stays, untouched, until you delete it.
+
 ## Attestation files:
 - **Original:** `[original attestation path]`
 - **Updated:** `[new attestation path]`
@@ -541,7 +638,10 @@ are low-risk.
 **AI safety wiring comes fourth.** This requires reading and understanding each file's
 LLM usage pattern. It's the most complex category.
 
-**Rate limiting comes last.** It adds new middleware that could affect request handling.
+**Rate limiting comes after those.** It adds new middleware that could affect request handling.
+
+**Deep-audit fixes come last, one at a time.** They change the app's own rules, so they run on
+top of everything already verified, each with its own test, re-check and commit.
 
 **Within each category, fix in severity order** (CRITICAL first, then HIGH, etc.).
 

@@ -26,7 +26,8 @@ attestation-grade rigor. Auto-selected from `app-context.json` + this skill; no 
 @~/.claude/make-it/references/expert-personas.md
 
 **Scan modes** (user specifies after the command):
-- `/nemo-it` or `/nemo-it full` -- Run everything (NeMo + OWASP + Dependencies + Static Analysis)
+- `/nemo-it` or `/nemo-it full` -- Run everything (NeMo + OWASP + Dependencies + Static Analysis + Deep Code Audit)
+- `/nemo-it audit` -- Deep code audit only (reads the code for logic flaws; no running app needed)
 - `/nemo-it guardrails` -- NeMo Guardrails AI safety testing only
 - `/nemo-it owasp` -- OWASP Testing Guide dynamic and static checks only
 - `/nemo-it deps` -- Dependency and container scanning only
@@ -39,7 +40,7 @@ attestation-grade rigor. Auto-selected from `app-context.json` + this skill; no 
 
 This skill has 6 phases:
 0. **Preflight** -- Detect project type, install tools, verify app state
-1. **Static Analysis** -- Code-level scanning without a running app
+1. **Static Analysis** -- Code-level scanning without a running app, then the deep code audit (Phase 1.7)
 2. **Dynamic Analysis** -- Runtime testing against a running app
 3. **AI Safety Testing** -- NeMo Guardrails tests (only if AI features detected)
 4. **Analysis and Reporting** -- Correlate findings, assign risk scores, generate remediation guidance
@@ -123,6 +124,7 @@ Input parsing:
   /nemo-it owasp        --> mode = "owasp"
   /nemo-it deps         --> mode = "deps"
   /nemo-it sast         --> mode = "sast"
+  /nemo-it audit        --> mode = "audit"
 
 Check for format flags:
   --format json          --> also generate JSON output
@@ -210,7 +212,7 @@ A port is this project's app only when the output confirms it: a container whose
 - If app is NOT running (no port confirmed) and mode requires DAST (full or owasp): look for a start command (package.json scripts, docker-compose file) and record it as `START_COMMAND`. Do not start anything yet -- the start is picked in step 7, after the production check.
   - If found: "Your application is not running. The live tests need it, so I will ask before starting it, together with anything I need to install."
   - If none found: "Your application is not running and I could not find how to start it. I will skip the live tests and note it in the attestation." Skip DAST phases.
-- If mode is `sast` or `deps`: "This scan mode does not need a running app. Proceeding."
+- If mode is `sast`, `deps` or `audit`: "This scan mode does not need a running app. Proceeding."
 
 **6. Check for production environment:**
 
@@ -253,7 +255,7 @@ Build a list of tools needed for the selected scan mode, then check which are mi
 # Results from an earlier scan never count for this one (guardrail 11); find stays quiet when there are none
 find /tmp/ -maxdepth 1 -name 'nemo-it-*' -exec rm -rf {} + 2>/dev/null
 
-# Tools for ALL modes
+# Tools for ALL modes except audit (audit needs none of the tools below; Phase 1.7 checks its own)
 command -v semgrep 2>/dev/null || echo "MISSING: semgrep"
 
 # Tools for SAST mode
@@ -598,6 +600,63 @@ tooling packaged in the container image, not in application runtime code. Effect
 risk is lower than the CVE severity suggests."
 
 Update user: [every scanner here that applies ran: "Dependency and container scanning complete. Found [N] vulnerable dependencies and [M] container issues." / otherwise: "Dependency and container scanning done, but not all of it ran. Not run: [each scanner or scan, with the reason, such as 'trivy is not on this computer, so the Dockerfile and image scans did not run']. The attestation records each as NOT RUN. In what did run, I found [N] vulnerable dependencies[a container scan ran: ' and [M] container issues']."]
+
+</step>
+
+<!-- ============================================================ -->
+<!-- PHASE 1.7: DEEP CODE AUDIT -- Reads the code only             -->
+<!-- ============================================================ -->
+
+<step name="deep_code_audit">
+
+**Run when mode is: full, audit**
+
+The scanners above match known-bad lines. This phase looks for flaws in the app's own logic -- a login that can be skipped, one customer reading another's records -- by reading the code the way an attacker would, then having a separate reviewer try to disprove each thing found. It follows the vendored security-audit skill (Cloudflare, MIT licence; an unmodified pinned copy -- see `VENDORED.md` beside it).
+
+Tell the user: "Phase 1.7: Deep code audit. Several reviewers read your code for flaws in how it decides who may do what, and a separate reviewer tries to disprove each thing they find. This is the longest phase. It only reads your code: nothing is run, nothing is installed, and nothing is sent to your app."
+
+**1. Check it can run:**
+
+```bash
+AUDIT_DIR="$HOME/.claude/make-it/security-audit"
+[ -f "$AUDIT_DIR/SKILL.md" ] || echo "MISSING: the security-audit files (re-run the make-it installer)"
+command -v node >/dev/null 2>&1 || echo "MISSING: node (the audit's two result checkers need it)"
+```
+
+If either is missing, the deep code audit is NOT RUN, with that reason (guardrail 11). Say so and go on to the next phase. Node is not installed for this without the user's OK (guardrail 9).
+
+**2. Run it.** Read `$AUDIT_DIR/SKILL.md` and follow it in full audit mode: all six phases, reading its companion files when a phase calls for them. Its setup values:
+
+- **Skill directory:** `$AUDIT_DIR`
+- **Target:** this project's root
+- **Output directory:** its default, `~/security-audit-skill/<repo-name>/run-<N>`, outside the project. Keep the path as `AUDIT_RUN_DIR`.
+- **Profile:** the one the user named (`quick`, `standard` or `deep`), otherwise `standard`. Before the first hunting wave, tell the user the profile and how many agents its estimate plans -- a note, not a question.
+- **Agents:** its hunters, critics and verifiers run on Fable (Opus if Fable is unavailable), never Sonnet or Haiku.
+
+Where its rules and this skill's differ, the stricter one applies:
+
+- Its "Universal execution safety" section stands as written. The project's code is built or run only inside the OS-enforced sandbox that section describes. No such sandbox on this machine: nothing is run or executed, and the lead stays `needs_validation`. Nothing is installed, and no request goes to any app or port in this phase -- so it runs unchanged when `PASSIVE_ONLY` is true.
+- Guardrail 10 covers every file it writes: a secret is named by file and line, never by value.
+- It describes fixes; it changes no file in the project (the "What you NEVER do" list).
+
+**3. Did it run?** (guardrail 11) The audit ran only if `AUDIT_RUN_DIR` holds `findings.json` and `coverage-ledger.json` and both checkers exit 0:
+
+```bash
+node "$AUDIT_DIR/validate-findings.cjs" "$AUDIT_RUN_DIR/findings.json"
+node "$AUDIT_DIR/validate-coverage-ledger.cjs" "$AUDIT_RUN_DIR/coverage-ledger.json"
+```
+
+Otherwise it is NOT RUN, with the reason. If `run-metadata.json` says `run_status: "incomplete"`, its confirmed records still count, the status carries the `incomplete_reason`, and an incomplete audit is never NO FINDINGS.
+
+**4. Carry the records into this scan's findings:**
+
+- Each `confirmed` record becomes one finding, `AUDIT-NNN`, category `code-logic`. Its severity is the record's `overall_severity` (critical, high, medium, low, informational -> CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL) and its likelihood and impact are the record's own; Phase 4 does not re-score them. Keep the record's `fingerprint` on the finding so /fix-it can find the record.
+- Each `needs_validation` record has no severity: it goes in the suite's "Needs validation" table with its title, the one fact that is still unknown, and its safe plan to settle it. It is never counted in the severity totals and never offered to /fix-it.
+- `rejected` records are counted, not listed.
+- A flaw a scanner also reported is one finding: keep the audit record and name the scanner under **How**.
+- The suite records `AUDIT_RUN_DIR`, the profile, the commit audited, and the coverage statement from its `REPORT.md` word for word (a `quick` or scoped run is partial coverage and says so).
+
+Tell the user: "Deep code audit complete ([profile], [N] agents): [N] confirmed ([N] critical, [N] high, [N] medium, [N] low), [N] still need a fact checked, [N] ruled out.[incomplete: ' It did not finish: [incomplete_reason].']"
 
 </step>
 

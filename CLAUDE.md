@@ -227,6 +227,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       investigator-prompt.md      # read-only evidence agent template
       writer-prompt.md            # plain-English drafts template (never sent by the agent)
       patterns/                   # shipped seed root-cause patterns (generic)
+    security-audit/               # Vendored cloudflare/security-audit-skill (MIT, pinned commit, unmodified): /nemo-it's deep code audit; /fix-it reads its findings
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check
       references/                 # report standard, attack-chain format, VEX, sources, tenant assessment, pitfalls, fact-check, profile template
@@ -423,6 +424,6 @@ The build process has six layers:
 1. **Foundation** -- Scaffold provides pre-verified auth, RBAC, Docker, and UI components (these patterns were debugged once and never regenerated)
 2. **Prevention** -- Prompts and build instructions encode lessons learned (API contract verification, seed data alignment, Alembic syntax rules)
 3. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
-4. **Security Hardening** -- Build-verify Part D runs an automatic security scan (static analysis, dependency audit, AI safety checks) and auto-fixes findings in a self-healing loop (up to 3 cycles) before the user ever sees the app. Only mechanical AUTO-class fixes are applied silently; remaining findings go to TODO.md. This logic is fully internalized in /make-it (via `build-verify-security.md` + `fix-strategies.md`) -- no separate skill installation required. Standalone /nemo-it and /fix-it are optional skills for GRC teams needing formal attestation, interactive triage, or deeper analysis (OWASP ZAP, SQLMap, behavioral AI testing).
+4. **Security Hardening** -- Build-verify Part D runs an automatic security scan (static analysis, dependency audit, AI safety checks) and auto-fixes findings in a self-healing loop (up to 3 cycles) before the user ever sees the app. Only mechanical AUTO-class fixes are applied silently; remaining findings go to TODO.md. This logic is fully internalized in /make-it (via `build-verify-security.md` + `fix-strategies.md`) -- no separate skill installation required. Standalone /nemo-it and /fix-it are optional skills for GRC teams needing formal attestation, interactive triage, or deeper analysis (OWASP ZAP, SQLMap, behavioral AI testing, and a multi-agent deep code audit whose Critical and High findings /fix-it fixes without asking on a `fix-it/<date>` branch -- test first, independently re-checked, never merged by the skill).
 5. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
 6. **Catch-up** -- /resume-it scans existing projects against the latest build-standards.md and applies any new patterns

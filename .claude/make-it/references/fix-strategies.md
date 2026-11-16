@@ -16,6 +16,7 @@ Every finding from a `/nemo-it` attestation is classified using these rules:
 | **SEMI-AUTO** | Fix is well-defined but touches application logic. Show the diff, get implicit approval (user can object). |
 | **MANUAL** | Fix requires understanding business logic, architectural decisions, or has multiple valid approaches. |
 | **SKIP** | Finding is informational, accepted risk, or N/A. |
+| **AUDIT** | A CRITICAL or HIGH finding from the deep code audit (`AUDIT-`). Touches application logic, so it is fixed only on a `fix-it/[date]` branch, test first, and re-checked by a fresh agent (Strategy 13). No approval is asked; the branch is the undo. |
 
 **Never classified: X09, hostile code** (`hostile-code.md`). A finding that code attacks the computer running it has no fix strategy: don't edit, delete or re-run it. It goes to the user.
 
@@ -531,11 +532,52 @@ DB_PASSWORD=change_this_to_a_secure_value
 
 ---
 
+## Strategy 13: Deep-Audit Findings
+
+### Detection
+- Finding ID starts with `AUDIT-`; category `code-logic`; the full record is in the audit run
+  folder's `findings.json`, matched by fingerprint
+- Typical cases: a route missing its permission check, one tenant's records readable by another,
+  a login step that can be skipped, a role granted from data the caller controls
+
+### Classification: AUDIT (CRITICAL, HIGH) / SEMI-AUTO (MEDIUM and lower) / MANUAL (not a code change)
+
+### Fix Procedure
+1. Read the record: the path, the rule the code should enforce, the smallest recommended fix
+2. Write one regression test that does what the attacker can do and asserts it is refused; it must
+   fail before the fix
+3. Fix at the last trusted decision point; nothing else changes
+4. New test and full suite pass; no existing test changed, skipped or deleted
+5. A fresh agent tries to reach the same result another way and checks allowed users are unaffected
+6. One commit per finding on the `fix-it/[date]` branch
+
+### Stop Conditions (finding becomes MANUAL, its changes reverted)
+- The test passes before any fix (the flaw is not there as described)
+- The project cannot run such a test
+- An existing test fails and would have to change
+- Two fix attempts fail the re-check or the suite
+- The fix has to touch a file with the user's uncommitted changes
+
+### Verification
+- The regression test, the full suite, the fresh agent's verdict, then the /nemo-it re-scan
+
+### Risk Level: HIGH (changes who can do what -- hence branch-only, test-first, independent re-check)
+
+---
+
 ## Decision Tree
 
 When classifying a finding, follow this tree:
 
 ```
+Is it a deep-audit finding (ID starts with AUDIT-)?
+  Yes -> Is the remediation a code change?
+    Yes -> CRITICAL or HIGH?
+      Yes -> AUDIT (Strategy 13)
+      No  -> SEMI-AUTO (Strategy 13, diff shown)
+    No  -> MANUAL
+  No -> Continue
+
 Is it a dependency CVE?
   Yes -> Is a fix version available?
     Yes -> Is it a major version bump?
@@ -583,5 +625,6 @@ After each fix category, run these checks:
 | AI Safety | YES | guardrails/ | - | YES |
 | Rate Limiting | YES | - | - | - |
 | Config | YES | - | - | - |
+| Deep-audit | YES | New regression test | If exists | YES |
 | Temp Files | YES | If exist | - | - |
 | Secrets | YES | - | YES | YES |
