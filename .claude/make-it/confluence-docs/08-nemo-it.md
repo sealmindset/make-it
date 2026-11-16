@@ -45,6 +45,7 @@ From inside your project, type:
 /nemo-it guardrails     # AI-safety tests only
 /nemo-it owasp          # OWASP web-security checks only
 /nemo-it deps           # dependency/container scanning only
+/nemo-it audit          # deep code audit only (logic flaws; reads the code, runs nothing)
 /nemo-it sast           # static code analysis only
 ```
 

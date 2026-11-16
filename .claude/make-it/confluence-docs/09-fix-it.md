@@ -64,7 +64,7 @@ It will ask **how you want your work saved** (a new branch, or the current branc
 ## Good to know
 
 - Some findings **can't be safely auto-fixed** — `/fix-it` clearly separates those and leaves them for a human, rather than guessing.
-- It always gets your **approval on the plan** before changing anything.
+- It gets your **approval on the plan** before changing anything -- with one exception. Critical and High findings from `/nemo-it`'s deep code audit are fixed **without asking**, each with a test that shows the flaw, on a separate `fix-it/<date>` branch. Nothing reaches your own branch until you say keep it.
 
 ---
 

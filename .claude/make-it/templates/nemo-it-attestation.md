@@ -71,6 +71,7 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 | 20 | Dependency & Container Security    | Trivy Container Scan                  | DEP-TRIVY     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 | 21 | Static Analysis                    | Semgrep                               | SAST-SEMGREP  | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 | 22 | Static Analysis                    | Bandit / ESLint Security              | SAST-LINT     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 23 | Deep Code Audit                    | Logic and trust-boundary review       | AUDIT         | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 
 ### Severity Distribution
 
@@ -790,6 +791,47 @@ The following likelihood-by-impact matrix is used to classify all findings in th
   - [CONTROL_3 -- e.g., Sandbox execution environment]
 - **Remediation type:** [PROGRAMMATIC_FIX | TECHNOLOGICAL_CONTROL | PROCESS_CONTROL | ACCEPT_RISK]
 - **Evidence:** [LINK_OR_REFERENCE_TO_RAW_OUTPUT]
+
+---
+
+## Suite 5: Deep Code Audit
+
+### 5.1 Logic and trust-boundary review (AUDIT)
+
+- **Status:** [FAIL / NO FINDINGS / NOT RUN / NA]
+- **Date Tested:** [TEST_DATE]
+- **Method:** security-audit skill (Cloudflare, vendored at [VENDORED_COMMIT]), profile [quick / standard / deep]
+- **Commit audited:** [SOURCE_REF]
+- **Run folder:** [AUDIT_RUN_DIR]
+- **Agents used:** [AGENT_COUNT]
+- **Records:** [CONFIRMED_COUNT] confirmed, [NEEDS_VALIDATION_COUNT] need validation, [REJECTED_COUNT] ruled out
+- **Coverage:** [COVERAGE_STATEMENT_FROM_REPORT -- partial for a quick or scoped run; the reason when it did not finish]
+
+#### Findings
+
+##### AUDIT-[NNN]: [FINDING_TITLE]
+
+- **Severity:** [CRITICAL / HIGH / MEDIUM / LOW / INFORMATIONAL]
+- **Fingerprint:** [RECORD_FINGERPRINT]
+- **What:** [PLAIN_LANGUAGE_DESCRIPTION]
+- **Where:** [FILE_PATH:LINE -- entry point to the line where the check is missing]
+- **How:** [WHO_CAN_DO_IT, WHAT_THEY_SEND, WHAT_THEY_GET -- and the scanner that also reported it, if any]
+- **Root cause:** [THE_RULE_THE_CODE_SHOULD_ENFORCE_AND_DOES_NOT]
+- **Risk matrix:**
+  - Likelihood: [1-5] -- [JUSTIFICATION]
+  - Impact: [1-5] -- [JUSTIFICATION]
+  - Risk Level: **[RISK_LEVEL]**
+- **Remediation:** [SMALLEST_FIX_AND_THE_TEST_THAT_PROVES_IT]
+- **Remediation type:** [PROGRAMMATIC_FIX | TECHNOLOGICAL_CONTROL | PROCESS_CONTROL | ACCEPT_RISK]
+- **Evidence:** [AUDIT_RUN_DIR]/findings.json
+
+### 5.2 Needs validation
+
+Leads the audit could not settle from the code alone. They have no severity, are not counted above, and /fix-it does not act on them.
+
+| Title | Where | The fact still unknown | Safe way to settle it |
+|-------|-------|------------------------|-----------------------|
+| [TITLE] | [FILE_PATH:LINE] | [UNRESOLVED_FACT] | [VALIDATION_PLAN] |
 
 ---
 
