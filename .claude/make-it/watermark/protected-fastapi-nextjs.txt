@@ -1,0 +1,20 @@
+# Security files of the fastapi-nextjs scaffold that a build has no reason to change.
+# One path per line, relative to the app's root. Each must have no [PLACEHOLDER] and be in CONTENT_MANIFEST.
+# watermark.py compares the app's copy with the release's hash; a difference means security review.
+# Left out on purpose, because builds edit them: 001_rbac_schema.py (domain permissions),
+# models/user.py, the admin pages and layouts, and mock-oidc's requirements (safety updates).
+backend/app/middleware/auth.py
+backend/app/middleware/permissions.py
+backend/app/routers/auth.py
+backend/app/routers/roles.py
+backend/app/routers/permissions.py
+backend/app/routers/users.py
+backend/app/models/role.py
+backend/app/models/permission.py
+backend/app/schemas/auth.py
+backend/app/schemas/role.py
+backend/app/lib/ai/validate.py
+frontend/lib/auth.tsx
+mock-services/mock-oidc/Dockerfile
+backend/Dockerfile
+backend/entrypoint.sh

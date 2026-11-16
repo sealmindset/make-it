@@ -1,0 +1,21 @@
+name: watermark contract
+
+# The build record is a claim; watermark.py verify is the proof an organization relies on. The test
+# pins what verify must refuse (a forged record, a changed or missing security file, a route with no
+# permission check) and that every build skill writes the record.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: watermark contract test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I scripts/test-watermark.py

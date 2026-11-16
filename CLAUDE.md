@@ -25,6 +25,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
 - The user never fixes code -- security scanner findings (if configured) and CI/CD automation issues are auto-remediated
+- Every build leaves a build record (`.make-it/manifest.json`) written silently by `watermark.py`; it is a claim, and the organization's required GitHub check, which recomputes everything from the code, is the proof (`watermark.md`, checks WM01-WM04)
 - Security is found and fixed inside every build, not afterwards: build-verify's security step scans, then runs a deep code audit and fixes every confirmed Critical and High logic flaw (test first, independently re-checked) before handoff. /nemo-it is the attestation that the code was scanned; it is not where problems are meant to be found first
 - The user only verifies their app works the way they envision it
 
@@ -223,11 +224,13 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       hostile-code.md            # X09: check for code that attacks the computer running it, before anything runs; a stop, never a fix
       deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
       resolve-it.md              # /resolve-it contract: outcome, autonomy, rails, phases, variations, records, pattern format
+      watermark.md               # The build record and its check: what make-it writes, what GitHub verifies, the managed hook (WM01-WM04)
       ai-accounting.md           # AI cost, value and the model ladder: ledger, prices, Control Plane, spend pages, statements (AC01-AC16)
     resolve-it/
       investigator-prompt.md      # read-only evidence agent template
       writer-prompt.md            # plain-English drafts template (never sent by the agent)
       patterns/                   # shipped seed root-cause patterns (generic)
+    watermark/                    # Security file list per scaffold, for the build record's check (watermark.md)
     security-audit/               # Vendored cloudflare/security-audit-skill (MIT, pinned commit, unmodified): /nemo-it's deep code audit; /fix-it reads its findings
     threats-it/
       scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check

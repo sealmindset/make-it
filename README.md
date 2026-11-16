@@ -969,6 +969,34 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.59.0 -- the build record: proof that make-it's guardrails ran
+
+- **A build record in every project:** `.make-it/manifest.json`, written silently at the end of
+  /make-it, /retrofit-it, /resume-it and /fix-it. It names the make-it release, the project's
+  security files with their hashes, and what the security step did. No questions, no secrets, no
+  timestamps.
+- **The record is a claim; the check is the proof:** `watermark.py verify` recomputes everything
+  from the code and ignores what the record says. Python is parsed, not text-matched. A missing
+  record, a missing security file, a route without its own permission check, a replaced
+  `require_permission` or a missing roles table fails. A security file that differs from the
+  release needs security review, unless that content is already in the base commit. A project
+  with none of make-it's security files needs review too: "nothing to check" is never a pass.
+- **Only plain code passes on its own:** two independent adversarial reviews each got a clean pass
+  with an unprotected route. Every bypass they found is closed and has its own test, and the rule
+  is now the other way round: ordinary route code passes, anything unusual in the backend (code
+  built while running, routes or request filters added another way) needs security review.
+- **Next phase, not in this release:** the GitHub check starts the app and tests its real routes.
+  Until then a pass means "nothing wrong was found", not proof against someone acting on purpose.
+- **For organizations:** `references/watermark.md` describes the two one-time setups: a required
+  GitHub check run from an organization-owned repository (with GitHub's own attestation as the
+  watermark), and a Claude Code managed hook that keeps the record current and cannot be switched
+  off by a user. The GitHub side needs Enterprise Cloud for the required-workflow rule and for
+  attestations on private repositories.
+- **Limits:** v1 covers the FastAPI + Next.js scaffold; other project types get the record and
+  need review. It proves the result, not that every line was typed through make-it, and it does
+  not prove which folder the deployed container runs.
+- **New checks WM01-WM04. Checked:** `scripts/test-watermark.py`.
+
 ### v1.58.0 -- security is found and fixed inside every build
 
 - **Deep code audit in the build:** build-verify's security step now ends with a deep code audit

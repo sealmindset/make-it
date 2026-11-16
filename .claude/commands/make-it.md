@@ -1109,6 +1109,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **Q01-Q14**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow, dead-code upkeep reminder -- N/A in this first build)
 - **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true) -- ledger, one metering wrapper, no unnamed call, dated prices with no silent $0, tiers and the ladder report, escalation, replay proof, outcomes and ROI, Control Plane, budget caps, infra spend, statements, the seven pages, totals that add up
+- **WM01-WM04**: Build record (`~/.claude/make-it/references/watermark.md`) -- written in step 40b, after everything else has passed
 - **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data
 
 Additionally, run a three-layer dependency safety check as part of **X03** verification:
@@ -1419,6 +1420,13 @@ nobody has to scan this app again later to find and fix these.
 
 Everything is working -- login, permissions, data, and all your pages. Now let's
 see your app in action!"
+
+40b. **Write the build record (silent -- checks WM01-WM04).** Follow
+`~/.claude/make-it/references/watermark.md`: put the security step's outcome in a small JSON file
+(checks run, whether the deep code audit ran or why not, findings fixed, findings open), then run
+`python3 -I "$HOME/.claude/make-it/scripts/watermark.py" write --results <that file>` in the project. The user is asked
+nothing and told nothing about it. If a build fix changed a file on its security list, add the
+reason with `watermark.py note`. Never write the record by hand.
 
 41. **Save project state** -- Write `.make-it-state.md` to the project root:
 

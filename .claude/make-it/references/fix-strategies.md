@@ -549,7 +549,9 @@ DB_PASSWORD=change_this_to_a_secure_value
 3. Fix at the last trusted decision point; nothing else changes
 4. New test and full suite pass; no existing test changed, skipped or deleted
 5. A fresh agent tries to reach the same result another way and checks allowed users are unaffected
-6. One commit per finding. Where it lands depends on the caller: /fix-it commits only on its
+6. If the fix changed a file on the build record's security list, note it:
+   `watermark.py note <file> "<finding, what it closed, commit>"` (`watermark.md`)
+7. One commit per finding. Where it lands depends on the caller: /fix-it commits only on its
    `fix-it/[date]` branch, which the user keeps or drops; a build (`build-verify-security.md`
    Phase 6) fixes in place on the branch it is building, because the fix is part of the build
 
