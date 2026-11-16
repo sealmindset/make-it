@@ -10,7 +10,7 @@ pass, but BEFORE /try-it presents the app to the user.
 
 **Key differences from standalone /nemo-it + /fix-it:**
 - Completely silent -- no user prompts, no triage approval, no tool installation requests
-- Auto-fixes everything possible without asking
+- Auto-fixes everything possible without asking -- mechanical fixes for what the scanners find, and tested, independently re-checked fixes for the Critical and High logic flaws the deep code audit confirms (Phase 6)
 - Self-healing loop: scan → fix → re-scan (up to 3 cycles)
 - Only blocks handoff if CRITICAL findings remain unfixed after all cycles
 - Skips phases that require external tools not already installed (graceful degradation)
@@ -171,7 +171,7 @@ No user approval needed -- this is part of the build process.
 ### Fix Rules
 
 - **Never apply major dependency upgrades** -- too risky without user validation
-- **Never change application logic** -- only add safety controls around existing logic
+- **Never change application logic** -- only add safety controls around existing logic, except the tested fixes Phase 6 makes for confirmed Critical and High deep-audit findings
 - **Never modify test files** -- if tests fail after a fix, fix the code not the test
 - **After each fix category:** run syntax check, then rebuild affected container with `--no-cache`
 - **If a fix breaks the build:** revert it immediately, log as "unfixed", continue
@@ -214,14 +214,94 @@ Cycle 3: (if findings remain) Fix remaining → Rebuild → Re-scan
 After 3 cycles, accept remaining findings and classify them:
 
 - **CRITICAL remaining:** Log to build-verify report. Add to TODO.md with urgency note.
-  Do NOT block handoff -- the app is still structurally sound, and the user can run
-  /nemo-it + /fix-it standalone for a deeper pass.
+  Do NOT block handoff -- the app is still structurally sound.
 - **HIGH/MEDIUM remaining:** Log to TODO.md under "## Security Improvements".
 - **LOW/INFO remaining:** Log to TODO.md under "## Security Improvements (Optional)".
 
 ---
 
-## Phase 6: Internal Report
+## Phase 6: Deep Code Audit and Fix
+
+The scans above match known-bad lines. This phase finds flaws in the app's own logic -- a route
+missing its permission check, one customer reading another's records, a login step that can be
+skipped -- and fixes the serious ones before the user sees the app. It is why nobody has to come
+back to this app later with a scanner to find and fix them. It runs after the self-healing loop,
+on code that is otherwise green. The user is asked nothing and told nothing here, except the one
+line in 6d.
+
+### 6a. Can it run
+
+```bash
+AUDIT_DIR="$HOME/.claude/make-it/security-audit"
+[ -f "$AUDIT_DIR/SKILL.md" ] || echo "MISSING: the security-audit files"
+command -v node >/dev/null 2>&1 || echo "MISSING: node"
+```
+
+If either is missing, the deep code audit is NOT RUN. Nothing is installed for it and the build is
+not blocked, but a check that did not run is never recorded as clean or as no findings: write
+"Deep code audit: NOT RUN ([reason])" in the internal report, and one line in TODO.md under
+"## Security Improvements": "The deep code check did not run on this build ([reason])."
+
+### 6b. Audit
+
+Read `$AUDIT_DIR/SKILL.md` and follow it in full audit mode, with these setup values:
+
+- **Target:** the project root. **Output directory:** its default, outside the project.
+- **Profile:** `quick` -- one hunting wave and one critic pass, which by its own definition is
+  partial coverage; the internal report says so.
+- **Scope:** the first audit of this project covers the whole project. After that, when an earlier
+  run for this project exists in its output folder, audit only the code that changed since the
+  commit that run recorded (its scoped run, using the earlier run by its prior-runs rules). If no
+  source file changed since then, skip it and record "no change since the last audit".
+- **Agents:** hunters, critics and verifiers on Fable (Opus if Fable is unavailable), never Sonnet
+  or Haiku.
+
+Its "Universal execution safety" section stands as written. The project's code is built or run for
+the audit only inside the OS-enforced sandbox that section describes. No such sandbox on this
+machine: nothing is run or executed for it, and the lead stays `needs_validation`. Nothing is
+installed, and no request goes to the app or any port in this step. A secret is recorded by file
+and line, never by value.
+
+The audit ran only if its run folder holds `findings.json` and `coverage-ledger.json` and both
+checkers exit 0 (`node "$AUDIT_DIR/validate-findings.cjs" <run>/findings.json`, `node
+"$AUDIT_DIR/validate-coverage-ledger.cjs" <run>/coverage-ledger.json`). Otherwise it is NOT RUN,
+recorded as in 6a. If it stopped early (`run_status: "incomplete"`), what it confirmed still counts
+and the report carries its reason.
+
+### 6c. Fix
+
+Every confirmed Critical and High finding is fixed here, without asking, by Strategy 13 in
+`fix-strategies.md`: one finding at a time, Critical first -- a regression test that fails first,
+the smallest fix, the project's whole test suite, then a fresh agent that tries to get in another
+way. The fix is made in place, on the branch the build is already on, as its own commit, so each
+one can be undone alone. A second failed try is reverted and the finding is left unfixed (6d).
+
+After the last fix, rebuild as in Phase 3 and re-run the Part B live tests: these fixes change who
+can do what, so login, permissions and every page are checked again.
+
+Never fixed here:
+- `needs_validation` leads are never fixed: nobody has shown they are real.
+- A finding in a left-out item, or on the go-live record that /ship-it owns, is never fixed -- the same rules
+  `resume-it.md` applies to a scanner finding there.
+- A fix that is a setting outside the code (a proxy rule, a cloud permission).
+
+### 6d. What is left, and what is said
+
+- **Fixed:** one CHANGELOG.md line each, in plain words: "Closed a gap where [who] could [what]."
+  When the app is one the user has already been using (/resume-it, /retrofit-it), also tell them
+  in one plain line per fix, because something now behaves differently: "I closed a safety gap:
+  [who] could [what]; now [what happens instead]."
+- **Confirmed Critical or High, not fixed:** TODO.md, top of "## Security Improvements", with what
+  was tried. It does not block handoff, but it is not hidden either. Tell the user in one plain
+  line: "One safety problem I found I could not fix on my own: [what someone could do, in one
+  line]. It is at the top of your to-do list."
+- **Confirmed Medium and lower:** TODO.md under "## Security Improvements".
+- **Needs validation:** TODO.md under "## Security Improvements", as a question: "[title]: to
+  know whether this is a real problem, I need [the missing fact]."
+
+---
+
+## Phase 7: Internal Report
 
 Build an internal summary (NOT shown to user) that feeds into the build-verify result:
 
@@ -233,6 +313,9 @@ Security Scan Summary:
   Auto-fixed: [N]
   Remaining: [N] (CRITICAL: [n], HIGH: [n], MEDIUM: [n], LOW: [n])
   Fix cycles: [1-3]
+  Deep code audit: [ran, quick profile, partial coverage / no change since the last audit / NOT RUN (reason)]
+    Confirmed: [N] (CRITICAL: [n], HIGH: [n], MEDIUM: [n], LOW: [n]); needs validation: [N]
+    Critical and High fixed: [N] of [N] (each: test, commit, re-check verdict)
   
   Findings added to TODO.md: [Y/N]
 ```
@@ -246,12 +329,15 @@ This summary is included in the build-verify status internally. The user sees on
 
 ## What This Does NOT Replace
 
-- **/nemo-it (standalone):** Full attestation with behavioral AI testing, OWASP ZAP,
-  SQLMap, Playwright security tests, executive summary, and versioned attestation documents.
+- **/nemo-it (standalone):** The attestation -- the document that shows the code was scanned
+  for AI-safety and security problems. It reports and never fixes. Full run: behavioral AI
+  testing, OWASP ZAP, SQLMap, Playwright security tests, the deep code audit at its fuller
+  `standard` profile (it reuses this build's audit runs), executive summary, and versioned
+  attestation documents. It is not where problems are meant to be found first: this file is.
   Part D is a subset focused on what can be automated silently during build.
 - **/fix-it (standalone):** Full triage with user approval, semi-auto fixes with diff review,
   git strategy choice, and before/after attestation comparison.
-  Part D only applies AUTO-class fixes silently.
+  Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
   Part D does code-level verification only. Full behavioral testing is /nemo-it's domain.
 
@@ -279,5 +365,6 @@ Findings are classified using the same scale as /nemo-it:
 | LOW | Minor risk, address in normal development | Yes (if mechanical fix exists) |
 | INFO | Awareness only, no action required | No (skip) |
 
-The key constraint: only AUTO-class fixes from fix-strategies.md are applied silently.
-SEMI-AUTO and MANUAL fixes are logged to TODO.md for the user to address with /nemo-it + /fix-it.
+The key constraint: for scanner findings, only AUTO-class fixes from fix-strategies.md are applied
+silently; SEMI-AUTO and MANUAL ones are logged to TODO.md. Deep-audit findings follow Phase 6:
+Critical and High are fixed by Strategy 13, the rest are logged to TODO.md.

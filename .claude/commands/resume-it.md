@@ -286,6 +286,24 @@ Dependency safety uses the same plain-language rules as scanner findings:
 - Say "safety update", "safety patch", or "security update" if the user must be told anything
 - Auto-fix silently when possible -- the user should not know this happened
 
+**6c. Deep code audit (always -- when the code changed since the last one):**
+
+Steps 6 and 6b catch known-bad libraries and what a scanner filed. This step looks for flaws in
+the app's own logic, so they are found and fixed here instead of by someone scanning the app later.
+
+Run Phase 6 of `~/.claude/make-it/references/build-verify-security.md` (6a and 6b): the whole
+project if it has never been audited, otherwise only the code that changed since the last audit.
+Nothing changed since: skip it, silently.
+
+- **Confirmed Critical and High:** join the auto-fix queue at the same priority as scanner
+  critical/high findings and are fixed in the security-scanner-remediation step, before the user's
+  work starts.
+- **Everything else** (Medium and lower, leads that need validation, an audit that did not run):
+  recorded as that file's 6d says.
+
+The same plain-language rules apply: NEVER say "vulnerability", "audit" or "finding" to the user.
+Say "safety gap" or "safety fix" if they must be told anything.
+
 **7. ALWAYS check for AI prompt management gaps (tier-aware detection):**
 
 **This step is MANDATORY -- always run it, do not skip.** First determine if the app uses AI,
@@ -913,7 +931,7 @@ Want me to help with any of the items you can do right now, or would you rather 
 
 <step name="security-scanner-remediation">
 
-**Triggered when: security scanner findings are detected during context discovery.**
+**Triggered when: security scanner findings, or confirmed Critical or High deep-audit findings (step 6c), are detected during context discovery.**
 
 This runs BEFORE any user-requested work. The user does not initiate this -- it happens automatically.
 
@@ -981,6 +999,13 @@ added to TODO.md, and is not counted or offered as something to tackle.
      thing to check -- the exact screen or step that changed. Then: "Run /try-it and tell me
      if that still works the way you want."
    - Wait for their answer before continuing
+
+**Deep-audit findings (from step 6c):** no scanner API or GitHub Issue is involved. Fix each by
+Strategy 13 in `fix-strategies.md`, as `build-verify-security.md` 6c sets out: a test that fails
+first, the smallest fix, a fresh agent's re-check, its own commit, then CHANGELOG.md. Two failed
+tries: reverted, and recorded as that file's 6d says. A deep-audit finding in a left-out item or on
+`.ship-it-go-live.json` is handled by the same rules as a scanner finding there (point 1 above).
+These fixes always change behavior, so point 7 above applies to each one.
 
 **If scanner API is NOT available** (no API key):
 
@@ -1544,6 +1569,8 @@ I'll start fixing these in that order -- in the app, not by changing the tests."
 
 Reference ship-it-guide.md. Same handoff as /make-it Phase 4:
 
+0. If the code changed since the last deep code audit, run step 6c again now and fix what it
+   confirms (security-scanner-remediation), so what ships has been through it.
 1. Run full test suite one final time
 2. Ensure all changes are committed
 3. Tell the user: "All tests pass and your changes are saved." (No deploy ask here: the deploy
