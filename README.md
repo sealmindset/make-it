@@ -969,6 +969,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.58.0 -- security is found and fixed inside every build
+
+- **Deep code audit in the build:** build-verify's security step now ends with a deep code audit
+  (`build-verify-security.md` Phase 6). The first build audits the whole app; later ones audit only
+  what changed. It runs at the `quick` profile, which is partial coverage by design.
+- **Critical and High are fixed before handoff, without asking:** a test that fails first, the
+  smallest fix, a fresh agent's re-check, one commit per finding, in place. Two failed tries are
+  undone; a serious one left unfixed goes to the top of TODO.md and the user is told in one line.
+- **Every build flow runs it:** `/make-it` (step 39b) and `/retrofit-it` before handoff; `/resume-it`
+  at the start of a session and again before the `/ship-it` handoff, when the code changed. New
+  check **V17** carries it into `/resume-it`'s catch-up for apps built earlier.
+- **`/nemo-it` is the attestation, not the first look:** it still reports only and still produces the
+  document that shows the code was scanned. Its audit reuses the build's audit runs.
+- **Not changed:** `/try-it` (it presents an app the build already checked). Never fixed: leads that
+  need validation, left-out items, the go-live record.
+- **Checked:** `scripts/test-audit-every-build.sh`.
+
 ### v1.57.0 -- /nemo-it deep code audit, and /fix-it fixes its Critical and High findings
 
 - **New phase in `/nemo-it`:** a deep code audit runs by default (and alone as `/nemo-it audit`). It

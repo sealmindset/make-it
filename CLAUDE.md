@@ -25,6 +25,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 - `/try-it` presents the verified app to the user for exploration (app is already working)
 - `/ship-it` handles deployment (the user just types the command)
 - The user never fixes code -- security scanner findings (if configured) and CI/CD automation issues are auto-remediated
+- Security is found and fixed inside every build, not afterwards: build-verify's security step scans, then runs a deep code audit and fixes every confirmed Critical and High logic flaw (test first, independently re-checked) before handoff. /nemo-it is the attestation that the code was scanned; it is not where problems are meant to be found first
 - The user only verifies their app works the way they envision it
 
 ## /try-it
@@ -75,7 +76,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 `/resume-it` picks up where `/make-it` left off. The user runs it from within the project directory.
 
 0. **Context Discovery** -- Reads `.make-it-state.md`, `CHANGELOG.md`, `TODO.md`, `CLAUDE.md`, git log, security scanner findings
-1. **Security Scanner Remediation** -- Auto-fixes scan findings (invisible to user unless behavior changes)
+1. **Security Scanner Remediation** -- Auto-fixes scan findings, and the Critical and High findings of a deep code audit of whatever changed since the last one (invisible to user unless behavior changes)
 2. **Greet + Suggest** -- Shows project status and suggests actionable next steps
 3. **Work** -- Helps with new features, TODO items, or anything the user describes
 4. **Readiness Check** -- Standup-style "what's done / what's blocked / what's next" assessment. Scans `app-context.json` and codebase to detect required infrastructure, env vars, tickets, and approvals. Generates a shareable `NEXT-STEPS.md` checklist.
@@ -424,6 +425,6 @@ The build process has six layers:
 1. **Foundation** -- Scaffold provides pre-verified auth, RBAC, Docker, and UI components (these patterns were debugged once and never regenerated)
 2. **Prevention** -- Prompts and build instructions encode lessons learned (API contract verification, seed data alignment, Alembic syntax rules)
 3. **Detection** -- Build-verify silently starts the app and tests auth flow, API endpoints, page content, and permission boundaries before the user sees anything
-4. **Security Hardening** -- Build-verify Part D runs an automatic security scan (static analysis, dependency audit, AI safety checks) and auto-fixes findings in a self-healing loop (up to 3 cycles) before the user ever sees the app. Only mechanical AUTO-class fixes are applied silently; remaining findings go to TODO.md. This logic is fully internalized in /make-it (via `build-verify-security.md` + `fix-strategies.md`) -- no separate skill installation required. Standalone /nemo-it and /fix-it are optional skills for GRC teams needing formal attestation, interactive triage, or deeper analysis (OWASP ZAP, SQLMap, behavioral AI testing, and a multi-agent deep code audit whose Critical and High findings /fix-it fixes without asking on a `fix-it/<date>` branch -- test first, independently re-checked, never merged by the skill).
+4. **Security Hardening** -- Build-verify Part D runs an automatic security scan (static analysis, dependency audit, AI safety checks) and auto-fixes findings in a self-healing loop (up to 3 cycles) before the user ever sees the app. It then runs a deep code audit (`quick` profile; the whole app on the first build, only what changed after that) and fixes every confirmed Critical and High logic flaw -- failing test first, smallest fix, a fresh agent's re-check, one commit each (check V17). For scanner findings only mechanical AUTO-class fixes are applied silently; remaining findings go to TODO.md. This logic is fully internalized in /make-it (via `build-verify-security.md` + `fix-strategies.md`) -- no separate skill installation required. Standalone /nemo-it is the GRC attestation that the code was scanned for AI-safety and security problems (report only); with /fix-it it also serves teams needing interactive triage or deeper analysis (OWASP ZAP, SQLMap, behavioral AI testing, and a multi-agent deep code audit whose Critical and High findings /fix-it fixes without asking on a `fix-it/<date>` branch -- test first, independently re-checked, never merged by the skill).
 5. **Demo** -- /try-it presents the verified app to the user; its fix cycle is a safety net, not the primary quality mechanism
 6. **Catch-up** -- /resume-it scans existing projects against the latest build-standards.md and applies any new patterns

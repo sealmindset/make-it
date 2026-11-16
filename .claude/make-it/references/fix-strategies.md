@@ -16,7 +16,7 @@ Every finding from a `/nemo-it` attestation is classified using these rules:
 | **SEMI-AUTO** | Fix is well-defined but touches application logic. Show the diff, get implicit approval (user can object). |
 | **MANUAL** | Fix requires understanding business logic, architectural decisions, or has multiple valid approaches. |
 | **SKIP** | Finding is informational, accepted risk, or N/A. |
-| **AUDIT** | A CRITICAL or HIGH finding from the deep code audit (`AUDIT-`). Touches application logic, so it is fixed only on a `fix-it/[date]` branch, test first, and re-checked by a fresh agent (Strategy 13). No approval is asked; the branch is the undo. |
+| **AUDIT** | A CRITICAL or HIGH finding from the deep code audit (`AUDIT-`). Touches application logic, so it is fixed test first and re-checked by a fresh agent (Strategy 13). No approval is asked. Run by /fix-it, the fix goes only on a `fix-it/[date]` branch and the branch is the undo; inside a build it is made in place, one commit per finding. |
 
 **Never classified: X09, hostile code** (`hostile-code.md`). A finding that code attacks the computer running it has no fix strategy: don't edit, delete or re-run it. It goes to the user.
 
@@ -549,7 +549,9 @@ DB_PASSWORD=change_this_to_a_secure_value
 3. Fix at the last trusted decision point; nothing else changes
 4. New test and full suite pass; no existing test changed, skipped or deleted
 5. A fresh agent tries to reach the same result another way and checks allowed users are unaffected
-6. One commit per finding on the `fix-it/[date]` branch
+6. One commit per finding. Where it lands depends on the caller: /fix-it commits only on its
+   `fix-it/[date]` branch, which the user keeps or drops; a build (`build-verify-security.md`
+   Phase 6) fixes in place on the branch it is building, because the fix is part of the build
 
 ### Stop Conditions (finding becomes MANUAL, its changes reverted)
 - The test passes before any fix (the flaw is not there as described)
