@@ -8,6 +8,81 @@ settings), make-it writes down what it did (the build record), and GitHub checks
 **The idea in one line:** nothing on a builder's computer can be trusted as proof, so the record
 written there is only a claim, and the check that counts runs in GitHub where builders can't edit it.
 
+## The seal (works anywhere, with nothing but the project and git)
+
+Two tiers. **The seal** is everything a project carries by itself: no account, no service, no
+special plan. **The organization's check** (sections 2 to 4) is the stronger tier for a company
+that has GitHub Enterprise Cloud. The seal works today, for any project.
+
+**What it is.** When a make-it skill has finished and checked its work, it seals the project:
+
+```bash
+python3 -I "$HOME/.claude/make-it/scripts/watermark.py" seal --skill <skill> [--results <file>]
+```
+
+That fingerprints the project's code and adds one entry to `.make-it/ledger/`, chained to the
+entry before it. Code that no longer matches a seal was changed outside make-it.
+
+| It writes | What it is |
+|---|---|
+| `.make-it/ledger/<n>-<hash>.json` | One entry per make-it run: the skill, the make-it release, the date, the code's fingerprint, the security files' state, the check results, and the hash of the entry before it. One file per entry, so two branches never clash. |
+| `.make-it/manifest.json` | The build record (section 1). |
+| `.make-it/sealed-files.txt` | The file list behind the latest fingerprint, so a failed check can name what changed. |
+| `MAKE-IT.md` | The seal for a person: built with which make-it, every run, the security files' state, how to check it. |
+| `backend/make-it-stamp.json` | A small copy the running app reads. |
+
+**What counts.** Every file git tracks or would add, except Markdown, `.make-it/` and the stamp.
+Docs can change freely. Code cannot change without breaking the seal. A file counts by its content
+and whether it is executable. A link counts by what it points at, even a file the seal otherwise
+skips; a link that points outside the project fails the check and is never read. A submodule counts
+by the commit it points at, and a nested repository by its files. Commit everything before pushing:
+a new file that was sealed but not committed makes the next clean checkout fail.
+
+**What it sets up.** The first seal adds four lines to the project's `.gitattributes`: `* -text`,
+so git never rewrites line endings (that would change every fingerprint on some machines), and
+`merge=union` for the three files the seal regenerates, so two sealed branches merge without a
+conflict in them.
+
+**Who seals.** Every make-it skill that changes a project, at its end, after its own checks:
+/make-it, /retrofit-it, /resume-it, /fix-it, /deadcode-it, /argo-it, and /try-it when its fix
+cycle changed something. /wrap-it never seals: it saves work, it does not check it. The hook in
+section 4 keeps the record current but never seals, or a hand edit made in a session would be
+sealed by the next turn.
+
+**What the check adds** (`watermark.py verify`, the same command everywhere):
+
+| It checks | When it doesn't hold |
+|---|---|
+| The code's fingerprint matches a seal | **fail**: "N file(s) changed outside make-it since /skill sealed it on date", naming them, and "Run /resume-it in this project, then push again." |
+| The history behind that seal is whole | **fail**: an entry was removed or edited |
+| The project has been sealed at all | **fail** |
+| The seal and the record name the same make-it release | **fail** |
+
+/resume-it is the way back: it rechecks what changed (its catch-up and its security step), then
+seals. Two sealed branches merged together are new content, so they fail until sealed; the new
+entry then joins both histories. A damaged history is never sealed over silently: `seal` refuses,
+and only the user can go on, with `seal --restart "<why>"`, which `MAKE-IT.md` shows from then on.
+
+**Where each reader sees it**
+- **A person:** `MAKE-IT.md` at the project's root.
+- **Any CI system:** the `watermark` job in the scaffold's `quality-gate.yml` checks out make-it
+  at the record's release tag and runs `verify`. A fail fails the job. A changed security file that
+  make-it sealed passes with a warning.
+- **The running app:** `GET /api/admin/about` (admin settings permission) rehashes its own
+  security files inside the container and compares them with the stamp. The admin settings page
+  shows it as "About this app". Admins only: it is never public.
+
+**Only the newest seal counts.** Code rolled back to an older sealed state fails until it is sealed
+again. The CI job refuses a make-it release older than 1.60.0, the first that checks the seal, and
+checks the pull request's own commit, not GitHub's trial merge with the base branch.
+
+**The limit.** The seal attests. It does not prove. A person who runs `watermark.py seal` by hand
+gets a valid seal, and a project's owner can remove the job from their own CI. Deleting the newest
+history entries and putting the code back to match an older one also passes: nothing outside the
+project remembers the newer seal. The seal reliably
+shows code that never went near make-it, hand edits, and anything changed since make-it last ran.
+Resisting someone who sets out to fake it is what the organization's check is for.
+
 ## 1. The build record: a claim, not proof
 
 `.make-it/manifest.json`, committed with the code. Written by one script and nothing else:

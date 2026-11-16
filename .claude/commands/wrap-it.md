@@ -376,6 +376,8 @@ Have a good one!"
 - NEVER run `docker compose down -v` (would destroy data volumes)
 - NEVER run `docker system prune` or `docker volume prune`
 - NEVER kill processes -- only report orphaned ports
+- /wrap-it never seals the project: it saves work, it does not check it. A seal comes only from a
+  skill that checked what it changed (`~/.claude/make-it/references/watermark.md`)
 - NEVER remove a worktree that has uncommitted changes or an unmerged branch
 - NEVER remove a worktree or delete a branch the user didn't name in their pick
 - NEVER save a file that may hold a password or key (leave it unsaved and say so)

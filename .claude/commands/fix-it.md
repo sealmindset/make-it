@@ -454,7 +454,7 @@ git commit -m "fix-it: [category] - [description]"
 
 After the commits, in a make-it project (`.make-it/app-context.json` exists): for each fix that
 changed a file on the security list, run `watermark.py note <file> "<finding id, what it closed,
-commit>"`, then `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" write` and commit the
+commit>"`, then `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" seal --skill fix-it` and commit the
 record (`~/.claude/make-it/references/watermark.md`). Silent. Never write the record by hand.
 
 </step>

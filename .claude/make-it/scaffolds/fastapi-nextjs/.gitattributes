@@ -1,0 +1,6 @@
+# Line endings are never rewritten: the make-it seal fingerprints files byte for byte.
+* -text
+# Files the seal regenerates merge without a conflict; the next seal rewrites them.
+MAKE-IT.md merge=union
+.make-it/sealed-files.txt merge=union
+backend/make-it-stamp.json merge=union

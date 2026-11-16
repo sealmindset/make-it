@@ -446,6 +446,12 @@ Spec: `~/.claude/make-it/references/watermark.md`. The record is a claim; the or
 
 **WM04** [Tier 0] [FIX] **Only the script writes the record** -- no skill, fix or agent edits `.make-it/manifest.json` by hand. If it was edited, run `write` again: it rebuilds the record from the code.
 
+**WM05** [Tier 0] [FIX] **The project is sealed and the seal matches the code** -- `.make-it/ledger/` holds at least one entry, and `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" verify` reports no file changed outside make-it and an unbroken history. Fix: finish the skill's own checks, then `watermark.py seal --skill <this skill>` and commit what it wrote. A damaged history is never sealed over silently: `seal` refuses, and only the user can restart it (`--restart "<why>"`), which `MAKE-IT.md` then shows.
+
+**WM06** [Tier 1] [FIX] **The app reports its stamp to admins** -- `backend/app/routers/about.py` exists, is registered in `main.py`, and its route is guarded by `require_permission("admin.settings", "read")`; the admin settings page has the "About this app" card. Fix: copy both from the scaffold. Never make the route public.
+
+**WM07** [Tier 0] [FIX] **The project's CI checks the seal** -- `.github/workflows/quality-gate.yml` has the `watermark` job, which runs `watermark.py verify` and fails when the code does not match its seal. Fix: copy the job from the scaffold's workflow. Projects on another CI system run the same command.
+
 ---
 
 ## Live Verification Checks
