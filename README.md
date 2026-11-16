@@ -969,6 +969,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.60.0 -- the seal: a watermark that needs nothing but the project
+
+- **Every make-it run seals the project.** At the end of /make-it, /retrofit-it, /resume-it,
+  /fix-it, /deadcode-it, /argo-it (and /try-it when it fixed something), make-it fingerprints the
+  project's code and adds an entry to `.make-it/ledger/`, chained to the one before. No account,
+  no service, no special plan.
+- **Code changed outside make-it fails the check.** `watermark.py verify` names the files that
+  changed since the last seal and says to run /resume-it, which rechecks them and seals. Markdown
+  can change freely. A removed or edited history entry fails too.
+- **Three places to see it:** `MAKE-IT.md` at the project's root (for a person), a `watermark` job
+  in the generated `quality-gate.yml` (for any CI plan), and an admins-only "About this app" card
+  that rehashes the app's own sign-in and permission code while it runs.
+- **It survives how teams really work:** squash-merges and rebases (it fingerprints content, not
+  commits), git worktrees, and two branches merged together (the next seal joins both histories).
+- **The limit, stated plainly:** the seal attests; it does not prove. Running `watermark.py seal`
+  by hand gives a valid seal, and a project's owner can remove the CI job. Resisting someone who
+  sets out to fake it is the organization's check from v1.59.0, which stays as the stronger tier.
+- **What it costs:** every code change has to go through a make-it skill before CI passes,
+  including a one-line hand fix and a dependency bot's pull request.
+- **New checks WM05-WM07. Checked:** `scripts/test-watermark.py` (70 tests).
+
 ### v1.59.0 -- the build record: proof that make-it's guardrails ran
 
 - **A build record in every project:** `.make-it/manifest.json`, written silently at the end of

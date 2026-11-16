@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import enforce_secrets, settings
 from app.middleware.logging import RequestLoggingMiddleware
-from app.routers import auth, logs, permissions, prompts, roles, users
+from app.routers import about, auth, logs, permissions, prompts, roles, users
 from app.routers import settings as settings_router
 
 app = FastAPI(title="[APP_SLUG]", version="0.1.0")
@@ -38,6 +38,7 @@ app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(permissions.router)
 app.include_router(settings_router.router)
+app.include_router(about.router)
 app.include_router(logs.router)
 app.include_router(prompts.router)
 

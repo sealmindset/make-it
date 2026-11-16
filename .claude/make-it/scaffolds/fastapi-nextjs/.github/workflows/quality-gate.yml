@@ -187,9 +187,73 @@ jobs:
           name: security-results
           path: /tmp/security-results.json
 
+  watermark:
+    name: make-it watermark
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The pull request's own commit, not GitHub's trial merge with the base branch: the seal covers
+      # exactly what was sealed, and a trial merge is different content.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Read make-it version
+        id: version
+        run: |
+          if [ ! -f .make-it/manifest.json ]; then
+            echo "::error::.make-it/manifest.json is missing, so the make-it version of this project is unknown. Run /resume-it, then push again."
+            exit 1
+          fi
+          VERSION=$(jq -r '.framework.version // empty' .make-it/manifest.json 2>/dev/null || true)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::.make-it/manifest.json has no usable make-it version (framework.version must look like 1.2.3). Run /resume-it, then push again."
+            exit 1
+          fi
+          # Releases before 1.60.0 have no seal check: a project must not be able to pick one.
+          if [ "$(printf '%s\n' "1.60.0" "$VERSION" | sort -V | head -n1)" != "1.60.0" ]; then
+            echo "::error::This project names make-it $VERSION, which is older than 1.60.0 and cannot check the seal. Update make-it, run /resume-it, then push again."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: sealmindset/make-it
+          ref: v${{ steps.version.outputs.version }}
+          path: .make-it-framework
+          persist-credentials: false
+
+      - name: Verify watermark
+        run: |
+          # The seal counts every new file in the project, so make-it must not sit inside it.
+          mv .make-it-framework "$RUNNER_TEMP/make-it"
+          set +e
+          python3 -I "$RUNNER_TEMP/make-it/.claude/make-it/scripts/watermark.py" verify --app . --framework "$RUNNER_TEMP/make-it/.claude/make-it" > "$RUNNER_TEMP/watermark.txt" 2>&1
+          CODE=$?
+          set -e
+
+          cat "$RUNNER_TEMP/watermark.txt"
+          {
+            echo "## make-it watermark"
+            echo '```text'
+            cat "$RUNNER_TEMP/watermark.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CODE" -eq 0 ]; then
+            exit 0
+          elif [ "$CODE" -eq 3 ]; then
+            echo "::warning::Security files differ from the make-it release; see the job log"
+            exit 0
+          fi
+          echo "::error::This project's code does not match its make-it seal. Run /resume-it, then push again."
+          exit 1
+
   attestation:
     name: Quality Attestation
-    needs: [python-quality, frontend-quality, security-scan]
+    needs: [python-quality, frontend-quality, security-scan, watermark]
     if: always()
     runs-on: ubuntu-latest
     steps:

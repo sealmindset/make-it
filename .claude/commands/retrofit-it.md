@@ -1215,7 +1215,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **T01-T05**: Test infrastructure
 - **AI01-AI10**: AI features (if ai_features.needed = true)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
-- **WM01-WM04**: Build record (`~/.claude/make-it/references/watermark.md`), written after Part D
+- **WM01-WM07**: Build record and seal (`~/.claude/make-it/references/watermark.md`), written after Part D
 - **Q01-Q14**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)
 
 For each failing check (left-out items: skipped, see above):
@@ -1261,7 +1261,7 @@ allowed people can already do. Part D's preservation checks run after it and say
 **PART D: Retrofit-specific verification**
 
 After the standard build-verify passes, run these additional checks. When they have passed, write
-the build record, silently: `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" write --results <file>`
+the build record and seal the project, silently: `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" seal --skill retrofit-it --results <file>`
 (`~/.claude/make-it/references/watermark.md`). A retrofitted app's security files often differ from
 the release because its own auth was wrapped, not replaced: that is recorded as `changed`, with a
 `watermark.py note` saying so, and is never "fixed" by overwriting the app's file.

@@ -439,7 +439,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **Code Quality (Q01-Q14):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs; Q14 is the dead-code upkeep reminder: it runs no tools and writes nothing, just reads the dates in `docs/DELETION_LOG.md` (`deadcode.md` §8)
    - **AI (AI01-AI28):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
-   - **Build record (WM01-WM04):** Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
+   - **Build record and seal (WM01-WM07):** Check the project is sealed and the seal matches the code (an app built before the seal existed gets its first one at the end of this session), that the app reports its stamp to admins, and that its quality-gate workflow has the `watermark` job. Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
    - **AI Accounting (AC01-AC16):** Only if AI features detected -- check for the `ai_usage_events` table in migrations/schema, one metering wrapper (no AI SDK import or provider URL outside the provider layer), the AC03 CI test, `model_prices`, `.make-it/ai-ladder.md`, the Control Plane and the seven admin pages, `INFRA_COST_SOURCE` in .env.example. If AI features exist but there is no ledger (AC01 GAP), mark every AC check N/A in the gaps list and offer the whole feature as one suggestion (not auto-applied), which routes to `ai-accounting-addition`. Once the ledger exists, AC gaps go in the gaps list like any other.
 
@@ -1573,8 +1573,8 @@ Reference ship-it-guide.md. Same handoff as /make-it Phase 4:
 0. If the code changed since the last deep code audit, run step 6c again now and fix what it
    confirms (security-scanner-remediation), so what ships has been through it.
 1. Run full test suite one final time
-1b. Refresh the build record (`watermark.py write`, as in save-state), so what ships carries a
-   current one. Silent.
+1b. Seal the project (`watermark.py seal --skill resume-it`, as in save-state), so what ships
+   matches its seal. Silent.
 2. Ensure all changes are committed
 3. Tell the user: "All tests pass and your changes are saved." (No deploy ask here: the deploy
    gate is /ship-it's, and typing /ship-it is the user's go.)
@@ -1633,7 +1633,7 @@ Also update `TODO.md` if new items were discovered during the session.
 
 If this session changed code, refresh the build record, silently
 (`~/.claude/make-it/references/watermark.md`):
-`python3 -I "$HOME/.claude/make-it/scripts/watermark.py" write`, with `--results` when a
+`python3 -I "$HOME/.claude/make-it/scripts/watermark.py" seal --skill resume-it`, with `--results` when a
 security step ran this session. Commit it with the session's changes.
 
 </step>

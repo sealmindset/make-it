@@ -33,6 +33,20 @@ interface AuditLog {
   created_at: string;
 }
 
+interface AboutInfo {
+  stamp: "present" | "missing";
+  make_it_version?: string | null;
+  sealed_by?: string | null;
+  sealed_on?: string | null;
+  runs?: number | null;
+  security_files?: {
+    total: number;
+    as_released: number;
+    changed: string[];
+    missing: string[];
+  };
+}
+
 type Tab = "settings" | "audit";
 
 export default function SettingsPage() {
@@ -47,6 +61,7 @@ export default function SettingsPage() {
   const [edits, setEdits] = useState<Record<string, string | null>>({});
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealing, setRevealing] = useState<Record<string, boolean>>({});
+  const [about, setAbout] = useState<AboutInfo | null>(null);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -75,6 +90,11 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tab === "audit") fetchAuditLogs();
   }, [tab, fetchAuditLogs]);
+
+  useEffect(() => {
+    // No stamp details (e.g. 403) -> the card is simply not shown
+    apiGet<AboutInfo>("/admin/about").then(setAbout).catch(() => setAbout(null));
+  }, []);
 
   // Group settings by group_name
   const groups = settings.reduce<Record<string, AppSetting[]>>((acc, s) => {
@@ -363,6 +383,63 @@ export default function SettingsPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* About this app */}
+      {about && (
+        <div
+          className="rounded-xl border"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
+        >
+          <div className="border-b px-5 py-3" style={{ borderColor: "var(--border)" }}>
+            <h2 className="text-sm font-semibold">About this app</h2>
+          </div>
+          <div className="space-y-1 px-5 py-4 text-sm">
+            {about.stamp === "missing" || !about.security_files ? (
+              <p style={{ color: "var(--muted-foreground)" }}>
+                No make-it stamp found in this build.
+              </p>
+            ) : (
+              <>
+                <p>Built with make-it {about.make_it_version ?? "(unknown version)"}</p>
+                {about.sealed_by && about.sealed_on && (
+                  <p style={{ color: "var(--muted-foreground)" }}>
+                    Last checked by {about.sealed_by} on {about.sealed_on}
+                  </p>
+                )}
+                {about.runs != null && (
+                  <p style={{ color: "var(--muted-foreground)" }}>
+                    {about.runs} recorded runs
+                  </p>
+                )}
+                {about.security_files.changed.length === 0 &&
+                about.security_files.missing.length === 0 ? (
+                  <p>
+                    {about.security_files.total === 0
+                      ? "Sign-in and permission code: not checked in this build"
+                      : `Sign-in and permission code: as released (${about.security_files.total} files)`}
+                  </p>
+                ) : (
+                  <>
+                    <p className="inline-flex items-center gap-1.5" style={{ color: "var(--destructive)" }}>
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Sign-in and permission code: {about.security_files.changed.length} changed,{" "}
+                      {about.security_files.missing.length} missing
+                    </p>
+                    <ul className="list-disc pl-5 font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+                      {about.security_files.changed.map((f) => (
+                        <li key={`changed-${f}`}>{f} (changed)</li>
+                      ))}
+                      {about.security_files.missing.map((f) => (
+                        <li key={`missing-${f}`}>{f} (missing)</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
