@@ -275,6 +275,9 @@ Every confirmed Critical and High finding is fixed here, without asking, by Stra
 the smallest fix, the project's whole test suite, then a fresh agent that tries to get in another
 way. The fix is made in place, on the branch the build is already on, as its own commit, so each
 one can be undone alone. A second failed try is reverted and the finding is left unfixed (6d).
+When a fix changes a file on the build record's security list (`watermark.md`), say why in the
+record: `watermark.py note <file> "<finding, what it closed, commit>"`. The organization's check
+sends that file to security review, and the note is what the reviewer reads.
 
 After the last fix, rebuild as in Phase 3 and re-run the Part B live tests: these fixes change who
 can do what, so login, permissions and every page are checked again.

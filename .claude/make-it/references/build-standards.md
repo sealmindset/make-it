@@ -434,6 +434,20 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 ---
 
+## Build Record (the make-it watermark)
+
+Spec: `~/.claude/make-it/references/watermark.md`. The record is a claim; the organization's check in GitHub is the proof.
+
+**WM01** [Tier 0] [FIX] **The build record exists and is current** -- `.make-it/manifest.json` exists, parses, has `schema: 1`, and matches the code as it is now. Fix: run `python3 -I "$HOME/.claude/make-it/scripts/watermark.py" write` (silent; nothing is asked). It is committed with the change it describes.
+
+**WM02** [Tier 0] [FIX] **The record names the make-it release** -- `framework.version` and `framework.content_manifest_sha256` are set. Fix: the same `write`.
+
+**WM03** [Tier 1] [WARN] **Security files are as released, or their change is explained** -- every `security_files` entry is `match`, or is `changed` with a `note` saying which fix changed it and in which commit (`watermark.py note`). A `missing` entry, or a `changed` one nobody can explain, is noted in TODO.md under "Security Improvements": the organization's check will send it to security review. Never restore or overwrite the file to make this pass.
+
+**WM04** [Tier 0] [FIX] **Only the script writes the record** -- no skill, fix or agent edits `.make-it/manifest.json` by hand. If it was edited, run `write` again: it rebuilds the record from the code.
+
+---
+
 ## Live Verification Checks
 
 These checks run after the app is started (Docker containers up, health checks passing).
