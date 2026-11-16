@@ -975,5 +975,137 @@ class Wiring(unittest.TestCase):
             self.assertIn("watermark.py", self.read(rel), rel)
 
 
+class CiScript(Base):
+    """scripts/watermark-check.sh: the same check for any CI system (Jenkins, GitLab CI, ...)."""
+
+    CI = "scripts/watermark-check.sh"
+
+    @classmethod
+    def setUpClass(cls):
+        # a make-it "release" to clone: this checkout's framework, tagged with its own version
+        cls.rel_tmp = tempfile.mkdtemp(prefix="wm-rel-")
+        cls.rel = os.path.join(cls.rel_tmp, "make-it")
+        shutil.copytree(FW, os.path.join(cls.rel, ".claude", "make-it"),
+                        ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
+        for name in ("VERSION", "CONTENT_MANIFEST"):
+            shutil.copy(os.path.join(ROOT, name), os.path.join(cls.rel, name))
+        with open(os.path.join(ROOT, "VERSION")) as f:
+            cls.version = f.read().strip()
+        import hashlib
+        with open(os.path.join(ROOT, "CONTENT_MANIFEST"), "rb") as f:
+            cls.digest = hashlib.sha256(f.read()).hexdigest()
+        git(cls.rel, "init", "-q", "-b", "main")
+        git(cls.rel, "add", "-A")
+        git(cls.rel, "commit", "-q", "-m", "release")
+        git(cls.rel, "tag", f"v{cls.version}")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.rel_tmp, ignore_errors=True)
+
+    def sealed(self):
+        self.write()
+        git(self.app, "add", "-A")
+        git(self.app, "commit", "-q", "-m", "built")
+
+    def ci(self, **env):
+        e = dict(os.environ, MAKE_IT_REPO_URL=self.rel)
+        for k in ("ALLOWED_RELEASES", "CHANGED_SECURITY_FILES", "BASE_SHA", "CHANGE_TARGET"):
+            e.pop(k, None)
+        e.update(env)
+        return subprocess.run(["bash", self.CI], cwd=self.app, capture_output=True, text=True, env=e)
+
+    def test_a_sealed_project_passes_and_nothing_is_left_behind(self):
+        self.sealed()
+        r = self.ci()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(git(self.app, "status", "--porcelain").stdout, "", "the check left files in the project")
+
+    def test_a_hand_edit_fails_and_names_the_file(self):
+        self.sealed()
+        self.edit("backend/app/main.py")
+        r = self.ci()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("backend/app/main.py", r.stdout + r.stderr)
+
+    def test_no_build_record_fails(self):
+        r = self.ci()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("/resume-it", r.stdout + r.stderr)
+
+    def test_a_linked_build_record_is_not_read(self):
+        self.sealed()
+        rec = self.p(".make-it/manifest.json")
+        os.rename(rec, rec + ".real")
+        os.symlink(rec + ".real", rec)
+        r = self.ci()
+        self.assertEqual(r.returncode, 1)
+        # refused by this script before anything is fetched, not only later by watermark.py
+        self.assertIn("no usable make-it build record", r.stdout + r.stderr)
+
+    def test_a_release_before_the_seal_is_refused(self):
+        self.sealed()
+        rec = self.record()
+        rec["framework"]["version"] = "1.59.0"
+        with open(self.p(".make-it/manifest.json"), "w") as f:
+            json.dump(rec, f)
+        r = self.ci()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("1.60.0", r.stdout + r.stderr)
+
+    def test_a_version_that_is_not_a_version_is_refused(self):
+        self.sealed()
+        rec = self.record()
+        rec["framework"]["version"] = "1.60.0; touch pwned"
+        with open(self.p(".make-it/manifest.json"), "w") as f:
+            json.dump(rec, f)
+        self.assertEqual(self.ci().returncode, 1)
+        self.assertFalse(os.path.exists(self.p("pwned")))
+
+    def test_allowed_list_passes_the_listed_release(self):
+        self.sealed()
+        r = self.ci(ALLOWED_RELEASES=f"9.9.9 {'0' * 64};{self.version} {self.digest}")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_allowed_list_refuses_an_unlisted_release(self):
+        self.sealed()
+        r = self.ci(ALLOWED_RELEASES=f"9.9.9 {self.digest}")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not an allowed release", r.stdout + r.stderr)
+
+    def test_allowed_list_refuses_a_release_whose_content_differs(self):
+        self.sealed()
+        r = self.ci(ALLOWED_RELEASES=f"{self.version} {'0' * 64}")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("does not match", r.stdout + r.stderr)
+
+    def changed_security_file(self):
+        self.sealed()
+        self.edit(PERMS)
+        run("seal", "--app", self.app, "--skill", "fix-it")
+        git(self.app, "add", "-A")
+        git(self.app, "commit", "-q", "-m", "fix")
+
+    def test_a_sealed_security_change_passes_for_review_by_default(self):
+        self.changed_security_file()
+        r = self.ci()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("SECURITY REVIEW", r.stdout + r.stderr)
+
+    def test_a_sealed_security_change_fails_when_set_to_block(self):
+        self.changed_security_file()
+        self.assertEqual(self.ci(CHANGED_SECURITY_FILES="block").returncode, 1)
+
+    def test_a_bad_base_commit_is_a_setup_error_not_a_pass(self):
+        self.sealed()
+        self.assertEqual(self.ci(BASE_SHA="main").returncode, 2)
+
+    def test_the_spec_and_the_standard_name_the_script(self):
+        for rel in (".claude/make-it/references/watermark.md", ".claude/make-it/references/build-standards.md",
+                    ".claude/commands/argo-it.md"):
+            with open(os.path.join(ROOT, rel)) as f:
+                self.assertTrue("scripts/watermark-check.sh" in f.read(), rel)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

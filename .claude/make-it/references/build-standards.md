@@ -450,7 +450,7 @@ Spec: `~/.claude/make-it/references/watermark.md`. The record is a claim; the or
 
 **WM06** [Tier 1] [FIX] **The app reports its stamp to admins** -- `backend/app/routers/about.py` exists, is registered in `main.py`, and its route is guarded by `require_permission("admin.settings", "read")`; the admin settings page has the "About this app" card. Fix: copy both from the scaffold. Never make the route public.
 
-**WM07** [Tier 0] [FIX] **The project's CI checks the seal** -- `.github/workflows/quality-gate.yml` has the `watermark` job, which runs `watermark.py verify` and fails when the code does not match its seal. Fix: copy the job from the scaffold's workflow. Projects on another CI system run the same command.
+**WM07** [Tier 0] [FIX] **The project's CI checks the seal** -- `.github/workflows/quality-gate.yml` has the `watermark` job, which runs `watermark.py verify` and fails when the code does not match its seal. Fix: copy the job from the scaffold's workflow. A project built by another CI system (a `Jenkinsfile`, `.gitlab-ci.yml`, `azure-pipelines.yml`) has `scripts/watermark-check.sh` and a stage that runs `bash scripts/watermark-check.sh`. Fix: copy the script from the scaffold and add the stage. Where the organization's own pipeline already runs the check, the stage is not needed.
 
 ---
 
