@@ -385,7 +385,29 @@ def check_package_json(raw):
     return out
 
 
-def walk(root, skipped):
+def is_worktree_of(root, folder):
+    """True only when git on this computer registered `folder` as another working copy of root's
+    project: the folder points into root's registry and the registry points back at the folder.
+    A clone cannot bring either side with it (git never tracks a `.git` entry)."""
+    marker = os.path.join(folder, ".git")
+    try:
+        if os.path.islink(marker) or not os.path.isfile(marker) or os.path.getsize(marker) > 4096:
+            return False
+        with open(marker, encoding="utf-8") as f:
+            text = f.read().strip()
+        if not text.startswith("gitdir:"):
+            return False
+        entry = os.path.realpath(os.path.join(folder, text[7:].strip()))
+        if os.path.dirname(entry) != os.path.realpath(os.path.join(root, ".git", "worktrees")):
+            return False
+        with open(os.path.join(entry, "gitdir"), encoding="utf-8") as f:
+            back = f.read(4096).strip()
+        return os.path.realpath(os.path.join(entry, back)) == os.path.realpath(marker)
+    except (OSError, ValueError):
+        return False
+
+
+def walk(root, skipped, worktrees):
     try:
         with open(os.path.join(root, ".git", "index"), "rb") as f:
             index = f.read()
@@ -395,6 +417,11 @@ def walk(root, skipped):
         keep = []
         for d in dirs:
             if d in ALWAYS_SKIP:
+                continue
+            # Another working copy of this project is checked when work happens there, not from here:
+            # a project with dozens of them would otherwise be read dozens of times over.
+            if is_worktree_of(root, os.path.join(folder, d)):
+                worktrees.add(os.path.relpath(os.path.join(folder, d), root))
                 continue
             # A committed folder is project code whatever its name: only a real install is skipped.
             if d in INSTALLED and index is not None and (d.encode() + b"/") not in index:
@@ -420,12 +447,14 @@ def check_config(base, raw):
 
 def scan(root, cleared):
     report = {"status": "clear", "stop": [], "notes": [], "cleared": [], "not_checked": [], "skipped": [],
-              "checked": 0}
+              "worktrees": [], "checked": 0}
     if not os.path.isdir(root):
         report.update(status="incomplete", not_checked=[root])
         return report
     skipped, found, trees, hashes = set(), collections.defaultdict(list), {}, {}
-    entries = list(walk(root, skipped))
+    worktrees = set()
+    entries = list(walk(root, skipped, worktrees))
+    report["worktrees"] = sorted(worktrees)
     known = {rel for _, rel in entries if rel.endswith((".py", ".pyw"))}
 
     for path, rel in entries:
@@ -520,6 +549,10 @@ def show(r):
         print(f"  cleared by the user earlier: {safe(f['file'])}")
     if r["skipped"]:
         print("  not read (installed packages): " + ", ".join(r["skipped"]))
+    if r["worktrees"]:
+        names = ", ".join(safe(w) for w in r["worktrees"][:3]) + (", ..." if len(r["worktrees"]) > 3 else "")
+        print(f"  not read ({len(r['worktrees'])} other working copies of this project, each checked "
+              f"when work happens there): {names}")
 
 
 def load_cleared(path):
@@ -559,6 +592,10 @@ def main():
     ap.add_argument("--cleared-file", default=os.path.join(
         os.path.expanduser("~"), ".claude", "make-it", "hostile-code-cleared.json"))
     args = ap.parse_args()
+    try:
+        os.nice(19)  # a check, never a reason for the computer to feel slow
+    except (AttributeError, OSError):
+        pass
     if args.clear:
         return clear(args.folder, args.clear, args.cleared_file)
     report = scan(args.folder, load_cleared(args.cleared_file))
