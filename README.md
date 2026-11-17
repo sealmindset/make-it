@@ -969,6 +969,33 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.62.0 -- the hostile-code check stops raising the same false alarm in your own project
+
+- **"This project is mine", asked once.** The check's stop now offers a third answer, confirmed
+  by typing the folder's name. The mark is two matching halves, one outside the project and one
+  inside its `.git` folder, so a clone, a download or a folder made again never has it. In a project
+  marked as yours, a test that loads your own code is a note, an old copy of a file the main
+  line has since fixed is a note that names the fixing commit, and the same read-and-run shape in
+  your own code is a weakness to fix first (new exit 3), not a stop. An old copy softens only
+  those soft findings; code shaped like an attack stops even as an old copy.
+- **Real attacks stop exactly as before, in every project:** unpacking hidden data, downloading
+  and running, a hidden run command, install hooks, folder-open tasks, and anything in
+  `conftest.py` or `setup.py`.
+- **Answered once, not asked again.** "Stop" is remembered for those exact files and said in one
+  line next time. A file the check cannot read can now be let through by typing its path.
+- **Other working copies are left out only in a project marked as yours.** v1.61.1 left them out
+  everywhere, and a review showed a downloaded archive could carry a fake registration and hide a
+  folder from the check. An unmarked project is read in full again, and the report says so.
+- **A repository inside your project is never treated as yours:** a clone, a download with its
+  own `.git`, or a submodule keeps the strict rules.
+- **git, only for your own projects, and locked down.** The old-copy lookup is the first time
+  this check runs git. It never does in a folder nobody marked, it needs git 2.45 or later, and a
+  repository's own settings cannot make it run a command or fetch anything.
+- **Checked:** `scripts/test-hostile-code.py` (49 new tests, 122 in all), including a repository
+  whose settings try to run a command and one set up to fetch missing objects on demand. Two
+  independent reviews broke earlier versions; each way they found is closed and has its own test,
+  and two rules were narrowed on the owner's ruling.
+
 ### v1.61.1 -- the hostile-code check no longer reads a project's other working copies
 
 - **Faster where it was slowest.** The check that runs before anything in a project is installed or
