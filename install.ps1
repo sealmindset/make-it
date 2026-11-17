@@ -984,10 +984,17 @@ function Install-MakeItSkills($state) {
 
     # Copy references, templates, and scaffolds
     Step "Copying references, templates, and scaffolds..."
+    # Keep the answers the hostile-code check remembered: they live in this folder, and replacing
+    # it used to delete them on every update.
+    $keepDir = Join-Path ([System.IO.Path]::GetTempPath()) ("make-it-keep-" + [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $keepDir -Force | Out-Null
     if (Test-Path $MAKEIT_DIR) {
+        Copy-Item -Path (Join-Path $MAKEIT_DIR "hostile-code-*.json") -Destination $keepDir -ErrorAction SilentlyContinue
         Remove-Item -Path $MAKEIT_DIR -Recurse -Force
     }
     Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $MAKEIT_DIR -Recurse -Force
+    Copy-Item -Path (Join-Path $keepDir "hostile-code-*.json") -Destination $MAKEIT_DIR -ErrorAction SilentlyContinue
+    Remove-Item -Path $keepDir -Recurse -Force -ErrorAction SilentlyContinue
 
     # Verify
     $refsDir = Join-Path $MAKEIT_DIR "references"

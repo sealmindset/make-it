@@ -211,9 +211,15 @@ install_skills() {
   # Copy references, templates, and scaffolds
   echo "  Copying references, templates, and scaffolds..."
   # Remove symlink (from dev-link.sh) or directory before copying
+  # Keep the answers the hostile-code check remembered (cleared files, "this project is mine",
+  # "stop"): they live in this folder, and replacing it used to delete them on every update.
+  KEEP_DIR="$(mktemp -d)"
+  cp -p "$MAKEIT_DIR"/hostile-code-*.json "$KEEP_DIR"/ 2>/dev/null || true
   [ -L "$MAKEIT_DIR" ] && rm "$MAKEIT_DIR"
   [ -d "$MAKEIT_DIR" ] && rm -rf "$MAKEIT_DIR"
   cp -r "$REPO_DIR/.claude/make-it" "$MAKEIT_DIR"
+  cp -p "$KEEP_DIR"/hostile-code-*.json "$MAKEIT_DIR"/ 2>/dev/null || true
+  rm -rf "$KEEP_DIR"
 
   # Verify
   [ -d "$MAKEIT_DIR/references" ] || fail "Copy failed -- references directory missing."
