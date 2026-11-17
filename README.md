@@ -969,6 +969,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.1 -- the hostile-code check no longer trusts a Python file it never read
+
+Found by a third independent review. Both gaps are older than v1.62.0.
+
+- **Fixed: code hidden behind a file the check skips could pass as "nothing found".** Reading a
+  named `.py` file and running it was treated as harmless, on the theory that the check reads
+  that file too. It does not read a link, anything under a `.git` folder, an installed-packages
+  folder, or a path outside the project. Loading such a file now stops the run.
+- **Fixed: an old copy of `conftest.py` or `setup.py` was softened** in a project marked as
+  yours. Files that run on their own are never softened, old copy or not.
+- **Checked:** six new tests in `scripts/test-hostile-code.py` (129 in all); each failed before
+  the fix.
+
 ### v1.65.0 -- no skill asks you to type a confirmation, and a "no" is kept everywhere
 
 - **One shared rule, read by every skill that asks:** an ask is a select, never a typed path,
