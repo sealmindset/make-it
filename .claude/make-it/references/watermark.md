@@ -65,9 +65,19 @@ and only the user can go on, with `seal --restart "<why>"`, which `MAKE-IT.md` s
 
 **Where each reader sees it**
 - **A person:** `MAKE-IT.md` at the project's root.
-- **Any CI system:** the `watermark` job in the scaffold's `quality-gate.yml` checks out make-it
+- **GitHub Actions:** the `watermark` job in the scaffold's `quality-gate.yml` checks out make-it
   at the record's release tag and runs `verify`. A fail fails the job. A changed security file that
   make-it sealed passes with a warning.
+- **Jenkins, GitLab CI, Azure DevOps, any other CI system:** one script the scaffold ships,
+  `scripts/watermark-check.sh`, does the same in one line (it needs bash, git, python3 and a way to
+  reach the make-it repository; `MAKE_IT_REPO_URL` points it at a mirror). In a `Jenkinsfile`:
+
+  ```groovy
+  stage('make-it watermark') { steps { sh 'bash scripts/watermark-check.sh' } }
+  ```
+
+  Build the pull request's own commit, not a merge with the base branch (in Jenkins: discover pull
+  requests by "the current pull request revision").
 - **The running app:** `GET /api/admin/about` (admin settings permission) rehashes its own
   security files inside the container and compares them with the stamp. The admin settings page
   shows it as "About this app". Admins only: it is never public.
@@ -196,6 +206,24 @@ repository by an organization ruleset, so no project can edit or skip it. On a p
 Needs GitHub Enterprise Cloud: the required-workflow rule and attestations on private
 repositories are not in the Team plan (checked against GitHub's docs, 2026-11-16). On other plans
 the same workflow can run as an ordinary required status check, without the attestation.
+
+**The same gate in Jenkins.** An organization whose builds run in Jenkins holds the check in a
+*global* shared library that only Jenkins administrators can change (`make-it-verify` is laid out
+as one: `vars/makeItWatermark.groovy`, with the script and the allowed list under `resources/`).
+The organization's own pipeline calls `makeItWatermark()` before it builds or deploys anything.
+What makes it a gate, not a courtesy:
+
+- the pipeline definition and the library come from the organization, never from the project's
+  branch, and the library's version cannot be overridden from a `Jenkinsfile`;
+- the script runs with `ALLOWED_RELEASES` set, so only listed make-it releases pass (pinned by
+  digest) and the hostile-code check runs first;
+- GitHub requires that Jenkins status on the default branch, with Jenkins' own GitHub App chosen
+  as its expected source, so nobody else can post a passing status under that name;
+- Jenkins is also what deploys, so "no pass, no deploy" is the order of the stages. There is no
+  attestation on this path: that is GitHub Actions only.
+
+Checked against Jenkins' shared-library docs and GitHub's ruleset docs, 2026-11-16. Not yet run in
+a Jenkins.
 
 ## 4. Always on (set up once by the Claude administrator)
 

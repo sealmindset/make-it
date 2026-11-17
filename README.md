@@ -969,6 +969,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.61.0 -- the watermark check runs in Jenkins and any other CI system
+
+- **One script, any pipeline.** Every web app now ships `scripts/watermark-check.sh`. One line in
+  a `Jenkinsfile`, `.gitlab-ci.yml` or `azure-pipelines.yml` runs the same check the GitHub Actions
+  job runs: it reads the project's make-it release, fetches that release outside the project, and
+  fails when code changed outside make-it. It needs bash, git and python3, and leaves nothing behind.
+- **The organization's check in Jenkins.** With `ALLOWED_RELEASES` set, the same script is the
+  stronger tier: only listed releases pass (pinned by digest) and the hostile-code check runs
+  first. `watermark.md` describes holding it in a Jenkins global shared library and requiring its
+  status in GitHub. That part is written from Jenkins' and GitHub's docs and has not run in a Jenkins.
+- **/argo-it** puts the stage first in the Jenkins, GitLab CI and Azure DevOps pipelines it
+  generates. Check WM07 covers projects built by those systems.
+- **Checked:** `scripts/test-watermark.py` (13 new tests, run against a local copy of the release).
+
 ### v1.60.0 -- the seal: a watermark that needs nothing but the project
 
 - **Every make-it run seals the project.** At the end of /make-it, /retrofit-it, /resume-it,

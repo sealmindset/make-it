@@ -1269,6 +1269,10 @@ Detect the CI system from the repo:
 - `azure-pipelines.yml` exists -> Azure DevOps
 - None found -> default to GitHub Actions
 
+For Jenkins, GitLab CI and Azure DevOps, when the project has `scripts/watermark-check.sh`, the
+pipeline's first stage runs `bash scripts/watermark-check.sh` (the make-it watermark, check WM07),
+on the pushed commit, before anything is built.
+
 **For GitHub Actions** (most common):
 
 Generate `.github/workflows/build-and-deploy.yml`:
