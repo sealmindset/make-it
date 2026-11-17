@@ -213,13 +213,20 @@ install_skills() {
   # Remove symlink (from dev-link.sh) or directory before copying
   # Keep the answers the hostile-code check remembered (cleared files, "this project is mine",
   # "stop"): they live in this folder, and replacing it used to delete them on every update.
-  KEEP_DIR="$(mktemp -d)"
-  cp -p "$MAKEIT_DIR"/hostile-code-*.json "$KEEP_DIR"/ 2>/dev/null || true
+  # The new folder is built beside the old one, answers included, and only then swapped in: a
+  # failure on the way leaves the old folder, and its answers, where they were.
+  NEW_DIR="$MAKEIT_DIR.new.$$"
+  rm -rf "$NEW_DIR"
+  cp -r "$REPO_DIR/.claude/make-it" "$NEW_DIR"
+  for kept in "$MAKEIT_DIR"/hostile-code-*.json; do
+    # an ordinary file only: a link is not followed, and its answers are asked again
+    if [ -f "$kept" ] && [ ! -L "$kept" ]; then
+      cp -p "$kept" "$NEW_DIR"/ || { rm -rf "$NEW_DIR"; fail "Could not keep $(basename "$kept"). Nothing was changed."; }
+    fi
+  done
   [ -L "$MAKEIT_DIR" ] && rm "$MAKEIT_DIR"
   [ -d "$MAKEIT_DIR" ] && rm -rf "$MAKEIT_DIR"
-  cp -r "$REPO_DIR/.claude/make-it" "$MAKEIT_DIR"
-  cp -p "$KEEP_DIR"/hostile-code-*.json "$MAKEIT_DIR"/ 2>/dev/null || true
-  rm -rf "$KEEP_DIR"
+  mv "$NEW_DIR" "$MAKEIT_DIR"
 
   # Verify
   [ -d "$MAKEIT_DIR/references" ] || fail "Copy failed -- references directory missing."
