@@ -969,6 +969,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.63.0 -- the hostile-code check asks far less, and never asks you to type
+
+- **An old or broken Python file no longer stops the run.** When Python can't parse a file but
+  its text is plain, the text checks read it and it becomes a note. Nobody is asked. Text that
+  looks like an attack still stops. A file whose text can't be read plainly (another encoding,
+  hidden bytes), one that is too large, or one that can't be opened still counts as unfinished.
+- **Every remaining ask is a select.** "I know this code" lets through the files the ask listed,
+  and "This whole project is mine" marks the project. No path or folder name to type.
+- **Real attacks stop exactly as before**, in every project.
+- **Checked:** `scripts/test-hostile-code.py` (124 tests).
+
 ### v1.62.0 -- the hostile-code check stops raising the same false alarm in your own project
 
 - **"This project is mine", asked once.** The check's stop now offers a third answer, confirmed
