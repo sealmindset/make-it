@@ -489,15 +489,25 @@ class OwnProject(Case):
 class Remembered(Case):
     """An answer given once is kept outside the project, for those exact bytes."""
 
-    def test_a_file_that_cannot_be_read_as_python_can_be_cleared_by_its_path(self):
+    def test_a_file_that_cannot_be_read_as_python_is_a_note_and_nobody_is_asked(self):
+        # owner, 2026-11-17: an old or broken Python file must not stop the run and raise a question
         self.put("broken.py", "def f(:\n")
-        self.assertEqual(self.scan(2)["not_checked"], ["broken.py"])
-        self.assertEqual(self.tool("--clear", "broken.py").returncode, 0)
         out = self.scan(0)
         self.assertEqual(out["not_checked"], [])
-        self.assertEqual([c["file"] for c in out["cleared"]], ["broken.py"])
-        self.put("broken.py", "def g(:\n")
-        self.assertEqual(self.scan(2)["not_checked"], ["broken.py"])
+        self.assertEqual([(n["file"], n["signal"]) for n in out["notes"]], [("broken.py", "unreadable")])
+
+    def test_a_broken_file_whose_text_cannot_be_read_plainly_is_still_unfinished(self):
+        # the quiet rule covers only files the text checks really read
+        for name, raw in (("nul.py", b"def f(:\n\0"), ("latin.py", b"def f(:\n\xff\n"),
+                          ("cookie.py", b"# -*- coding: utf-7 -*-\ndef f(:\n")):
+            with self.subTest(name):
+                self.put(name, raw)
+                self.assertIn(name, self.scan(2)["not_checked"])
+                os.remove(os.path.join(self.dir, name))
+
+    def test_a_broken_file_whose_text_looks_like_an_attack_still_stops(self):
+        self.put("broken.py", "def f(:\nimport zlib\nexec(zlib.decompress(blob))\n")
+        self.assertIn(("broken.py", "decode-then-run"), self.stops(self.scan(1)))
 
     def test_a_remembered_stop_is_said_in_one_line_and_still_stops(self):
         self.put("evil.py", PLAIN)
@@ -671,8 +681,9 @@ class StaleCopies(Case):
         with open(os.path.join(self.wt, "scripts", "scan_gitleaks.py"), "w") as f:
             f.write('"""never closed, and changed on the branch\n')
         self.mine()
-        out = self.scan_wt(2)
-        self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])
+        out = self.scan_wt(0)
+        note = [n for n in out["notes"] if n["file"] == "scripts/scan_gitleaks.py"]
+        self.assertEqual([(n["signal"], n.get("reason")) for n in note], [("unreadable", None)])
 
     def test_a_checkout_level_with_main_has_no_old_copies(self):
         # review: bytes that match something in history are not old when this checkout is not behind
@@ -752,7 +763,6 @@ class StaleCopies(Case):
         self.the_case(replacement=PLAIN)
         self.tool("--mine", folder=self.wt)
         out = self.scan_wt()
-        self.assertTrue(out["stop"] or out["not_checked"])
         self.assertEqual([f for f in out["notes"] if "old copy" in f.get("reason", "")], [])
 
     def test_a_carrier_that_main_still_has_is_not_stale(self):
@@ -784,7 +794,6 @@ class StaleCopies(Case):
         self.env = dict(os.environ, PATH=fake + os.pathsep + os.environ["PATH"])
         out = self.scan_wt()
         self.assertFalse(os.path.exists(marker), "a git too old to block on-demand fetches was used")
-        self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])  # nothing was treated as an old copy
         self.assertEqual([f for f in out["notes"] if "old copy" in f.get("reason", "")], [])
 
     def test_a_missing_object_never_makes_git_fetch(self):
@@ -1125,8 +1134,8 @@ class Wiring(unittest.TestCase):
         import re
         ref = re.sub(r"[\s>]+", " ", self.read(".claude/make-it/references/hostile-code.md"))  # wrap-proof
         for must in ("exit 3", "--mine", "--not-mine", "--remember-stop", "--look-again", "STOPPED EARLIER",
-                     'never on a plain "yes"', "Never mark a project yourself", "conftest.py",
-                     "type the folder's name", "is behind the main line", "never an old copy",
+                     'never a plain "yes"', "Never mark a project yourself", "conftest.py",
+                     "Every ask here is a select", "The user never types a path or a folder's name", "is behind the main line", "never an old copy",
                      "for the soft findings only", "isn't marked as yours", "never treated as the user's",
                      "hostile-code-projects.json", "/debug-it"):
             self.assertIn(must, ref, must)

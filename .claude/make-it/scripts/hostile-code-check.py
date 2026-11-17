@@ -68,7 +68,7 @@ WHY = {
     "large-blob": "holds a large unreadable value",
     "outside-dependency": "installs code from outside the package registry",
     "program-file": "is a program file committed to the project",
-    "unreadable": "could not be read as Python",
+    "unreadable": "could not be read as Python, so its text was checked instead",
 }
 # Shapes an attacker uses. These stop in every project, the owner's own included.
 # read-then-run is the one shape honest code shares: a test loading the code it checks, or a
@@ -373,6 +373,16 @@ def import_time_targets(tree, rel, known):
     return list(targets.items())
 
 
+def plain_text(raw):
+    """True when the text checks really read this file: plain UTF-8 with no declared encoding. Anything
+    else (another encoding, NUL bytes, a coding line) could hide its words from them."""
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return b"\0" not in raw and not re.search(rb"coding[:=]", b"\n".join(raw.split(b"\n", 2)[:2]))
+
+
 def parse(raw):
     try:
         with warnings.catch_warnings():
@@ -649,6 +659,7 @@ def scan(root, cleared, projects=None):
         report.update(status="incomplete", not_checked=[root])
         return report
     skipped, found, trees, hashes, gitsha = set(), collections.defaultdict(list), {}, {}, {}
+    text_read = set()
     worktrees, nested = set(), set()
     record = (projects or {}).get(os.path.realpath(root))
     record = record if isinstance(record, dict) else {}
@@ -690,6 +701,8 @@ def scan(root, cleared, projects=None):
             if tree is None:
                 report["not_checked"].append(rel)
                 found[rel].extend(text_verdicts(raw))
+                if plain_text(raw):
+                    text_read.add(rel)
             else:
                 trees[rel] = tree
                 found[rel].extend(verdicts(read_tree(tree)[0]))
@@ -720,7 +733,12 @@ def scan(root, cleared, projects=None):
     for rel in sorted(set(found) | unread):
         items = sorted(set(found.get(rel, ())))
         if rel in unread and rel in hashes:
-            items = items or [("unreadable", 1, False)]
+            items = sorted(set(items) | {("unreadable", 1, False)})
+        if rel in text_read:
+            # Python could not parse it, but its text was read (text_verdicts): a note, not an unfinished
+            # check. A file whose text could not be read plainly, could not be opened or is too large
+            # stays unread.
+            unread.discard(rel)
         if items and is_cleared(rel):
             report["cleared"].append({"file": rel, "signals": sorted({i[0] for i in items})})
             unread.discard(rel)
@@ -733,7 +751,7 @@ def scan(root, cleared, projects=None):
             if rel in stale and (sig in SOFT or sig == "unreadable" or not stop):
                 # only the soft findings: code shaped like an attack stops even as an old copy
                 kind, entry["reason"] = "notes", f"old copy: the main line replaced it in {stale[rel]}"
-            elif sig == "unreadable":
+            elif sig == "unreadable" and rel not in text_read:
                 continue  # reported under not_checked
             elif mine and stop and sig in SOFT and fold(os.path.basename(rel)) not in AUTO_RUN \
                     and not foreign(rel):
