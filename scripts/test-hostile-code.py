@@ -206,6 +206,72 @@ class ReviewFindings(Case):
         self.assertIn("venv", out["skipped"])
 
 
+class Worktrees(Case):
+    """Other working copies of the same project (git worktrees) are not read from here: each is
+    checked when work happens there. Only a copy git registered on both sides is skipped."""
+
+    def worktree(self, rel="wt/a", name="a", marker=None, back=None):
+        self.put(".git/index", b"DIRC\x00\x00good.py\x00")
+        self.put("good.py", "x=1\n")
+        self.put(rel + "/evil.py", PLAIN)
+        entry = os.path.join(self.dir, ".git", "worktrees", name)
+        if marker is not False:
+            self.put(rel + "/.git", marker or f"gitdir: {entry}\n")
+        if back is not False:
+            self.put(f".git/worktrees/{name}/gitdir", back or os.path.join(self.dir, rel, ".git") + "\n")
+
+    def test_a_registered_worktree_is_skipped_and_said(self):
+        self.worktree()
+        out = self.scan(0)
+        self.assertEqual(out["worktrees"], ["wt/a"])
+        p = subprocess.run([sys.executable, "-I", SCRIPT, self.dir, "--cleared-file", self.cleared],
+                           capture_output=True, text=True)
+        self.assertIn("other working copies", p.stdout)
+
+    def test_relative_paths_count_too(self):
+        self.worktree(marker="gitdir: ../../.git/worktrees/a\n", back="../../../wt/a/.git\n")
+        self.assertEqual(self.scan(0)["worktrees"], ["wt/a"])
+
+    def test_a_folder_that_only_claims_to_be_one_is_read(self):
+        self.worktree(back=False)
+        self.assertIn(("wt/a/evil.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_folder_the_project_lists_but_that_does_not_point_back_is_read(self):
+        self.worktree(marker=False)
+        self.assertIn(("wt/a/evil.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_marker_pointing_outside_the_registry_is_read(self):
+        other = os.path.join(self.tmp.name, "elsewhere")
+        os.makedirs(other)
+        with open(os.path.join(other, "gitdir"), "w") as f:
+            f.write(os.path.join(self.dir, "wt/a/.git") + "\n")
+        self.worktree(marker=f"gitdir: {other}\n")
+        self.assertIn(("wt/a/evil.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_the_registry_naming_another_folder_is_read(self):
+        self.worktree(back=os.path.join(self.dir, "wt/b/.git") + "\n")
+        self.assertIn(("wt/a/evil.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_linked_marker_is_read(self):
+        self.worktree(marker=False)
+        real = self.put("real-marker", f"gitdir: {os.path.join(self.dir, '.git', 'worktrees', 'a')}\n")
+        os.symlink(real, os.path.join(self.dir, "wt/a/.git"))
+        self.assertIn(("wt/a/evil.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_real_git_worktree_is_skipped(self):
+        import shutil
+        if not shutil.which("git"):
+            self.skipTest("no git")
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+                   GIT_COMMITTER_EMAIL="t@t")
+        self.put("good.py", "x=1\n")
+        for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "x"],
+                     ["worktree", "add", "-q", ".worktrees/feature", "-b", "feature"]):
+            subprocess.run(["git", "-C", self.dir, *args], check=True, capture_output=True, env=env)
+        self.put(".worktrees/feature/evil.py", PLAIN)
+        self.assertEqual(self.scan(0)["worktrees"], [".worktrees/feature"])
+
+
 class ImportTrigger(Case):
     def test_module_level_call_into_flagged_sibling(self):
         self.put("pkg/__init__.py", "")

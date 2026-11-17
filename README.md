@@ -969,6 +969,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.61.1 -- the hostile-code check no longer reads a project's other working copies
+
+- **Faster where it was slowest.** The check that runs before anything in a project is installed or
+  started (X09) read every git worktree inside the folder, each a full copy of the project. On a
+  project with 128 of them it ran for over 25 minutes; it now takes about 20 seconds. It reads the
+  copy being worked in, and says how many others it left out. Each is checked when work happens there.
+- **Only copies git registered are left out:** the folder must point at this project's registry and
+  the registry must point back. A folder that merely claims to be one is still read.
+- **Low priority.** The check lowers its own priority so it does not slow the computer down.
+- **Checked:** `scripts/test-hostile-code.py` (8 new tests; four ways of weakening the rule each fail one).
+
 ### v1.61.0 -- the watermark check runs in Jenkins and any other CI system
 
 - **One script, any pipeline.** Every web app now ships `scripts/watermark-check.sh`. One line in
