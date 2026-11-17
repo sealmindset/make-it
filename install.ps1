@@ -986,15 +986,19 @@ function Install-MakeItSkills($state) {
     Step "Copying references, templates, and scaffolds..."
     # Keep the answers the hostile-code check remembered: they live in this folder, and replacing
     # it used to delete them on every update.
-    $keepDir = Join-Path ([System.IO.Path]::GetTempPath()) ("make-it-keep-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $keepDir -Force | Out-Null
+    # The new folder is built beside the old one, answers included, and only then swapped in: a
+    # failure on the way leaves the old folder, and its answers, where they were.
+    $newDir = "$MAKEIT_DIR.new.$PID"
+    if (Test-Path $newDir) { Remove-Item -Path $newDir -Recurse -Force }
+    Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $newDir -Recurse -Force
     if (Test-Path $MAKEIT_DIR) {
-        Copy-Item -Path (Join-Path $MAKEIT_DIR "hostile-code-*.json") -Destination $keepDir -ErrorAction SilentlyContinue
+        # an ordinary file only: a link is not followed, and its answers are asked again
+        Get-ChildItem -Path $MAKEIT_DIR -Filter "hostile-code-*.json" -File -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.LinkType } |
+            ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $newDir -Force -ErrorAction Stop }
         Remove-Item -Path $MAKEIT_DIR -Recurse -Force
     }
-    Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $MAKEIT_DIR -Recurse -Force
-    Copy-Item -Path (Join-Path $keepDir "hostile-code-*.json") -Destination $MAKEIT_DIR -ErrorAction SilentlyContinue
-    Remove-Item -Path $keepDir -Recurse -Force -ErrorAction SilentlyContinue
+    Move-Item -Path $newDir -Destination $MAKEIT_DIR
 
     # Verify
     $refsDir = Join-Path $MAKEIT_DIR "references"

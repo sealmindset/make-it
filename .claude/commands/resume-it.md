@@ -519,10 +519,12 @@ Then one plain line for each item left out by your choice (step 8):
 
 Then, when anything is under `## Put off by your choice`, the one line for all of it:
 "[N] things you put off -- say 'show what I put off' to see them."
+Must-do updates among them are named on that line every session, never only counted: "[N] things
+you put off, including must-do updates: [name each]."
 
 **3. Generate suggested actions based on what you found:**
 
-Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant. No suggestion offers an item left out by your choice (step 8), or one put off by your choice. A suggestion the user turns down, or passes over to pick something else twice, goes under `## Put off by your choice`.
+Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant. No suggestion offers an item left out by your choice (step 8), or one put off by your choice. A suggestion the user turns down goes under `## Put off by your choice`; one they only pass over to pick something else does not.
 
 | Context Signal | Suggested Action |
 |---------------|-----------------|
@@ -550,7 +552,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | CI quality gate workflow missing (Q13) | "Your app has local quality checks but no CI workflow to enforce them on every PR. Want me to add the quality gate workflow? It runs all checks automatically and generates an attestation artifact." |
 | Dead-code cleanup due (Q14 gap) | "It's been a while since anyone cleared out code your app no longer uses [or: that's never been done / or: there's an earlier cleanup waiting for you to keep or drop]. Want me to check? I check everything still works after each step, and you decide on anything I can't fully prove is unused." (routes to /deadcode-it) |
 | Standards gaps found (critical) | "I found [N] must-do updates before deployment ([name each]) and [M] improvements ([name each]) -- which group should I apply, or not now?" (active confirmation -- the ask below) |
-| Standards gaps found (important) | "There are [N] improvements available since your app was built ([name each]) and no must-do updates -- say 'apply the improvements' or 'not now'." (active confirmation -- the ask below, one group) |
+| Standards gaps found (important) | "There are [N] improvements available since your app was built ([name each]) and no must-do updates -- pick 'Apply the improvements' or 'Not now'." (active confirmation -- the ask below, one group) |
 | Standards gaps found (nice-to-have) | "I noticed [N] optional enhancements available. Want to see the list?" |
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
@@ -582,8 +584,8 @@ the must-do updates -- the catch is some of them change how sign-in behaves, so 
 app right after.)"
 
 Show only the groups that have items: no "0 must-do updates", and never recommend an empty
-group. With one group, ask about that group alone, with named options: "Say 'apply the [must-do
-updates / improvements]' or 'not now'."
+group. With one group, ask about that group alone, with named options to pick from: "Apply the [must-do
+updates / improvements]" or "Not now".
 
 Items left out by your choice (step 8) are not in [N] or the other counts, the must-do or
 improvements groups, or the ask; the status summary (2) already mentions each one.
@@ -609,8 +611,8 @@ in `.make-it-state.md` (one line: the item, its checks, and today's date, as
 by your choice". A group the user didn't pick is only put off, so it isn't recorded. On "not now"
 with items left out, name each one as step 6 below does.
 
-A group the user didn't pick, and each item they only put off, goes under `## Put off by your
-choice` instead, naming its items. The catch-up ask then leaves it out, and asks about that group
+"Isn't recorded" there means the left-out record. A group the user didn't pick, and each item
+they only put off, goes under `## Put off by your choice` instead, naming its items. The catch-up ask then leaves it out, and asks about that group
 again only for items it has gained since.
 
 **If the user accepts the catch-up work:**

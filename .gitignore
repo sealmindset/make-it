@@ -22,3 +22,6 @@ dist/
 __pycache__/
 # Git worktrees made by Claude Code sessions and subagents
 .claude/worktrees/
+
+# the hostile-code check's remembered answers, when the install folder is linked to this checkout
+.claude/make-it/hostile-code-*.json

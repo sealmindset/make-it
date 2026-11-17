@@ -969,6 +969,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.64.2 -- fixes from an independent review of v1.63.0 to v1.64.1
+
+- **Fixed: a hostile file could pass as "nothing found" (introduced in v1.63.0).** A Python file
+  the check's own Python can't parse was given a light text search and passed as a note. A file
+  written for a newer Python fails to parse in the check but runs where the project runs, and the
+  text search misses most attack shapes. Such files stop the run again, as before v1.63.0, and are
+  let through only by your pick, which is remembered.
+- **"I know this code" now asks which files.** One pick used to let through every file listed.
+  It is a select with one option per file.
+- **/resume-it:** passing over a suggestion no longer counts as turning it down, and must-do
+  updates you put off are named in every status, not only counted.
+- **Installers:** the new folder is built first and swapped in, so a failed update no longer
+  loses the remembered answers. A linked answers file is not followed.
+- **Tests:** the checks for the put-off rules and the no-typing rule now fail when those rules
+  are removed.
+
 ### v1.64.1 -- updating make-it no longer forgets what you told the hostile-code check
 
 - **Fixed: every update deleted the remembered answers.** The files you let through, the projects
