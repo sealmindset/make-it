@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """Look for code built to attack the computer that runs it, BEFORE anything in the project runs.
 
-Reads files as data: never imports or runs them, and never calls git (a repo's own git settings
-can run commands). Standard library only. Output carries file paths, line numbers and fixed
+Reads files as data: never imports or runs them. It calls git only in a folder the user marked as
+their own project (--mine), and then with everything a repo's own git settings could use to run a
+command switched off; in any other folder git is never called. Standard library only. Output carries file paths, line numbers and fixed
 wording, never file contents, so a hostile file can't talk to whoever reads the report.
 
     python3 -I hostile-code-check.py <folder> [--json]
     python3 -I hostile-code-check.py <folder> --clear <relative path>   # only on the user's word
+    python3 -I hostile-code-check.py <folder> --mine | --not-mine       # only on the user's word
+    python3 -I hostile-code-check.py <folder> --remember-stop | --look-again
 
-Exit: 0 nothing found, 1 stop, 2 could not finish (not a clean result).
+Exit: 0 nothing found, 1 stop, 2 could not finish (not a clean result), 3 a weakness in the
+user's own code to fix before carrying on (only in a folder marked --mine).
 Finding nothing does not prove a project is safe: see references/hostile-code.md.
 """
 import argparse
 import ast
 import collections
+import datetime
 import hashlib
 import json
 import math
 import os
 import re
+import secrets
+import subprocess
 import sys
+import unicodedata
 import warnings
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -60,7 +68,14 @@ WHY = {
     "large-blob": "holds a large unreadable value",
     "outside-dependency": "installs code from outside the package registry",
     "program-file": "is a program file committed to the project",
+    "unreadable": "could not be read as Python",
 }
+# Shapes an attacker uses. These stop in every project, the owner's own included.
+# read-then-run is the one shape honest code shares: a test loading the code it checks, or a
+# careless loader in the owner's own code. It is softened only in a project marked as the owner's.
+SOFT = {"read-then-run"}
+# Files that run on their own (pytest, pip and Python load them unasked) are never softened.
+AUTO_RUN = {"conftest.py", "setup.py", "sitecustomize.py", "usercustomize.py"}
 
 
 def entropy(sample):
@@ -407,7 +422,183 @@ def is_worktree_of(root, folder):
         return False
 
 
-def walk(root, skipped, worktrees):
+def fold(name):
+    """A file name as a file system that ignores case and letter form sees it."""
+    return unicodedata.normalize("NFKC", name).casefold()
+
+
+def is_test(rel):
+    """A test file, by the usual names. conftest.py is not one here: pytest runs it on its own,
+    which is exactly where a fake project puts a payload."""
+    rel = rel.replace(os.sep, "/")
+    base = fold(rel.rsplit("/", 1)[-1])
+    if base in AUTO_RUN:
+        return False
+    return bool(re.search(r"(^|/)tests?/", fold(rel))) or base.startswith("test_") \
+        or base.endswith(("_test.py", "_test.pyw"))
+
+
+def owner_home(root):
+    """(project root, its .git folder) for the project this folder belongs to, or None when it is
+    not a git project. A registered working copy belongs to its main project."""
+    dot = os.path.join(root, ".git")
+    if os.path.isdir(dot) and not os.path.islink(dot):
+        return os.path.realpath(root), dot
+    try:
+        if os.path.islink(dot) or not os.path.isfile(dot) or os.path.getsize(dot) > 4096:
+            return None
+        with open(dot, encoding="utf-8") as f:
+            text = f.read().strip()
+        entry = os.path.realpath(os.path.join(root, text[7:].strip())) if text.startswith("gitdir:") else ""
+        common = os.path.dirname(os.path.dirname(entry))
+        main = os.path.dirname(common)
+        if entry and os.path.basename(common) == ".git" and is_worktree_of(main, root):
+            return main, common
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def owner_token(gitdir):
+    """The mark the user's --mine left inside the project's .git folder. git never tracks anything
+    in there, so a clone, a download or a folder made again cannot bring a matching one."""
+    path = os.path.join(gitdir, "make-it-owner")
+    try:
+        if os.path.islink(path) or not os.path.isfile(path) or os.path.getsize(path) > 128:
+            return ""
+        with open(path, encoding="ascii") as f:
+            return f.read().strip()
+    except (OSError, ValueError):
+        return ""
+
+
+def is_mine(root, projects):
+    home = owner_home(root)
+    if not home:
+        return False
+    rec = (projects or {}).get(home[0])
+    token = rec.get("token") if isinstance(rec, dict) and rec.get("mine") else ""
+    return bool(token) and isinstance(token, str) and owner_token(home[1]) == token
+
+
+def git_exe(root):
+    """An absolute path to git that the project cannot supply: PATH entries that are relative, or
+    inside the project, are skipped."""
+    home = owner_home(root)
+    bases = {os.path.realpath(root)} | ({home[0]} if home else set())
+
+    def inside(path):
+        real = os.path.realpath(path)
+        return any(real == b or real.startswith(b + os.sep) for b in bases)
+
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        exe = os.path.join(d, "git")
+        if os.path.isabs(d) and not inside(d) and os.path.isfile(exe) and os.access(exe, os.X_OK) \
+                and not inside(exe):  # a link named git that points into the project is the project's git
+            return exe
+    return None
+
+
+def run_git(exe, root, *args, stdin=None):
+    """git, for a project its owner marked as their own, and never otherwise. Plumbing commands
+    only, with everything a repository's own settings could use to run a command switched off:
+    no fetch of missing objects, no prompts, no pager, no file monitor, no hooks, no replaced
+    objects, and the user's and the system's git settings left out. Bytes, or None on any failure:
+    a failure must never read as an empty, harmless answer."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", GIT_PAGER="cat",
+               GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_ASKPASS="true")
+    cmd = [exe, "-C", root, "--no-pager", "--no-replace-objects",
+           "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit",
+           "-c", "core.alternateRefsCommand=", "-c", "core.hooksPath=" + os.devnull,
+           "-c", "log.showSignature=false", "-c", "core.pager=cat", *args]
+    try:
+        r = subprocess.run(cmd, input=stdin, stdin=None if stdin is not None else subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, env=env, cwd=os.sep)
+        return r.stdout if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def passes(base, raw):
+    """True when this content, read on its own, has nothing that stops and can be read."""
+    try:
+        if not base.lower().endswith((".py", ".pyw")):
+            return not any(stop for _, _, stop in check_config(base, raw))
+        tree = parse(raw)
+        return tree is not None and not any(stop for _, _, stop in verdicts(read_tree(tree)[0]))
+    except (ValueError, RecursionError, MemoryError):
+        return False
+
+
+def stale_copies(root, gitsha):
+    """{file: commit} for each file here that is an old copy. All of these must hold:
+    this checkout is behind the main line (it forked from a commit that is not the main line's
+    newest); the file is byte for byte what that fork commit had; the main line has a different
+    file at that path now; and that newer file passes the check. A file the main line deleted, a
+    file changed since the fork, and a checkout that is level with the main line are never old
+    copies: a downloaded payload is current, not old."""
+    root = os.path.realpath(root)  # git is started from the top folder, never from inside the project
+    exe = git_exe(root)
+    if not exe:
+        return {}
+    # Before 2.45 git ignores GIT_NO_LAZY_FETCH, and a repository set up to fetch missing objects on
+    # demand could then run its own command. Older git: no lookup, so nothing is softened.
+    try:
+        v = subprocess.run([exe, "--version"], cwd=os.sep, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=20).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    m = re.search(r"(\d+)\.(\d+)", v)
+    if not m or (int(m.group(1)), int(m.group(2))) < (2, 45):
+        return {}
+
+    def one(*args):
+        out = run_git(exe, root, *args)
+        return out.decode("utf-8", "replace").strip() if out else ""
+
+    ref = one("symbolic-ref", "-q", "refs/remotes/origin/HEAD")
+    for cand in ("refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"):
+        if ref:
+            break
+        if one("rev-parse", "-q", "--verify", cand + "^{commit}"):
+            ref = cand
+    tip = one("rev-parse", "-q", "--verify", ref + "^{commit}") if ref else ""
+    head = one("rev-parse", "-q", "--verify", "HEAD^{commit}")
+    fork = one("merge-base", head, tip) if head and tip else ""
+    if not fork or fork == tip:
+        return {}
+    prefix = run_git(exe, root, "rev-parse", "--show-prefix")
+    if prefix is None:
+        return {}
+    prefix = prefix.decode("utf-8", "replace").strip()
+    out = {}
+    for rel, ours in gitsha.items():
+        path = prefix + rel.replace(os.sep, "/")
+        if "\n" in path:
+            continue
+        def plain_file(commit):
+            """The blob at this path in this commit, only when it is an ordinary file (not a link,
+            a folder or another repository)."""
+            line = one("ls-tree", commit, "--", path)
+            meta = line.split("\t", 1)[0].split(" ")
+            return meta[2] if len(meta) == 3 and meta[0].startswith("100") and meta[1] == "blob" else ""
+
+        if plain_file(fork) != ours:
+            continue
+        now = plain_file(tip)
+        if not now or now == ours:
+            continue
+        raw = run_git(exe, root, "cat-file", "blob", now)
+        if raw is None or not passes(os.path.basename(rel), raw):
+            continue
+        commit = one("rev-list", "-1", tip, "--", path)
+        if commit:
+            out[rel] = commit[:8]
+    return out
+
+
+def walk(root, skipped, worktrees, mine=False, nested=None):
     try:
         with open(os.path.join(root, ".git", "index"), "rb") as f:
             index = f.read()
@@ -419,10 +610,16 @@ def walk(root, skipped, worktrees):
             if d in ALWAYS_SKIP:
                 continue
             # Another working copy of this project is checked when work happens there, not from here:
-            # a project with dozens of them would otherwise be read dozens of times over.
-            if is_worktree_of(root, os.path.join(folder, d)):
-                worktrees.add(os.path.relpath(os.path.join(folder, d), root))
-                continue
+            # a project with dozens of them would otherwise be read dozens of times over. Only in a
+            # project the user marked as their own: a downloaded archive can carry both halves of a
+            # working copy's registration, and would hide a folder from the check that way.
+            sub = os.path.join(folder, d)
+            if is_worktree_of(root, sub):
+                worktrees.add(os.path.relpath(sub, root))
+                if mine:
+                    continue
+            elif nested is not None and os.path.lexists(os.path.join(sub, ".git")):
+                nested.add(os.path.relpath(sub, root))  # somebody else's repository inside this one
             # A committed folder is project code whatever its name: only a real install is skipped.
             if d in INSTALLED and index is not None and (d.encode() + b"/") not in index:
                 skipped.add(d)
@@ -445,16 +642,25 @@ def check_config(base, raw):
     return [("outside-dependency", 1, False)] if pattern.search(text) else []
 
 
-def scan(root, cleared):
-    report = {"status": "clear", "stop": [], "notes": [], "cleared": [], "not_checked": [], "skipped": [],
-              "worktrees": [], "checked": 0}
+def scan(root, cleared, projects=None):
+    report = {"status": "clear", "stop": [], "fix": [], "notes": [], "cleared": [], "not_checked": [],
+              "skipped": [], "worktrees": [], "checked": 0, "mine": False, "stopped_earlier": None}
     if not os.path.isdir(root):
         report.update(status="incomplete", not_checked=[root])
         return report
-    skipped, found, trees, hashes = set(), collections.defaultdict(list), {}, {}
-    worktrees = set()
-    entries = list(walk(root, skipped, worktrees))
-    report["worktrees"] = sorted(worktrees)
+    skipped, found, trees, hashes, gitsha = set(), collections.defaultdict(list), {}, {}, {}
+    worktrees, nested = set(), set()
+    record = (projects or {}).get(os.path.realpath(root))
+    record = record if isinstance(record, dict) else {}
+    mine = is_mine(root, projects)
+    report["mine"] = mine
+
+    def foreign(rel):
+        """Under a repository of its own inside this project: not the owner's word to give."""
+        return any(rel == n or rel.startswith(n + os.sep) for n in nested)
+    entries = list(walk(root, skipped, worktrees, mine, nested))
+    report["worktrees"] = sorted(worktrees) if mine else []
+    report["worktrees_read"] = 0 if mine else len(worktrees)
     known = {rel for _, rel in entries if rel.endswith((".py", ".pyw"))}
 
     for path, rel in entries:
@@ -475,6 +681,7 @@ def scan(root, cleared):
             with open(path, "rb") as f:
                 raw = f.read()
             hashes[rel] = hashlib.sha256(raw).hexdigest()
+            gitsha[rel] = hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
             report["checked"] += 1
             if not is_py:
                 found[rel].extend(check_config(base, raw))
@@ -494,6 +701,11 @@ def scan(root, cleared):
 
     flagged = {rel for rel, items in found.items() if not is_cleared(rel) and any(
         stop or sig == "encoded-data" for sig, _, stop in items)}
+    # Old copies, looked up in git only for a project its owner marked as their own.
+    held = {rel for rel in set(report["not_checked"]) | {r for r in flagged if any(st for _, _, st in found[r])}
+            if rel in gitsha and not is_cleared(rel) and not foreign(rel)}
+    stale = stale_copies(root, {rel: gitsha[rel] for rel in held}) if mine and held else {}
+    # An old copy stays in `flagged`: a file that starts it on import is still a stop.
     extras = {}
     for rel, tree in trees.items():
         stubs = sum(1 for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
@@ -504,22 +716,50 @@ def scan(root, cleared):
                 found[rel].append(("runs-on-import", line, True))
                 extras[(rel, line)] = {"target": target, "empty_functions": stubs}
 
-    for rel in sorted(found):
-        items = sorted(set(found[rel]))
+    unread = set(report["not_checked"])
+    for rel in sorted(set(found) | unread):
+        items = sorted(set(found.get(rel, ())))
+        if rel in unread and rel in hashes:
+            items = items or [("unreadable", 1, False)]
         if items and is_cleared(rel):
             report["cleared"].append({"file": rel, "signals": sorted({i[0] for i in items})})
+            unread.discard(rel)
             continue
         for sig, line, stop in items:
             entry = {"file": rel, "line": line, "signal": sig, "why": WHY[sig]}
             if sig == "runs-on-import":
                 entry.update(extras[(rel, line)])
-            report["stop" if stop else "notes"].append(entry)
+            kind = "stop" if stop else "notes"
+            if rel in stale and (sig in SOFT or sig == "unreadable" or not stop):
+                # only the soft findings: code shaped like an attack stops even as an old copy
+                kind, entry["reason"] = "notes", f"old copy: the main line replaced it in {stale[rel]}"
+            elif sig == "unreadable":
+                continue  # reported under not_checked
+            elif mine and stop and sig in SOFT and fold(os.path.basename(rel)) not in AUTO_RUN \
+                    and not foreign(rel):
+                if is_test(rel):
+                    kind, entry["reason"] = "notes", "a test in your own project that loads code to check it"
+                else:
+                    kind = "fix"
+            report[kind].append(entry)
+        if rel in stale:
+            unread.discard(rel)
     report["skipped"] = sorted(skipped)
-    report["not_checked"] = sorted(set(report["not_checked"]))
+    report["not_checked"] = sorted(unread)
+    held = sorted({f["file"] for f in report["stop"]} | unread)
+    # A file with no hash (too large, unreadable) can't be told from its next version, so a result
+    # that holds one is never remembered.
+    report["fingerprint"] = hashlib.sha256(json.dumps(
+        [(rel, hashes[rel]) for rel in held]).encode()).hexdigest() if held and all(r in hashes for r in held) else ""
+    earlier = record.get("stopped")
+    if held and isinstance(earlier, dict) and earlier.get("fingerprint") == report["fingerprint"]:
+        report["stopped_earlier"] = str(earlier.get("date", ""))
     if report["stop"]:
         report["status"] = "stop"
     elif report["not_checked"]:
         report["status"] = "incomplete"
+    elif report["fix"]:
+        report["status"] = "fix"
     elif not report["checked"]:
         report["status"] = "nothing-to-check"
     return report
@@ -530,10 +770,16 @@ def safe(path):
 
 
 def show(r):
+    if r["stopped_earlier"]:
+        print(f"STOPPED EARLIER -- you chose to stop here on {safe(r['stopped_earlier'])} and nothing has "
+              "changed since. Say 'look again' to go through it again.")
     if r["status"] == "stop":
         print("STOP -- do not install or run this project yet:")
     elif r["status"] == "incomplete":
         print("COULD NOT FINISH -- this is not a clean result.")
+    elif r["status"] == "fix":
+        print(f"FIX FIRST -- nothing found that attacks this computer in {r['checked']} files, but your own "
+              "code has a weakness to fix before carrying on:")
     elif r["status"] == "nothing-to-check":
         print("Nothing to check: no Python files, package.json, requirements or VS Code tasks here.")
     else:
@@ -541,8 +787,11 @@ def show(r):
     for f in r["stop"]:
         extra = f" -> {safe(f['target'])}" if "target" in f else ""
         print(f"  {safe(f['file'])}:{f['line']} {f['signal']}: {f['why']}{extra}")
+    for f in r["fix"]:
+        print(f"  fix {safe(f['file'])}:{f['line']} {f['signal']}: {f['why']}")
     for f in r["notes"]:
-        print(f"  note {safe(f['file'])}:{f['line']} {f['signal']}: {f['why']}")
+        reason = f" ({f['reason']})" if "reason" in f else ""
+        print(f"  note {safe(f['file'])}:{f['line']} {f['signal']}: {f['why']}{reason}")
     for path in r["not_checked"]:
         print(f"  not checked: {safe(path)}")
     for f in r["cleared"]:
@@ -553,6 +802,9 @@ def show(r):
         names = ", ".join(safe(w) for w in r["worktrees"][:3]) + (", ..." if len(r["worktrees"]) > 3 else "")
         print(f"  not read ({len(r['worktrees'])} other working copies of this project, each checked "
               f"when work happens there): {names}")
+    if r.get("worktrees_read"):
+        print(f"  read {r['worktrees_read']} other working copies of this project too. In a project marked "
+              "as your own they are left out, which is much faster.")
 
 
 def load_cleared(path):
@@ -564,21 +816,61 @@ def load_cleared(path):
         return {}
 
 
+def save(path, data):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=1, sort_keys=True)
+    os.replace(tmp, path)
+
+
+def remember(projects_file, root, **change):
+    """Set (or, with None, forget) answers for this folder. Kept outside every project."""
+    data = load_cleared(projects_file)
+    key = os.path.realpath(root)
+    rec = data.get(key) if isinstance(data.get(key), dict) else {}
+    for name, value in change.items():
+        if value is None:
+            rec.pop(name, None)
+        else:
+            rec[name] = value
+    data[key] = rec
+    save(projects_file, data)
+
+
+def mark_mine(projects_file, root, today):
+    """--mine: a fresh random mark inside the project's .git folder, and the same mark kept outside.
+    Both must match for the folder to count as the user's own."""
+    home = owner_home(root)
+    if not home:
+        print("Not marked: only a git project can be marked as your own.")
+        return 2
+    token = secrets.token_hex(16)
+    path = os.path.join(home[1], "make-it-owner")
+    if os.path.lexists(path) and (os.path.islink(path) or not os.path.isfile(path)):
+        print("Not marked: the mark's place inside .git is not an ordinary file.")
+        return 2
+    with open(path, "w", encoding="ascii") as f:
+        f.write(token + "\n")
+    remember(projects_file, home[0], mine=today, token=token)
+    print("Remembered: this folder is your own project.")
+    return 0
+
+
 def clear(root, rel, cleared_file):
     base = os.path.realpath(root)
     path = os.path.realpath(os.path.join(root, rel))
     if not path.startswith(base + os.sep) or not os.path.isfile(path):
         print(f"Not cleared: {safe(rel)} is not a file inside this project.")
         return 2
+    if os.path.getsize(path) > MAX_BYTES:
+        print(f"Not cleared: {safe(rel)} is too large to check, so it can't be told from a changed copy.")
+        return 2
     with open(path, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()
     data = load_cleared(cleared_file)
     data[digest] = os.path.relpath(path, base)
-    os.makedirs(os.path.dirname(cleared_file) or ".", exist_ok=True)
-    tmp = cleared_file + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=1, sort_keys=True)
-    os.replace(tmp, cleared_file)
+    save(cleared_file, data)
     print(f"Cleared {safe(rel)} as it is now. Any change to the file flags it again.")
     return 0
 
@@ -587,10 +879,18 @@ def main():
     ap = argparse.ArgumentParser(description="Look for code built to attack the computer that runs it.")
     ap.add_argument("folder")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--clear", metavar="RELATIVE_PATH")
+    one = ap.add_mutually_exclusive_group()
+    one.add_argument("--clear", metavar="RELATIVE_PATH")
     # Kept outside every project: a list inside a repo could clear that repo's own malware.
     ap.add_argument("--cleared-file", default=os.path.join(
         os.path.expanduser("~"), ".claude", "make-it", "hostile-code-cleared.json"))
+    # The owner's answers about a folder: also outside every project, for the same reason.
+    ap.add_argument("--projects-file", default=os.path.join(
+        os.path.expanduser("~"), ".claude", "make-it", "hostile-code-projects.json"))
+    one.add_argument("--mine", action="store_true", help="the user said this folder is their own project")
+    one.add_argument("--not-mine", action="store_true")
+    one.add_argument("--remember-stop", action="store_true", help="the user chose to stop on this result")
+    one.add_argument("--look-again", action="store_true")
     args = ap.parse_args()
     try:
         os.nice(19)  # a check, never a reason for the computer to feel slow
@@ -598,12 +898,26 @@ def main():
         pass
     if args.clear:
         return clear(args.folder, args.clear, args.cleared_file)
-    report = scan(args.folder, load_cleared(args.cleared_file))
+    today = datetime.date.today().isoformat()
+    if args.mine:
+        return mark_mine(args.projects_file, args.folder, today)
+    if args.not_mine:
+        home = owner_home(args.folder)
+        if home:
+            remember(args.projects_file, home[0], mine=None, token=None)
+        print("Forgotten: this folder is no longer marked as your own project.")
+        return 0
+    if args.look_again and os.path.isdir(args.folder):
+        remember(args.projects_file, args.folder, stopped=None)
+    report = scan(args.folder, load_cleared(args.cleared_file), load_cleared(args.projects_file))
+    if args.remember_stop and report["fingerprint"]:
+        remember(args.projects_file, args.folder, stopped={"fingerprint": report["fingerprint"], "date": today})
+        report["stopped_earlier"] = today
     if args.json:
         print(json.dumps(report, indent=1))
     else:
         show(report)
-    return {"stop": 1, "incomplete": 2}.get(report["status"], 0)
+    return {"stop": 1, "incomplete": 2, "fix": 3}.get(report["status"], 0)
 
 
 if __name__ == "__main__":
