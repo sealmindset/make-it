@@ -79,6 +79,24 @@ Nothing in this skill puts a left-out item back on its own (step 6b's dependency
 and the test phase's fixes included), and the test phase's pass/fail report reads a left-out
 item's tests as `left-out-record.md` says.
 
+**Put off by your choice, everywhere in this skill:** an offer or ask the user answers with "not
+now", "later" or a plain no is written down once, so no later session raises it again. Write one
+line under `## Put off by your choice` in `.make-it-state.md`:
+`- [the offer, in the words the user saw] -- put off [YYYY-MM-DD]`. Read that section before
+greeting.
+- **Never asked or suggested again.** Not in the suggestions, not in the catch-up ask, not as a
+  feature offer. The status summary says one line for all of them: "[N] things you put off -- say
+  'show what I put off' to see them."
+- **It comes back only** when the user asks for it, or when what it covers has changed: a
+  catch-up group that has gained items is asked about the new items only.
+- **It approves nothing.** A put-off line only stops the question; it never lets a change
+  through, and a change that needs the user's pick still needs it when they take the offer up.
+  Taking one up deletes its line.
+- **It is not the left-out record.** A put-off item's checks still read as gaps, never "left
+  out", and the rules in `left-out-record.md` don't apply to it.
+- **Every ask in this skill is a select** (AskUserQuestion where there is one; otherwise the
+  options by name). The user never types a count, a path or an exact phrase to confirm.
+
 **The go-live record, everywhere in this skill:** follow the readiness check's read-only rule
 (step 2, Go-live checklist).
 
@@ -499,9 +517,12 @@ From all of the above, build a mental model of:
 Then one plain line for each item left out by your choice (step 8):
 "[item] -- left out by your choice -- tell me if you want it added."
 
+Then, when anything is under `## Put off by your choice`, the one line for all of it:
+"[N] things you put off -- say 'show what I put off' to see them."
+
 **3. Generate suggested actions based on what you found:**
 
-Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant. No suggestion offers an item left out by your choice (step 8).
+Analyze the context and present up to 4 relevant suggestions. Pick from these categories based on what's most relevant. No suggestion offers an item left out by your choice (step 8), or one put off by your choice. A suggestion the user turns down, or passes over to pick something else twice, goes under `## Put off by your choice`.
 
 | Context Signal | Suggested Action |
 |---------------|-----------------|
@@ -587,6 +608,10 @@ in `.make-it-state.md` (one line: the item, its checks, and today's date, as
 `~/.claude/make-it/references/left-out-record.md` defines), and file it in TODO.md as "left out
 by your choice". A group the user didn't pick is only put off, so it isn't recorded. On "not now"
 with items left out, name each one as step 6 below does.
+
+A group the user didn't pick, and each item they only put off, goes under `## Put off by your
+choice` instead, naming its items. The catch-up ask then leaves it out, and asks about that group
+again only for items it has gained since.
 
 **If the user accepts the catch-up work:**
 
@@ -1094,8 +1119,9 @@ Build a snapshot:
 **Phase 3: Conversational Confirmation**
 
 Present the snapshot and upgrade plan to the user. This changes database tables, so it is
-active confirmation, per the approval block: the user picks the specific -- Tier 2, the number
-of prompts to carry over; Tier 3, the exact phrase -- never a plain yes.
+active confirmation, per the approval block: the user picks the specific from a select -- Tier 2,
+the option that names the number of prompts carried over; Tier 3, the option that names the
+replacement -- never a plain yes, and nothing typed.
 
 **For Tier 2 Outdated (normal upgrade):**
 
@@ -1122,9 +1148,12 @@ every one of them carried over (your app's features need their prompts, so none 
 - [prompt name]
 - [prompt name]
 - ...
-Count them and tell me the number to carry over -- [N] -- or 'not now' to leave everything as it
-is. If a prompt you use isn't on this list, or the number doesn't match what you count, stop me:
-I've missed something and will look before touching anything."
+The one thing to check: is a prompt you use missing from this list? Then pick 'Something is
+missing' and I'll look before touching anything.
+Pick one:
+- **Carry over all [N] prompts and upgrade**
+- **Something is missing** -- nothing changes; I look again
+- **Not now** -- nothing changes, and I won't bring it up again"
 
 **For Tier 3 Custom (protection):**
 
@@ -1141,12 +1170,16 @@ you'd go without [list the standard's features the snapshot shows yours lacks].
 
 The one thing to check: does your team use anything on that first list today? If yes, keep.
 
-I'll leave it alone unless you tell me otherwise. To replace it anyway, type exactly:
-'Yes, replace my custom prompt management' -- the only undo is for me to put the old version
-back from your saved history."
+Pick one:
+- **Keep what I have** (Recommended)
+- **Replace my custom prompt management** -- the only undo is for me to put the old version back
+  from your saved history."
 
-Anything other than that exact phrase keeps the current implementation (one stop, active
+Anything other than the replace option keeps the current implementation (one stop, active
 confirmation -- no separate "skip it?" ask).
+
+On 'Not now' or 'Keep what I have', write the put-off line (discover-context), so the upgrade
+isn't offered again.
 
 ---
 
@@ -1325,7 +1358,8 @@ This adds database tables and permissions, so I need you to pick one, not just s
 Wait for the pick (active confirmation, per the approval block); a plain yes isn't an answer --
 ask which. 'Not now': put app-context.json's `brain_features` back the way Phase 1 found it
 (absent, or its earlier values -- so the BN01-BN13 checks stay off; a later scan may still
-suggest the feature), add the TODO.md line and return to the menu; skip Phases 3-4.
+suggest the feature -- so write the put-off line too, discover-context, which keeps it from being
+offered), add the TODO.md line and return to the menu; skip Phases 3-4.
 
 **Phase 3: Implement**
 
@@ -1428,7 +1462,7 @@ Pick one:
 - **Not now** -- nothing changes; I'll note it in your to-do file"
 
 A plain yes isn't an answer -- ask which. 'Not now': nothing was written; add the TODO.md line
-and return to the menu.
+and the put-off line (discover-context), and return to the menu.
 
 **Phase 3: Build.** Prompt #10g steps 2-7, in its order. Route the call sites one agent at a
 time, running that agent's existing tests after each. Set `ai_accounting` in app-context.json.
@@ -1577,7 +1611,9 @@ Reference ship-it-guide.md. Same handoff as /make-it Phase 4:
    matches its seal. Silent.
 2. Ensure all changes are committed
 3. Tell the user: "All tests pass and your changes are saved." (No deploy ask here: the deploy
-   gate is /ship-it's, and typing /ship-it is the user's go.)
+   gate is /ship-it's, and typing /ship-it is the user's go.) If must-do updates are under
+   `## Put off by your choice`, name them in one line here: this is the one place a put-off item
+   is raised unasked, and it is a line, not an ask.
 4. If the app uses the claude_agent provider, the billing ask in ship-it-guide.md comes first.
 5. Hand off to /ship-it:
 
@@ -1615,6 +1651,8 @@ Update `.make-it-state.md` in the project root with:
 [exactly as it is in the file now; if the file has no such section yet, the older left-out lines that read step 2 of `left-out-record.md` finds, moved in as its entries; with nothing left out anywhere, nothing under the heading -- never "- None" or any filler line]
 
 [## Before sharing -- if the file has this section now, keep it exactly as it is]
+
+[## Put off by your choice -- if the file has this section now, keep it exactly as it is]
 
 ## Test Status
 - Unit tests: [X passing, Y failing]

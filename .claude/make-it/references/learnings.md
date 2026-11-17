@@ -47,7 +47,9 @@ assistants read it.
   anything else. Only the items the user names are written. An item flagged as relaxing a check
   or touching sign-in, permissions or secrets is written only when the user names its number --
   never through a blanket "yes" or "all". Nothing queued -> skip it silently.
-- **No** (or not named in the answer): drop it, and don't offer the same lesson again this session.
+- **No** (or not named in the answer): drop it, and don't offer the same lesson again. In a
+  project with a `.make-it-state.md`, write it under `## Put off by your choice` (one line, as
+  /resume-it defines), so a later session doesn't offer it either.
 
 Example ask -- illustration only, never copy these learnings into a project:
 

@@ -183,6 +183,8 @@ Write or update the state breadcrumb:
 
 [## Before sharing -- if the file has this section now, keep it exactly as it is]
 
+[## Put off by your choice -- if the file has this section now, keep it exactly as it is]
+
 ## Test Status
 - Unit tests: [X passing, Y failing, or "not yet set up"]
 - Integration tests: [X passing, Y failing, or "not yet set up"]
