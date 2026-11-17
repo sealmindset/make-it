@@ -969,6 +969,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.0 -- no skill asks you to type a confirmation, and a "no" is kept everywhere
+
+- **One shared rule, read by every skill that asks:** an ask is a select, never a typed path,
+  name, count or phrase. A high-stakes ask still names exactly what happens, one option per target.
+- **A "no" or "not now" is kept** in the project's state file and not raised again unless you ask
+  or something changed. A yes to an action (a send, a deploy, a delete, a paused security tool) is
+  never kept: it is asked each time.
+- **/try-it:** stopping another program that holds a port is a pick, not its typed name.
+- **/make-it and /try-it:** pausing a network security tool is a pick per tool. How long you
+  paused it for is no longer asked.
+- **/demo-it:** removing a demo is a pick that names the firm, not a bare yes/no.
+- **/wrap-it:** "keep them all" is remembered, so finished copies and labels you chose to keep
+  are not offered again.
+- **Checked:** `scripts/test-asks-select.sh` (23 checks).
+
 ### v1.64.2 -- fixes from an independent review of v1.63.0 to v1.64.1
 
 - **Fixed: a hostile file could pass as "nothing found" (introduced in v1.63.0).** A Python file

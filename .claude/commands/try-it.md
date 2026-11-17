@@ -285,14 +285,16 @@ If any port is occupied:
   docker-compose
 - If no free port works for a service (moved, it still won't come up, and fixing didn't help),
   ask before touching the other program. Stopping it is a high-stakes stop (per the approval
-  block): the user names it. `[PROGRAM]` is the name `lsof -i :[PORT]` shows (plus its folder
+  block): the user picks it by name. `[PROGRAM]` is the name `lsof -i :[PORT]` shows (plus its folder
   from `ps -o command= -p [PID]` when that says more). Tell user: "Your app needs a spot on your
   computer that [PROGRAM] is using, and I couldn't get your app working in another spot. If I
   stop [PROGRAM], anything unsaved in it may be lost; you can start it again yourself
   afterwards. Normally I just move your app; this time no other spot worked. The one thing to
-  check: you're not using [PROGRAM] right now. To let me stop it, type its name: '[PROGRAM]'.
-  Anything else and I'll leave it alone."
-  **Wait for their answer.** Only its name means go: stop that one process ([PID]), nothing
+  check: you're not using [PROGRAM] right now.
+  Pick one:
+  - **Stop [PROGRAM]**
+  - **Leave it running** -- I'll stop here instead."
+  **Wait for their pick.** Only "Stop [PROGRAM]" means go: stop that one process ([PID]), nothing
   else. Anything else: leave it running, tell the user "Your app can't start while [PROGRAM] is
   using its spot. Close it whenever you like, then run /try-it again.", run the save-state step
   and end.
@@ -329,22 +331,23 @@ runs out; either way, I'll remind you to turn it back on as soon as I'm done dow
 whether or not everything worked. Normally I handle everything myself; this is the one thing I
 can't do for you.
 The one thing to check: it's your company's tool and you're allowed to pause it. If you're not
-sure, say 'not sure' and I'll stop here instead.
-[Only when the check found nothing: 'If you don't have a tool like this, say "don't have one"
+sure, pick 'Not sure, or I can't' and I'll stop here instead.
+[Only when the check found nothing: 'If you don't have a tool like this, pick 'I don't have a tool like this'
 and I'll keep working on the download problem myself.']
 To pause it: find [TOOL] in your menu bar or system tray, choose 'Disable' or 'Pause,' and if it
-asks, pick a time long enough for the downloads. Then tell me which tool you paused and how long
-for -- 'no time limit' is fine if it didn't offer one."
+asks, pick a time long enough for the downloads. Then pick what you did:
+- **I paused [TOOL]** [one option per tool the check named]
+- **Not sure, or I can't** -- I'll stop here.
+[Only when the check found nothing: - **I don't have a tool like this**]"
 
-**Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
-'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
-none was given. When `[TOOL]` names more than one tool, the answer must cover every one of them
-before the build is retried; ask about the ones still missing. 'not sure', 'can't', or 'no' means
-stop; 'don't have one' (offered only when the check found nothing) means the tool wasn't the
-cause -- go back to the normal "If build fails" diagnosis in step 2 and keep fixing, and don't
-offer this pause again this run (a later certificate error gets the normal diagnosis, not this
-ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
-missing. Do NOT retry Docker builds while the tool is active. On stop: if they already said
+**Wait for their pick.** "I paused [TOOL]" means go. When `[TOOL]` names more than one tool,
+every one of them must be picked before the build is retried; ask about the ones still
+missing. If they say how long they paused it for, note it as that tool's `[TIME]`; it is not
+asked for. "Not sure, or I can't" means stop; "I don't have a tool like this" (offered only
+when the check found nothing) means the tool wasn't the cause -- go back to the normal "If build fails" diagnosis in step 2
+and keep fixing, and don't offer this pause again this run (a later certificate error gets the
+normal diagnosis, not this ask); a plain 'done' or 'ok' is not a pick -- show the options
+again. Do NOT retry Docker builds while the tool is active. On stop: if they already said
 they paused any tool, give it the reminder below first; then tell the user "Your app can't be
 put together on this network [if detected: 'while [only the tools still running] is running' /
 otherwise: 'while something is blocking the downloads']. Ask whoever manages your computer, or

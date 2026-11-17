@@ -266,8 +266,10 @@ any time). What's unusual: [for each copy holding local-only files: 'the copy [n
 not still using any of these. Which should I remove? Pick them or name them, or say 'keep them
 all'."
 
-Offer each copy as its own choice (or have them type the names). A plain "yes" or "ok" is not a
-pick: ask which ones. "All" counts only with the number in it ("all 3"), matching the list.
+Offer each copy as its own choice in a multi-select. A plain "yes" or "ok" is not a
+pick: ask which ones. 'Keep them all' is remembered: write one line naming them under
+`## Put off by your choice` in `.make-it-state.md`, and from then on ask only about copies that
+are not on it. "All" counts only with the number in it ("all 3"), matching the list.
 Remove only the ones they named, one at a time:
 
 ```bash
@@ -299,8 +301,9 @@ What's unusual: [anything that sets one apart, e.g. 'the label [name] hasn't bee
 months'; otherwise 'nothing']. The one thing to check: none of these is something you still
 plan to add to. Which should I delete? Pick them or name them, or say 'keep them all'."
 
-Offer each branch as its own choice (or have them type the names). A plain "yes" or "ok" is not
-a pick: ask which ones. "All" counts only with the number in it ("all 4"), matching the list.
+Offer each branch as its own choice in a multi-select. A plain "yes" or "ok" is not
+a pick: ask which ones. 'Keep them all' is remembered the same way: one put-off line naming
+them, and from then on ask only about labels that are not on it. "All" counts only with the number in it ("all 4"), matching the list.
 Delete only the ones they named, with `git branch -d <name>` (it refuses anything unmerged; if
 it does, keep that branch and mention it in the summary). This is local-only.
 **Do NOT** delete branches or worktrees you don't own — in a shared/multi-session checkout, other

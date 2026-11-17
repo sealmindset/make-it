@@ -1194,22 +1194,23 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     it back on as soon as I'm done downloading, whether or not everything worked. Normally I
     handle everything myself; this is the one thing I can't do for you.
     The one thing to check: it's your company's tool and you're allowed to pause it. If you're
-    not sure, say 'not sure' and I'll stop here instead.
-    [Only when the check found nothing: 'If you don't have a tool like this, say "don't have
-    one" and I'll keep working on the download problem myself.']
+    not sure, pick 'Not sure, or I can't' and I'll stop here instead.
+    [Only when the check found nothing: 'If you don't have a tool like this, pick 'I don't have a tool
+    like this' and I'll keep working on the download problem myself.']
     To pause it: find [TOOL] in your menu bar or system tray, choose 'Disable' or 'Pause,' and
-    if it asks, pick a time long enough for the downloads. Then tell me which tool you paused
-    and how long for -- 'no time limit' is fine if it didn't offer one."
+    if it asks, pick a time long enough for the downloads. Then pick what you did:
+    - **I paused [TOOL]** [one option per tool the check named]
+    - **Not sure, or I can't** -- I'll stop here.
+    [Only when the check found nothing: - **I don't have a tool like this**]"
 
-    **Wait for their answer.** A tool's name plus how long means go -- a time ("30 minutes"), or
-    'no time limit' / 'until I turn it back on'; note each tool's time as its `[TIME]`, or that
-    none was given. When `[TOOL]` names more than one tool, the answer must cover every one of
-    them before the build is retried; ask about the ones still missing. 'not sure', 'can't', or
-    'no' means stop; 'don't have one' (offered only when the check found nothing) means the tool
-    wasn't the cause -- go back to step 22's normal diagnosis and keep fixing, and don't offer
-    this pause again this run (a later certificate error gets the normal diagnosis, not this
-    ask); a plain 'done' or 'ok', or a name without how long, is not an answer -- ask for what's
-    missing. Do NOT retry Docker builds while the tool is active. On stop: if they already said
+    **Wait for their pick.** "I paused [TOOL]" means go. When `[TOOL]` names more than one tool,
+    every one of them must be picked before the build is retried; ask about the ones still
+    missing. If they say how long they paused it for, note it as that tool's `[TIME]`; it is not
+    asked for. "Not sure, or I can't" means stop; "I don't have a tool like this" (offered only
+    when the check found nothing) means the tool wasn't the cause -- go back to step 22's normal diagnosis
+    and keep fixing, and don't offer this pause again this run (a later certificate error gets the
+    normal diagnosis, not this ask); a plain 'done' or 'ok' is not a pick -- show the options
+    again. Do NOT retry Docker builds while the tool is active. On stop: if they already said
     they paused any tool, give it the reminder below first; then tell them in a few lines that
     their app can't be put together on this network [if detected: 'while [only the tools still
     running] is running' / otherwise: 'while something is blocking the downloads']; to ask
