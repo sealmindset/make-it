@@ -27,7 +27,22 @@ higher one.
 
 No bare "approve? (y/n)" or "OK to proceed?". An option marked **Recommended** carries its
 strongest counter-argument beside it. For a high-stakes ask, the options are the specifics (which
-rows, which environment) or the human types them.
+rows, which environment), one option each.
+
+## Every ask is a select, and a "no" is kept
+
+- **A select, never typing.** Ask with AskUserQuestion where there is one; otherwise give the
+  options by name. Never ask the user to type a path, a name, a count or a set phrase to confirm
+  something. For a high-stakes ask the options are still the specifics: one option per target
+  (a multi-select when there are several), so a pick names exactly what happens. Free text is
+  only for information you can't know, such as a reason in the user's own words.
+- **A "no" or "not now" is kept.** In a project with a `.make-it-state.md`, write it under
+  `## Put off by your choice` (one line: what was offered, and the date -- /resume-it defines the
+  section) and don't raise it again unless the user asks or what it covers has changed. A skill
+  that rewrites that file keeps the section. In a project without that file nothing is kept, and
+  the next run may ask again.
+- **A yes to an action is never kept.** A send, a deploy, a delete, a migration, a payment or a
+  paused security tool is asked each time it comes up. Keeping a "no" approves nothing.
 
 ## A list of asks ("Waiting on you")
 

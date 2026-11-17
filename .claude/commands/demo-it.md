@@ -189,10 +189,12 @@ Davis Defense LLC    Expiring  Jun 02, 2026  ⚠️ 3 days left
 
 # TEARDOWN MODE (`/demo-it teardown {firm}`)
 
-Ask for confirmation:
-> Are you sure you want to remove **{firm_name}**'s demo? This deletes all their sample data and login access. (yes/no)
+Ask once, as a select (deleting data is high-stakes: the option names the firm, never a bare yes/no):
+> Removing **{firm_name}**'s demo deletes all their sample data and login access. It can't be undone; a new demo would start from empty. The one thing to check: nobody at {firm_name} is still using it.
+> - **Remove {firm_name}'s demo**
+> - **Keep it** -- nothing changes
 
-If yes:
+If they pick "Remove {firm_name}'s demo":
 1. Deactivate the tenant record
 2. Remove S3 data under the tenant prefix
 3. Revoke any Entra app consent (if applicable)
