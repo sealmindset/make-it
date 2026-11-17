@@ -128,10 +128,16 @@ One ask (`approval-block.md`), naming what was not read:
 > anything yet. Not read: `<files, or "no Python on this computer">`.
 > - **Stop** (Recommended) -- safest if you didn't write this project. The downside: nothing moves
 >   until those files are looked at.
+> - **I know these files** -- I'll let through the files listed above, as they are now, and won't
+>   ask about them again unless they change. (Leave this option out when a file is too large to
+>   check or can't be opened: it can't be told from a changed copy, so it can't be let through.)
 > - **Keep going without the check** -- I'd say so in the final report.
 
-**Stop:** remember it with `--remember-stop`, as above. Choosing to keep going is disclosed in
-the run's report, as a skipped safeguard, and is not remembered.
+**Stop:** remember it with `--remember-stop`, as above. **I know these files:** clear each file
+the ask listed with `--clear <path>`, as for exit 1; it holds for those exact contents. Choosing
+to keep going is disclosed in the run's report, as a skipped safeguard, and is not remembered.
+
+The remembered answers are kept when make-it is updated.
 
 A Python file that is only old or broken never gets here: when Python can't parse a file but its
 text is plain, the text checks read it, and it is a note (`unreadable`) on exit 0 with nobody

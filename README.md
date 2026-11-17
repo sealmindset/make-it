@@ -969,6 +969,17 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.64.1 -- updating make-it no longer forgets what you told the hostile-code check
+
+- **Fixed: every update deleted the remembered answers.** The files you let through, the projects
+  you marked as yours and the stops you chose live in make-it's install folder, and the installer
+  replaced that folder whole. Both installers now keep them. Answers already lost have to be given
+  once more.
+- **Fixed: "I know these files" is back** on the could-not-finish ask, as a select. v1.63.0 removed
+  it by mistake: a file in an unusual text encoding still gets there and can be let through.
+- **Checked:** `scripts/test-update-keeps-answers.sh` runs the real installer against a throwaway
+  home folder. The Windows installer got the same change but was not run.
+
 ### v1.64.0 -- /resume-it remembers "not now" and never asks you to type
 
 - **A "not now" is written down once.** Suggestions, catch-up updates, the AI memory and AI cost
