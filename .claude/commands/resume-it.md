@@ -95,7 +95,7 @@ greeting.
 - **It is not the left-out record.** A put-off item's checks still read as gaps, never "left
   out", and the rules in `left-out-record.md` don't apply to it.
 - **Every ask in this skill is a select** (AskUserQuestion where there is one; otherwise the
-  options by name). The user never types a count, a path or an exact phrase to confirm.
+  options by name). The user never types a count, a path or a set phrase to confirm.
 
 **The go-live record, everywhere in this skill:** follow the readiness check's read-only rule
 (step 2, Go-live checklist).

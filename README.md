@@ -969,6 +969,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.64.0 -- /resume-it remembers "not now" and never asks you to type
+
+- **A "not now" is written down once.** Suggestions, catch-up updates, the AI memory and AI cost
+  offers, the prompt-management upgrade and declined learnings go under `## Put off by your choice`
+  in `.make-it-state.md` and are not raised again. The status shows one line for all of them.
+- **It comes back only** when you ask, or when it has gained something new. Must-do updates you
+  put off are named in one line before the hand-off to /ship-it.
+- **It approves nothing.** Remembering a "not now" only stops the question.
+- **Selects, not typing.** The prompt-management upgrade no longer asks for a count or an exact
+  phrase.
+- **Checked:** `scripts/test-put-off.sh`.
+
 ### v1.63.0 -- the hostile-code check asks far less, and never asks you to type
 
 - **An old or broken Python file no longer stops the run.** When Python can't parse a file but
