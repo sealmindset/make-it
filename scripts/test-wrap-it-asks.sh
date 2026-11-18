@@ -27,9 +27,10 @@ flat() { tr '\n' ' ' | tr -s ' '; }
 between() { awk -v a="$1" -v b="$2" 'on && $0 ~ b {exit} $0 ~ a {on=1} on' "$F"; }
 
 CTX="$(between '^<execution_context>' '^</execution_context>')"
-SAVE="$(between '<step name="save-progress">' '^\*\*3\. ' | awk '/^\*\*2\. /{on=1} on' | flat)"
-WT="$(between '^\*\*4\. Tidy up finished worktrees' '^\*\*5\. ' | flat)"
-BR="$(between '^\*\*5\. Prune stale branches' '^</step>' | flat)"
+# bracket forms, not backslashes: gawk warns about "\*" in a -v string, and this test fails on any stderr
+SAVE="$(between '<step name="save-progress">' '^[*][*]3[.] ' | awk '/^\*\*2\. /{on=1} on' | flat)"
+WT="$(between '^[*][*]4[.] Tidy up finished worktrees' '^[*][*]5[.] ' | flat)"
+BR="$(between '^[*][*]5[.] Prune stale branches' '^</step>' | flat)"
 GUARD="$(between '^<guardrails>' '^</guardrails>')"
 ALL="$(flat < "$F")"
 

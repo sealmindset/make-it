@@ -32,12 +32,14 @@ paras() { awk 'BEGIN{RS="";ORS="\n"} {gsub(/\n/," "); print}' | tr -s ' '; }
 sents() { paras | perl -pe 's/([.!?]["\x27]?) (?=\S)/$1\n/g'; }
 # does stdin match the perl regex $1 (case-insensitive)? perl, for the lookbehinds that bind a phrase to its polarity
 pm() { P="$1" perl -0777 -ne 'exit !(/$ENV{P}/i)'; }
-stepof()  { printf '%s\n' "$T" | awk -v n="<step name=\"$1\">" 'index($0,n){on=1;next} on&&/^<\/step>/{exit} on'; }
-between() { printf '%s\n' "$T" | awk -v a="$1" -v b="$2" 'index($0,a){on=1} on&&index($0,b)&&!index($0,a){exit} on'; }
+# These read all of their input and never `exit` early: on Linux a writer whose reader quits gets SIGPIPE once the
+# text is bigger than the pipe (64 KB), which prints "Broken pipe" and, under pipefail, fails the pipeline.
+stepof()  { printf '%s\n' "$T" | awk -v n="<step name=\"$1\">" 'fin{next} index($0,n){on=1;next} on&&/^<\/step>/{fin=1;next} on'; }
+between() { printf '%s\n' "$T" | awk -v a="$1" -v b="$2" 'fin{next} index($0,a){on=1} on&&index($0,b)&&!index($0,a){fin=1;next} on'; }
 SIGNIN='\b(if|when) (the )?(sign-in|sign in|login)\b[^.;:]{0,20}\bleft out\b'
 
 # Phase 2 step N's text, from its "**N. " heading to the next step's
-smokestep() { stepof smoke-test | awk -v a="^[*][*]$1[.] " -v b="^[*][*]$(($1+1))[.] " '$0~a{on=1} $0~b{exit} on'; }
+smokestep() { stepof smoke-test | awk -v a="^[*][*]$1[.] " -v b="^[*][*]$(($1+1))[.] " 'fin{next} $0~a{on=1} $0~b{fin=1;next} on'; }
 # 1-2. Phase 2: with sign-in left out, the pages the app already had are still checked, without signing in.
 # What it affirms is read in step 3, where the path lives; what it rejects, in every sign-in paragraph of Phase 2 but
 # step 5's, which check 8 reads (there "only an endpoint that belongs to the left-out item is" left out is right).
@@ -83,7 +85,7 @@ check "S26-8 Phase 2 step 5: with sign-in left out, the endpoints the app alread
   '[ -n "$APIP" ] && [ -n "$SUMSIGN" ] && printf "%s" "$APIP" | pm "\bstep 5 still runs, without a token\b" && printf "%s" "$APIP" | pm "\bendpoints? the app already had\b" && printf "%s" "$APIP" | pm "\bapp.s own access\b" && printf "%s" "$APIP" | pm "\bas (it|they) did before\b" && printf "%s" "$APIP" | pm "\breport lists (them|those endpoints) as checked\b" && printf "%s" "$APIP" | pm "\bneeded sign-in before the retrofit\b[^.]*\bname (it|them) plainly\b[^.]*\bas not checked, never as left out\b" && printf "%s" "$APIP" | pm "\bonly an? endpoints? that belongs? to the left.out item\s+\(.left-out-record\.md.?\s+read\s+step\s+3\)" && ! printf "%s" "$APIP" | pm "$S8X" && printf "%s" "$SUMSIGN" | pm "\bendpoints? the app already had\b[^.]*\bwithout signing in\b[^.]*\bas checked, never as left out\b" && printf "%s" "$SUMSIGN" | pm "\bneeded sign-in before the retrofit\b[^.]*\bnot checked\b" && ! printf "%s" "$SUMSIGN" | pm "(?<!never )(?<!not )\bas left out\b|Left out \(your choice\)|\beven if\b|\bunless\b"'
 
 # 9. the guardrails' screenshot minimum names the exceptions <error-handling> and step 3 already allow, in one clause
-GR="$(printf '%s\n' "$T" | awk '/^<guardrails>/{on=1} on' | awk '/at least: login, dashboard per role/{on=1;print;next} on&&(/^- /||/^$/||/^</){exit} on' | flat)"
+GR="$(printf '%s\n' "$T" | awk '/^<guardrails>/{on=1} on' | awk 'fin{next} /at least: login, dashboard per role/{on=1;print;next} on&&(/^- /||/^$/||/^</){fin=1;next} on' | flat)"
 check "S26-9 guardrails: the screenshot minimum names, in one except clause, each case where none can be taken -- all when Playwright couldn't be installed, the per-role ones when sign-in is left out, one a left-out item kept from being taken" \
   '[ -n "$GR" ] && [ "$(printf "%s" "$GR" | perl -ne "\$c += () = /\bexcept\b/gi; END { print \$c + 0 }")" = 1 ] && ! printf "%s" "$GR" | pm "[.;]\s+\S" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\ball of them when Playwright couldn.t be installed\b" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\bper.role ones when sign-in is left out\b" && printf "%s" "$GR" | pm "\bexcept\b[^.;]*\bleft.out item kept from being taken, which follows .left-out-record\.md" && ! printf "%s" "$GR" | pm "\bno exception|\beven (if|when)\b|\bunless\b|\bstill (required|needed|must)\b"'
 
