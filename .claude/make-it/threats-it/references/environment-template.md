@@ -13,7 +13,7 @@ Everything in the profile is a lead to verify, not a fact to quote. Reports cite
 Organisation name (reports, VEX author): <Org>            # also export THREATS_IT_ORG="<Org>"
 VEX id base: https://<org-domain>/vex/                     # also export VEX_ID_BASE
 Confidentiality label: Internal — <Org> confidential
-Projects folder: ~/Documents/threat-briefs                 # THREATS_IT_HOME
+Projects folder: ~/threat-briefs                           # THREATS_IT_HOME; never a folder that syncs to the cloud
 
 Identity used: <upn> via Azure CLI. Entra roles (token wids): <…>. Probe results: Graph /auditLogs/* <status>;
 Intune <status>; Security API <status>; Entra diagnostic settings <status>.
