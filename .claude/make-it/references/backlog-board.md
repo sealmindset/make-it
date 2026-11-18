@@ -404,7 +404,7 @@ exception: it still runs on the user's go; it only leads with the alignment brie
 > - **Potentially harmful or app-impacting** → everything up to the **open PR**, then **STOP for
 >   explicit human approval before merge or deploy.** Ask once: what the PR changes, the evidence
 >   (the green run), what it touches and how to roll it back, what is unusual (which trigger below
->   it hit), and the one thing to check. The human picks or types the specific -- `Merge only --
+>   it hit), and the one thing to check. The human picks the specific -- `Merge only --
 >   no deploy` or `Merge and deploy -- to <environment>`, naming the environment -- never a plain
 >   yes; no answer, no merge. Triggers (non-exhaustive): anything
 >   destructive or hard to reverse (data deletion, migrations, schema changes, rewriting
@@ -924,7 +924,7 @@ critical` is set, or it touches -- by signal, not guesswork -- any of:
    what exists now, what already works (and the proof), what would change (touch the working
    path vs. add alongside it), the blast radius, and a safe place to rehearse (never live data).
    Then wait for an explicit go, asked as active confirmation: the brief adds what is unusual
-   (the signal that made it high-stakes) and the one thing to check, and the user picks or types
+   (the signal that made it high-stakes) and the one thing to check, and the user picks
    the specific -- `Add alongside -- rehearse on <place>`, `Change the working path -- rehearse on
    <place>`, or `Not now -- stays on the board`, naming the place -- never a plain yes. Not
    batched with any other ask; no pick, no start.

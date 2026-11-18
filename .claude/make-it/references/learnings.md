@@ -45,7 +45,7 @@ assistants read it.
   in /wrap-it, in the same message as any pending correction.
 - The message counts as ONE ask: send it on its own and wait for the answer before asking
   anything else. Only the items the user names are written. An item flagged as relaxing a check
-  or touching sign-in, permissions or secrets is written only when the user names its number --
+  or touching sign-in, permissions or secrets is written only when the user picks that item itself --
   never through a blanket "yes" or "all". Nothing queued -> skip it silently.
 - **No** (or not named in the answer): drop it, and don't offer the same lesson again. In a
   project with a `.make-it-state.md`, write it under `## Put off by your choice` (one line, as

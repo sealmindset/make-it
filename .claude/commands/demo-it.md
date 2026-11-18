@@ -187,10 +187,12 @@ Davis Defense LLC    Expiring  Jun 02, 2026  ⚠️ 3 days left
 
 ---
 
+How to ask: `~/.claude/make-it/references/approval-block.md` (a select that names the specific, never a bare yes/no).
+
 # TEARDOWN MODE (`/demo-it teardown {firm}`)
 
 Ask once, as a select (deleting data is high-stakes: the option names the firm, never a bare yes/no):
-> Removing **{firm_name}**'s demo deletes all their sample data and login access. It can't be undone; a new demo would start from empty. The one thing to check: nobody at {firm_name} is still using it.
+> Removing **{firm_name}**'s demo ends their login access now and removes their sample data. The data is kept in an archive for 90 days and can be brought back in that time; after that it is gone. The one thing to check: nobody at {firm_name} is still using it.
 > - **Remove {firm_name}'s demo**
 > - **Keep it** -- nothing changes
 

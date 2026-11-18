@@ -969,6 +969,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.3 -- the ask rules, tightened after a second review
+
+- **A security stop or a gate can never be "put off".** Keeping a "no" only silences an offer.
+  A stop, a failed check or a finding still runs, still reports and still holds. An ask that a
+  blocked step needs is asked again whenever the step is blocked again.
+- **No "all of them" pick, and no typed counts.** /wrap-it's "all 3" is gone: every copy or label
+  is its own pick.
+- **Leftover typing removed** from /wrap-it, /fix-it, the board's merge and high-stakes gates,
+  the learnings ask and the preview's access gate. /fix-it and /demo-it now read the shared rules.
+- **/demo-it's teardown ask states the real undo:** the data is archived for 90 days.
+- **The test for these rules now fails when a rule is reversed or removed** (45 checks; nine
+  mutants got past the first version).
+
 ### v1.65.2 -- the hostile-code check reads the git index exactly before skipping a packages folder
 
 Follow-up to the third independent review.
