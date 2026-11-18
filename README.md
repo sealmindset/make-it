@@ -969,6 +969,19 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.0 -- /backlog-it groom says which cards are no longer needed
+
+- **Groom now asks of every epic, story and task: does this still need doing?** The answer is
+  needed, not needed or can't tell.
+- **"Not needed" takes evidence:** the code or another card already covers it; what it was about
+  is gone or the owner decided against it; nobody and nothing is asking for it; or an epic has
+  nothing left under it. Age, low priority and difficulty don't count, and a security finding is
+  never "not needed" unless the code shows it fixed.
+- **Nothing closes on its own,** even with `--apply`. The plan lists the cards, then one
+  multi-select ask lets you pick which to close. A closed card is kept, marked
+  `closed_as: not-needed` with the reason, and `undo` brings it back.
+- **Checked:** `scripts/test-backlog-groom-needed.sh`.
+
 ### v1.69.0 -- /threats-it treats the organisation's own AI systems as a target
 
 Last of four parts adding AI as a threat actor to /threats-it.

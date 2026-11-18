@@ -59,7 +59,7 @@ Opus"); never a silent switch.
 | `plan` routing call | `route` | `check-plan.py` gates every hard rule; a slip costs one re-run |
 | `plan --with-deps`, or 100+ candidates | `judge` | suggested links and long chains are judgment the gate only shape-checks |
 | `groom` grounders (one per card, the reconcile ladder) | `ground` | evidence gathering against code and tests; many cards |
-| `groom` steps 2-5 (clean, sequence, tag, persist) | `judge` | one agent with every grounder's verdict decides what unblocks the most and what to cut |
+| `groom` steps 2-5 (clean, needed or not, sequence, tag, persist) | `judge` | one agent with every grounder's verdict decides what unblocks the most, what is no longer needed and what to cut |
 | `groom strategy` analysts and the map | `judge` | inferred epic dependencies and foundation-vs-polish calls go wrong quietly |
 
 Capture triage, `reconcile` and `info` keep the session's model.
@@ -347,7 +347,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md`; `--with-deps` also plans the cards the filter waits on, across epics |
 | `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
-| `groom [filter] [--with-deps]` | Propose the order that finishes the most, soonest; `--with-deps` adds the chain behind the filter |
+| `groom [filter] [--with-deps]` | Propose the order that finishes the most, soonest, and say which cards are no longer needed; `--with-deps` adds the chain behind the filter |
 | `groom move <id> <pos>` · `groom pin` · `groom unpin <id>` | Pin / release an item's rank |
 | `groom strategy` | Which work is foundation and which is polish, and why |
 | `undo` | `git revert` the last board commit (board in its own repo) |
@@ -829,6 +829,30 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
    (the "minimum lovable loop"), **carve out** deferred work into its own card (never hold a
    delivered feature open), **flag** mis-scoped cards. Close / merge / restatus apply under
    `--apply`; **splits, deferrals, and kills are always proposals**.
+   **Needed or not.** Before anything is ranked, ask of every card in scope, and of every epic
+   that owns one: does this still need doing? The answer is `needed`, `not needed` or `can't tell`,
+   and `not needed` takes evidence of one of these, cited:
+   - **Already covered** -- the code does it today, or another card does (name it).
+   - **Overtaken** -- what it fixes or extends is gone or was replaced, or the owner has since
+     decided against it (the card, `handoff.md`, a later card's notes).
+   - **Nobody is asking** -- no report, no person and no card waits on it, and it names no one it
+     is for.
+   - **An epic with nothing left** -- every card under it is done or not needed.
+
+   The default is `needed`: `can't tell` stays in the burn-down with the one fact that would settle
+   it. Age, a low priority and "it's hard" are never evidence. A security finding, a failed check
+   or a gate is `not needed` only when the code shows it fixed or gone, never because it is
+   unwelcome. "Not worth doing now" is a deferral, not `not needed`.
+   Each grounder adds two facts for this, evidence only: whether what the card targets still
+   exists (`file:line`, or "gone"), and who or what asks for it (a report, a person, a card that
+   waits on it). The judge decides.
+   **A `not needed` verdict is a proposal, under `--apply` too.** It is listed under
+   `## Needed or not` in `GROOM-PLAN.md`, and after the report the strongest cases go to the human
+   in one multi-select ask (`approval-block.md`): one option per card, each with its title and the
+   reason in a line, no "all of them"; a card not picked stays as it was. A picked card is closed
+   the board's way: `status: done`, `closed_as: not-needed`, and a `## Not needed (YYYY-MM-DD)`
+   block with the reason and the evidence. It is never deleted, and `undo` brings it back. A
+   not-needed card leaves the burn-down only once picked; until then it ranks last, marked.
 3. **Sequence.** Pins first: a card with `pin: N` sits at rank N and everything else re-flows
    around it (two pins on one rank: smaller id first, flagged). Then the unpinned cards by:
    (a) **unblock value** -- what unblocks the most downstream work jumps the queue;
@@ -846,7 +870,8 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 6. **Report.** A one-line state digest -- **Started N · Finished N · Not-started N · Stalled N**
    (stalled = `in-progress` with no commit or `updated:` movement in 14 days; list them) -- then
    the board deltas, the burn-down, the high-stakes block, **top 3 to start now** (never
-   high-stakes), and **3 to drop or defer**. `--dispatch` then runs `dispatch` for the #1
+   high-stakes), **what is no longer needed** (count, then each card with its reason), and **3 to
+   drop or defer**. `--dispatch` then runs `dispatch` for the #1
    parallel-safe card (off by default).
 
 **`GROOM-PLAN.md`:**
@@ -865,6 +890,10 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 
 ## ⚠️ Requires alignment before touching   (high-stakes -- not auto-runnable)
 - ⚠️ <id> · <title> · why high-stakes · needs the alignment brief + an explicit go before `start`
+
+## Needed or not   (proposals -- nothing closes without your pick)
+- ✂️ <id> · <title> · not needed: <already covered | overtaken | nobody is asking | nothing left> -- <evidence>
+- ❓ <id> · <title> · can't tell: <the one fact that would settle it>
 
 ## Start now (top 3 -- never ⚠️)   ·   ## Drop / defer (3)
 ```
