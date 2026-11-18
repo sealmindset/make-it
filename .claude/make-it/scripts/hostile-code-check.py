@@ -25,6 +25,7 @@ import math
 import os
 import re
 import secrets
+import struct
 import subprocess
 import sys
 import unicodedata
@@ -617,12 +618,52 @@ def stale_copies(root, gitsha):
     return out
 
 
+def tracked_folders(raw):
+    """Every folder name that holds a file git tracks, read from a git index (versions 2 to 4), or
+    None when the index can't be read exactly. Looking for a folder's name anywhere in the file is
+    not enough: version 4 stores each path as what it shares with the one before, and a file that
+    only starts like an index proves nothing."""
+    try:
+        if raw[:4] != b"DIRC":
+            return None
+        version, count = struct.unpack(">II", raw[4:12])
+        if version not in (2, 3, 4):
+            return None
+        pos, prev, names = 12, b"", set()
+        for _ in range(count):
+            flags = struct.unpack(">H", raw[pos + 60:pos + 62])[0]
+            start = pos + 62 + (2 if flags & 0x4000 and version >= 3 else 0)
+            if version == 4:
+                byte = raw[start]
+                strip, start = byte & 0x7F, start + 1
+                while byte & 0x80:
+                    byte = raw[start]
+                    strip, start = ((strip + 1) << 7) | (byte & 0x7F), start + 1
+                end = raw.index(b"\0", start)
+                if strip > len(prev):
+                    return None
+                path, pos = prev[:len(prev) - strip] + raw[start:end], end + 1
+            else:
+                end = raw.index(b"\0", start)
+                path, pos = raw[start:end], pos + ((end - pos + 8) & ~7)  # padded to a multiple of 8
+            names.update(path.split(b"/")[:-1])
+            prev = path
+        while pos + 8 <= len(raw) - 20:  # the extensions that follow, then a 20-byte checksum
+            name, size = raw[pos:pos + 4], struct.unpack(">I", raw[pos + 4:pos + 8])[0]
+            if name == b"link":
+                return None  # a split index keeps most paths in another file
+            pos += 8 + size
+        return names if pos == len(raw) - 20 else None
+    except (struct.error, ValueError, IndexError):
+        return None
+
+
 def walk(root, skipped, worktrees, mine=False, nested=None):
     try:
         with open(os.path.join(root, ".git", "index"), "rb") as f:
-            index = f.read()
+            tracked = tracked_folders(f.read())
     except OSError:
-        index = None  # no git record, as in a zip download: a folder's name proves nothing
+        tracked = None  # no git record, as in a zip download: a folder's name proves nothing
     for folder, dirs, files in os.walk(root):
         keep = []
         for d in dirs:
@@ -640,7 +681,7 @@ def walk(root, skipped, worktrees, mine=False, nested=None):
             elif nested is not None and os.path.lexists(os.path.join(sub, ".git")):
                 nested.add(os.path.relpath(sub, root))  # somebody else's repository inside this one
             # A committed folder is project code whatever its name: only a real install is skipped.
-            if d in INSTALLED and index is not None and (d.encode() + b"/") not in index:
+            if d in INSTALLED and tracked is not None and d.encode() not in tracked:
                 skipped.add(d)
                 continue
             keep.append(d)
