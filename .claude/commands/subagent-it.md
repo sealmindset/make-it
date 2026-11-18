@@ -24,6 +24,12 @@ Full doctrine: `~/.claude/make-it/references/subagent-driven-development.md`.
 
 </objective>
 
+<execution_context>
+
+@~/.claude/make-it/references/approval-block.md
+
+</execution_context>
+
 <expert_persona>
 
 When constructing each task's implementer brief (and its reviewer brief), assign the **specialist

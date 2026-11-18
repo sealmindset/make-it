@@ -969,6 +969,15 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.1 -- /dispatch-it and /subagent-it load the approval block
+
+- **Both skills now load `approval-block.md`** (how a skill asks: selects only, fewer asks, every
+  gate kept). Their asks already followed it; until now neither skill actually loaded the file.
+- **No ask or gate wording changed.** An inventory of every ask and gate in both skills found
+  nothing to remove or reword.
+- **Checked:** `scripts/test-dispatch-it-asks.sh` (21 checks) and
+  `scripts/test-subagent-it-asks.sh` (32 checks) pin the link, the no-yes/no rule and each gate.
+
 ### v1.70.0 -- /backlog-it groom says which cards are no longer needed
 
 - **Groom now asks of every epic, story and task: does this still need doing?** The answer is

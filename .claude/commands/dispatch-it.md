@@ -26,6 +26,12 @@ Full doctrine (always loaded):
 
 </objective>
 
+<execution_context>
+
+@~/.claude/make-it/references/approval-block.md
+
+</execution_context>
+
 <expert_persona>
 
 When constructing each subagent's brief, assign the **specialist persona matching that worker's
