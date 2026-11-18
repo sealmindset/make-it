@@ -205,7 +205,8 @@ gh api "repos/${OWNER_REPO}/dependabot/alerts" --jq '.[] | select(.state=="open"
 Fix any Dependabot alerts not already resolved by Layer 2.
 
 **After all layers:**
-- Unless an update is unfinished (above), stage and commit any fixes: `git add -A && git commit -m "Apply safety patches" 2>/dev/null`
+- Unless an update is unfinished (above), stage and commit any fixes: `git add -A -- . ':(exclude).ship-it-go-live.json' && git commit -m "Apply safety patches" -- . ':(exclude).ship-it-go-live.json' 2>/dev/null`
+- That save leaves the go-live record out: /ship-it owns that file (`ship-it-guide.md`, The record). If `.ship-it-go-live.json` has changes, say one line when the app is presented: "I left your go-live record unsaved. /ship-it owns that file."
 - If running in Docker, rebuild affected containers: `docker compose --profile dev build {affected-service} 2>/dev/null`
 - The user never sees this -- it happens before the app starts.
 

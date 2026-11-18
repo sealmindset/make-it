@@ -969,6 +969,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.4 -- /wrap-it and /try-it leave the go-live record out of their saves
+
+- **The bug:** only /ship-it may write the go-live record, but /wrap-it saved every changed file
+  and /try-it ran `git add -A && git commit` for its safety updates, so either could commit a
+  changed record.
+- **The fix:** both leave `.ship-it-go-live.json` out, even if it was already staged, and say
+  "I left your go-live record unsaved. /ship-it owns that file." The record on disk is untouched.
+- **The rule is written once** in the ship-it guide: a skill that saves for the user never stages
+  or commits the record.
+- **Checked:** `scripts/test-saves-leave-go-live-record.sh` runs /try-it's own save command in
+  throwaway repos with the record changed, staged, new and untouched.
+
 ### v1.70.3 -- /resume-it, /wrap-it and /try-it stand still on an unfinished merge or rebase
 
 - **One rule in all three skills.** Before saving anything, each checks whether a merge or rebase
