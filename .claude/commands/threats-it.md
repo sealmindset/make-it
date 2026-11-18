@@ -110,7 +110,10 @@ its rating (low, informational and accepted risks included; a tool's or a droppe
 until this run confirms it), work out which ones connect into a path from a real starting point to an incident,
 and give each path its diagram, its "who can do this now" table, its cheapest break and its test plan. Every path
 is "not exercised": this skill never runs one. In a threat-feed run, limit it to what this threat's chains touch.
-Write `data/derived/paths.json`; `check_paths.py` must pass.
+Write `data/derived/paths.json`; `check_paths.py` must pass. In a `chains` run, and whenever the threat names an AI
+system, agent, plugin, skill or MCP server, also follow `references/ai-systems.md`: inventory the organisation's AI
+systems (`exposure.py` with `templates/presence-ai.json`), what each can reach, what it reads that outsiders can
+write, and what it can do with nobody approving. Never prompt one, and never plant content for one to read.
 
 **6 — VEX.** One statement per product × item, following `references/vex.md`; write `data/derived/vex.json` from
 the assess script; `openvex.py` renders and validates it.

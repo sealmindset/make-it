@@ -34,6 +34,9 @@ Check claim by claim. Flag:
    exploited or exploitable when its status is "not exercised"; a combined severity score nobody published; a
    "cheapest break" that leaves another route between the same start and objective; steps from the test plan
    appearing in the briefing.
+9. AI systems: one called present from its name alone; one called vulnerable from what AI systems can do in general,
+   with no evidence about its own access, inputs, actions or logging; "none" where the run could not see; an ATLAS
+   id with no archived page; a prompt or payload that would work, anywhere.
 Be adversarial and specific; skip style. Output a severity-ordered list (high/medium/low): file:line, quoted claim,
 problem, evidence. End with "checked N claims, flagged M".
 ```
