@@ -33,6 +33,9 @@ Own security tooling (never reported as an attacker; `tenant-assessment.md`): Au
 service-principal id <id>, source addresses <ranges>, repository <org/repo>; <other scanners, pen-test accounts and
 windows, MDR tooling, each with the identifiers that prove an event is theirs>.
 
+AuditGitHub findings: export AUDITGITHUB_API_URL=<https address of the API> and AUDITGITHUB_API_KEY from a
+secret store, a key with findings:read only. The key is never written into the profile, a project or a report.
+
 Code inventory: <dependency export path and date, or SBOM source> — check its date; a rescan beats a stale export.
 
 Owners named in reports by role, not by person: <server team, endpoint team, network team, SOC, app owners…>.

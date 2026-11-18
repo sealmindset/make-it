@@ -969,6 +969,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.68.0 -- /threats-it reads the findings your own security tools already hold
+
+Third of four parts adding AI as a threat actor to /threats-it.
+
+- **New collector, `findings_sources.py`.** It reads Secure Score, Defender for Cloud assessments,
+  Defender XDR alerts and incidents, and AuditGitHub's open findings, with every rating included.
+  Low and informational findings are what the chaining step needs.
+- **Read-only.** Only read requests and one Resource Graph query.
+- **A source that could not be read is reported** with its error, and is never counted as "no
+  findings".
+- **AuditGitHub is read through its own API** with a read-only key from the environment. The key
+  is never written to disk, is never sent on a redirect, and code snippets are not copied.
+- **An alert is not a finding.** Alerts show whether a stage would be seen; they are never a link
+  in a path.
+- **Checked:** `scripts/test-threats-it-sources.sh`. The Microsoft readers have not been run
+  against a live tenant.
+
 ### v1.67.0 -- /threats-it joins small findings into attack paths, with a test plan
 
 Second of four parts adding AI as a threat actor to /threats-it.

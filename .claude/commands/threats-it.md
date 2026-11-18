@@ -64,6 +64,7 @@ and `weasyprint` for PDFs. No tenant access → run phases 0–4 and 6–9 as a 
 | `exposure.py <dir> presence.json [--fixmap msrc.json --cve X --since D]` | Takeover/bulk permissions, foreign credentials, roles (SPs and groups), long-lived certs, product presence, server builds vs fix |
 | `sentinel_coverage.py <dir> [chains.json]` | Rule states live/partial/blind/disabled per chain; workspaces not in Sentinel |
 | `openvex.py vex.json out.json --author … --id-base …` | Validate VEX statements and render OpenVEX v0.2.0 |
+| `findings_sources.py <dir> [--since D]` | Findings the organisation's tools already hold, every rating: Secure Score, Defender for Cloud assessments, Defender XDR alerts and incidents, AuditGitHub (`AUDITGITHUB_API_URL` / `AUDITGITHUB_API_KEY`); each source saved with its status |
 | `check_paths.py <project>` | Paths built from small findings: every link in evidence and confirmed, status "not exercised" unless a person's test record says otherwise, a break and a test plan per path |
 | `check_pair.py briefing.md technical.md [headline.json]` | Briefing figures/dates/CVEs ⊂ companion; headline values pinned |
 
@@ -104,7 +105,7 @@ standard scripts do not reach, such as runtime versions or web-server logs). Cop
 project `scripts/assess.py`. Report progress to the user as findings land (IOC verdict first, then exposure, then
 detection coverage).
 
-**5b — Finding chains.** Follow `references/finding-chains.md`: inventory every finding the run can read, whatever
+**5b — Finding chains.** Follow `references/finding-chains.md`: run `findings_sources.py`, then inventory every finding the run can read, whatever
 its rating (low, informational and accepted risks included; a tool's or a dropped report's finding is a lead
 until this run confirms it), work out which ones connect into a path from a real starting point to an incident,
 and give each path its diagram, its "who can do this now" table, its cheapest break and its test plan. Every path

@@ -23,7 +23,11 @@ evidence (export the rows), and do not remediate.
    names + their sign-ins), Windows server builds vs the MSRC fixed build.
 5. `sentinel_coverage.py <outdir> chains.json` — rule states (live/partial/blind/disabled) per chain; which security
    workspaces are not onboarded.
-6. Targeted follow-ups as the evidence demands (e.g. which groups an outside app changes and what roles those groups
+6. `findings_sources.py <outdir> [--since <date>]` (for the finding-chains step) — Secure Score, Defender for
+   Cloud assessments, Defender XDR alerts and incidents, AuditGitHub findings. Read-only GETs and one Resource
+   Graph query. Record each source's status: a 403 here is usually a missing Security Reader role or, for the
+   Graph security endpoints, the Azure CLI app's missing scopes.
+7. Targeted follow-ups as the evidence demands (e.g. which groups an outside app changes and what roles those groups
    hold; who registered a new app; sign-ins of an app named in the threat). Add each follow-up to the project's own
    collector script so the snapshot stays reproducible, then **re-run the whole snapshot** so every figure comes
    from one run.
