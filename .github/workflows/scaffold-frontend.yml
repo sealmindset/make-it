@@ -1,0 +1,49 @@
+name: scaffold frontend
+
+# A new app starts as a copy of the scaffold, with dependencies resolved that day. This job does the
+# same: it installs the scaffold frontend's dependencies fresh (no lock file) and runs the checks a
+# new app's first commit and first build will hit. If it fails, new apps are failing the same way.
+# It runs on changes to the scaffold and once a week, so a new upstream lint rule or type change
+# shows up here and not in someone's first commit.
+
+on:
+  pull_request:
+    paths:
+      - ".claude/make-it/scaffolds/fastapi-nextjs/frontend/**"
+      - ".claude/make-it/scaffolds/fastapi-nextjs/.pre-commit-config.yaml"
+      - ".github/workflows/scaffold-frontend.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: scaffold frontend lint, types and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .claude/make-it/scaffolds/fastapi-nextjs/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install, as a new app would (no lock file, no install scripts)
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: npm run lint (eslint, then prettier)
+        run: npm run lint
+      - name: The pre-commit hook's eslint command (zero warnings)
+        run: npx eslint --max-warnings 0 .
+      - name: The pre-commit hook's prettier command
+        run: npx prettier --check .
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Production build (what the Dockerfile runs)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"

@@ -149,6 +149,15 @@ This is added per-app during the Build phase for each external integration.
 
 FastAPI registers list endpoints with a trailing slash (e.g., `/api/rfcs/`). When requests arrive through the Next.js reverse proxy without the slash, FastAPI's built-in redirect leaks the internal Docker hostname (e.g., `http://backend:8000/api/rfcs/`). The `TrailingSlashASGI` wrapper in `main.py` silently rewrites matching paths instead of issuing a redirect.
 
+### Lint-clean frontend patterns
+
+The scaffold's frontend passes its own checks on a fresh copy (`npm run lint`, the zero-warnings pre-commit hook, `tsc --noEmit`, `next build`); CI's `scaffold frontend` job runs them. Code generated on top must keep that true:
+- **Loading a page's data:** `useAsyncEffect(fetchData)` (`lib/use-async-effect.ts`), with `fetchData` in `useCallback`. Never call a state-setting loader straight from `useEffect`; the loader sets state only after it awaits.
+- **Resetting state when something opens or changes:** set it in the event handler that causes it, not in an effect.
+- **A lookup by a variable key:** `own(table, key)` (`lib/utils.ts`), which reads own properties only; `.at(i)` for arrays. Never `table[key]`.
+- **A full-page navigation to a backend route** (sign-in, sign-out) keeps `window.location.href`, with the one-line exception and its reason, as `login-button.tsx` does.
+- Hooks come before any early `return`.
+
 ### Test Infrastructure
 
 The scaffold includes a ready-to-use test setup:
