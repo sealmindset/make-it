@@ -2,7 +2,7 @@
 
 Every attack in the threat gets its own chain. A chain describes **what the attacker does** — behaviour, not product
 — so the analysis still works for the next threat that uses the same moves against different software. Each chain
-has three parts: a flow diagram, a stage table, and a short "<Org>" line. The report ends the chains section
+has four parts: a flow diagram, a stage table, a short "<Org>" line, and a "who can do this now" table (section 5). The report ends the chains section
 with **what the chains have in common** (behaviours that recur, and the detection source each needs).
 
 ## 1. Flow diagram (required for every chain)
@@ -78,6 +78,35 @@ Columns: **Stage | Behaviour | ATT&CK | Signal | <Org>: telemetry → hunt resul
 
 Under the table: **Exposure** (where the organisation is open to this chain, linking to the exposure section) and
 **Gap** (which stage is unwatched and what closes it, with volumes or licences where known).
+
+## 5. Who can do this now: the AI-assisted attacker (required for every chain)
+
+A chain that "needs a skilled attacker" used to be read as unlikely. That reading is out of date: work that took
+a specialist days (finding which small weaknesses connect, reading the documentation and configuration that
+shows how, adapting a public write-up into working steps) can now be done by a less skilled person with an AI
+assistant in a fraction of the time. So every chain says who can run it now, stage by stage.
+
+Table, one row per stage of the chain: **Stage | A person alone: skill, time | With AI help: skill, time | Why it
+changes, or doesn't**.
+- **Skill**, one of three words: `anyone` (can follow instructions), `practitioner` (does this for a living),
+  `specialist` (few people can).
+- **Time**, an order of magnitude only: `minutes`, `hours`, `days`, `weeks`. Never a number; say "hours, not days".
+- **With AI help moves only with a reason tied to that stage.** AI help changes a stage when the work is:
+  connecting many small facts; reading documentation, configuration or code to find the way through; turning a
+  published description into working steps; writing convincing messages; sorting through large output. It does
+  not change a stage that waits on something else: a stolen credential, an insider, a victim's click, physical
+  access, a flaw nobody has published. Say which, in the last column.
+- **Every rating is this report's judgement.** Head the table "Assessment, not measurement". It is never evidence
+  that AI was used in this attack: write that only when a source says so, quoted and archived like any other fact.
+- **A general statement about what AI can do needs a source too** (`sources.md`, AI capability claims). With no
+  source archived in this project, the last column says "our assessment; no published source archived".
+
+Under the table, one line: **What still stands in the way** -- the stage whose bar is still highest with AI help,
+and whether <Org> controls it (a patch, a rule, a setting) or only the attacker's luck does. If nothing stands in
+the way, say so in those words.
+
+Never write that a chain is unlikely because it needs a sophisticated attacker, in any document, unless this
+table is beside the claim and supports it.
 
 ## 3. Chain patterns seen so far (reuse when a new threat matches)
 

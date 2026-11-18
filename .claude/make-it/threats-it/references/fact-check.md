@@ -25,6 +25,10 @@ Check claim by claim. Flag:
 4. Inconsistencies between briefing and companion for the same fact.
 5. Mischaracterisations of the source threat report (says it omits something it contains, or vice versa).
 6. Wording a non-technical reader could misread as a stronger claim than the evidence supports.
+7. Claims about AI: a statement that AI was used in this attack, or in any named incident, with no archived source
+   that says so; a "who can do this now" rating presented as measured, not as an assessment; a time more precise
+   than minutes / hours / days / weeks; a chain called unlikely because it needs a sophisticated attacker without
+   the chain's "who can do this now" table supporting it.
 Be adversarial and specific; skip style. Output a severity-ordered list (high/medium/low): file:line, quoted claim,
 problem, evidence. End with "checked N claims, flagged M".
 ```

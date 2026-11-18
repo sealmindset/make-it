@@ -23,6 +23,14 @@ silently dropped a KEV row (the only exploited Microsoft CVE) and invented a dat
 | Incident narrative, IOCs | Researcher posts (Huntress, Mandiant/GTIG, vendor trust centres), via the API route or two-extraction rule | as above |
 | Press (SecurityWeek, BleepingComputer, The Hacker News) | corroboration only; prefer the primary figure when they disagree (e.g. "two dozen" vs MSRC's 22) | |
 
+## AI capability claims
+A statement about what AI lets an attacker do ("cuts this from days to hours") is a claim like any other. It needs
+a source archived in this project, fetched and quoted the same way: a government or CERT advisory, a vendor's
+threat-intelligence report on observed misuse of its own models, a peer-reviewed or reproducible study. Quote the
+sentence verbatim with its date into `data/curated/ai-capability.json`. Press and commentary are corroboration only.
+Never name an outage or a breach as AI-driven unless a primary source attributes it. With no source, the report
+says "our assessment; no published source archived" -- it never borrows authority it doesn't have.
+
 ## Verification habits
 - Check day-of-week claims with `cal <month> <year>` (the first source said "Thursday" and a summary said "Oct 16").
 - Re-derive every count from the raw data (CVEs in the article, KEV count as of a date, MSRC batch composition).

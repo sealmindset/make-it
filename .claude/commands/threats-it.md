@@ -88,7 +88,11 @@ Re-derive every count from raw data.
 
 **4 — Attack chains.** For each attack: flow diagram + stage table + exposure/gap lines, exactly as
 `references/attack-chains.md` (the Spring4Shell diagram is the format reference). Verify every ATT&CK ID with
-`attack_ids.py`; mark the source's mappings vs this report's. Close with "what the chains have in common".
+`attack_ids.py`; mark the source's mappings vs this report's. Add each chain's "who can do this now" table
+(section 5: a person alone against a person with AI help, per stage, and what still stands in the way) -- an
+assessment, never a claim that AI was used unless a source says so. Close with "what the chains have in common".
+The organisation's own security testing (AuditGitHub and its scanners, anything under "Own security tooling" in
+the profile) is never a chain, an indicator or a finding: `references/tenant-assessment.md`.
 
 **5 — Organisation assessment (read-only).** Follow `references/tenant-assessment.md`: `tenant_access.py` →
 `ioc.json` → `hunt.py` (+ `hunt_web.py` for web-borne threats) → `presence.json` + `exposure.py` (with the MSRC fix map for any exploited Windows CVE) →
