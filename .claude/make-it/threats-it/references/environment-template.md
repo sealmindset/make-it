@@ -29,6 +29,10 @@ Missing telemetry: <firewall / DNS / endpoint / web-server tables not in any rea
 Known in the environment (from <date> evidence): <appliances, remote-support tools, MDR apps, high-privilege
 third-party apps, internet-facing apps, server counts, runtime counts>.
 
+Own security tooling (never reported as an attacker; `tenant-assessment.md`): AuditGitHub -- app or
+service-principal id <id>, source addresses <ranges>, repository <org/repo>; <other scanners, pen-test accounts and
+windows, MDR tooling, each with the identifiers that prove an event is theirs>.
+
 Code inventory: <dependency export path and date, or SBOM source> — check its date; a rescan beats a stale export.
 
 Owners named in reports by role, not by person: <server team, endpoint team, network team, SOC, app owners…>.

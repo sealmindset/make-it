@@ -33,7 +33,8 @@ It must not read like a newspaper. Order:
    rows first. One-sentence VEX definition above the table.
 5. **The six questions, briefly** (required by the standard, 1–4 lines each): what is this; what is the problem;
    what if we don't act (specific clean-up cost); benefits beyond; what is involved (effort, sequence, purchases —
-   list every possible cost, never "nothing to buy" unless proven); what we are not claiming (coverage limits,
+   list every possible cost, never "nothing to buy" unless proven); what we are not claiming (our own security
+   testing left out of the hunt, by tool and count; coverage limits,
    inference vs evidence, staleness, retention clocks, read-only, no admin role).
 Minimum jargon; define any term in place. No product deep-dives — those live in the companion.
 

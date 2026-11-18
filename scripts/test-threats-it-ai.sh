@@ -27,4 +27,14 @@ has 'a statement that AI was used in this attack, or in any named incident, with
 has 'a time more precise than minutes / hours / days / weeks' "$R/fact-check.md" "the fact-check looks for false precision"
 has 'who can do this now' .claude/commands/threats-it.md "the skill's step 4 asks for the table"
 has 'never a claim that AI was used unless a source says so' .claude/commands/threats-it.md "the skill's step 4 keeps the sourcing rule"
+# the organisation's own security testing is not an attacker (owner, 2026-11-17)
+T=$R/tenant-assessment.md
+has "own security testing is not an attacker" "$T" "own security testing is never reported as an attacker"
+has 'AuditGitHub and the scanners it runs' "$T" "AuditGitHub and its scanners are named"
+has 'a name alone proves nothing' "$T" "exclusion is by recorded identifier, not by name"
+has 'matches no recorded identifier is hunted like everything else' "$T" "a look-alike is still hunted"
+has 'Excluded activity is counted, never dropped silently' "$T" "what was left out is counted and said"
+has 'a finding is used only after this run' "$T" "the tool's findings are leads to confirm"
+has 'Own security tooling' "$R/environment-template.md" "the profile records the tools and their identifiers"
+has 'our own security testing left out of the hunt, by tool and count' "$R/report-standard.md" "the report says what was left out"
 exit $fail

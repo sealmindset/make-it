@@ -981,6 +981,10 @@ First of four parts adding AI as a threat actor to /threats-it.
 - **These are assessments, and say so.** Time is given as minutes, hours, days or weeks, never a
   number. A statement that AI was used in an attack, or in any named incident, needs an archived
   source that says so. The fact-check step now checks all of this.
+- **Your own security testing is never reported as an attacker.** AuditGitHub and its scanners
+  are left out of hunts and reports, by the identifiers recorded in the organisation profile and
+  never by name alone. What was left out is counted and said. Their findings stay as leads that
+  each run must confirm, since such tools give false positives by design.
 - **Checked:** `scripts/test-threats-it-ai.sh`.
 
 ### v1.65.5 -- /threats-it no longer keeps tenant evidence in a folder that syncs to the cloud

@@ -44,6 +44,16 @@ Move the outputs into the project as `data/raw/tenant-<date>/`; derive figures w
 - Retention clocks: compute when the attack window falls out of each workspace and put the date in both documents.
   IOCs older than the oldest log cannot be checked from logs at all — say so.
 - "Not checked" is not clean. Name the missing telemetry and the owner who has it.
+- **The organisation's own security testing is not an attacker.** AuditGitHub and the scanners it runs, and any
+  other tool the profile lists under "Own security tooling", exist to find weaknesses: their test scripts, probes
+  and scan traffic look like an attack and are not one. Never report them as attacker behaviour, as an indicator,
+  or as a finding about the organisation. Exclude an event only when it matches an identifier the profile records
+  for that tool (its app or service-principal id, its source addresses, its repository): a name alone proves
+  nothing, since an attacker can use the same name. Anything that claims to be the tool but matches no recorded
+  identifier is hunted like everything else. Excluded activity is counted, never dropped silently: both documents
+  say "N events from <tool>, our own testing, were left out", under what we are not claiming.
+- The tool's **findings** are still input (to the chaining step and to exposure), but each is a lead: these tools
+  give false positives by design, so a finding is used only after this run's own evidence confirms it.
 - Server builds: Server 2025 and Windows 11 24H2 share 10.0.26100 with different fixed revisions — match by product
   line. 2012 R2 / Win10 22H2 fixes may be ESU-only (MSRC files them under the ESU family). ESU enrolment is a
   separate question.
