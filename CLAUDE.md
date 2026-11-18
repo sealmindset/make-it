@@ -110,7 +110,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 `/threats-it` turns any threat feed (advisory URL, article, CVE list, IOC list) into a verified, organisation-specific assessment. Standalone -- not tied to an app. Support files in `.claude/make-it/threats-it/`.
 
-0. **Scaffold** -- Local git project under `~/Documents/threat-briefs/<date>-<slug>/` (never pushed: it holds tenant evidence)
+0. **Scaffold** -- Local git project under `~/threat-briefs/<date>-<slug>/` (never pushed and never in a cloud-synced folder: it holds tenant evidence)
 1. **Intake** -- Archive every source raw with hashes; refused pages via API or two matching extractions
 2. **Extract** -- CVEs, products, IOCs, attack narratives into `facts.json`, quotes matched by regex
 3. **Verify** -- CISA KEV, MSRC, CVE record, vendor advisories, Microsoft Learn; corrections table

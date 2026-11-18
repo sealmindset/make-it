@@ -969,6 +969,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.5 -- /threats-it no longer keeps tenant evidence in a folder that syncs to the cloud
+
+- **Fixed: the default projects folder was `~/Documents/threat-briefs`.** On a Mac where iCloud
+  syncs Documents, the "never pushed" evidence was uploaded anyway. The default is now
+  `~/threat-briefs`.
+- **The scaffold refuses a synced folder.** iCloud Drive, Documents or Desktop when iCloud syncs
+  them, Dropbox, OneDrive and Google Drive, including through a link. Nothing is created, and
+  the skill offers a folder that stays on the computer.
+- **Existing projects are not moved.** If yours are under `~/Documents/threat-briefs`, move them
+  and update "Projects folder" in your organisation profile.
+- **Checked:** `scripts/test-threats-it-folder.sh` (14 checks; 13 failed before the fix).
+
 ### v1.65.4 -- a repeated stop is reported as make-it's fault; the last named-answer asks
 
 - **The same stop twice is said to be make-it's fault.** When a stop or an ask comes back with

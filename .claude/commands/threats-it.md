@@ -23,7 +23,7 @@ every claim is no broader than what was measured. Support files live in `~/.clau
 **Input:** whatever the user gives after `/threats-it` — a URL, a file, pasted text, a CVE list, an IOC list, or
 "refresh <project>". If nothing is given, ask for the threat source (one question).
 
-**Output (in `${THREATS_IT_HOME:-~/Documents/threat-briefs}/<YYYY-MM-DD>-<slug>/`, a local git repo, never pushed):**
+**Output (in `${THREATS_IT_HOME:-~/threat-briefs}/<YYYY-MM-DD>-<slug>/`, a local git repo, never pushed and never in a folder that syncs to the cloud):**
 `briefing.md` + `technical.md` + generated `appendix.md`, `dist/*.pdf` for each, `dist/openvex.json`, all evidence in
 `data/`, build scripts in `scripts/`. Optionally a covering-email draft in the reply.
 
@@ -67,7 +67,7 @@ and `weasyprint` for PDFs. No tenant access → run phases 0–4 and 6–9 as a 
 
 ## Phases
 
-**0 — Scaffold.** `scripts/new_project.sh <today> <slug>`. Read the organisation profile (leads to verify, not facts)
+**0 — Scaffold.** `scripts/new_project.sh <today> <slug>`. Exit 3 means the projects folder syncs to the cloud (iCloud, Dropbox, OneDrive, Google Drive), where tenant evidence must not go: nothing was created. Tell the user in plain words which folder and why, and offer `~/threat-briefs` or a folder they pick; then set it as the profile's Projects folder and run the script again. Earlier projects left in a synced folder are the user's to move: say they are there, don't move them. Read the organisation profile (leads to verify, not facts)
 and `references/pitfalls.md`.
 
 **1 — Intake and archive.** Archive every source raw into `data/raw/` with `fetch_source.sh`. Refused → API route or
