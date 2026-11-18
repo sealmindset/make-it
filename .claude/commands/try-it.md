@@ -318,10 +318,10 @@ SSL-inspecting proxies can break Docker image pulls and builds. A tool the check
 only a name so far: try the build (step 2) first, and ask only when a build or pull fails with a
 TLS/certificate error. Then the user has to pause the tool themselves, and this is a high-stakes
 stop (per the approval block): they are turning off a security tool on their own computer, so
-they state the specifics -- never a plain "done". Fill `[TOOL]` with every name the check printed
+they pick the specific tool -- never a plain "done". Fill `[TOOL]` with every name the check printed
 (Zscaler, Netskope or GlobalProtect; all of them if more than one matched). If the check found
 nothing, use "your network security tool (often Zscaler, Netskope or GlobalProtect)" and the
-'don't have one' sentence.
+'I don't have a tool like this' option.
 
 Tell user: "Before I can put your app together, I need you to pause [TOOL] for a little while.
 The download just failed in the way these tools make it fail[if detected: ', and I can see
@@ -340,7 +340,7 @@ asks, pick a time long enough for the downloads. Then pick what you did:
 - **Not sure, or I can't** -- I'll stop here.
 [Only when the check found nothing: - **I don't have a tool like this**]"
 
-**Wait for their pick.** "I paused [TOOL]" means go. When `[TOOL]` names more than one tool,
+**Wait for their pick.** "I paused [TOOL]" means go, unless "Not sure, or I can't" is picked with it: then it is a stop. When `[TOOL]` names more than one tool,
 every one of them must be picked before the build is retried; ask about the ones still
 missing. If they say how long they paused it for, note it as that tool's `[TIME]`; it is not
 asked for. "Not sure, or I can't" means stop; "I don't have a tool like this" (offered only
@@ -357,7 +357,7 @@ Only if the user actually paused a tool: once the downloading is over -- the bui
 worked and the smoke test's installs and audits are done (its steps 1 and 2b, rebuilds
 included), or you've stopped trying -- remind the user, naming every tool they said they paused:
 "All done with the heavy lifting! You can turn [TOOL] back on now[if a time was given: ' -- no
-need to wait out the [TIME] you gave it']." No pause (never asked, or 'don't have one'), no
+need to wait out the [TIME] you gave it']." No pause (never asked, or 'I don't have a tool like this'), no
 reminder.
 
 **2. Build the containers:**
@@ -1024,7 +1024,7 @@ Let me create it now..."
 - SSL-inspecting proxies (Zscaler, Netskope, Palo Alto, etc.) break Docker image pulls and npm/pip installs inside containers
 - Detect by looking for errors containing: "certificate", "SSL", "TLS", "x509", "CERT_", "unable to get local issuer"
 - Use the ask in build-and-start step 1 and wait for the same answer; a stop there is a stop
-  here, and if the user already answered 'don't have one' this run, don't ask again -- keep
+  here, and if the user already picked 'I don't have a tool like this' this run, don't ask again -- keep
   diagnosing. Do NOT retry builds while the SSL proxy is active.
 - Once the downloading is over (as step 1 defines it), give step 1's reminder, under step 1's
   rule (only if a tool was actually paused).

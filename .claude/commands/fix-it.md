@@ -64,6 +64,7 @@ This skill has 6 phases:
 @~/.claude/make-it/references/fix-strategies.md
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/design-blueprint.md
+@~/.claude/make-it/references/approval-block.md
 
 </execution_context>
 
@@ -257,13 +258,14 @@ How would you like me to handle git?
 1. Create a new `fix-it/[date]` branch
 2. Work on the current branch, one commit for everything
 3. Work on the current branch, one commit per fix category
+4. Not now -- nothing is changed
 
-Ready to proceed?"
+Pick one."
 
 **Wait for user approval before making any changes.**
 
 **When any AUDIT finding is in scope**, the plan above is a note, not a question: leave out the
-git strategy list and "Ready to proceed?", say "Everything goes on a new branch, `fix-it/[date]`.
+git strategy list and "Pick one.", say "Everything goes on a new branch, `fix-it/[date]`.
 Nothing reaches your current branch unless you keep it.", and start. The `fix-it/[date]` branch is
 not asked for and is not a choice here: it is what makes fixing without asking safe to undo. Create
 it before the first change (`git checkout -b fix-it/YYYY-MM-DD`; a second run the same day adds
@@ -613,7 +615,7 @@ These remaining items have been added to `TODO.md` under a '## Security Fixes (M
 These change who can do what in your app, so they are on the branch `fix-it/[date]` and nowhere
 else. The one thing to check: sign in as an ordinary user and do the everyday things from the
 table above -- they should work exactly as before.
-- **Keep it:** merge `fix-it/[date]` into [original branch] (or say "keep it" and I will).
+- **Keep it:** merge `fix-it/[date]` into [original branch] (or pick 'Keep it' and I will).
 - **Drop it:** `git checkout [original branch]`. The branch stays, untouched, until you delete it.
 
 ## Attestation files:

@@ -70,9 +70,9 @@ a "can't be built as shown" agreement -- updates both, so later features build o
 5. **On their go** ("build it", or a yes with no changes): set
    `Preview: approved <date> (round <N>)` and build; don't ask again before building.
    **High-stakes:** a /resume-it feature that changes who can see or do something the app already
-   has (an existing screen or role). The user names those screens and roles in their go (active
-   confirmation, `approval-block.md`); a plain "yes" or "build it" is not enough -- ask them to
-   name them, and build only the access they named.
+   has (an existing screen or role). The go is a select that names those screens and roles, one option per
+   access change (active confirmation, `approval-block.md`); a plain "yes" or "build it" is not
+   enough -- show the select, and build only the access they picked.
 
 ## Build to the preview
 

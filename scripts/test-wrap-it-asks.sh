@@ -65,11 +65,11 @@ for x in "worktree removal|WT|scripts/worktree.sh rm|--force" "branch deletion|B
   T="${!var}"
   check "$name: the step was found" '[ -n "$T" ]'
   check "$name: the user picks or names which ones; nothing else is removed" \
-    'printf "%s" "$T" | gq -iE "\b(pick|name)s? (them|which|each)|which (ones )?should I (remove|delete)" && printf "%s" "$T" | gq -iE "only the ones (they|the user) (named|picked|name|pick)"'
+    'printf "%s" "$T" | gq -iE "\b(pick|name)s? (them|which|each)|which (ones )?should I (remove|delete)" && printf "%s" "$T" | gq -iE "only the ones (they|the user) (picked|pick)"'
   check "$name: a plain yes is not a pick" \
     'printf "%s" "$T" | gq -iE "plain .?(yes|ok).?[^.]{0,40}(is not|isn.t) a pick"'
-  check "$name: 'all' counts only with the number in it" \
-    'printf "%s" "$T" | gq -iE "\ball\b[^.]{0,60}\b(number|count)\b"'
+  check "$name: there is no 'all of them' option -- every one is its own pick (was: 'all' with the number typed; owner 2026-11-17, no typed counts)" \
+    'printf "%s" "$T" | gq -iE "no .all of them. option" && printf "%s" "$T" | gq -iE "every one is its own pick"'
   check "$name: a way to keep everything is offered" 'printf "%s" "$T" | gq -iE "keep them all"'
   check "$name: evidence -- it says what was checked" 'printf "%s" "$T" | gq -iE "I checked"'
   check "$name: blast radius and undo are stated" \

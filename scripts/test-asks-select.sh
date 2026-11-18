@@ -31,4 +31,28 @@ W=.claude/commands/wrap-it.md
 hasnt 'have them type the names' "$W" "/wrap-it: nothing typed"
 has "'Keep them all' is remembered" "$W" "/wrap-it: 'keep them all' is remembered for copies"
 has "ask only about labels that are not on it" "$W" "/wrap-it: and for labels"
+# the rules themselves, not only their headings (second review, 2026-11-17: nine mutants survived)
+has 'A stop, a failed check, a security finding or a gate is never put off' "$A" "a security stop or a gate can never be put off"
+has 'is asked again whenever that step is blocked again' "$A" "an ask a blocked step needs comes back when it is blocked again"
+has "don't raise it again unless the user asks or what it covers has changed" "$A" "a kept no comes back when the user asks or it changed"
+has 'A skill that rewrites that file keeps the section' "$A" "the kept answers survive a rewrite of the state file"
+has 'Free text is only for information you can' "$A" "free text is only for information"
+has 'a paused security tool is asked each time it comes up' "$A" "a yes to pausing a security tool is never kept"
+has 'No "all of them" option' "$A" "several targets are never one pick"
+hasnt 'states or picks the specific' "$A" "the tier table no longer offers stating"
+has 'Only "Stop [PROGRAM]" means go: stop that one process ([PID]), nothing else' "$T" "/try-it: only that pick, and only that one process"
+for f in "$T" "$M"; do
+  has 'Do NOT retry Docker builds while the tool is active' "$f" "$f: no retry while the tool is still on"
+  has 'then it is a stop' "$f" "$f: 'not sure' beside 'I paused' is a stop"
+  hasnt "don't have one'" "$f" "$f: the old option name is gone"
+done
+has "If they pick \"Remove {firm_name}'s demo\":" "$D" "/demo-it: teardown runs only on that pick"
+has 'kept in an archive for 90 days' "$D" "/demo-it: the ask states the real undo"
+has "write one line naming them under" "$W" "/wrap-it: the kept answer is written down"
+hasnt "name them, or say|picks or names each|counts only with the number" "$W" "/wrap-it: no typed names or counts"
+for f in .claude/commands/fix-it.md .claude/commands/demo-it.md; do
+  has 'approval-block.md' "$f" "$f reads the shared rules"
+done
+hasnt 'Ready to proceed\?"' .claude/commands/fix-it.md "/fix-it: no bare 'ready to proceed?'"
+hasnt 'picks or types' .claude/make-it/references/backlog-board.md "the board's gates are picks, not typing"
 exit $fail

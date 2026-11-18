@@ -253,7 +253,7 @@ git worktree list 2>/dev/null
 If worktrees exist beyond the main checkout, check each for unsaved work
 (`git -C <path> status --short`). For the worktrees you own (not another session's or a tool's)
 that are BOTH fully merged into the default branch AND have no unsaved changes, ask once. Removing
-one deletes a folder, so this is high-stakes per the approval block: the user picks or names each
+one deletes a folder, so this is high-stakes per the approval block: the user picks each
 one to remove, never a plain yes. Before asking, list each candidate's local-only files
 (`git -C <path> status --short --ignored`, e.g. a `.env`): they go with the folder.
 
@@ -263,14 +263,13 @@ main project, and none has unsaved changes. Removing a copy deletes only that fo
 stays in your main project, but the folder itself can't be brought back (I can make a fresh one
 any time). What's unusual: [for each copy holding local-only files: 'the copy [name] also holds
 [files], which would be deleted with it'; otherwise 'nothing']. The one thing to check: you're
-not still using any of these. Which should I remove? Pick them or name them, or say 'keep them
-all'."
+not still using any of these. Which should I remove? Pick them, or pick 'Keep them all'."
 
 Offer each copy as its own choice in a multi-select. A plain "yes" or "ok" is not a
 pick: ask which ones. 'Keep them all' is remembered: write one line naming them under
 `## Put off by your choice` in `.make-it-state.md`, and from then on ask only about copies that
-are not on it. "All" counts only with the number in it ("all 3"), matching the list.
-Remove only the ones they named, one at a time:
+are not on it. There is no 'all of them' option: every one is its own pick.
+Remove only the ones they picked, one at a time:
 
 ```bash
 scripts/worktree.sh rm <branch>   # removes the worktree directory and prunes
@@ -291,7 +290,7 @@ git fetch origin --prune 2>/dev/null   # drop tracking refs for deleted remote b
 Then ask once about LOCAL branches you own that are merged into the default branch AND not
 checked out in any worktree (`git branch --merged origin/main`, after step 4's removals; never
 the default branch itself); none
-→ skip silently. Deleting is high-stakes per the approval block: the user picks or names each
+→ skip silently. Deleting is high-stakes per the approval block: the user picks each
 branch, never a plain yes.
 
 "[N] of your work labels ('branches') are finished: [for each: its name -- what it was for].
@@ -299,12 +298,12 @@ I checked: all their work is already in your main project. Deleting a label remo
 name -- the work stays, and the label can be brought back from it any time you want it.
 What's unusual: [anything that sets one apart, e.g. 'the label [name] hasn't been used for
 months'; otherwise 'nothing']. The one thing to check: none of these is something you still
-plan to add to. Which should I delete? Pick them or name them, or say 'keep them all'."
+plan to add to. Which should I delete? Pick them, or pick 'Keep them all'."
 
 Offer each branch as its own choice in a multi-select. A plain "yes" or "ok" is not
 a pick: ask which ones. 'Keep them all' is remembered the same way: one put-off line naming
-them, and from then on ask only about labels that are not on it. "All" counts only with the number in it ("all 4"), matching the list.
-Delete only the ones they named, with `git branch -d <name>` (it refuses anything unmerged; if
+them, and from then on ask only about labels that are not on it. There is no 'all of them' option: every one is its own pick.
+Delete only the ones they picked, with `git branch -d <name>` (it refuses anything unmerged; if
 it does, keep that branch and mention it in the summary). This is local-only.
 **Do NOT** delete branches or worktrees you don't own — in a shared/multi-session checkout, other
 sessions' branches and tool-managed worktrees (audit caches, agent-isolation worktrees) are

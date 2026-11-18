@@ -10,7 +10,7 @@ file from its `<execution_context>`; agent prompts carry the disclosure line the
 |------|-----------|-----|
 | **Routine** | Reversible, expected, inside the task's scope | Don't ask. Do it, say so in one line, and list it in the end-of-run summary. |
 | **Consequential** | Changes what ships, costs real time or money, or is awkward to undo | One ask: batch every such question of this step together. |
-| **High-stakes** | Destructive or hard to undo; auth, permissions, secrets; schema or migrations; live data; money; anything sent outside the team; breaking changes | **Active confirmation:** the human states or picks the specific -- the count, the target, the case -- never a plain yes. This gate is never batched away or removed. |
+| **High-stakes** | Destructive or hard to undo; auth, permissions, secrets; schema or migrations; live data; money; anything sent outside the team; breaking changes | **Active confirmation:** the human picks the specific -- the count, the target, the case -- never a plain yes. This gate is never batched away or removed. |
 
 Never ask a question whose answer wouldn't change what happens. Torn between two tiers → the
 higher one.
@@ -41,8 +41,14 @@ rows, which environment), one option each.
   section) and don't raise it again unless the user asks or what it covers has changed. A skill
   that rewrites that file keeps the section. In a project without that file nothing is kept, and
   the next run may ask again.
+- **Only an offer is put off.** A stop, a failed check, a security finding or a gate is never put
+  off: the check still runs, still reports, and still holds what it held. An ask that a step needs
+  in order to go on (a blocked download, a port in use) is asked again whenever that step is
+  blocked again, whatever was answered last time.
 - **A yes to an action is never kept.** A send, a deploy, a delete, a migration, a payment or a
   paused security tool is asked each time it comes up. Keeping a "no" approves nothing.
+- **No "all of them" option.** When the ask lists several targets, each is its own pick. If an
+  answer picks both an action and "not sure" or "stop", it is a stop.
 
 ## A list of asks ("Waiting on you")
 
