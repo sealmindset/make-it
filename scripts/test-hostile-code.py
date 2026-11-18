@@ -839,6 +839,55 @@ class StaleCopies(Case):
         self.scan_wt()
         self.assertFalse(os.path.exists(marker), "a git setting in the project ran a command")
 
+    def test_an_old_copy_of_conftest_is_never_softened(self):
+        # third review: the old-copy branch ran before the files-that-run-on-their-own check
+        self.put("conftest.py", "import sys\nexec(open(sys.argv[1]).read())\n")
+        self.g("init", "-q", "-b", "main")
+        self.g("add", "-A")
+        self.g("commit", "-q", "-m", "old")
+        self.g("worktree", "add", "-q", self.wt, "-b", "feature")
+        self.put("conftest.py", "x = 1\n")
+        self.g("add", "-A")
+        self.g("commit", "-q", "-m", "fixed")
+        self.tool("--mine", folder=self.wt)
+        out = self.scan_wt(1)
+        self.assertIn(("conftest.py", "read-then-run"), self.stops(out))
+
+
+class UnreadPaths(Case):
+    """Review 2026-11-17 (third round): a .py path named in open() is only harmless when this tool
+    really read that file. A link, a .git folder and a skipped folder are never read."""
+
+    PAYLOAD = "import os\nos.system('true')\n"
+    LOADER = 'exec(open("%s").read())\n'
+
+    def test_a_py_name_that_is_a_link_to_an_unread_file_stops(self):
+        self.put("README.txt", self.PAYLOAD)
+        os.symlink("README.txt", os.path.join(self.dir, "helper.py"))
+        self.put("setup.py", self.LOADER % "helper.py")
+        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_a_py_file_inside_a_git_folder_is_not_read_so_loading_it_stops(self):
+        self.put(".git/p.py", self.PAYLOAD)
+        self.put("setup.py", self.LOADER % ".git/p.py")
+        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_a_py_file_in_a_skipped_packages_folder_is_not_read_so_loading_it_stops(self):
+        self.put(".git/index", "junk")
+        self.put("node_modules/p.py", self.PAYLOAD)
+        self.put("setup.py", self.LOADER % "node_modules/p.py")
+        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_a_py_file_outside_the_project_is_not_read_so_loading_it_stops(self):
+        self.put("run.py", self.LOADER % "/tmp/elsewhere.py")
+        self.assertIn(("run.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_loading_a_py_file_this_tool_did_read_is_still_fine(self):
+        self.put("pkg/version.py", "VERSION = '1.0'\n")
+        self.put("pkg/build.py", self.LOADER % "version.py")       # beside the file that names it
+        self.put("tool.py", self.LOADER % "pkg/version.py")        # from the project's top folder
+        self.assertEqual(self.stops(self.scan(0)), [])
+
 
 class ImportTrigger(Case):
     def test_module_level_call_into_flagged_sibling(self):

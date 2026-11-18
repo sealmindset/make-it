@@ -109,6 +109,7 @@ def dotted(node, aliases):
 class PySignals:
     def __init__(self):
         self.first = {}  # kind -> first line
+        self.named = []  # (path, line): a .py file named in open(); harmless only if this tool read it
 
     def hit(self, kind, line):
         self.first.setdefault(kind, line or 1)
@@ -210,6 +211,17 @@ def reads_a_file(node):
     return any(isinstance(c, ast.Attribute) and c.attr in FILE_READ_ATTRS | {"read"} for c in ast.walk(node))
 
 
+def settle(s, rel, known):
+    """A .py file named in open() counts as a read unless it is one of the files this tool read:
+    looked up beside the file that names it and from the project's top folder."""
+    here = os.path.dirname(rel)
+    for name, line in s.named:
+        tries = {os.path.normpath(os.path.join(here, name)), os.path.normpath(name)}
+        if os.path.isabs(name) or not tries & known:
+            s.hit("read", line)
+    return s
+
+
 def names_python_file(args):
     return bool(args) and isinstance(args[0], ast.Constant) and str(args[0].value).endswith((".py", ".pyw"))
 
@@ -217,12 +229,18 @@ def names_python_file(args):
 def read_call(n, aliases, bound, s, handled):
     """A fixed string can't hide anything, so exec/compile/eval on one don't count."""
     f, line = n.func, n.lineno
-    # A payload can sit in a file this tool never reads. A .py file named outright does get read.
-    if dotted(f, aliases) in ("open", "io.open", "codecs.open") and not names_python_file(n.args):
-        s.hit("read", line)
-    if isinstance(f, ast.Attribute) and f.attr in FILE_READ_ATTRS and not (
-            isinstance(f.value, ast.Call) and names_python_file(f.value.args)):
-        s.hit("read", line)
+    # A payload can sit in a file this tool never reads. A .py file named outright usually does get
+    # read, but not always (a link, a .git folder, a skipped folder): settle() decides, per file.
+    if dotted(f, aliases) in ("open", "io.open", "codecs.open"):
+        if names_python_file(n.args):
+            s.named.append((str(n.args[0].value), line))
+        else:
+            s.hit("read", line)
+    if isinstance(f, ast.Attribute) and f.attr in FILE_READ_ATTRS:
+        if isinstance(f.value, ast.Call) and names_python_file(f.value.args):
+            s.named.append((str(f.value.args[0].value), line))
+        else:
+            s.hit("read", line)
     if isinstance(f, ast.Name) and f.id in RUN_NAMES and f.id not in bound:
         handled.add(id(f))
         if n.args and not isinstance(n.args[0], ast.Constant):
@@ -526,7 +544,8 @@ def passes(base, raw):
         if not base.lower().endswith((".py", ".pyw")):
             return not any(stop for _, _, stop in check_config(base, raw))
         tree = parse(raw)
-        return tree is not None and not any(stop for _, _, stop in verdicts(read_tree(tree)[0]))
+        # judged alone, with no other file known to have been read
+        return tree is not None and not any(stop for _, _, stop in verdicts(settle(read_tree(tree)[0], base, set())))
     except (ValueError, RecursionError, MemoryError):
         return False
 
@@ -575,7 +594,7 @@ def stale_copies(root, gitsha):
     out = {}
     for rel, ours in gitsha.items():
         path = prefix + rel.replace(os.sep, "/")
-        if "\n" in path:
+        if "\n" in path or path.startswith(":"):  # a leading colon is git's own path syntax
             continue
         def plain_file(commit):
             """The blob at this path in this commit, only when it is an ordinary file (not a link,
@@ -692,7 +711,7 @@ def scan(root, cleared, projects=None):
                 found[rel].extend(text_verdicts(raw))
             else:
                 trees[rel] = tree
-                found[rel].extend(verdicts(read_tree(tree)[0]))
+                found[rel].extend(verdicts(settle(read_tree(tree)[0], rel, known)))
         except (OSError, ValueError, RecursionError, MemoryError):
             report["not_checked"].append(rel)
 
@@ -730,7 +749,8 @@ def scan(root, cleared, projects=None):
             if sig == "runs-on-import":
                 entry.update(extras[(rel, line)])
             kind = "stop" if stop else "notes"
-            if rel in stale and (sig in SOFT or sig == "unreadable" or not stop):
+            if rel in stale and (sig in SOFT or sig == "unreadable" or not stop) \
+                    and fold(os.path.basename(rel)) not in AUTO_RUN:
                 # only the soft findings: code shaped like an attack stops even as an old copy
                 kind, entry["reason"] = "notes", f"old copy: the main line replaced it in {stale[rel]}"
             elif sig == "unreadable":

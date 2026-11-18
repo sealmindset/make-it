@@ -178,6 +178,10 @@ cannot tell which file a test loads, so there a test that reads any file and run
 project that is theirs and later takes in someone else's test of that shape gets a note, not a
 stop. The old-copy lookup needs git 2.45 or later; with an older git nothing is treated as an old copy.
 
+It does not read links, anything inside a `.git` folder, or installed-package folders
+(`node_modules` and the like). Code that reads a file from one of those and runs it is a stop, but
+code that only imports a package from them is not seen.
+
 In a project marked as the user's own, it does not read the project's other working copies (git
 worktrees inside the folder), and says how many it left out. Each one is checked when a session
 works there. What that leaves open: a file in another working copy that this copy runs by its path
