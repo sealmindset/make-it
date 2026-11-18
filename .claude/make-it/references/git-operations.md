@@ -27,6 +27,9 @@ Agent-side discipline; invisible to the vibe-coder. Composes with `worktree-work
    (lint/format/secret-scan/type-check); don't bypass with `--no-verify`.
 5. **Update a feature branch by rebasing, not merging.** `git fetch origin && git rebase
    origin/main` keeps history linear and surfaces conflicts early and small.
+   One exception: /ship-it brings `main` into a branch by merging, and only to settle the go-live
+   record when that file is the only one that clashes (`ship-it-guide.md`, The record); it never
+   rebases and never force-pushes, so a branch with an open pull request is never rewritten.
 6. **Push your branch; let CI run.** Re-pushing after a rebase uses `--force-with-lease`, **never
    plain `--force`** (force-with-lease refuses to clobber work you haven't seen).
 7. **Fresh CI before merge.** If `main` moved since your last green run, **rebase and re-run CI** —

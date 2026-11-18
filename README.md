@@ -969,6 +969,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.2 -- The go-live record: /ship-it settles a clash by merge (the rule, not yet the step)
+
+- **The rule is written.** When two branches both change a go-live answer, /ship-it tries the
+  update from main as a trial that changes nothing. If the go-live record is the only file that
+  clashes, it merges main into the branch, keeps the newer answer per item, and pushes normally.
+  If any other file clashes too, it starts no merge and the request goes on.
+- **One exception to "update a branch by rebase"** (`git-operations.md`, rule 5), chosen by the
+  owner on 2026-11-18. /ship-it never rebases and never force-pushes.
+- **Not live yet.** /ship-it's own file has no go-live step; the guide lists this with the other
+  steps /ship-it doesn't run yet. Until then a clash is still settled by hand.
+- **Checked:** `scripts/test-go-live-checklist.sh` (119 checks): three checks flipped, a sandbox
+  shows the trial names exactly the files that clash and changes nothing, and 14 reversed rules
+  each failed a check.
+
 ### v1.70.1 -- /dispatch-it and /subagent-it load the approval block
 
 - **Both skills now load `approval-block.md`** (how a skill asks: selects only, fewer asks, every
