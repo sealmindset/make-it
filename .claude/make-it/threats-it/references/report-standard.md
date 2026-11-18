@@ -29,6 +29,8 @@ It must not read like a newspaper. Order:
    and one line on workspace-wide detection coverage. Then **Who could do this now**, one line per chain, from
    the chain's section 5 table: who it took before AI help (skill, time), who it takes with it, and what still
    stands in the way. Marked as an assessment. Leadership should not read "needs a skilled attacker" as "unlikely".
+   Then **What the small findings add up to** (`finding-chains.md`): the paths table with each path's status, and
+   one line on leads. No steps. In a `chains` run this section leads the briefing.
 4. **Status of each item (VEX)** — `Status | Item | <Org> evidence | Action · owner · when`, Affected rows bold, "now"
    rows first. One-sentence VEX definition above the table.
 5. **The six questions, briefly** (required by the standard, 1–4 lines each): what is this; what is the problem;
@@ -52,10 +54,16 @@ Minimum jargon; define any term in place. No product deep-dives — those live i
 - S6 Code inventory (if relevant).
 - S7 The threat's pattern inside <Org> (exposure, hardening — not IOC), with actions and owners.
 - S8 Other observations. S9 Access gaps and who closes them.
+- S10 Paths built from small findings (`finding-chains.md`): inventory counts by source rating, each path in full
+  with its status, then the leads.
 **Part B — Generic** (any Microsoft 365 tenant): B0 method and sources table; B1 triage of the source (sections, CVE
 count, product count); B2 corrections and additions to the source (table: brief says | verified position | evidence);
 B3 findings summary (grouped, separately counted when fixes differ); B4… findings with What / Where / How and
 commands marked "NOT TESTED" unless run; licensing and cost; coverage limits with closers; reproduction; sources.
+
+## Test plan (`test-plan.md`) — when there are paths
+`finding-chains.md`, section 4. Its own file and PDF, never attached to the briefing: it is a how-to for attacking
+the organisation. Each path with its status, what must be in place before anyone starts, the steps, and the undo.
 
 ## Appendix (`appendix.md`) — generated only
 CVE table with applicability; IOC tables; MSRC batch tables and fixed builds; KEV context; org sections (full VEX

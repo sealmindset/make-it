@@ -14,6 +14,9 @@ if [ -f data/derived/vex.json ]; then
   python3 -I "$SKILL/scripts/openvex.py" data/derived/vex.json dist/openvex.json \
     --author "${VEX_AUTHOR:-${THREATS_IT_ORG:-Your Organisation} Information Security}" --id-base "${VEX_ID_BASE:-urn:threats-it:vex:$(basename "$PWD")}"
 fi
+if [ -f data/derived/paths.json ]; then
+  python3 -I "$SKILL/scripts/check_paths.py" .
+fi
 if [ -f data/derived/headline.json ]; then
   python3 -I "$SKILL/scripts/check_pair.py" briefing.md technical.md data/derived/headline.json
 else
@@ -21,7 +24,7 @@ else
 fi
 
 mkdir -p dist
-for doc in briefing technical appendix; do
+for doc in briefing technical appendix test-plan; do
   [ -f "$doc.md" ] || continue
   pandoc "$doc.md" --from markdown+pipe_tables+yaml_metadata_block --standalone \
     --css scripts/pdf.css --metadata pagetitle="$doc" --pdf-engine=weasyprint -o "dist/$doc.pdf" 2>&1 | grep -v '^WARNING' || true
