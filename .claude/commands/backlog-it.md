@@ -75,7 +75,7 @@ user's go, and every other skill reads the same board.
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item (Step 4); always end with `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --needs-you` |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b); `--with-deps` also plans what the filter waits on, across epics |
 | `mode <id> <mode\|auto>` | Choose a card's mode yourself; `plan` keeps it |
-| `groom [filter] [--with-deps] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md`; `--with-deps` adds the chain behind the filter |
+| `groom [filter] [--with-deps] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md`, and say which epics, stories and tasks are no longer needed (proposals; one multi-select ask closes the ones you pick); `--with-deps` adds the chain behind the filter |
 | `groom move/pin <id> <pos>`, `groom unpin <id>` | Pin / release a rank |
 | `groom strategy [--apply\|--dry-run]` | Foundation vs polish → `STRATEGY.md` |
 | `undo` | Revert the last board commit (board in its own repo only) |

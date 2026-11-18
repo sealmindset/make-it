@@ -47,7 +47,7 @@ and waiting to be checked, and what's next.
   the live app, so nothing is marked done that isn't. `reconcile --prs` moves bugs forward from
   their pull requests on GitHub: facts, not memory.
 - **Deciding what's next**: `groom` proposes the order that finishes the most, soonest (you can
-  pin anything to a spot), and `groom strategy` sorts the work into foundation and polish, and
+  pin anything to a spot) and points out cards that are no longer needed, and `groom strategy` sorts the work into foundation and polish, and
   says why.
 - **Deciding how to run it**: `plan` reads your handoff note and the board, and says for each
   card whether to do it directly, investigate first (a spike), build it step by step from a plan,
@@ -129,6 +129,10 @@ else from the board joins the plan.
 
 ## What's changed since mid-October
 
+- **2026-11-18** (v1.70.0) — **Needed or not**: `groom` now also says which epics, stories and
+  tasks no longer need doing, with the evidence (already covered, overtaken, nobody is asking, or
+  an epic with nothing left). Nothing closes on its own: you pick the ones to close, and `undo`
+  brings a card back.
 - **2026-11-10** (v1.50.0) — **Putting one epic first**: `plan` and `groom` take `--with-deps`; a
   single card id works as a filter; an epic's `dependsOn` now holds for every card under it.
 - **2026-10-28** (v1.46.0) — **`info`** explains any card in plain terms, in the same three parts
