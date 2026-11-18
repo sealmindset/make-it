@@ -55,4 +55,11 @@ for f in .claude/commands/fix-it.md .claude/commands/demo-it.md; do
 done
 hasnt 'Ready to proceed\?"' .claude/commands/fix-it.md "/fix-it: no bare 'ready to proceed?'"
 hasnt 'picks or types' .claude/make-it/references/backlog-board.md "the board's gates are picks, not typing"
+# the same stop twice (the owner's brief, rule 4), and the last named-answer asks
+has "The same stop twice is make-it's fault, and is said so" "$A" "a repeated stop is reported as make-it's fault"
+has 'a repeat never turns a stop into a go' "$A" "a repeated stop stays stopped"
+has 'this never applies to approving an action' "$A" "a repeated approval of an action is still asked"
+hasnt '\(name the files\)|names which files|names what to move' .claude/commands/argo-it.md "/argo-it: files and secrets are picked, not named"
+has 'a second select with one option per file' .claude/commands/argo-it.md "/argo-it: replacing some files is one pick per file"
+hasnt 'by item number' .claude/commands/retrofit-it.md "/retrofit-it: items are picked from the list"
 exit $fail

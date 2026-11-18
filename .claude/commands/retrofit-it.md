@@ -498,8 +498,7 @@ or fresh build][; and, if the database lives elsewhere: is [host] a test copy or
 people use for real] -- or **Not now**."
 
 **Wait for their pick, per the approval block** (high-stakes: this changes sign-in, who can do
-what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or by
-item number)[; and, if the app has a login and secure login is not left out, keep or replace][; and, if Very High, which
+what, and the database). A plain yes is not an answer -- ask which (all [ITEM_COUNT], or each item picked from the list)[; and, if the app has a login and secure login is not left out, keep or replace][; and, if Very High, which
 route][; and, if the database lives elsewhere: is [host] a test copy or the one people use
 for real]. Build only what they included; anything left out
 goes to TODO.md (with the record, in the same folder: **Then write the record**) as "left out by your choice" with what they'll need to handle themselves (see

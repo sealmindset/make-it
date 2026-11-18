@@ -969,6 +969,16 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.4 -- a repeated stop is reported as make-it's fault; the last named-answer asks
+
+- **The same stop twice is said to be make-it's fault.** When a stop or an ask comes back with
+  nothing changed since you answered it, the skill says so in one line, gives the way out, and
+  notes it in the report. It stays stopped, and it never applies to approving an action.
+- **/argo-it and /retrofit-it:** files to replace, secret values to move and items to include
+  are picked from a list, not named or numbered.
+- /nemo-it, /deadcode-it and /fix-it were read against the shared rule and needed no change.
+- **Checked:** `scripts/test-asks-select.sh` (52 checks).
+
 ### v1.65.3 -- the ask rules, tightened after a second review
 
 - **A security stop or a gate can never be "put off".** Keeping a "no" only silences an offer.

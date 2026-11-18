@@ -460,7 +460,7 @@ git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-p
 ```
 
 If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
-the approval block: the user names what to move, a plain yes isn't an answer.
+the approval block: the user picks what to move, a plain yes isn't an answer.
 
 **If any hit sits under `== saved, not sent ==`: the only option is stop here.** Step
 4 sends the saved change that holds the value, so moving it out of the current files can't keep
@@ -492,7 +492,7 @@ moving it isn't enough -- it should also be changed, and **stop here** is the sa
 Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
 out yourself?"
 
-Move only the ones they named: the value goes to `.env`, the code gets an `os.getenv()` /
+Move only the ones they picked: the value goes to `.env`, the code gets an `os.getenv()` /
 `process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
 nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
 your files. If any found value is still in the code (not named, or called a
@@ -2256,7 +2256,7 @@ Only offer manifest regeneration if the user explicitly asks.
 
 **If existing manifests are found but deploy infrastructure is incomplete:**
 Replacing files someone wrote is hard to undo, so this is active confirmation, per the approval
-block: the user names which files, a plain yes isn't an answer. Fill every bracket from PHASE 0.
+block: the user picks which files, a plain yes isn't an answer. Fill every bracket from PHASE 0.
 
 "I found existing deployment files in `{dir}`: [list the N files]. [What's missing from the
 setup, e.g. 'there's no automated build-and-deploy workflow yet'] -- that's why I'm asking. I can
@@ -2267,10 +2267,10 @@ depend on these files as they are?
 
 Which should I do?
 - **Replace all [N] files in `{dir}`**
-- **Replace only these:** (name the files)
+- **Replace only some** -- I'll list the files and you pick which
 - **Leave them all as they are** -- I'll follow their pattern for anything new I add"
 
-Replace only what they named. 'Leave them': generate only what's missing, following the
+Replace only what they picked (for 'Replace only some', a second select with one option per file). 'Leave them': generate only what's missing, following the
 existing pattern.
 
 **If the user doesn't know a setting (namespace, hostname, etc.):**
