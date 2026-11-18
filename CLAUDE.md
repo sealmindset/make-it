@@ -115,7 +115,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 2. **Extract** -- CVEs, products, IOCs, attack narratives into `facts.json`, quotes matched by regex
 3. **Verify** -- CISA KEV, MSRC, CVE record, vendor advisories, Microsoft Learn; corrections table
 4. **Attack chains** -- Flow diagram + ATT&CK-verified stage table per attack, plus who can run each chain now: a person alone against a person with AI help
-5. **Organisation assessment** -- Read-only Graph / Log Analytics / Resource Graph: IOC + behaviour hunts, exposure, Sentinel rule coverage
+5. **Organisation assessment** -- Read-only Graph / Log Analytics / Resource Graph: IOC + behaviour hunts, exposure, Sentinel rule coverage; then finding chains: low and informational findings joined into attack paths, each with its cheapest break and a test plan (`/threats-it chains` runs this alone, with no feed)
 6. **VEX** -- One statement per product x item, OpenVEX v0.2.0
 7. **Reports** -- Leadership briefing + technical companion + generated appendix, Markdown and PDF, figure check
 8. **Fact-check** -- Independent agent; every finding fixed
@@ -127,6 +127,8 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Prove it or don't report it -- WebFetch is discovery only, never the source of a figure
 - Behaviour first: the briefing leads with what attackers do and the VEX table, not product articles
 - The organisation's own security testing (AuditGitHub and its scanners) is never reported as an attacker; it is excluded by recorded identifier and counted, and its findings are leads to confirm
+- A path built from small findings is "not exercised" until a person's test record says otherwise; the skill never runs one, and the test plan carries no exploit code
+- AI is treated as the attacker too, not only a helper: each chain is rated for an AI agent acting on its own, with how fast it could finish against how fast the organisation would notice
 - AI is treated as part of the attacker: "needs a skilled attacker" is never a reason to call a chain unlikely. Ratings are assessments; a claim that AI was used needs a source
 - The organisation profile (`~/.claude/threats-it/environment.md`) is local only -- never committed
 

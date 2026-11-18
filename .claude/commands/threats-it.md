@@ -21,7 +21,8 @@ every claim is no broader than what was measured. Support files live in `~/.clau
 (`scripts/`, `references/`, `templates/`); paths below are relative to that folder.
 
 **Input:** whatever the user gives after `/threats-it` — a URL, a file, pasted text, a CVE list, an IOC list, or
-"refresh <project>". If nothing is given, ask for the threat source (one question).
+"refresh <project>", or `chains` (no feed: what the organisation's low and informational findings add up to,
+`references/finding-chains.md`). If nothing is given, ask for the threat source (one question).
 
 **Output (in `${THREATS_IT_HOME:-~/threat-briefs}/<YYYY-MM-DD>-<slug>/`, a local git repo, never pushed and never in a folder that syncs to the cloud):**
 `briefing.md` + `technical.md` + generated `appendix.md`, `dist/*.pdf` for each, `dist/openvex.json`, all evidence in
@@ -63,6 +64,7 @@ and `weasyprint` for PDFs. No tenant access → run phases 0–4 and 6–9 as a 
 | `exposure.py <dir> presence.json [--fixmap msrc.json --cve X --since D]` | Takeover/bulk permissions, foreign credentials, roles (SPs and groups), long-lived certs, product presence, server builds vs fix |
 | `sentinel_coverage.py <dir> [chains.json]` | Rule states live/partial/blind/disabled per chain; workspaces not in Sentinel |
 | `openvex.py vex.json out.json --author … --id-base …` | Validate VEX statements and render OpenVEX v0.2.0 |
+| `check_paths.py <project>` | Paths built from small findings: every link in evidence and confirmed, status "not exercised" unless a person's test record says otherwise, a break and a test plan per path |
 | `check_pair.py briefing.md technical.md [headline.json]` | Briefing figures/dates/CVEs ⊂ companion; headline values pinned |
 
 ## Phases
@@ -102,6 +104,13 @@ standard scripts do not reach, such as runtime versions or web-server logs). Cop
 project `scripts/assess.py`. Report progress to the user as findings land (IOC verdict first, then exposure, then
 detection coverage).
 
+**5b — Finding chains.** Follow `references/finding-chains.md`: inventory every finding the run can read, whatever
+its rating (low, informational and accepted risks included; a tool's or a dropped report's finding is a lead
+until this run confirms it), work out which ones connect into a path from a real starting point to an incident,
+and give each path its diagram, its "who can do this now" table, its cheapest break and its test plan. Every path
+is "not exercised": this skill never runs one. In a threat-feed run, limit it to what this threat's chains touch.
+Write `data/derived/paths.json`; `check_paths.py` must pass.
+
 **6 — VEX.** One statement per product × item, following `references/vex.md`; write `data/derived/vex.json` from
 the assess script; `openvex.py` renders and validates it.
 
@@ -123,6 +132,7 @@ environment.
 - Raw evidence archived with hashes; every figure traceable; `check_pair.py` passes.
 - Each attack has a diagram, a verified-ATT&CK stage table, organisation telemetry/result and rule state.
 - IOC verdict states exactly which tables, windows and workspaces were searched, and what could not be.
+- Paths built from small findings pass `check_paths.py`; each is marked not exercised and has a break and a test plan.
 - VEX validates; OpenVEX written; briefing VEX table matches it.
 - Markdown and PDFs for briefing, technical companion and appendix in `dist/`.
 - Fact-check findings applied; commit made; the user told what is time-sensitive (retention clocks, KEV deadlines).

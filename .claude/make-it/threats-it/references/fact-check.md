@@ -27,8 +27,13 @@ Check claim by claim. Flag:
 6. Wording a non-technical reader could misread as a stronger claim than the evidence supports.
 7. Claims about AI: a statement that AI was used in this attack, or in any named incident, with no archived source
    that says so; a "who can do this now" rating presented as measured, not as an assessment; a time more precise
-   than minutes / hours / days / weeks; a chain called unlikely because it needs a sophisticated attacker without
+   than minutes / hours / days / weeks; a time-to-compromise figure ("under N hours") with no archived source; a
+   response time for <Org> that is not in this run's evidence; a chain called unlikely because it needs a sophisticated attacker without
    the chain's "who can do this now" table supporting it.
+8. Paths built from small findings: a link with no evidence behind it; a lead presented as a path; a path worded as proven,
+   exploited or exploitable when its status is "not exercised"; a combined severity score nobody published; a
+   "cheapest break" that leaves another route between the same start and objective; steps from the test plan
+   appearing in the briefing.
 Be adversarial and specific; skip style. Output a severity-ordered list (high/medium/low): file:line, quoted claim,
 problem, evidence. End with "checked N claims, flagged M".
 ```

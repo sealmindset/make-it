@@ -28,7 +28,8 @@ A statement about what AI lets an attacker do ("cuts this from days to hours") i
 a source archived in this project, fetched and quoted the same way: a government or CERT advisory, a vendor's
 threat-intelligence report on observed misuse of its own models, a peer-reviewed or reproducible study. Quote the
 sentence verbatim with its date into `data/curated/ai-capability.json`. Press and commentary are corroboration only.
-Never name an outage or a breach as AI-driven unless a primary source attributes it. With no source, the report
+Never name an outage or a breach as AI-driven unless a primary source attributes it. The same goes for a general
+time-to-compromise figure ("any target in under N hours"): quote it with its source and its conditions, or leave it out. With no source, the report
 says "our assessment; no published source archived" -- it never borrows authority it doesn't have.
 
 ## Verification habits

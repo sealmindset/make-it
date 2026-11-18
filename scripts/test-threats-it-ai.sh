@@ -10,7 +10,15 @@ has() { if [ "$(flat < "$2" | grep -cF -- "$1")" -gt 0 ]; then echo "ok   $3"; e
 hasnt() { if [ "$(flat < "$2" | grep -ciE -- "$1")" -eq 0 ]; then echo "ok   $3"; else echo "FAIL $3"; fail=1; fi; }
 C=$R/attack-chains.md
 has 'Who can do this now: the AI-assisted attacker (required for every chain)' "$C" "every chain gets a who-can-do-this-now table"
-has '**Stage | A person alone: skill, time | With AI help: skill, time | Why it changes, or doesn' "$C" "the table compares a person alone with a person with AI help"
+has '**Stage | A person alone: skill, time | With AI help: skill, time | AI acting on its own: time | Why it changes, or doesn' "$C" "the table compares a person alone, a person with AI help, and an AI acting on its own"
+has 'an AI agent running the chain itself, with a person only starting it or nobody at all' "$C" "an AI acting on its own is its own attacker"
+has 'it tries combinations at machine speed' "$C" "machine-speed trial and error is named"
+has 'it uses what each failed try showed in the next one' "$C" "learning between tries is named"
+has 'How fast <Org> would notice and act' "$C" "the window sets the attack against the response"
+has 'If the chain can finish before anyone would act, say that in those words' "$C" "a chain that outruns the response is said plainly"
+has 'Would the tries be seen?' "$C" "the noise of failed tries is checked"
+has 'a time-to-compromise figure ("under N hours") with no archived source' "$R/fact-check.md" "the fact-check looks for unsourced time-to-compromise figures"
+has 'quote it with its source and its conditions, or leave it out' "$R/sources.md" "a general time-to-compromise figure needs a source"
 has 'an order of magnitude only' "$C" "time is an order of magnitude"
 has 'Never a number' "$C" "time is never a number"
 has 'With AI help moves only with a reason tied to that stage' "$C" "the AI rating needs a reason per stage"
