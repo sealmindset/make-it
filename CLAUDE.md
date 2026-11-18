@@ -114,7 +114,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 1. **Intake** -- Archive every source raw with hashes; refused pages via API or two matching extractions
 2. **Extract** -- CVEs, products, IOCs, attack narratives into `facts.json`, quotes matched by regex
 3. **Verify** -- CISA KEV, MSRC, CVE record, vendor advisories, Microsoft Learn; corrections table
-4. **Attack chains** -- Flow diagram + ATT&CK-verified stage table per attack
+4. **Attack chains** -- Flow diagram + ATT&CK-verified stage table per attack, plus who can run each chain now: a person alone against a person with AI help
 5. **Organisation assessment** -- Read-only Graph / Log Analytics / Resource Graph: IOC + behaviour hunts, exposure, Sentinel rule coverage
 6. **VEX** -- One statement per product x item, OpenVEX v0.2.0
 7. **Reports** -- Leadership briefing + technical companion + generated appendix, Markdown and PDF, figure check
@@ -126,6 +126,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Read-only in the tenant; a real indicator stops the run and goes to the user, evidence preserved, nothing remediated
 - Prove it or don't report it -- WebFetch is discovery only, never the source of a figure
 - Behaviour first: the briefing leads with what attackers do and the VEX table, not product articles
+- AI is treated as part of the attacker: "needs a skilled attacker" is never a reason to call a chain unlikely. Ratings are assessments; a claim that AI was used needs a source
 - The organisation profile (`~/.claude/threats-it/environment.md`) is local only -- never committed
 
 ## /wrap-it

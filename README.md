@@ -969,6 +969,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.66.0 -- /threats-it rates every attack chain for an AI-assisted attacker
+
+First of four parts adding AI as a threat actor to /threats-it.
+
+- **Every attack chain now says who can run it.** Per stage: what it took a person alone (skill
+  and time) and what it takes with AI help, with the reason it changes or doesn't. Under it, the
+  one stage that still stands in the way and whether the organisation controls it.
+- **The leadership briefing carries one line per chain** from that table, so "needs a skilled
+  attacker" is no longer read as "unlikely".
+- **These are assessments, and say so.** Time is given as minutes, hours, days or weeks, never a
+  number. A statement that AI was used in an attack, or in any named incident, needs an archived
+  source that says so. The fact-check step now checks all of this.
+- **Checked:** `scripts/test-threats-it-ai.sh`.
+
 ### v1.65.5 -- /threats-it no longer keeps tenant evidence in a folder that syncs to the cloud
 
 - **Fixed: the default projects folder was `~/Documents/threat-briefs`.** On a Mac where iCloud

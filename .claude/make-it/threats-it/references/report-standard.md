@@ -26,7 +26,9 @@ It must not read like a newspaper. Order:
    headline; "we do need to act — N items now" with sub-bullets; VEX status count.
 3. **What the attackers did, and where <Org> stands** — one row per attacker *behaviour* (not product):
    `Attacker behaviour | Seen at <Org>? | Would we be alerted? | Our exposure`. Then one paragraph "Indicators checked"
-   and one line on workspace-wide detection coverage.
+   and one line on workspace-wide detection coverage. Then **Who could do this now**, one line per chain, from
+   the chain's section 5 table: who it took before AI help (skill, time), who it takes with it, and what still
+   stands in the way. Marked as an assessment. Leadership should not read "needs a skilled attacker" as "unlikely".
 4. **Status of each item (VEX)** — `Status | Item | <Org> evidence | Action · owner · when`, Affected rows bold, "now"
    rows first. One-sentence VEX definition above the table.
 5. **The six questions, briefly** (required by the standard, 1–4 lines each): what is this; what is the problem;
