@@ -11,29 +11,42 @@ export async function GET(request: NextRequest) {
   const includePerms =
     request.nextUrl.searchParams.get("include_permissions") === "true";
 
-  const roles = await prisma.role.findMany({
-    include: includePerms
-      ? { permissions: { include: { permission: true } } }
-      : undefined,
-    orderBy: { name: "asc" },
+  const base = (r: {
+    id: string;
+    name: string;
+    description: string | null;
+    isSystem: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    is_system: r.isSystem,
+    created_at: r.createdAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
   });
 
+  // Two queries, one per shape: a conditional `include` leaves the result
+  // untyped for the permissions, which fails the type check.
+  if (!includePerms) {
+    const roles = await prisma.role.findMany({ orderBy: { name: "asc" } });
+    return NextResponse.json(roles.map(base));
+  }
+
+  const roles = await prisma.role.findMany({
+    include: { permissions: { include: { permission: true } } },
+    orderBy: { name: "asc" },
+  });
   return NextResponse.json(
     roles.map((r) => ({
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      is_system: r.isSystem,
-      created_at: r.createdAt.toISOString(),
-      updated_at: r.updatedAt.toISOString(),
-      ...(includePerms && {
-        permissions: r.permissions?.map((rp) => ({
-          id: rp.permission.id,
-          resource: rp.permission.resource,
-          action: rp.permission.action,
-          description: rp.permission.description,
-        })),
-      }),
+      ...base(r),
+      permissions: r.permissions.map((rp) => ({
+        id: rp.permission.id,
+        resource: rp.permission.resource,
+        action: rp.permission.action,
+        description: rp.permission.description,
+      })),
     })),
   );
 }

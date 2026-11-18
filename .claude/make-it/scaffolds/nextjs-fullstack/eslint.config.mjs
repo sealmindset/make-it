@@ -14,7 +14,10 @@ const __dirname = dirname(__filename);
 
 const compat = new FlatCompat({ baseDirectory: __dirname });
 
-export default [
+// eslint-config-next 15 only ships eslintrc-style configs, so FlatCompat loads them.
+// When this scaffold moves to Next 16, import the native flat configs instead, as the
+// fastapi-nextjs scaffold does: FlatCompat crashes on eslint-config-next 16.
+const config = [
   ...compat.extends("next/core-web-vitals", "next/typescript", "prettier"),
   security.configs.recommended,
   {
@@ -27,3 +30,5 @@ export default [
     ignores: [".next/", "node_modules/", "coverage/"],
   },
 ];
+
+export default config;

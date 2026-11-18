@@ -53,3 +53,20 @@ export function daysUntil(dateString: string): number {
   const diffMs = date.getTime() - now.getTime();
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * Read `obj[key]` only when `key` is the object's own property.
+ *
+ * A key that comes from a URL, an API response or user input can otherwise
+ * reach the prototype (`constructor`, `__proto__`, `toString`) and return
+ * something that was never in the table. Use this for every lookup by a
+ * variable key; it is the one audited place that indexes an object that way.
+ */
+export function own<T>(
+  obj: Record<string, T> | null | undefined,
+  key: string,
+): T | undefined {
+  if (!obj || !Object.prototype.hasOwnProperty.call(obj, key)) return undefined;
+  // eslint-disable-next-line security/detect-object-injection -- own property, checked on the line above
+  return obj[key];
+}

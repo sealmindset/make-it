@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, own } from "@/lib/utils";
 
 // [SEGMENT_LABELS] -- human-readable labels for URL segments
 const segmentLabels: Record<string, string> = {
@@ -17,7 +17,9 @@ const segmentLabels: Record<string, string> = {
 };
 
 function formatSegment(segment: string): string {
-  if (segmentLabels[segment]) return segmentLabels[segment];
+  // `segment` comes from the URL: only an entry of the table itself counts as a label.
+  const label = own(segmentLabels, segment);
+  if (label) return label;
   return segment
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());

@@ -70,7 +70,7 @@ async function main() {
 
   const actions = ["view", "create", "edit", "delete"];
 
-  const permissions: Record<string, string> = {};
+  const permissions = new Map<string, string>();
 
   for (const resource of resources) {
     for (const action of actions) {
@@ -85,7 +85,7 @@ async function main() {
           description: `${action} ${resource}`,
         },
       });
-      permissions[`${resource}.${action}`] = perm.id;
+      permissions.set(`${resource}.${action}`, perm.id);
     }
   }
 
@@ -93,7 +93,7 @@ async function main() {
   // 3. Role-permission assignments
   // -------------------------------------------------------------------------
   // Super Admin: all permissions
-  const allPermIds = Object.values(permissions);
+  const allPermIds = [...permissions.values()];
   for (const permId of allPermIds) {
     await prisma.rolePermission.upsert({
       where: {
@@ -109,7 +109,7 @@ async function main() {
 
   // Admin: all except role delete
   const adminPermIds = allPermIds.filter(
-    (id) => id !== permissions["roles.delete"],
+    (id) => id !== permissions.get("roles.delete"),
   );
   for (const permId of adminPermIds) {
     await prisma.rolePermission.upsert({
@@ -132,16 +132,17 @@ async function main() {
     // [MANAGER_PERMISSIONS] -- app-specific manager permissions
   ];
   for (const key of managerPermKeys) {
-    if (permissions[key]) {
+    const permissionId = permissions.get(key);
+    if (permissionId) {
       await prisma.rolePermission.upsert({
         where: {
           roleId_permissionId: {
             roleId: manager.id,
-            permissionId: permissions[key],
+            permissionId,
           },
         },
         update: {},
-        create: { roleId: manager.id, permissionId: permissions[key] },
+        create: { roleId: manager.id, permissionId },
       });
     }
   }
@@ -152,16 +153,17 @@ async function main() {
     // [USER_PERMISSIONS] -- app-specific user permissions
   ];
   for (const key of userPermKeys) {
-    if (permissions[key]) {
+    const permissionId = permissions.get(key);
+    if (permissionId) {
       await prisma.rolePermission.upsert({
         where: {
           roleId_permissionId: {
             roleId: user.id,
-            permissionId: permissions[key],
+            permissionId,
           },
         },
         update: {},
-        create: { roleId: user.id, permissionId: permissions[key] },
+        create: { roleId: user.id, permissionId },
       });
     }
   }

@@ -99,11 +99,6 @@ function FacetedFilterButton<TData>({
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  if (!column) return null;
-
-  const filterValue = column.getFilterValue();
-  const selected: string[] = Array.isArray(filterValue) ? filterValue : [];
-
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -114,6 +109,13 @@ function FacetedFilterButton<TData>({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  // Hooks first, then the early return: a hook after a return runs conditionally.
+  if (!column) return null;
+
+  const filterValue = column.getFilterValue();
+  const selected: string[] = Array.isArray(filterValue) ? filterValue : [];
+
 
   const filteredOptions = search
     ? options.filter((o) =>

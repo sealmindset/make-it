@@ -98,8 +98,9 @@ export function QuickSearch() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && filteredItems[selectedIndex]) {
-      navigate(filteredItems[selectedIndex].href);
+    } else if (e.key === "Enter") {
+      const picked = filteredItems.at(selectedIndex);
+      if (picked) navigate(picked.href);
     }
   };
 

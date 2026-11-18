@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { formatDate } from "@/lib/utils";
+import { formatDate, own } from "@/lib/utils";
 import type { RoleWithPermissions, Permission } from "@/lib/types";
 import { Shield, Plus, Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -110,7 +110,7 @@ export default function RolesPage() {
                         {resources.map((resource) => (
                           <tr key={resource} className="border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
                             <td className="px-2 py-1.5 font-medium capitalize">{resource}</td>
-                            {actions.map((action) => { const perm = grouped[resource]?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-2 py-1.5 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-2 py-1.5 text-center"><input type="checkbox" checked={rolePermIds.has(perm.id)} disabled className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
+                            {actions.map((action) => { const perm = own(grouped, resource)?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-2 py-1.5 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-2 py-1.5 text-center"><input type="checkbox" checked={rolePermIds.has(perm.id)} disabled className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
                           </tr>
                         ))}
                       </tbody>
@@ -137,7 +137,7 @@ function PermissionMatrixModal({ role, allPermissions, onClose, onSaved }: { rol
   const resources = Object.keys(grouped).sort();
   const actions = [...new Set(allPermissions.map((p) => p.action))].sort();
   const toggle = (permId: string) => { setSelected((prev) => { const next = new Set(prev); if (next.has(permId)) next.delete(permId); else next.add(permId); return next; }); };
-  const toggleAll = (resource: string) => { const perms = grouped[resource] || []; const allSelected = perms.every((p) => selected.has(p.id)); setSelected((prev) => { const next = new Set(prev); perms.forEach((p) => { if (allSelected) next.delete(p.id); else next.add(p.id); }); return next; }); };
+  const toggleAll = (resource: string) => { const perms = own(grouped, resource) || []; const allSelected = perms.every((p) => selected.has(p.id)); setSelected((prev) => { const next = new Set(prev); perms.forEach((p) => { if (allSelected) next.delete(p.id); else next.add(p.id); }); return next; }); };
   const handleSave = async () => { setSaving(true); try { await apiPut(`/api/roles/${role.id}/permissions`, { permission_ids: Array.from(selected) }); onSaved(); onClose(); } catch (err) { console.error("Failed to save permissions:", err); } finally { setSaving(false); } };
 
   return (
@@ -152,7 +152,7 @@ function PermissionMatrixModal({ role, allPermissions, onClose, onSaved }: { rol
               {resources.map((resource) => (
                 <tr key={resource} className="border-b" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-2"><button type="button" onClick={() => toggleAll(resource)} className="font-medium capitalize transition-colors" style={{ color: "var(--foreground)" }} title="Toggle all permissions for this resource">{resource}</button></td>
-                  {actions.map((action) => { const perm = grouped[resource]?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-3 py-2 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-3 py-2 text-center"><input type="checkbox" checked={selected.has(perm.id)} onChange={() => toggle(perm.id)} className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
+                  {actions.map((action) => { const perm = own(grouped, resource)?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-3 py-2 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-3 py-2 text-center"><input type="checkbox" checked={selected.has(perm.id)} onChange={() => toggle(perm.id)} className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
                 </tr>
               ))}
             </tbody>
@@ -176,7 +176,7 @@ function CreateRoleModal({ allPermissions, onClose, onCreated }: { allPermission
   const resources = Object.keys(grouped).sort();
   const actions = [...new Set(allPermissions.map((p) => p.action))].sort();
   const toggle = (permId: string) => { setSelected((prev) => { const next = new Set(prev); if (next.has(permId)) next.delete(permId); else next.add(permId); return next; }); };
-  const toggleAll = (resource: string) => { const perms = grouped[resource] || []; const allSelected = perms.every((p) => selected.has(p.id)); setSelected((prev) => { const next = new Set(prev); perms.forEach((p) => { if (allSelected) next.delete(p.id); else next.add(p.id); }); return next; }); };
+  const toggleAll = (resource: string) => { const perms = own(grouped, resource) || []; const allSelected = perms.every((p) => selected.has(p.id)); setSelected((prev) => { const next = new Set(prev); perms.forEach((p) => { if (allSelected) next.delete(p.id); else next.add(p.id); }); return next; }); };
   const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); setSubmitting(true); setError(""); try { await apiPost("/api/roles", { name, description, permission_ids: Array.from(selected) }); onCreated(); onClose(); } catch (err) { setError(err instanceof Error ? err.message : "Failed to create role"); } finally { setSubmitting(false); } };
 
   return (
@@ -197,7 +197,7 @@ function CreateRoleModal({ allPermissions, onClose, onCreated }: { allPermission
                   {resources.map((resource) => (
                     <tr key={resource} className="border-b" style={{ borderColor: "var(--border)" }}>
                       <td className="px-3 py-2"><button type="button" onClick={() => toggleAll(resource)} className="font-medium capitalize transition-colors" style={{ color: "var(--foreground)" }} title="Toggle all">{resource}</button></td>
-                      {actions.map((action) => { const perm = grouped[resource]?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-3 py-2 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-3 py-2 text-center"><input type="checkbox" checked={selected.has(perm.id)} onChange={() => toggle(perm.id)} className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
+                      {actions.map((action) => { const perm = own(grouped, resource)?.find((p) => p.action === action); if (!perm) return (<td key={action} className="px-3 py-2 text-center" style={{ color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)" }}>-</td>); return (<td key={action} className="px-3 py-2 text-center"><input type="checkbox" checked={selected.has(perm.id)} onChange={() => toggle(perm.id)} className="rounded" style={{ borderColor: "var(--border)" }} /></td>); })}
                     </tr>
                   ))}
                 </tbody>
