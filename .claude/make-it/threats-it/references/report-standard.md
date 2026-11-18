@@ -31,7 +31,8 @@ It must not read like a newspaper. Order:
    it against how fast <Org> would notice, and what still
    stands in the way. Marked as an assessment. Leadership should not read "needs a skilled attacker" as "unlikely".
    Then **What the small findings add up to** (`finding-chains.md`): the paths table with each path's status, and
-   one line on leads. No steps. In a `chains` run this section leads the briefing.
+   one line on leads. No steps. In a `chains` run this section leads the briefing. With it, the AI systems table
+   (`ai-systems.md`).
 4. **Status of each item (VEX)** — `Status | Item | <Org> evidence | Action · owner · when`, Affected rows bold, "now"
    rows first. One-sentence VEX definition above the table.
 5. **The six questions, briefly** (required by the standard, 1–4 lines each): what is this; what is the problem;
@@ -57,6 +58,7 @@ Minimum jargon; define any term in place. No product deep-dives — those live i
 - S8 Other observations. S9 Access gaps and who closes them.
 - S10 Paths built from small findings (`finding-chains.md`): inventory counts by source rating, each path in full
   with its status, then the leads.
+- S11 AI systems as a target (`ai-systems.md`): inventory, findings, chains, and what could not be seen.
 **Part B — Generic** (any Microsoft 365 tenant): B0 method and sources table; B1 triage of the source (sections, CVE
 count, product count); B2 corrections and additions to the source (table: brief says | verified position | evidence);
 B3 findings summary (grouped, separately counted when fixes differ); B4… findings with What / Where / How and

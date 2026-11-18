@@ -1,0 +1,8 @@
+{
+ "Microsoft Copilot": {"app_names": "copilot", "arm_publisher": "", "arm_offer": "", "arm_type": ""},
+ "Azure OpenAI and Azure AI services": {"app_names": "azure ?openai|azure ai|ai foundry|cognitive services", "arm_publisher": "", "arm_offer": "", "arm_type": "microsoft\\.cognitiveservices/accounts"},
+ "Azure Machine Learning and AI Foundry projects": {"app_names": "machine learning", "arm_publisher": "", "arm_offer": "", "arm_type": "microsoft\\.machinelearningservices/workspaces"},
+ "Bots and Copilot Studio agents": {"app_names": "copilot studio|power virtual agents|bot framework", "arm_publisher": "", "arm_offer": "", "arm_type": "microsoft\\.botservice/botservices"},
+ "Third-party AI assistants and coding agents": {"app_names": "openai|chatgpt|anthropic|claude|gemini|perplexity|cursor|codex|mistral|hugging ?face", "arm_publisher": "", "arm_offer": "", "arm_type": ""},
+ "Agent connectors and MCP servers": {"app_names": "\\bmcp\\b|model context protocol|\\bagent\\b", "arm_publisher": "", "arm_offer": "", "arm_type": ""}
+}

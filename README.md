@@ -969,6 +969,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.69.0 -- /threats-it treats the organisation's own AI systems as a target
+
+Last of four parts adding AI as a threat actor to /threats-it.
+
+- **AI assistants and agents are inventoried like privileged identities.** For each: what it runs
+  as, what it can read and change, what it reads that outsiders can write, what it can do with
+  nobody approving, and whether its actions are logged and watched.
+- **Found with the collector the skill already has.** A ready list of AI product names and Azure
+  AI resource types (`templates/presence-ai.json`) is fed to `exposure.py`. A name match is only a
+  hint until its permissions, resources or sign-ins confirm it.
+- **Their weaknesses join the chaining step,** and three attack patterns through AI systems are
+  added: a planted instruction, an over-permissioned agent, a poisoned skill, plugin or MCP server.
+- **Read-only, as always.** The skill never prompts one of the organisation's AI systems, never
+  plants content for one to read, and never reports a prompt that would work.
+- **What it can't see, it says:** low-code agents, assistants on people's machines, AI inside
+  third-party services.
+- **Checked:** `scripts/test-threats-it-ai-systems.sh`.
+
 ### v1.68.0 -- /threats-it reads the findings your own security tools already hold
 
 Third of four parts adding AI as a threat actor to /threats-it.
