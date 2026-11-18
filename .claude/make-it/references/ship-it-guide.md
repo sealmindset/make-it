@@ -153,7 +153,8 @@ Q13). Their sections describe them as /ship-it will run them.
   Provider on Ship)
 - **The billing ask** before that switch (The billing ask; the ship hand-off of /make-it,
   /resume-it and /retrofit-it asks it today)
-- **The go-live checklist** (Go-live checklist): the five items, their record and item 1's check
+- **The go-live checklist** (Go-live checklist): the five items, their record, item 1's check, and how
+  a clash in the record is settled (the merge)
 - **The left-out rules** (Left-out items before production): the production ask, the auto-fix
   rule, the stop on a found secret, and the go-live lines
 
@@ -400,9 +401,17 @@ plain line only when GitHub couldn't be reached: "I couldn't reach GitHub, so I 
 branch's go-live record." No file on main is normal, and nothing is said about it.
 
 A clash is still possible: when two open branches both change an answer, git shows a conflict in
-`.ship-it-go-live.json` on the second PR. It is never a gate. How the skills handle that conflict
-is not designed yet; until it is, the user settles it by hand: "Your go-live record changed on two
-branches. To settle it, keep, for each item, the line with the newer date."
+`.ship-it-go-live.json` on the second PR. It is never a gate. /ship-it settles it (owner,
+2026-11-18). After saving the user's work, it first tries the update from main as a trial that
+changes nothing. When the record is the only file that clashes, /ship-it merges main into the
+branch, writes the record by the rule above (the newer `date` per item, a tie to the branch's),
+and pushes normally. /ship-it never rebases and never force-pushes: this merge is the one
+exception to updating a branch by rebase (`git-operations.md`, rule 5). When any other file
+clashes too, it starts no merge, says its plain conflict line, and the request goes on. When it
+settled the record, it says one line: "Your go-live answers changed in two places. I kept the
+newer answer for each." Someone who updates the branch by hand still settles it by hand: "Your
+go-live record changed on two branches. To settle it, keep, for each item, the line with the newer
+date."
 
 The go-live record is not the left-out record (`left-out-record.md`). A go-live skip is never
 written under `## Left out by your choice`, and a left-out item never becomes a go-live ask. A

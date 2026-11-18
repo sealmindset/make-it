@@ -553,8 +553,8 @@ check "owner 4 (GitHub unreachable): with no file on main the checklist goes on 
 
 # rule 4: a clash in .ship-it-go-live.json on the second PR is settled per item by the newer date (a real add/add-free
 # content conflict: two branches change item 1 and item 2 differently); never a gate
-# (re-pointed by R1, final review: the by-hand line, exact, is the rule the fixture runs; "re-running /ship-it after
-# updating from main settles it" left with the rest of /ship-it settling its own file)
+# (E05-S21, owner 2026-11-18 "Merge": /ship-it settles it by merging main in when the record is the only file that clashes;
+# the by-hand line, exact, stays for a by-hand update and is the rule the fixture runs)
 OC_BYHAND='"Your go-live record changed on two branches. To settle it, keep, for each item, the line with the newer date."'
 OC_CLASH='A clash is still possible: when two open branches both change an answer, git shows a conflict in `.ship-it-go-live.json` on the second PR.'
 OCC=0; printf '%s' "$FLAT" | gq -F -- "$OC_BYHAND" && OCC=1
@@ -566,14 +566,14 @@ oc_case5() { local base ours theirs
   gx -C "$OC/c5/b" fetch -q origin main; ! gx -C "$OC/c5/b" merge -q origin/main >/dev/null || return 1
   ours="$(gx -C "$OC/c5/b" show ":2:$OCREC")"; theirs="$(gx -C "$OC/c5/b" show ":3:$OCREC")"; [ -n "$ours" ] && [ -n "$theirs" ] || return 1
   oc_merge "norec=1,newer=$OCC,tie=1,oneside=1,unread=1" "$theirs" "$ours" "$OC5W"; }
-check "owner 5 (a clash; re-pointed by R1): two branches change the record and git shows a conflict on the second PR -- the guide's exact clash sentence, never a gate; its exact by-hand line (keep, for each item, the line with the newer date) settles it (item 1 from this branch, item 2 from main)" \
-  'oc_case5 && printf "%s" "$FLAT" | gq -F -- "$OC_CLASH" && usays "conflict|clash" "\bnever a gate\b|\bnot a gate\b"'
-# R1 (final review, owner): how the skills handle that conflict is not designed yet; until then it is settled by hand.
-# Nothing in the section has /ship-it settle its own file, read the two sides, stage the result, complete or continue the
-# user's update, or stop on other conflicted files.
-R1_SHIPV='/ship-it\b[^.;:]{0,40}\b(settles?|settling|resolves?|completes?|continues?|stages?|finishes?)\b|\b(two|both) sides\b|--diff-filter=U|\bconflict markers\b|\bstage numbers\b|\bother (conflicted )?files?\b[^.;]{0,20}\b(in conflict|conflicted)\b|\bany other file is conflicted\b|\bwhen /ship-it isn.t run\b'
-check "R1 (guide, the clash settled by hand): a sentence says how the skills handle that conflict is not designed yet and that until it is, it is settled by hand; no sentence has /ship-it settle, resolve, stage, complete or continue it, read the two sides, or stop on other conflicted files" \
-  'says "\bnot designed yet\b" "conflict|clash" "+\bby hand\b" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$R1_SHIPV"'
+check "owner 5 (a clash; settled by /ship-it, owner 2026-11-18): two branches change the record and git shows a conflict on the second PR -- the guide's exact clash sentence, never a gate; the per-item rule (the newer date per item, a tie to the branch) settles it on a real conflict (item 1 from this branch, item 2 from main), and the settle sentence names that rule" \
+  'oc_case5 && printf "%s" "$FLAT" | gq -F -- "$OC_CLASH" && usays "conflict|clash" "\bnever a gate\b|\bnot a gate\b" && says "only file that clashes" "newer .?date.? per item" "tie to the branch"'
+# R1, flipped by E05-S21 (the spike E05-S9, owner 2026-11-18): /ship-it settles the clash by a merge it starts itself, after a
+# trial. Still refused: /ship-it continuing, completing, finishing, aborting or undoing an update it did not start, a rebase,
+# a pull, a force, or a stop on other files (the real opposites this check still fails; mutants in the PR).
+R1_SHIPV='/ship-it\b[^.;:]{0,40}\b(continues?|completes?|finishes?|aborts?|undoes|rebases?|pulls|pulling)\b|--diff-filter=U|\bconflict markers\b|\bstage numbers\b|\bstops? (on|the request|the push)\b|--force\b'
+check "R1 (guide, /ship-it settles the clash by merge; owner 2026-11-18): a trial that changes nothing comes first; when the record is the only file that clashes /ship-it merges main into the branch and pushes normally; when any other file clashes too it starts no merge and the request goes on; a by-hand update is still settled by hand, with the exact line; \"not designed yet\" is gone; no sentence has /ship-it continue, complete, finish, abort or undo an update, rebase, pull, force, or stop" \
+  'says "\btrial\b" "\b(changes|touches) nothing\b" && says "the record is the only file that clashes" "+/ship-it merges main into the branch" "+\bpushes normally\b" && says "any other file clashes" "\bstarts no merge\b" "+\brequest goes on\b" && says "+\bstill settles it by hand\b" && printf "%s" "$FLAT" | gq -F -- "$OC_BYHAND" && ! infl "not designed yet" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "$R1_SHIPV"'
 
 # rule 5: a re-run, like a new request, reads main's copy the same way when it runs
 check "owner 6 (re-run): a re-run that runs the checklist reads main's copy the same way a new request does" \
@@ -679,11 +679,31 @@ check "R7 (Asking, first paragraph): it says only item 1 is asked and items 2-5 
 M5_GEN='(^|[.;:] )(an|any|each|every) item\b[^.;]{0,40}\bmissing\b|\b(an|any|each|every) (item|one) that is `?skipped`? or missing\b'
 check "M5 (Asking, asked again): in Asking's first paragraph, each sentence that affirms a skipped or missing item is asked is about item 1, and none says \"an item that is skipped or missing\" is asked" \
   'm5=$(printf "%s\n" "$ASK1P" | grep -iE "skipped.? or missing|missing or .?skipped" | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "\b(is|are|gets?) asked\b" || true); [ -n "$m5" ] && ! printf "%s\n" "$m5" | grep -viE "\bitem 1\b" | gq . && ! printf "%s\n" "$ASK1P" | cut -d $'"'"'\x1f'"'"' -f1 | gq -iE "$M5_GEN"'
-# A3: the record rules say /ship-it never starts a merge or rebase itself; no sentence of the section has /ship-it merge,
-# rebase or pull (the guard that went with "owner call 2, 3 (wording)", re-homed)
+# A3, narrowed by E05-S21: reading main's copy still starts no merge or rebase; /ship-it never rebases, pulls or force-pushes;
+# the one merge it may start is the clash rule's, and every sentence that has it merge must carry that rule's condition.
 A3P="$(printf '%s\n' "$SEC" | awk '/^```/{f=!f} !f&&/^#/{on=($0=="### The record")} on' | units | sents | pair)"
-check "A3 (no merge or rebase): the guide's record rules say \"/ship-it never starts a merge or rebase itself\", and no sentence of the Go-live checklist section has /ship-it merge, rebase or pull" \
-  'PAIRS="$A3P" says "/ship-it never starts a merge or (a )?rebase itself" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "/ship-it\b[^.;:]{0,25}\b(merges|merging|rebases|rebasing|pulls|pulling)\b"'
+check "A3 (the one merge): reading main's copy starts no merge or rebase; a sentence says /ship-it never rebases and never force-pushes; no sentence has /ship-it rebase, pull or force; every sentence in which /ship-it merges names that the record is the only file that clashes" \
+  'PAIRS="$A3P" says "/ship-it never starts a merge or (a )?rebase itself" "read main.s copy" && PAIRS="$A3P" says "/ship-it never rebases" "never force-pushes" && ! printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | gq -iE "/ship-it\b[^.;:]{0,25}\b(rebases|rebasing|pulls|pulling|force-push)" && a3m="$(printf "%s\n" "$PAIRS" | cut -d $'"'"'\x1f'"'"' -f2 | grep -iE "/ship-it\b[^.;:]{0,25}\b(merges|merging)\b" || true)" && [ -n "$a3m" ] && ! printf "%s\n" "$a3m" | grep -viE "the record is the only file that clashes" | gq .'
+# the trial (E05-S21): git can say which files clash without touching the branch. Two sandboxes: only the record clashes;
+# the record and an app file clash. Needs git 2.38 (merge-tree --write-tree); an older git is said, not passed silently.
+oc_trial() { local d="$OC/$1" app="$2" names
+  oc_origin "$1" && oc_put "$d/a" "$(oc_rec "$OC1M")" "record" && gx -C "$d/a" push -q origin main || return 1
+  gx -C "$d/b" checkout -q main && gx -C "$d/b" pull -q origin main && gx -C "$d/b" checkout -qb feature-t || return 1
+  [ -z "$app" ] || { printf "main side\n" > "$d/a/README" && gx -C "$d/a" add README; }
+  oc_put "$d/a" "$(oc_rec "$OC5C")" "main changes the record" && gx -C "$d/a" push -q origin main || return 1
+  [ -z "$app" ] || { printf "branch side\n" > "$d/b/README" && gx -C "$d/b" add README; }
+  oc_put "$d/b" "$(oc_rec "$OC5D")" "branch changes the record" && gx -C "$d/b" fetch -q origin main || return 1
+  local before; before="$(gx -C "$d/b" rev-parse HEAD)$(gx -C "$d/b" status --porcelain)"
+  names="$(gx -C "$d/b" merge-tree --write-tree --name-only --no-messages HEAD origin/main | tail -n +2 | sort | tr "\n" " ")"
+  [ "$before" = "$(gx -C "$d/b" rev-parse HEAD)$(gx -C "$d/b" status --porcelain)" ] || return 1
+  printf "%s" "$names"; }
+if gx merge-tree -h 2>&1 | gq -- "--write-tree"; then
+  check "the trial (sandbox): with only the record changed on both sides, a trial names the record as the only file that clashes and changes nothing; with an app file changed on both sides too, it names both" \
+    '[ "$(oc_trial t1 "")" = "$OCREC " ] && [ "$(oc_trial t2 app)" = "$OCREC README " ]'
+else ok "the trial (sandbox): NOT RUN -- this git has no merge-tree --write-tree (needs 2.38)"; fi
+GOPS="$(flat < .claude/make-it/references/git-operations.md)"
+check "git-operations rule 5 carries the one exception: /ship-it merges main into a branch only to settle the go-live record, and never rebases or force-pushes; the rule itself still says rebase, not merge" \
+  'printf "%s" "$GOPS" | gq -F -- "**Update a feature branch by rebasing, not merging.**" && printf "%s" "$GOPS" | gq -F -- "One exception: /ship-it brings \`main\` into a branch by merging, and only to settle the go-live record" && printf "%s" "$GOPS" | gq -F -- "it never rebases and never force-pushes"'
 
 # ---- E05-S2 Task 2: resume-it's readiness check lists the open go-live items (task-2-brief.md) ----
 # resume-it only reads `.ship-it-go-live.json` (/ship-it owns it), the way the guide's Go-live checklist says the answer
