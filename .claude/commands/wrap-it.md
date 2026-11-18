@@ -139,6 +139,9 @@ so save without asking:
 - Leave out any changed or new file that may hold a password or key: a `.env` file, a key or
   certificate file (`*.pem`, `*.key`, `*.p12`), or a file whose name says secret, credential,
   token or password. Never stage it; it stays on disk, unsaved.
+- Leave out the go-live record, `.ship-it-go-live.json`, the same way: /ship-it owns that file
+  (`ship-it-guide.md`, The record). Never stage it, and if it was already staged, commit only the
+  files you named (`git commit -m "..." -- <those files>`), so it stays out of the save.
 - Stage the rest by name and commit locally with a descriptive message.
   Use format: "WIP: [plain description of changes]"
 - Do NOT push to remote -- just commit locally.
@@ -146,7 +149,8 @@ so save without asking:
   e.g., 'Updated the dashboard page', 'Changed the settings screen']. Nothing was sent anywhere;
   if you'd rather I hadn't saved any of it, say so before you go and I'll take the save back --
   your changes stay." If a file was left out, add: "I left [file] unsaved because it may hold a
-  password -- it's still on your computer, just not in the save."
+  password -- it's still on your computer, just not in the save." If the go-live record had
+  changes, add: "I left your go-live record unsaved. /ship-it owns that file."
 - If they ask to take it back: `git reset --soft HEAD~1` (the changes return, unsaved, exactly
   as they were) and say so in the summary.
 

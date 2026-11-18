@@ -161,8 +161,9 @@ GL="$(printf '%s\n' "$OUT" | grep -iF 'go-live checklist' || true)"
 RESTATE='\.ship-it-go-live\.json|terms_privacy|security_audit|restore_test|load_test|live_payment|`coming soon`|state\]? -- \[?reason|not a legal review'
 check "other mentions: each \"go-live checklist\" elsewhere in the guide (the PR step, the left-out section, the CI/CD contract) points at Go-live checklist, and none restates it" \
   '[ "$(printf "%s\n" "$GL" | grep -c .)" -ge 3 ] && ! printf "%s\n" "$GL" | grep -vE "(\(|\bsee )(the )?Go-live checklist\b" | gq . && ! printf "%s\n" "$OUT" | gq -iE "$RESTATE"'
-check "only the guide names .ship-it-go-live.json among the skills and references (resume-it.md reads it through the guide)" \
-  '[ "$(grep -rlF --exclude-dir=worktrees ".ship-it-go-live.json" .claude | grep -vxF .claude/commands/resume-it.md | sort)" = ".claude/make-it/references/ship-it-guide.md" ]'
+# E02-S47: /wrap-it and /try-it now name the file too, only to leave it out of their saves (scripts/test-saves-leave-go-live-record.sh)
+check "only the guide and the three skills that save for the user (resume-it, wrap-it, try-it) name .ship-it-go-live.json among the skills and references" \
+  '[ "$(grep -rlF --exclude-dir=worktrees ".ship-it-go-live.json" .claude | sort | tr "\n" " ")" = ".claude/commands/resume-it.md .claude/commands/try-it.md .claude/commands/wrap-it.md .claude/make-it/references/ship-it-guide.md " ]'
 
 # ---- fix round 1: the coordinator's four calls (task-1-fix1-brief.md); the guide stays true to /ship-it v1.3.0 ----
 # call 1: ship-it v1.3.0 doesn't run the checklist yet, so the not-yet list names it in a bullet of its own

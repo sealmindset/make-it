@@ -348,7 +348,9 @@ doesn't run.
 ### The record
 
 The record is `.ship-it-go-live.json`, at the repo root. It is committed, and /ship-it owns it:
-other skills only read it. VLF mode commits it too: it will be the one file outside the frontend
+other skills only read it. A skill that saves for the user leaves the record out: /resume-it,
+/wrap-it and /try-it never stage or commit it, even when it has changes, and each says one line
+when it left it out. VLF mode commits it too: it will be the one file outside the frontend
 on VLF's allowed list. It can't go in `.ship-it.yml`, since DevOps owns that file, or in
 `app-context.json`, since /ship-it works without make-it.
 
