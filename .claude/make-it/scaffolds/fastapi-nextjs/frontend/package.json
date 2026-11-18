@@ -30,10 +30,9 @@
     "postcss": "^8.4.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.1.0",
+    "eslint-config-next": "^16.1.7",
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-security": "^3.0.0",
-    "prettier": "^3.4.0",
-    "@eslint/eslintrc": "^3.2.0"
+    "prettier": "^3.4.0"
   }
 }

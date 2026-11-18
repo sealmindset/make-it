@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Eye, EyeOff, HelpCircle } from "lucide-react";
 import { SafetyIndicator } from "@/components/safety-indicator";
 import { VariablePill, extractVariables } from "@/components/variable-pill";
+import { own } from "@/lib/utils";
 
 interface PromptEditorProps {
   content: string;
@@ -124,11 +125,15 @@ export function PromptEditor({
                 Dynamic values in this instruction:
               </span>
               {guidedMode && (
-                <HelpCircle
-                  className="h-3 w-3"
-                  style={{ color: "var(--muted-foreground)" }}
+                <span
                   title="These are placeholders that get replaced with real data when the AI runs"
-                />
+                  className="inline-flex"
+                >
+                  <HelpCircle
+                    className="h-3 w-3"
+                    style={{ color: "var(--muted-foreground)" }}
+                  />
+                </span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -136,7 +141,7 @@ export function PromptEditor({
                 <VariablePill
                   key={v}
                   name={v}
-                  description={variableDescriptions[v]}
+                  description={own(variableDescriptions, v)}
                 />
               ))}
             </div>

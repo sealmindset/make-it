@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -111,6 +111,9 @@ export function DataTable<TData, TValue>({
     [sk, pagination],
   );
 
+  // TanStack Table returns functions React's compiler can't memoize, so the compiler skips this
+  // component. That is expected and harmless: the table works as before, just without that extra.
+  // eslint-disable-next-line react-hooks/incompatible-library -- see above
   const table = useReactTable({
     data,
     columns,

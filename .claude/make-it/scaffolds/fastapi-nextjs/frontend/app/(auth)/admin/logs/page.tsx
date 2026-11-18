@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { apiGet, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/utils";
+import { useAsyncEffect } from "@/lib/use-async-effect";
+import { formatDateTime, own } from "@/lib/utils";
 import {
   Activity, RefreshCw, Trash2, Filter, Search,
   ArrowDownCircle, ArrowUpCircle, Clock, AlertCircle,
@@ -71,9 +72,7 @@ export default function ActivityLogsPage() {
     }
   }, [typeFilter, methodFilter, searchQuery]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -166,7 +165,7 @@ export default function ActivityLogsPage() {
         <div className="flex items-center gap-4 text-xs" style={{ color: "var(--muted-foreground)" }}>
           <span className="font-medium">Status:</span>
           {(["2xx", "3xx", "4xx", "5xx"] as const).map((bucket) => {
-            const count = stats.events_by_status[bucket] || 0;
+            const count = own(stats.events_by_status, bucket) || 0;
             if (count === 0) return null;
             return (
               <span key={bucket} className="inline-flex items-center gap-1">

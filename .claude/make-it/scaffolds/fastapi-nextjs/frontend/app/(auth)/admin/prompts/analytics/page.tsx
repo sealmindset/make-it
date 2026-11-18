@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -10,7 +10,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { formatRelative } from "@/lib/utils";
 import type {
   ManagedPromptListItem,
@@ -20,7 +20,6 @@ import type {
 
 export default function PromptAnalyticsPage() {
   const router = useRouter();
-  const { hasPermission } = useAuth();
 
   const [stats, setStats] = useState<PromptStats | null>(null);
   const [prompts, setPrompts] = useState<ManagedPromptListItem[]>([]);
@@ -44,9 +43,7 @@ export default function PromptAnalyticsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   // Group prompts by category
   const categoryBreakdown = prompts.reduce<Record<string, number>>(

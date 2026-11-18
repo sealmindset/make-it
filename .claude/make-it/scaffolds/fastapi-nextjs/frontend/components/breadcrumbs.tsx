@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, own } from "@/lib/utils";
 
 // Human-readable labels for URL segments.
 // Scaffold defaults are listed first; app-specific labels are added during build.
@@ -24,7 +24,9 @@ const segmentLabels: Record<string, string> = {
 };
 
 function formatSegment(segment: string): string {
-  if (segmentLabels[segment]) return segmentLabels[segment];
+  // `segment` comes from the URL: only an entry of the table itself counts as a label.
+  const label = own(segmentLabels, segment);
+  if (label) return label;
   // Convert kebab-case or snake_case to Title Case
   return segment
     .replace(/[-_]/g, " ")

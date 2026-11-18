@@ -83,6 +83,9 @@ export function QuickSearch() {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
+        // Every open starts from an empty search (reset here, not in an effect).
+        setQuery("");
+        setSelectedIndex(0);
         setOpen((prev) => !prev);
       }
       if (e.key === "Escape") {
@@ -97,8 +100,6 @@ export function QuickSearch() {
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 50);
-      setQuery("");
-      setSelectedIndex(0);
     }
   }, [open]);
 
@@ -110,8 +111,9 @@ export function QuickSearch() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && filteredItems[selectedIndex]) {
-      navigate(filteredItems[selectedIndex].href);
+    } else if (e.key === "Enter") {
+      const picked = filteredItems.at(selectedIndex);
+      if (picked) navigate(picked.href);
     }
   };
 
@@ -119,7 +121,11 @@ export function QuickSearch() {
     <>
       {/* Trigger button */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setQuery("");
+          setSelectedIndex(0);
+          setOpen(true);
+        }}
         className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         <Search className="h-4 w-4" />

@@ -4,12 +4,12 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
 import { apiGet, apiPost, ApiError } from "./api";
 import type { AuthMe } from "./types";
+import { useAsyncEffect } from "./use-async-effect";
 
 interface AuthContextValue {
   authMe: AuthMe | null;
@@ -41,9 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMe();
-  }, [fetchMe]);
+  useAsyncEffect(fetchMe);
 
   const hasPermission = useCallback(
     (resource: string, action: string): boolean => {
@@ -60,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Logout may return non-JSON; ignore errors
     }
     setAuthMe(null);
+    // A full page load on purpose: it drops everything the signed-in session held in memory.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- see above
     window.location.href = "/";
   }, []);
 

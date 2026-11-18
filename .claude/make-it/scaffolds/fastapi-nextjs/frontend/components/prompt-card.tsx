@@ -44,11 +44,12 @@ export function PromptCard({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {prompt.is_locked && (
-            <Lock
-              className="h-3.5 w-3.5"
-              style={{ color: "var(--warning)" }}
-              title="Locked"
-            />
+            <span title="Locked" className="inline-flex">
+              <Lock
+                className="h-3.5 w-3.5"
+                style={{ color: "var(--warning)" }}
+              />
+            </span>
           )}
           <span
             className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"

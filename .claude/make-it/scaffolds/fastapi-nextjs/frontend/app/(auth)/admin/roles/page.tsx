@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDate } from "@/lib/utils";
+import { useAsyncEffect } from "@/lib/use-async-effect";
+import { formatDate, own } from "@/lib/utils";
 import type { RoleWithPermissions, Permission } from "@/lib/types";
 import { Shield, Plus, Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -37,9 +38,7 @@ export default function RolesPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchRoles();
-  }, [fetchRoles]);
+  useAsyncEffect(fetchRoles);
 
   const handleDeleteRole = async (roleId: string) => {
     if (!confirm("Are you sure you want to delete this role?")) return;
@@ -261,7 +260,7 @@ export default function RolesPage() {
                               {resource}
                             </td>
                             {actions.map((action) => {
-                              const perm = grouped[resource]?.find(
+                              const perm = own(grouped, resource)?.find(
                                 (p) => p.action === action,
                               );
                               if (!perm) {
@@ -382,7 +381,7 @@ function PermissionMatrixModal({
   };
 
   const toggleAll = (resource: string) => {
-    const perms = grouped[resource] || [];
+    const perms = own(grouped, resource) || [];
     const allSelected = perms.every((p) => selected.has(p.id));
     setSelected((prev) => {
       const next = new Set(prev);
@@ -480,7 +479,7 @@ function PermissionMatrixModal({
                     </button>
                   </td>
                   {actions.map((action) => {
-                    const perm = grouped[resource]?.find(
+                    const perm = own(grouped, resource)?.find(
                       (p) => p.action === action,
                     );
                     if (!perm) {
@@ -592,7 +591,7 @@ function CreateRoleModal({
   };
 
   const toggleAll = (resource: string) => {
-    const perms = grouped[resource] || [];
+    const perms = own(grouped, resource) || [];
     const allSelected = perms.every((p) => selected.has(p.id));
     setSelected((prev) => {
       const next = new Set(prev);
@@ -721,7 +720,7 @@ function CreateRoleModal({
                         </button>
                       </td>
                       {actions.map((action) => {
-                        const perm = grouped[resource]?.find(
+                        const perm = own(grouped, resource)?.find(
                           (p) => p.action === action,
                         );
                         if (!perm) {

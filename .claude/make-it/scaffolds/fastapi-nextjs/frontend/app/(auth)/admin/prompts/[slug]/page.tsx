@@ -9,12 +9,11 @@ import {
   Save,
   Play,
   MapPin,
-  Clock,
   AlertCircle,
 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime, formatRelative } from "@/lib/utils";
+import { formatRelative, own } from "@/lib/utils";
 import { PromptEditor } from "@/components/prompt-editor";
 import { VersionTimeline } from "@/components/version-timeline";
 import type {
@@ -129,16 +128,21 @@ export default function PromptDetailPage() {
   }, [slug]);
 
   useEffect(() => {
-    Promise.all([fetchPrompt(), fetchVersions()]).then(() =>
-      setLoading(false)
-    );
+    const run = async () => {
+      await Promise.all([fetchPrompt(), fetchVersions()]);
+      setLoading(false);
+    };
+    run();
   }, [fetchPrompt, fetchVersions]);
 
   // Lazy-load tab data
   useEffect(() => {
-    if (activeTab === "usage") fetchUsages();
-    if (activeTab === "audit") fetchAudit();
-    if (activeTab === "tryit") fetchTestCases();
+    const run = async () => {
+      if (activeTab === "usage") await fetchUsages();
+      if (activeTab === "audit") await fetchAudit();
+      if (activeTab === "tryit") await fetchTestCases();
+    };
+    run();
   }, [activeTab, fetchUsages, fetchAudit, fetchTestCases]);
 
   const handleEditorChange = (
@@ -787,7 +791,7 @@ const actionColors: Record<string, string> = {
 };
 
 function ActionBadge({ action }: { action: string }) {
-  const color = actionColors[action] || "var(--muted-foreground)";
+  const color = own(actionColors, action) || "var(--muted-foreground)";
   const label = action.replace(/_/g, " ");
   return (
     <span

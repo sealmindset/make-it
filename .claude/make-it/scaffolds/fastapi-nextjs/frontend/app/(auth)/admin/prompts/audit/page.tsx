@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { formatRelative, formatDateTime } from "@/lib/utils";
 import type { PromptAuditLogEntry } from "@/lib/types";
 
@@ -34,7 +34,6 @@ const actionColors: Record<string, string> = {
 
 export default function PromptAuditPage() {
   const router = useRouter();
-  const { hasPermission } = useAuth();
 
   const [entries, setEntries] = useState<PromptAuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,9 +58,7 @@ export default function PromptAuditPage() {
     }
   }, [actionFilter, slugFilter]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   if (loading) {
     return (

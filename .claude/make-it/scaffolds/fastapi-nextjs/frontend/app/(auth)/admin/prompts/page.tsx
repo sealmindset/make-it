@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { PromptCard } from "@/components/prompt-card";
 import type {
   ManagedPromptListItem,
@@ -67,9 +68,7 @@ export default function PromptsPage() {
     }
   }, [search, categoryFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   const handleCreate = async () => {
     setCreateError("");
@@ -425,7 +424,10 @@ function StatCard({
   value,
   color,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{
+    className?: string;
+    style?: React.CSSProperties;
+  }>;
   label: string;
   value: number;
   color?: string;

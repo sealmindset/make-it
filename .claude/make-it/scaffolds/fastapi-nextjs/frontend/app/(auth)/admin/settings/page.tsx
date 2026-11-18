@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { apiGet, apiPut, apiDelete } from "@/lib/api";
+import { apiGet, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/utils";
+import { useAsyncEffect } from "@/lib/use-async-effect";
+import { formatDateTime, own } from "@/lib/utils";
 import {
   Settings, Save, Eye, EyeOff, RefreshCw, History,
   AlertTriangle,
@@ -83,12 +84,14 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  useAsyncEffect(fetchSettings);
 
   useEffect(() => {
-    if (tab === "audit") fetchAuditLogs();
+    if (tab !== "audit") return;
+    const run = async () => {
+      await fetchAuditLogs();
+    };
+    run();
   }, [tab, fetchAuditLogs]);
 
   useEffect(() => {
@@ -107,11 +110,13 @@ export default function SettingsPage() {
   };
 
   const hasEdits = (groupName: string) => {
-    return groups[groupName]?.some((s) => s.key in edits && edits[s.key] !== s.value);
+    return own(groups, groupName)?.some(
+      (s) => s.key in edits && own(edits, s.key) !== s.value,
+    );
   };
 
   const saveGroup = async (groupName: string) => {
-    const groupSettings = groups[groupName];
+    const groupSettings = own(groups, groupName);
     if (!groupSettings) return;
 
     const changes = groupSettings
@@ -151,11 +156,9 @@ export default function SettingsPage() {
   };
 
   const hideValue = (key: string) => {
-    setRevealed((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    setRevealed((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)),
+    );
   };
 
   const getDisplayValue = (s: AppSetting): string => {
@@ -198,12 +201,15 @@ export default function SettingsPage() {
           onChange={(e) => canEdit ? handleEdit(s.key, e.target.value) : undefined}
           readOnly={!canEdit}
           className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-mono ${isEdited ? "ring-2" : ""} ${!canEdit ? "opacity-70" : ""}`}
-          style={{
-            borderColor: isEdited ? "var(--primary)" : "var(--input)",
-            backgroundColor: "var(--background)",
-            color: "var(--foreground)",
-            ringColor: "var(--primary)",
-          }}
+          style={
+            {
+              borderColor: isEdited ? "var(--primary)" : "var(--input)",
+              backgroundColor: "var(--background)",
+              color: "var(--foreground)",
+              // Tailwind's ring reads its colour from this variable; `ringColor` is not a CSS property.
+              "--tw-ring-color": "var(--primary)",
+            } as React.CSSProperties
+          }
         />
         {s.is_sensitive && canEdit && (
           <button

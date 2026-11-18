@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { formatDate } from "@/lib/utils";
@@ -50,9 +51,7 @@ export default function UsersPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  useAsyncEffect(fetchUsers);
 
   const handleToggleActive = async (user: User) => {
     try {
@@ -322,10 +321,8 @@ function AddUserModal({
 
   // Search the OIDC directory when query changes
   useEffect(() => {
-    if (searchQuery.length < 2) {
-      setDirectoryResults([]);
-      return;
-    }
+    // Fewer than two characters: nothing to search (the input's handler clears the list).
+    if (searchQuery.length < 2) return;
 
     const debounce = setTimeout(async () => {
       setSearching(true);
@@ -401,6 +398,7 @@ function AddUserModal({
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
+                  if (e.target.value.length < 2) setDirectoryResults([]);
                   setSelectedUser(null);
                 }}
                 placeholder="Search by name or email..."
