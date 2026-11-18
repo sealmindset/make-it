@@ -120,6 +120,20 @@ ones to `LEARNINGS.md` now so step 2 saves them.
 
 **2. If there are uncommitted changes, save them -- routine, per the approval block:**
 
+**An unfinished update comes first.** Check whether a merge or rebase was left unfinished:
+
+```bash
+g="$(git rev-parse --git-dir 2>/dev/null)" && { [ -e "$g/MERGE_HEAD" ] || [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ]; } && echo unfinished
+```
+
+If it prints `unfinished`, this skill makes no commit, stages nothing, and runs nothing that finishes,
+continues or undoes the update (no `--continue`, no `--abort`, no stash, no reset, no checkout of
+files): any of those can lose work that was never saved. This holds whichever files the update
+touches. It says once, in one line: "An update of your branch isn't finished. I haven't changed it
+and I'm not saving anything while it is. A developer can finish it." Then it skips this
+save and the worktree and branch tidy-up (shutdown steps 4 and 5). It still updates its notes on
+disk and shuts the app down. Otherwise:
+
 Saving is what the user ran /wrap-it for, it stays on this computer, and it can be taken back,
 so save without asking:
 - Leave out any changed or new file that may hold a password or key: a `.env` file, a key or

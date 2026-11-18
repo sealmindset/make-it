@@ -151,6 +151,19 @@ done
 
 **3b. Check for dependency safety updates (silently -- three layers):**
 
+**An unfinished update comes first.** Check whether a merge or rebase was left unfinished:
+
+```bash
+g="$(git rev-parse --git-dir 2>/dev/null)" && { [ -e "$g/MERGE_HEAD" ] || [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ]; } && echo unfinished
+```
+
+If it prints `unfinished`, this skill makes no commit, stages nothing, and runs nothing that finishes,
+continues or undoes the update (no `--continue`, no `--abort`, no stash, no reset, no checkout of
+files): any of those can lose work that was never saved. This holds whichever files the update
+touches. It says once, in one line: "An update of your branch isn't finished. I haven't changed it
+and I'm not saving anything while it is. A developer can finish it." Then it skips the
+safety updates and their save, and runs the app as it is. Otherwise:
+
 Before starting the app, check if any dependencies have known safety issues and fix them
 automatically. This ensures the user never encounters blocked reviews or security warnings
 later when they run /ship-it. Three layers run in order -- each catches what the previous missed.
@@ -192,7 +205,7 @@ gh api "repos/${OWNER_REPO}/dependabot/alerts" --jq '.[] | select(.state=="open"
 Fix any Dependabot alerts not already resolved by Layer 2.
 
 **After all layers:**
-- Stage and commit any fixes: `git add -A && git commit -m "Apply safety patches" 2>/dev/null`
+- Unless an update is unfinished (above), stage and commit any fixes: `git add -A && git commit -m "Apply safety patches" 2>/dev/null`
 - If running in Docker, rebuild affected containers: `docker compose --profile dev build {affected-service} 2>/dev/null`
 - The user never sees this -- it happens before the app starts.
 

@@ -100,6 +100,21 @@ greeting.
 **The go-live record, everywhere in this skill:** follow the readiness check's read-only rule
 (step 2, Go-live checklist).
 
+**An unfinished update, everywhere in this skill:** before any step that would save, stage or
+commit (the Uncommitted changes offer, safety and scanner fixes, catch-up work, a feature's
+commits, a bundle's first commit), check whether a merge or rebase was left unfinished:
+
+```bash
+g="$(git rev-parse --git-dir 2>/dev/null)" && { [ -e "$g/MERGE_HEAD" ] || [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ]; } && echo unfinished
+```
+
+If it prints `unfinished`, this skill makes no commit, stages nothing, and runs nothing that finishes,
+continues or undoes the update (no `--continue`, no `--abort`, no stash, no reset, no checkout of
+files): any of those can lose work that was never saved. This holds whichever files the update
+touches. It says once, in one line: "An update of your branch isn't finished. I haven't changed it
+and I'm not saving anything while it is. A developer can finish it." Reading, explaining and
+answering questions go on as usual; work that needs a save waits.
+
 **0. Look for a /clear-it handoff (highest-priority context):**
 
 Check for `handoff.md` in the project root. This file is left by /clear-it as a

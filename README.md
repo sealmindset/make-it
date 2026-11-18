@@ -969,6 +969,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.3 -- /resume-it, /wrap-it and /try-it stand still on an unfinished merge or rebase
+
+- **One rule in all three skills.** Before saving anything, each checks whether a merge or rebase
+  was left unfinished. If one was, it makes no commit, stages nothing, and runs nothing that
+  finishes, continues or undoes it, because any of those can lose unsaved work.
+- **It says one line:** "An update of your branch isn't finished. I haven't changed it and I'm not
+  saving anything while it is. A developer can finish it." The last sentence will point to
+  /ship-it once /ship-it can put a stuck update back.
+- **What still happens:** /resume-it keeps reading and answering; /wrap-it still writes its notes
+  and shuts the app down; /try-it skips its safety updates and runs the app as it is.
+- **Checked:** `scripts/test-unfinished-update.sh` (55 checks) runs each skill's own detection
+  command in throwaway repos: a clean project, an unfinished merge, both kinds of unfinished
+  rebase, a linked working copy, and a folder that is not a git project.
+
 ### v1.70.2 -- The go-live record: /ship-it settles a clash by merge (the rule, not yet the step)
 
 - **The rule is written.** When two branches both change a go-live answer, /ship-it tries the
