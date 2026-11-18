@@ -46,7 +46,8 @@ the tenant or a subscription, data leaving, money moving, a service stopped, cod
 - Every link is a finding in the inventory with its evidence. A path with a link that is assumed or
   unconfirmed is a **lead**: listed separately, never counted with the paths, with the one check that would
   settle it.
-- Report the paths that matter, in this order: fewest links; lowest skill with AI help; most stages nobody
+- Report the paths that matter, in this order: fewest links; lowest skill with AI help; shortest window
+  for an AI acting on its own against how fast the organisation would notice; most stages nobody
   would be alerted on (`sentinel_coverage.py`). Say how many more were found and left in the appendix.
 - **Never invent a combined severity score.** Say what is true: "4 findings, rated low, informational, low
   and not rated by their sources, together reach tenant admin from any signed-in user."

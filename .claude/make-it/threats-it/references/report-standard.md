@@ -27,7 +27,8 @@ It must not read like a newspaper. Order:
 3. **What the attackers did, and where <Org> stands** — one row per attacker *behaviour* (not product):
    `Attacker behaviour | Seen at <Org>? | Would we be alerted? | Our exposure`. Then one paragraph "Indicators checked"
    and one line on workspace-wide detection coverage. Then **Who could do this now**, one line per chain, from
-   the chain's section 5 table: who it took before AI help (skill, time), who it takes with it, and what still
+   the chain's section 5 table: who it took before AI help (skill, time), who it takes with it, how fast an AI acting on its own could run
+   it against how fast <Org> would notice, and what still
    stands in the way. Marked as an assessment. Leadership should not read "needs a skilled attacker" as "unlikely".
    Then **What the small findings add up to** (`finding-chains.md`): the paths table with each path's status, and
    one line on leads. No steps. In a `chains` run this section leads the briefing.

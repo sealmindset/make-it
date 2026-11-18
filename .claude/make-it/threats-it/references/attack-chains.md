@@ -86,8 +86,13 @@ a specialist days (finding which small weaknesses connect, reading the documenta
 shows how, adapting a public write-up into working steps) can now be done by a less skilled person with an AI
 assistant in a fraction of the time. So every chain says who can run it now, stage by stage.
 
-Table, one row per stage of the chain: **Stage | A person alone: skill, time | With AI help: skill, time | Why it
-changes, or doesn't**.
+Table, one row per stage of the chain: **Stage | A person alone: skill, time | With AI help: skill, time | AI
+acting on its own: time | Why it changes, or doesn't**.
+- **Three attackers, not one.** A person alone; a person steering an AI assistant; and an AI agent running the
+  chain itself, with a person only starting it or nobody at all. The third brings three things a person does
+  not have: it tries combinations at machine speed, it carries a very wide knowledge of published tactics,
+  techniques and procedures, and it uses what each failed try showed in the next one. Rate it wherever a stage
+  is trial and error: guessing, enumerating, trying which settings and permissions combine.
 - **Skill**, one of three words: `anyone` (can follow instructions), `practitioner` (does this for a living),
   `specialist` (few people can).
 - **Time**, an order of magnitude only: `minutes`, `hours`, `days`, `weeks`. Never a number; say "hours, not days".
@@ -101,7 +106,17 @@ changes, or doesn't**.
 - **A general statement about what AI can do needs a source too** (`sources.md`, AI capability claims). With no
   source archived in this project, the last column says "our assessment; no published source archived".
 
-Under the table, one line: **What still stands in the way** -- the stage whose bar is still highest with AI help,
+Under the table, **The window**, two lines. *How fast:* the whole chain at machine speed, as an order of
+magnitude, set by its slowest stage. *How fast <Org> would notice and act:* from this run's evidence (which
+stages a live rule watches, who is alerted, the response time if <Org> has one on record), or "not known". If the
+chain can finish before anyone would act, say that in those words: detection that arrives after the last stage
+is a record, not a defence.
+
+Then **Would the tries be seen?** Trial and error at machine speed is loud: failed sign-ins, refused requests,
+throttling, a burst of reads. Name the signal the failed tries leave and whether any rule counts them
+(`sentinel_coverage.py`). An attacker nobody can outrun can still be one everybody can hear.
+
+Then one line: **What still stands in the way** -- the stage whose bar is still highest with AI help,
 and whether <Org> controls it (a patch, a rule, a setting) or only the attacker's luck does. If nothing stands in
 the way, say so in those words.
 

@@ -984,6 +984,11 @@ Second of four parts adding AI as a threat actor to /threats-it.
   otherwise. The skill stays read-only and never runs a test.
 - **A tool's finding is a lead** until the run's own evidence confirms it, and a path with an
   unconfirmed link is listed as a lead, not a path.
+- **AI acting on its own is rated as an attacker,** beside a person alone and a person with AI
+  help: machine-speed trial and error, wide knowledge of published techniques, learning from each
+  failed try. Each chain now states how fast it could finish against how fast the organisation
+  would notice, and whether the failed tries would be seen. A general figure such as "under N
+  hours" goes in only with a source.
 - **Checked by a script.** `check_paths.py` refuses a path that claims more than its evidence;
   the report build runs it. Tests: `scripts/test-threats-it-chains.sh`.
 
