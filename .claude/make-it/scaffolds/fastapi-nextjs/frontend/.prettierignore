@@ -2,3 +2,7 @@
 node_modules/
 coverage/
 public/
+
+# Written by Next.js itself (on every dev run and build), in its own layout.
+tsconfig.json
+next-env.d.ts

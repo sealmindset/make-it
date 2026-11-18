@@ -8,14 +8,7 @@ import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { formatDate } from "@/lib/utils";
 import type { User, Role } from "@/lib/types";
-import {
-  UserPlus,
-  Ban,
-  CheckCircle,
-  Trash2,
-  Search,
-  Loader2,
-} from "lucide-react";
+import { UserPlus, Ban, CheckCircle, Trash2, Search, Loader2 } from "lucide-react";
 
 interface DirectoryUser {
   oidc_subject: string;
@@ -86,21 +79,15 @@ export default function UsersPage() {
   const columns: ColumnDef<User, unknown>[] = [
     {
       accessorKey: "display_name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Name" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     },
     {
       accessorKey: "email",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Email" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
     },
     {
       accessorKey: "role_name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Role" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
       cell: ({ row }) => {
         const user = row.original;
         if (!canEdit) return user.role_name || "-";
@@ -129,9 +116,7 @@ export default function UsersPage() {
     },
     {
       accessorKey: "is_active",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Status" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
       cell: ({ row }) => {
         const active = row.original.is_active;
         return (
@@ -155,9 +140,7 @@ export default function UsersPage() {
     },
     {
       accessorKey: "created_at",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Created" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />,
       cell: ({ row }) => formatDate(row.original.created_at),
     },
     ...(canEdit || canDelete
@@ -221,8 +204,14 @@ export default function UsersPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-48 animate-pulse rounded" style={{ backgroundColor: "var(--muted)" }} />
-        <div className="h-64 animate-pulse rounded-xl border" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }} />
+        <div
+          className="h-8 w-48 animate-pulse rounded"
+          style={{ backgroundColor: "var(--muted)" }}
+        />
+        <div
+          className="h-64 animate-pulse rounded-xl border"
+          style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+        />
       </div>
     );
   }
@@ -248,7 +237,13 @@ export default function UsersPage() {
         )}
       </div>
 
-      <DataTable columns={columns} data={users} storageKey="users-table" searchKey="display_name" searchPlaceholder="Search users..." />
+      <DataTable
+        columns={columns}
+        data={users}
+        storageKey="users-table"
+        searchKey="display_name"
+        searchPlaceholder="Search users..."
+      />
 
       {showAddModal && (
         <AddUserModal roles={roles} onClose={() => setShowAddModal(false)} onAdded={fetchUsers} />
@@ -258,9 +253,13 @@ export default function UsersPage() {
 }
 
 function AddUserModal({
-  roles, onClose, onAdded,
+  roles,
+  onClose,
+  onAdded,
 }: {
-  roles: Role[]; onClose: () => void; onAdded: () => void;
+  roles: Role[];
+  onClose: () => void;
+  onAdded: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [directoryResults, setDirectoryResults] = useState<DirectoryUser[]>([]);
@@ -271,72 +270,189 @@ function AddUserModal({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (searchQuery.length < 2) { setDirectoryResults([]); return; }
+    if (searchQuery.length < 2) {
+      setDirectoryResults([]);
+      return;
+    }
     const debounce = setTimeout(async () => {
       setSearching(true);
       try {
-        const results = await apiGet<DirectoryUser[]>(`/api/users/directory?q=${encodeURIComponent(searchQuery)}`);
+        const results = await apiGet<DirectoryUser[]>(
+          `/api/users/directory?q=${encodeURIComponent(searchQuery)}`
+        );
         setDirectoryResults(results);
-      } catch { setDirectoryResults([]); } finally { setSearching(false); }
+      } catch {
+        setDirectoryResults([]);
+      } finally {
+        setSearching(false);
+      }
     }, 300);
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUser) { setError("Select a user from the directory first."); return; }
-    setSubmitting(true); setError("");
+    if (!selectedUser) {
+      setError("Select a user from the directory first.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
     try {
-      await apiPost("/api/users", { oidc_subject: selectedUser.oidc_subject, email: selectedUser.email, display_name: selectedUser.display_name, role_id: roleId });
-      onAdded(); onClose();
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed to add user"); } finally { setSubmitting(false); }
+      await apiPost("/api/users", {
+        oidc_subject: selectedUser.oidc_subject,
+        email: selectedUser.email,
+        display_name: selectedUser.display_name,
+        role_id: roleId,
+      });
+      onAdded();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-xl border p-6 shadow-lg" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)", color: "var(--card-foreground)" }}>
+      <div
+        className="w-full max-w-md rounded-xl border p-6 shadow-lg"
+        style={{
+          backgroundColor: "var(--card)",
+          borderColor: "var(--border)",
+          color: "var(--card-foreground)",
+        }}
+      >
         <h2 className="text-lg font-semibold">Add User</h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>Provision a user from the organization directory.</p>
+        <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          Provision a user from the organization directory.
+        </p>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
             <label className="text-sm font-medium">Search Directory</label>
             <div className="relative mt-1">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
-              <input type="text" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setSelectedUser(null); }} placeholder="Search by name or email..." className="w-full rounded-md border py-2 pl-8 pr-3 text-sm" style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }} />
-              {searching && <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin" style={{ color: "var(--muted-foreground)" }} />}
+              <Search
+                className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2"
+                style={{ color: "var(--muted-foreground)" }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSelectedUser(null);
+                }}
+                placeholder="Search by name or email..."
+                className="w-full rounded-md border py-2 pl-8 pr-3 text-sm"
+                style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }}
+              />
+              {searching && (
+                <Loader2
+                  className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin"
+                  style={{ color: "var(--muted-foreground)" }}
+                />
+              )}
             </div>
             {directoryResults.length > 0 && !selectedUser && (
-              <ul className="mt-1 max-h-40 overflow-y-auto rounded-md border text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--popover)", color: "var(--popover-foreground)" }}>
+              <ul
+                className="mt-1 max-h-40 overflow-y-auto rounded-md border text-sm"
+                style={{
+                  borderColor: "var(--border)",
+                  backgroundColor: "var(--popover)",
+                  color: "var(--popover-foreground)",
+                }}
+              >
                 {directoryResults.map((user) => (
                   <li key={user.oidc_subject}>
-                    <button type="button" onClick={() => { setSelectedUser(user); setSearchQuery(user.display_name); }} className="flex w-full flex-col px-3 py-2 text-left transition-colors" onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--accent)"; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setSearchQuery(user.display_name);
+                      }}
+                      className="flex w-full flex-col px-3 py-2 text-left transition-colors"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "var(--accent)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
                       <span className="font-medium">{user.display_name}</span>
-                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{user.email}</span>
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {user.email}
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
             {selectedUser && (
-              <div className="mt-2 flex items-center justify-between rounded-md border px-3 py-2 text-sm" style={{ backgroundColor: "color-mix(in oklch, var(--primary) 8%, transparent)", borderColor: "color-mix(in oklch, var(--primary) 30%, transparent)" }}>
+              <div
+                className="mt-2 flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                style={{
+                  backgroundColor: "color-mix(in oklch, var(--primary) 8%, transparent)",
+                  borderColor: "color-mix(in oklch, var(--primary) 30%, transparent)",
+                }}
+              >
                 <div>
                   <span className="font-medium">{selectedUser.display_name}</span>
-                  <span className="ml-2 text-xs" style={{ color: "var(--muted-foreground)" }}>{selectedUser.email}</span>
+                  <span className="ml-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    {selectedUser.email}
+                  </span>
                 </div>
-                <button type="button" onClick={() => { setSelectedUser(null); setSearchQuery(""); }} className="text-xs underline" style={{ color: "var(--muted-foreground)" }}>Change</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedUser(null);
+                    setSearchQuery("");
+                  }}
+                  className="text-xs underline"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Change
+                </button>
               </div>
             )}
           </div>
           <div>
             <label className="text-sm font-medium">Role</label>
-            <select value={roleId} onChange={(e) => setRoleId(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm" style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }}>
-              {roles.map((role) => (<option key={role.id} value={role.id}>{role.name}</option>))}
+            <select
+              value={roleId}
+              onChange={(e) => setRoleId(e.target.value)}
+              className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }}
+            >
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
             </select>
           </div>
-          {error && <p className="text-sm" style={{ color: "var(--destructive)" }}>{error}</p>}
+          {error && (
+            <p className="text-sm" style={{ color: "var(--destructive)" }}>
+              {error}
+            </p>
+          )}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-md border px-4 py-2 text-sm transition-colors" style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }}>Cancel</button>
-            <button type="submit" disabled={submitting || !selectedUser} className="rounded-md px-4 py-2 text-sm font-medium shadow-sm transition-colors disabled:opacity-50" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>{submitting ? "Adding..." : "Add User"}</button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border px-4 py-2 text-sm transition-colors"
+              style={{ borderColor: "var(--input)", backgroundColor: "var(--background)" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !selectedUser}
+              className="rounded-md px-4 py-2 text-sm font-medium shadow-sm transition-colors disabled:opacity-50"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+            >
+              {submitting ? "Adding..." : "Add User"}
+            </button>
           </div>
         </form>
       </div>

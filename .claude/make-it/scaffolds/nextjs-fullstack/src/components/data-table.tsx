@@ -21,11 +21,7 @@ import { cn } from "@/lib/utils";
 import { DataTableToolbar } from "./data-table-toolbar";
 import { DataTablePagination } from "./data-table-pagination";
 
-const arrIncludesFilter: FilterFn<unknown> = (
-  row,
-  columnId,
-  filterValue: string[],
-) => {
+const arrIncludesFilter: FilterFn<unknown> = (row, columnId, filterValue: string[]) => {
   if (!filterValue || filterValue.length === 0) return true;
   const value = String(row.getValue(columnId) ?? "");
   return filterValue.includes(value);
@@ -77,32 +73,21 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const sk = storageKey || "data-table";
 
-  const [sorting, setSorting] = useState<SortingState>(() =>
-    loadState(sk, "sorting", []),
-  );
+  const [sorting, setSorting] = useState<SortingState>(() => loadState(sk, "sorting", []));
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() =>
-    loadState(sk, "columnFilters", []),
+    loadState(sk, "columnFilters", [])
   );
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
-    () => loadState(sk, "columnVisibility", {}),
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() =>
+    loadState(sk, "columnVisibility", {})
   );
   const [pagination, setPagination] = useState<PaginationState>(() =>
-    loadState(sk, "pagination", { pageIndex: 0, pageSize: 20 }),
+    loadState(sk, "pagination", { pageIndex: 0, pageSize: 20 })
   );
 
   useEffect(() => saveState(sk, "sorting", sorting), [sk, sorting]);
-  useEffect(
-    () => saveState(sk, "columnFilters", columnFilters),
-    [sk, columnFilters],
-  );
-  useEffect(
-    () => saveState(sk, "columnVisibility", columnVisibility),
-    [sk, columnVisibility],
-  );
-  useEffect(
-    () => saveState(sk, "pagination", pagination),
-    [sk, pagination],
-  );
+  useEffect(() => saveState(sk, "columnFilters", columnFilters), [sk, columnFilters]);
+  useEffect(() => saveState(sk, "columnVisibility", columnVisibility), [sk, columnVisibility]);
+  useEffect(() => saveState(sk, "pagination", pagination), [sk, pagination]);
 
   const table = useReactTable({
     data,
@@ -148,10 +133,7 @@ export function DataTable<TData, TValue>({
                   >
                     {header.isPlaceholder
                       ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
+                      : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
               </tr>
@@ -162,35 +144,22 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  onClick={
-                    onRowClick
-                      ? () => onRowClick(row.original)
-                      : undefined
-                  }
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   className={cn(
                     "border-b border-border transition-colors hover:bg-muted/50",
-                    onRowClick && "cursor-pointer",
+                    onRowClick && "cursor-pointer"
                   )}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-3 py-2.5 align-middle"
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
+                    <td key={cell.id} className="px-3 py-2.5 align-middle">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
                 </tr>
               ))
             ) : (
               <tr>
-                <td
-                  colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
+                <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">
                   No results.
                 </td>
               </tr>

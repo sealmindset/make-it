@@ -116,10 +116,7 @@ export async function getCurrentUser(): Promise<AuthMe | null> {
 // Require permission -- throws 403 if user lacks permission
 // ---------------------------------------------------------------------------
 
-export async function requirePermission(
-  resource: string,
-  action: string,
-): Promise<AuthMe> {
+export async function requirePermission(resource: string, action: string): Promise<AuthMe> {
   const user = await getCurrentUser();
   if (!user) {
     throw new Response("Unauthorized", { status: 401 });
@@ -155,9 +152,7 @@ function isTrustedUrl(url: string, issuerUrl: string): boolean {
 
 export async function getOidcDiscovery(): Promise<OidcDiscovery> {
   const config = getConfig();
-  const resp = await fetch(
-    `${config.oidcIssuerUrl}/.well-known/openid-configuration`,
-  );
+  const resp = await fetch(`${config.oidcIssuerUrl}/.well-known/openid-configuration`);
   if (!resp.ok) {
     throw new Error(`OIDC discovery failed: ${resp.status}`);
   }
@@ -249,7 +244,7 @@ export async function exchangeCode(code: string): Promise<AuthMe> {
 
   // Build flat AuthMe payload
   const permissions = dbUser.role.permissions.map(
-    (rp) => `${rp.permission.resource}.${rp.permission.action}`,
+    (rp) => `${rp.permission.resource}.${rp.permission.action}`
   );
 
   return {

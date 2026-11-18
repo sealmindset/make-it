@@ -108,9 +108,7 @@ async function main() {
   }
 
   // Admin: all except role delete
-  const adminPermIds = allPermIds.filter(
-    (id) => id !== permissions.get("roles.delete"),
-  );
+  const adminPermIds = allPermIds.filter((id) => id !== permissions.get("roles.delete"));
   for (const permId of adminPermIds) {
     await prisma.rolePermission.upsert({
       where: {

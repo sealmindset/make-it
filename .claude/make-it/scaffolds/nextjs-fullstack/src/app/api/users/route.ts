@@ -26,7 +26,7 @@ export async function GET() {
       role_name: u.role.name,
       created_at: u.createdAt.toISOString(),
       updated_at: u.updatedAt.toISOString(),
-    })),
+    }))
   );
 }
 
@@ -38,10 +38,7 @@ export async function POST(request: NextRequest) {
   const { oidc_subject, email, display_name, role_id } = body;
 
   if (!oidc_subject || !email || !display_name || !role_id) {
-    return NextResponse.json(
-      { error: "Missing required fields" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   const user = await prisma.user.create({
@@ -66,6 +63,6 @@ export async function POST(request: NextRequest) {
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),
     },
-    { status: 201 },
+    { status: 201 }
   );
 }

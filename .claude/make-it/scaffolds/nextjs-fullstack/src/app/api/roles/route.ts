@@ -8,8 +8,7 @@ import { prisma } from "@/lib/db";
 export async function GET(request: NextRequest) {
   await requirePermission("roles", "view");
 
-  const includePerms =
-    request.nextUrl.searchParams.get("include_permissions") === "true";
+  const includePerms = request.nextUrl.searchParams.get("include_permissions") === "true";
 
   const base = (r: {
     id: string;
@@ -47,7 +46,7 @@ export async function GET(request: NextRequest) {
         action: rp.permission.action,
         description: rp.permission.description,
       })),
-    })),
+    }))
   );
 }
 
@@ -59,10 +58,7 @@ export async function POST(request: NextRequest) {
   const { name, description, permission_ids } = body;
 
   if (!name) {
-    return NextResponse.json(
-      { error: "Name is required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
   const role = await prisma.role.create({
@@ -96,6 +92,6 @@ export async function POST(request: NextRequest) {
         description: rp.permission.description,
       })),
     },
-    { status: 201 },
+    { status: 201 }
   );
 }
