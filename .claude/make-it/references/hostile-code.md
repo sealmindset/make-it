@@ -178,9 +178,15 @@ cannot tell which file a test loads, so there a test that reads any file and run
 project that is theirs and later takes in someone else's test of that shape gets a note, not a
 stop. The old-copy lookup needs git 2.45 or later; with an older git nothing is treated as an old copy.
 
-It does not read links, anything inside a `.git` folder, or installed-package folders
-(`node_modules` and the like). Code that reads a file from one of those and runs it is a stop, but
-code that only imports a package from them is not seen.
+It does not read anything inside a `.git` folder or an installed-package folder (`node_modules`
+and the like). Code that reads a file from one of those and runs it is a stop, but code that only
+imports a package from them is not seen. A code file that is a link is read through when its
+target is inside the project; a link that leaves the project is never opened and is a note. A
+linked folder is not walked.
+
+It reads code for a fixed set of shapes. Code that runs a file in a way it does not know (a file
+swapped in at run time, a loader it has no rule for) is not seen. It is a tripwire for the known
+ways these attacks hide, not proof that a project is safe.
 
 In a project marked as the user's own, it does not read the project's other working copies (git
 worktrees inside the folder), and says how many it left out. Each one is checked when a session

@@ -70,6 +70,7 @@ WHY = {
     "outside-dependency": "installs code from outside the package registry",
     "program-file": "is a program file committed to the project",
     "unreadable": "could not be read as Python",
+    "link-not-followed": "is a link to something outside the project, which was not read",
 }
 # Shapes an attacker uses. These stop in every project, the owner's own included.
 # read-then-run is the one shape honest code shares: a test loading the code it checks, or a
@@ -212,13 +213,18 @@ def reads_a_file(node):
     return any(isinstance(c, ast.Attribute) and c.attr in FILE_READ_ATTRS | {"read"} for c in ast.walk(node))
 
 
-def settle(s, rel, known):
-    """A .py file named in open() counts as a read unless it is one of the files this tool read:
-    looked up beside the file that names it and from the project's top folder."""
+def settle(s, rel, known, root=None):
+    """A .py file named in open() counts as a read unless it is one of the files this tool read.
+    Python finds the name from wherever it is run, which this tool can't know, so the name is
+    looked up beside the file that names it and from the project's top folder: at least one must
+    be a file that was read, and neither may be something else. A name that climbs out of a
+    folder ("..") is never trusted."""
     here = os.path.dirname(rel)
     for name, line in s.named:
-        tries = {os.path.normpath(os.path.join(here, name)), os.path.normpath(name)}
-        if os.path.isabs(name) or not tries & known:
+        tries = [os.path.normpath(os.path.join(here, name)), os.path.normpath(name)]
+        climbs = os.path.isabs(name) or ".." in name.replace("\\", "/").split("/")
+        other = any(t not in known and root is not None and os.path.lexists(os.path.join(root, t)) for t in tries)
+        if climbs or other or not any(t in known for t in tries):
             s.hit("read", line)
     return s
 
@@ -669,6 +675,10 @@ def walk(root, skipped, worktrees, mine=False, nested=None):
         for d in dirs:
             if d in ALWAYS_SKIP:
                 continue
+            if os.path.islink(os.path.join(folder, d)):
+                # never walked into; scan() reports one that leaves the project
+                yield os.path.join(folder, d), os.path.relpath(os.path.join(folder, d), root)
+                continue
             # Another working copy of this project is checked when work happens there, not from here:
             # a project with dozens of them would otherwise be read dozens of times over. Only in a
             # project the user marked as their own: a downloaded archive can carry both halves of a
@@ -688,7 +698,7 @@ def walk(root, skipped, worktrees, mine=False, nested=None):
         dirs[:] = keep
         for name in files:
             path = os.path.join(folder, name)
-            if not os.path.islink(path) and os.path.isfile(path):
+            if os.path.isfile(path):  # a link to a file is yielded too: scan() decides what it is
                 yield path, os.path.relpath(path, root)
 
 
@@ -721,13 +731,30 @@ def scan(root, cleared, projects=None):
     entries = list(walk(root, skipped, worktrees, mine, nested))
     report["worktrees"] = sorted(worktrees) if mine else []
     report["worktrees_read"] = 0 if mine else len(worktrees)
-    known = {rel for _, rel in entries if rel.endswith((".py", ".pyw"))}
+    top = os.path.realpath(root)
+
+    def leaves(path):
+        """A link whose target is not inside this project."""
+        real = os.path.realpath(path)
+        return os.path.islink(path) and real != top and not real.startswith(top + os.sep)
+    known = {rel for path, rel in entries if rel.endswith((".py", ".pyw")) and not leaves(path)}
 
     for path, rel in entries:
         base = os.path.basename(rel)
         is_py = rel.endswith((".py", ".pyw"))
         is_config = base in ("package.json", "pyproject.toml") or re.fullmatch(r"requirements.*\.txt", base) \
             or rel.replace(os.sep, "/").endswith(".vscode/tasks.json")
+        if os.path.islink(path):
+            # Python runs what a link points at. One that stays inside the project is read through
+            # below: a download can ship the target under a harmless name. One that leaves the
+            # project points at files the project did not bring, so it is never opened; a code file
+            # linked that way is a note. Linked folders are not walked: one inside the project is
+            # read where it really is, and one outside is usually a tool's cache.
+            if os.path.isdir(path) or not (is_py or is_config):
+                continue
+            if leaves(path):
+                found[rel].append(("link-not-followed", 1, False))
+                continue
         try:
             with open(path, "rb") as f:
                 head = f.read(4)
@@ -752,7 +779,7 @@ def scan(root, cleared, projects=None):
                 found[rel].extend(text_verdicts(raw))
             else:
                 trees[rel] = tree
-                found[rel].extend(verdicts(settle(read_tree(tree)[0], rel, known)))
+                found[rel].extend(verdicts(settle(read_tree(tree)[0], rel, known, root)))
         except (OSError, ValueError, RecursionError, MemoryError):
             report["not_checked"].append(rel)
 

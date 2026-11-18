@@ -905,11 +905,12 @@ class UnreadPaths(Case):
     PAYLOAD = "import os\nos.system('true')\n"
     LOADER = 'exec(open("%s").read())\n'
 
-    def test_a_py_name_that_is_a_link_to_an_unread_file_stops(self):
-        self.put("README.txt", self.PAYLOAD)
+    def test_a_py_name_that_is_a_link_is_judged_by_what_it_points_at(self):
+        # the link stays inside the project, so it is read through: the payload is found there
+        self.put("README.txt", PLAIN)
         os.symlink("README.txt", os.path.join(self.dir, "helper.py"))
         self.put("setup.py", self.LOADER % "helper.py")
-        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+        self.assertIn(("helper.py", "decode-then-run"), self.stops(self.scan(1)))
 
     def test_a_py_file_inside_a_git_folder_is_not_read_so_loading_it_stops(self):
         self.put(".git/p.py", self.PAYLOAD)
@@ -1088,12 +1089,15 @@ class Honesty(Case):
         self.put("b.py", "y=" + "-" * 200000 + "1\n")
         self.assertIn(self.scan()["status"], ("clear", "incomplete"))
 
-    def test_symlink_is_not_followed(self):
+    def test_a_code_file_linked_to_outside_the_project_is_never_opened_and_is_said(self):
+        # the project did not bring that file, so it is not read; the report says the link is there
         outside = os.path.join(self.tmp.name, "outside.py")
         with open(outside, "w") as f:
             f.write(PLAIN)
         os.symlink(outside, os.path.join(self.dir, "link.py"))
-        self.assertEqual(self.scan(0)["stop"], [])
+        out = self.scan(0)
+        self.assertEqual(out["stop"], [])
+        self.assertEqual([(n["file"], n["signal"]) for n in out["notes"]], [("link.py", "link-not-followed")])
 
     def test_installed_folders_are_skipped_and_said(self):
         self.put("node_modules/x/a.py", PLAIN)
@@ -1107,6 +1111,57 @@ class Honesty(Case):
         self.put("node_modules/x/a.py", PLAIN)
         self.put(".git/index", git_index("node_modules/x/a.py"))
         self.assertIn(("node_modules/x/a.py", "decode-then-run"), self.stops(self.scan(1)))
+
+
+class Links(Case):
+    """Second review of v1.65.1: a link that stands in for a code file, or for a folder, was skipped
+    without a word, so a conftest.py that is a link ran unseen."""
+
+    def test_a_linked_conftest_is_read_through_when_its_target_is_in_the_project(self):
+        self.put("notes.txt", PLAIN)
+        os.symlink("notes.txt", os.path.join(self.dir, "conftest.py"))
+        self.assertIn(("conftest.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_linked_module_that_another_file_imports_is_read_through(self):
+        self.put("data.txt", PLAIN)
+        os.symlink("data.txt", os.path.join(self.dir, "helper.py"))
+        self.put("setup.py", "import helper\n")
+        self.assertIn(("helper.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_link_that_is_not_code_is_left_alone(self):
+        self.put("good.py", "x = 1\n")
+        os.symlink("/etc/hosts", os.path.join(self.dir, "hosts-link.txt"))
+        os.symlink("nowhere.py", os.path.join(self.dir, "dangling.py"))  # nothing there to run
+        self.assertEqual(self.scan(0)["not_checked"], [])
+
+    def test_a_folder_linked_to_outside_the_project_is_not_walked_and_does_not_stop_the_run(self):
+        # a tool's cache is the usual case (a Terraform provider folder); it is not the project's code
+        outside = os.path.join(self.tmp.name, "cache")
+        os.mkdir(outside)
+        with open(os.path.join(outside, "conftest.py"), "w") as f:
+            f.write(PLAIN)
+        self.put("good.py", "x = 1\n")
+        os.symlink(outside, os.path.join(self.dir, "providers"))
+        out = self.scan(0)
+        self.assertEqual((out["stop"], out["not_checked"], out["checked"]), ([], [], 1))
+
+    def test_a_named_file_must_be_one_this_tool_read_wherever_python_might_find_it(self):
+        # tests/helpers.py is harmless and was read; helpers.py at the top is a link to somewhere
+        # else. Run from the top folder, open("helpers.py") gets the link.
+        outside = os.path.join(self.tmp.name, "payload.py")
+        with open(outside, "w") as f:
+            f.write(PLAIN)
+        self.put("tests/conftest.py", 'exec(open("helpers.py").read())\n')
+        self.put("tests/helpers.py", "x = 1\n")
+        os.symlink(outside, os.path.join(self.dir, "helpers.py"))
+        self.mine()
+        self.assertIn(("tests/conftest.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_a_named_path_that_climbs_out_of_a_folder_is_not_trusted(self):
+        self.put("p.py", "x = 1\n")
+        self.put("lib/keep.py", "x = 1\n")
+        self.put("setup.py", 'exec(open("lib/../p.py").read())\n')
+        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
 
 
 class InstalledFolders(Case):
@@ -1245,12 +1300,14 @@ class Wiring(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             os.makedirs(os.path.join(home, ".claude", "make-it"))
             os.symlink(os.path.dirname(SCRIPT), os.path.join(home, ".claude", "make-it", "scripts"))
-            open(os.path.join(home, "a.py"), "w").write("x=1\n")
+            project = os.path.join(home, "project")  # not the home itself: its link to the script
+            os.mkdir(project)                          # leaves the folder, which is never a pass
+            open(os.path.join(project, "a.py"), "w").write("x=1\n")
             shell_path = subprocess.run(["sh", "-c", f"command -v {shell}"], capture_output=True, text=True).stdout.strip()
             if not shell_path:
                 self.skipTest(f"{shell} not installed")
             env = {"HOME": home, "PATH": path}
-            return subprocess.run([shell_path, "-c", block], cwd=home, env=env, capture_output=True, text=True).stdout
+            return subprocess.run([shell_path, "-c", block], cwd=project, env=env, capture_output=True, text=True).stdout
 
     def test_snippet_with_no_python_says_could_not_finish(self):
         for shell in ("bash", "zsh"):
