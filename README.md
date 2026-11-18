@@ -969,6 +969,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.6 -- The second scaffold passes its own checks too, and both stay clean after the app runs
+
+- **`nextjs-fullstack` on a fresh copy** failed lint (1 error, 16 warnings), its formatting check
+  and its type check, so its production build failed. Fixed the same way as the first scaffold:
+  the hook before the early return, lookups through `own()`, a typed roles query, formatting.
+  It stays on Next 15.
+- **A gap in v1.70.5, found here.** Next.js writes `tsconfig.json` and `next-env.d.ts` itself.
+  After the first dev run or build, the first scaffold failed its formatting check on
+  `tsconfig.json` and the second failed lint on `next-env.d.ts`. Both files are now excluded from
+  the checks, and the first scaffold ships `tsconfig.json` the way Next 16 writes it.
+- **`nextjs-fullstack`'s formatting check covers app code only.** The project's notes and Docker
+  setup sit at its root and are no longer in scope, matching the first scaffold.
+- **CI:** the scaffold job now covers both scaffolds and runs lint again after the build, and
+  fails if the build changed a tracked file.
+
 ### v1.70.5 -- The scaffold's frontend passes its own lint, type check and build
 
 Reported by a developer on a company branch: with `eslint-config-next` 16 the scaffold's lint
