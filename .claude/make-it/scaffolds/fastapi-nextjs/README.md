@@ -157,6 +157,9 @@ The scaffold's frontend passes its own checks on a fresh copy (`npm run lint`, t
 - **A lookup by a variable key:** `own(table, key)` (`lib/utils.ts`), which reads own properties only; `.at(i)` for arrays. Never `table[key]`.
 - **A full-page navigation to a backend route** (sign-in, sign-out) keeps `window.location.href`, with the one-line exception and its reason, as `login-button.tsx` does.
 - Hooks come before any early `return`.
+- `tsconfig.json` and `next-env.d.ts` belong to Next.js, which rewrites them when the app runs. They are excluded from the checks; don't format them by hand.
+
+The `nextjs-fullstack` scaffold follows the same rules (`own()` is in its `src/lib/utils.ts`); it stays on Next 15, so its lint config still loads through `FlatCompat`.
 
 ### Test Infrastructure
 

@@ -5,10 +5,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 // PUT /api/users/:id -- Update user (role, active status)
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await requirePermission("users", "edit");
   const { id } = await params;
 
@@ -39,7 +36,7 @@ export async function PUT(
 // DELETE /api/users/:id -- Delete user
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await requirePermission("users", "delete");
   const { id } = await params;

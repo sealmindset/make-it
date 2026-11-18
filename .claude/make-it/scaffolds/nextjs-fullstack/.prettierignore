@@ -2,3 +2,13 @@
 node_modules/
 coverage/
 public/
+
+# Not app code. In this scaffold the app sits at the project root, so without these lines the
+# formatting check would also cover the project's notes and its Docker setup (in the
+# fastapi-nextjs scaffold those live outside the frontend folder and were never checked).
+*.md
+docker-compose*.yml
+
+# Written by Next.js itself (on every dev run and build), in its own layout.
+tsconfig.json
+next-env.d.ts

@@ -1,12 +1,7 @@
 "use client";
 
 import { type Table } from "@tanstack/react-table";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DataTablePaginationProps<TData> {
@@ -28,8 +23,7 @@ export function DataTablePagination<TData>({
       <div className="text-muted-foreground">
         {enableRowSelection ? (
           <>
-            {table.getFilteredSelectedRowModel().rows.length} of {totalRows}{" "}
-            row(s) selected
+            {table.getFilteredSelectedRowModel().rows.length} of {totalRows} row(s) selected
           </>
         ) : (
           <>{totalRows} row(s) total</>
@@ -64,7 +58,7 @@ export function DataTablePagination<TData>({
               "inline-flex h-8 w-8 items-center justify-center rounded-md border border-input transition-colors",
               table.getCanPreviousPage()
                 ? "hover:bg-accent hover:text-accent-foreground"
-                : "opacity-50 cursor-not-allowed",
+                : "opacity-50 cursor-not-allowed"
             )}
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -76,7 +70,7 @@ export function DataTablePagination<TData>({
               "inline-flex h-8 w-8 items-center justify-center rounded-md border border-input transition-colors",
               table.getCanPreviousPage()
                 ? "hover:bg-accent hover:text-accent-foreground"
-                : "opacity-50 cursor-not-allowed",
+                : "opacity-50 cursor-not-allowed"
             )}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -88,7 +82,7 @@ export function DataTablePagination<TData>({
               "inline-flex h-8 w-8 items-center justify-center rounded-md border border-input transition-colors",
               table.getCanNextPage()
                 ? "hover:bg-accent hover:text-accent-foreground"
-                : "opacity-50 cursor-not-allowed",
+                : "opacity-50 cursor-not-allowed"
             )}
           >
             <ChevronRight className="h-4 w-4" />
@@ -100,7 +94,7 @@ export function DataTablePagination<TData>({
               "inline-flex h-8 w-8 items-center justify-center rounded-md border border-input transition-colors",
               table.getCanNextPage()
                 ? "hover:bg-accent hover:text-accent-foreground"
-                : "opacity-50 cursor-not-allowed",
+                : "opacity-50 cursor-not-allowed"
             )}
           >
             <ChevronsRight className="h-4 w-4" />

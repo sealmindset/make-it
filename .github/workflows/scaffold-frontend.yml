@@ -1,9 +1,11 @@
 name: scaffold frontend
 
-# A new app starts as a copy of the scaffold, with dependencies resolved that day. This job does the
-# same: it installs the scaffold frontend's dependencies fresh (no lock file) and runs the checks a
-# new app's first commit and first build will hit. If it fails, new apps are failing the same way.
-# It runs on changes to the scaffold and once a week, so a new upstream lint rule or type change
+# A new app starts as a copy of a scaffold, with dependencies resolved that day. This job does the
+# same for each scaffold: it installs the dependencies fresh (no lock file) and runs the checks a new
+# app's first commit and first build will hit. If it fails, new apps are failing the same way.
+# The checks run twice, before and after a build: Next.js writes files of its own (tsconfig.json,
+# next-env.d.ts) on the first run, and a scaffold has to stay clean after that too.
+# It runs on changes to the scaffolds and once a week, so a new upstream lint rule or type change
 # shows up here and not in someone's first commit.
 
 on:
@@ -11,6 +13,7 @@ on:
     paths:
       - ".claude/make-it/scaffolds/fastapi-nextjs/frontend/**"
       - ".claude/make-it/scaffolds/fastapi-nextjs/.pre-commit-config.yaml"
+      - ".claude/make-it/scaffolds/nextjs-fullstack/**"
       - ".github/workflows/scaffold-frontend.yml"
   push:
     branches: [main]
@@ -25,9 +28,17 @@ jobs:
   checks:
     name: scaffold frontend lint, types and build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - .claude/make-it/scaffolds/fastapi-nextjs/frontend
+          - .claude/make-it/scaffolds/nextjs-fullstack
     defaults:
       run:
-        working-directory: .claude/make-it/scaffolds/fastapi-nextjs/frontend
+        working-directory: ${{ matrix.app }}
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +46,9 @@ jobs:
           node-version: 20
       - name: Install, as a new app would (no lock file, no install scripts)
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate the database client (nextjs-fullstack only)
+        if: hashFiles(format('{0}/prisma/schema.prisma', matrix.app)) != ''
+        run: npx prisma generate
       - name: npm run lint (eslint, then prettier)
         run: npm run lint
       - name: The pre-commit hook's eslint command (zero warnings)
@@ -45,5 +59,9 @@ jobs:
         run: npx tsc --noEmit
       - name: Production build (what the Dockerfile runs)
         run: npm run build
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
+      - name: After the build -- npm run lint again
+        run: npm run lint
+      - name: After the build -- the hook's eslint command again
+        run: npx eslint --max-warnings 0 .
+      - name: After the build -- the build changed no tracked file
+        run: git diff --exit-code -- .

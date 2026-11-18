@@ -31,7 +31,7 @@ export async function GET() {
       is_sensitive: s.isSensitive,
       requires_restart: s.requiresRestart,
       updated_by: s.updatedBy,
-    })),
+    }))
   );
 }
 

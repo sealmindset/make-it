@@ -17,6 +17,6 @@ export async function GET() {
       resource: p.resource,
       action: p.action,
       description: p.description,
-    })),
+    }))
   );
 }

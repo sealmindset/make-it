@@ -67,9 +67,7 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : (
-        <p style={{ color: "var(--muted-foreground)" }}>
-          Failed to load dashboard data.
-        </p>
+        <p style={{ color: "var(--muted-foreground)" }}>Failed to load dashboard data.</p>
       )}
     </div>
   );

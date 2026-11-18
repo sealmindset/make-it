@@ -20,10 +20,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
 
   if (!code) {
-    return NextResponse.json(
-      { error: "Missing authorization code" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Missing authorization code" }, { status: 400 });
   }
 
   // Validate OIDC state parameter
@@ -31,7 +28,7 @@ export async function GET(request: NextRequest) {
   if (!state || !storedState || state !== storedState) {
     return NextResponse.json(
       { error: "Invalid state parameter. Please try logging in again." },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -80,8 +77,7 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Authentication failed";
+    const message = err instanceof Error ? err.message : "Authentication failed";
     return NextResponse.json({ error: message }, { status: 403 });
   }
 }

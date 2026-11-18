@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, own } from "@/lib/utils";
 
 // [SEGMENT_LABELS] -- human-readable labels for URL segments
 const segmentLabels: Record<string, string> = {
@@ -17,10 +17,10 @@ const segmentLabels: Record<string, string> = {
 };
 
 function formatSegment(segment: string): string {
-  if (segmentLabels[segment]) return segmentLabels[segment];
-  return segment
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  // `segment` comes from the URL: only an entry of the table itself counts as a label.
+  const label = own(segmentLabels, segment);
+  if (label) return label;
+  return segment.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function Breadcrumbs() {
@@ -33,9 +33,8 @@ export function Breadcrumbs() {
     const href = "/" + segments.slice(0, index + 1).join("/");
     const isLast = index === segments.length - 1;
     const isId =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        segment,
-      ) || /^\d+$/.test(segment);
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
+      /^\d+$/.test(segment);
     const label = isId ? segment.slice(0, 8) + "..." : formatSegment(segment);
 
     return { href, label, isLast };
@@ -57,9 +56,7 @@ export function Breadcrumbs() {
           ) : (
             <Link
               href={crumb.href}
-              className={cn(
-                "text-muted-foreground transition-colors hover:text-foreground",
-              )}
+              className={cn("text-muted-foreground transition-colors hover:text-foreground")}
             >
               {crumb.label}
             </Link>

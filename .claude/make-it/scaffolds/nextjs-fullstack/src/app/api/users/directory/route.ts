@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       .filter(
         (u: { name: string; email: string }) =>
           u.name.toLowerCase().includes(q.toLowerCase()) ||
-          u.email.toLowerCase().includes(q.toLowerCase()),
+          u.email.toLowerCase().includes(q.toLowerCase())
       )
       .map((u: { sub: string; email: string; name: string }) => ({
         oidc_subject: u.sub,

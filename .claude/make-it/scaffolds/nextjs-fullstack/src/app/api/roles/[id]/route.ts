@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 // DELETE /api/roles/:id -- Delete a custom role
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await requirePermission("roles", "delete");
   const { id } = await params;
@@ -17,10 +17,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
   }
   if (role.isSystem) {
-    return NextResponse.json(
-      { error: "Cannot delete system roles" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Cannot delete system roles" }, { status: 400 });
   }
 
   await prisma.role.delete({ where: { id } });

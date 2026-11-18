@@ -63,7 +63,7 @@ export function QuickSearch() {
       setQuery("");
       router.push(href);
     },
-    [router],
+    [router]
   );
 
   // Cmd+K / Ctrl+K to open
@@ -98,8 +98,9 @@ export function QuickSearch() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && filteredItems[selectedIndex]) {
-      navigate(filteredItems[selectedIndex].href);
+    } else if (e.key === "Enter") {
+      const picked = filteredItems.at(selectedIndex);
+      if (picked) navigate(picked.href);
     }
   };
 
@@ -113,8 +114,7 @@ export function QuickSearch() {
         <Search className="h-4 w-4" />
         <span className="hidden sm:inline">Search...</span>
         <kbd className="pointer-events-none hidden select-none rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">
-          {typeof navigator !== "undefined" &&
-          navigator.platform?.includes("Mac")
+          {typeof navigator !== "undefined" && navigator.platform?.includes("Mac")
             ? "\u2318K"
             : "Ctrl+K"}
         </kbd>
@@ -161,7 +161,7 @@ export function QuickSearch() {
                       "flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors",
                       i === selectedIndex
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:bg-accent/50",
+                        : "text-foreground hover:bg-accent/50"
                     )}
                   >
                     {item.label}

@@ -5,10 +5,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 // PUT /api/admin/settings/:key -- Update a single setting
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ key: string }> },
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const user = await requirePermission("app_settings", "edit");
   const { key } = await params;
 
@@ -17,10 +14,7 @@ export async function PUT(
 
   const setting = await prisma.appSetting.findUnique({ where: { key } });
   if (!setting) {
-    return NextResponse.json(
-      { error: `Setting '${key}' not found` },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: `Setting '${key}' not found` }, { status: 404 });
   }
 
   const oldValue = setting.value;
