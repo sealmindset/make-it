@@ -25,6 +25,7 @@ import math
 import os
 import re
 import secrets
+import struct
 import subprocess
 import sys
 import unicodedata
@@ -69,6 +70,7 @@ WHY = {
     "outside-dependency": "installs code from outside the package registry",
     "program-file": "is a program file committed to the project",
     "unreadable": "could not be read as Python",
+    "link-not-followed": "is a link to something outside the project, which was not read",
 }
 # Shapes an attacker uses. These stop in every project, the owner's own included.
 # read-then-run is the one shape honest code shares: a test loading the code it checks, or a
@@ -211,13 +213,18 @@ def reads_a_file(node):
     return any(isinstance(c, ast.Attribute) and c.attr in FILE_READ_ATTRS | {"read"} for c in ast.walk(node))
 
 
-def settle(s, rel, known):
-    """A .py file named in open() counts as a read unless it is one of the files this tool read:
-    looked up beside the file that names it and from the project's top folder."""
+def settle(s, rel, known, root=None):
+    """A .py file named in open() counts as a read unless it is one of the files this tool read.
+    Python finds the name from wherever it is run, which this tool can't know, so the name is
+    looked up beside the file that names it and from the project's top folder: at least one must
+    be a file that was read, and neither may be something else. A name that climbs out of a
+    folder ("..") is never trusted."""
     here = os.path.dirname(rel)
     for name, line in s.named:
-        tries = {os.path.normpath(os.path.join(here, name)), os.path.normpath(name)}
-        if os.path.isabs(name) or not tries & known:
+        tries = [os.path.normpath(os.path.join(here, name)), os.path.normpath(name)]
+        climbs = os.path.isabs(name) or ".." in name.replace("\\", "/").split("/")
+        other = any(t not in known and root is not None and os.path.lexists(os.path.join(root, t)) for t in tries)
+        if climbs or other or not any(t in known for t in tries):
             s.hit("read", line)
     return s
 
@@ -617,16 +624,60 @@ def stale_copies(root, gitsha):
     return out
 
 
+def tracked_folders(raw):
+    """Every folder name that holds a file git tracks, read from a git index (versions 2 to 4), or
+    None when the index can't be read exactly. Looking for a folder's name anywhere in the file is
+    not enough: version 4 stores each path as what it shares with the one before, and a file that
+    only starts like an index proves nothing."""
+    try:
+        if raw[:4] != b"DIRC":
+            return None
+        version, count = struct.unpack(">II", raw[4:12])
+        if version not in (2, 3, 4):
+            return None
+        pos, prev, names = 12, b"", set()
+        for _ in range(count):
+            flags = struct.unpack(">H", raw[pos + 60:pos + 62])[0]
+            start = pos + 62 + (2 if flags & 0x4000 and version >= 3 else 0)
+            if version == 4:
+                byte = raw[start]
+                strip, start = byte & 0x7F, start + 1
+                while byte & 0x80:
+                    byte = raw[start]
+                    strip, start = ((strip + 1) << 7) | (byte & 0x7F), start + 1
+                end = raw.index(b"\0", start)
+                if strip > len(prev):
+                    return None
+                path, pos = prev[:len(prev) - strip] + raw[start:end], end + 1
+            else:
+                end = raw.index(b"\0", start)
+                path, pos = raw[start:end], pos + ((end - pos + 8) & ~7)  # padded to a multiple of 8
+            names.update(path.split(b"/")[:-1])
+            prev = path
+        while pos + 8 <= len(raw) - 20:  # the extensions that follow, then a 20-byte checksum
+            name, size = raw[pos:pos + 4], struct.unpack(">I", raw[pos + 4:pos + 8])[0]
+            if name == b"link":
+                return None  # a split index keeps most paths in another file
+            pos += 8 + size
+        return names if pos == len(raw) - 20 else None
+    except (struct.error, ValueError, IndexError):
+        return None
+
+
 def walk(root, skipped, worktrees, mine=False, nested=None):
     try:
         with open(os.path.join(root, ".git", "index"), "rb") as f:
-            index = f.read()
+            tracked = tracked_folders(f.read())
     except OSError:
-        index = None  # no git record, as in a zip download: a folder's name proves nothing
+        tracked = None  # no git record, as in a zip download: a folder's name proves nothing
     for folder, dirs, files in os.walk(root):
         keep = []
         for d in dirs:
             if d in ALWAYS_SKIP:
+                continue
+            if os.path.islink(os.path.join(folder, d)):
+                # never walked into; scan() reports one that leaves the project
+                yield os.path.join(folder, d), os.path.relpath(os.path.join(folder, d), root)
                 continue
             # Another working copy of this project is checked when work happens there, not from here:
             # a project with dozens of them would otherwise be read dozens of times over. Only in a
@@ -640,14 +691,14 @@ def walk(root, skipped, worktrees, mine=False, nested=None):
             elif nested is not None and os.path.lexists(os.path.join(sub, ".git")):
                 nested.add(os.path.relpath(sub, root))  # somebody else's repository inside this one
             # A committed folder is project code whatever its name: only a real install is skipped.
-            if d in INSTALLED and index is not None and (d.encode() + b"/") not in index:
+            if d in INSTALLED and tracked is not None and d.encode() not in tracked:
                 skipped.add(d)
                 continue
             keep.append(d)
         dirs[:] = keep
         for name in files:
             path = os.path.join(folder, name)
-            if not os.path.islink(path) and os.path.isfile(path):
+            if os.path.isfile(path):  # a link to a file is yielded too: scan() decides what it is
                 yield path, os.path.relpath(path, root)
 
 
@@ -680,13 +731,30 @@ def scan(root, cleared, projects=None):
     entries = list(walk(root, skipped, worktrees, mine, nested))
     report["worktrees"] = sorted(worktrees) if mine else []
     report["worktrees_read"] = 0 if mine else len(worktrees)
-    known = {rel for _, rel in entries if rel.endswith((".py", ".pyw"))}
+    top = os.path.realpath(root)
+
+    def leaves(path):
+        """A link whose target is not inside this project."""
+        real = os.path.realpath(path)
+        return os.path.islink(path) and real != top and not real.startswith(top + os.sep)
+    known = {rel for path, rel in entries if rel.endswith((".py", ".pyw")) and not leaves(path)}
 
     for path, rel in entries:
         base = os.path.basename(rel)
         is_py = rel.endswith((".py", ".pyw"))
         is_config = base in ("package.json", "pyproject.toml") or re.fullmatch(r"requirements.*\.txt", base) \
             or rel.replace(os.sep, "/").endswith(".vscode/tasks.json")
+        if os.path.islink(path):
+            # Python runs what a link points at. One that stays inside the project is read through
+            # below: a download can ship the target under a harmless name. One that leaves the
+            # project points at files the project did not bring, so it is never opened; a code file
+            # linked that way is a note. Linked folders are not walked: one inside the project is
+            # read where it really is, and one outside is usually a tool's cache.
+            if os.path.isdir(path) or not (is_py or is_config):
+                continue
+            if leaves(path):
+                found[rel].append(("link-not-followed", 1, False))
+                continue
         try:
             with open(path, "rb") as f:
                 head = f.read(4)
@@ -711,7 +779,7 @@ def scan(root, cleared, projects=None):
                 found[rel].extend(text_verdicts(raw))
             else:
                 trees[rel] = tree
-                found[rel].extend(verdicts(settle(read_tree(tree)[0], rel, known)))
+                found[rel].extend(verdicts(settle(read_tree(tree)[0], rel, known, root)))
         except (OSError, ValueError, RecursionError, MemoryError):
             report["not_checked"].append(rel)
 

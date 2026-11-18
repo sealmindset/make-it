@@ -969,6 +969,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.65.2 -- the hostile-code check reads the git index exactly before skipping a packages folder
+
+Follow-up to the third independent review.
+
+- **Fixed: a packages folder could be skipped on a forged or compressed git index.** The check
+  skipped `node_modules`, `venv` and the like when the folder's name did not appear anywhere in
+  `.git/index`. A file that only starts like an index hid a committed folder, and a version 4
+  index stores paths in a way that can keep the name out of the file. The index is now parsed
+  (versions 2 to 4). One that can't be read exactly, or a split index, skips nothing.
+- **Fixed: a `conftest.py` or `setup.py` that is a link was never read** (found by a second
+  review of v1.65.1). A code file linked to another file in the project is now read through the
+  link. A link that leaves the project is never opened and is noted in the report.
+- **Fixed: the "was this file really read" check from v1.65.1 could be fooled** by a second file
+  of the same name in another folder, or by a path with `..` in it. Both now stop.
+- **Tests now catch three safeguards being removed:** git's replace refs staying off, a `git`
+  reached through a link into the project, and hooks staying off.
+- **Checked:** `scripts/test-hostile-code.py` (145 tests); the parser was also run on three real
+  repositories, and against git's own version 2 and version 4 indexes.
+
 ### v1.65.1 -- the hostile-code check no longer trusts a Python file it never read
 
 Found by a third independent review. Both gaps are older than v1.62.0.

