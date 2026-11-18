@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { apiGet, apiPut, apiDelete } from "@/lib/api";
+import { apiGet, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime } from "@/lib/utils";
-import {
-  Settings, Save, Eye, EyeOff, RefreshCw, History,
-  AlertTriangle,
-} from "lucide-react";
+import { useAsyncEffect } from "@/lib/use-async-effect";
+import { formatDateTime, own } from "@/lib/utils";
+import { Settings, Save, Eye, EyeOff, RefreshCw, History, AlertTriangle } from "lucide-react";
 
 interface AppSetting {
   id: string;
@@ -83,17 +81,21 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  useAsyncEffect(fetchSettings);
 
   useEffect(() => {
-    if (tab === "audit") fetchAuditLogs();
+    if (tab !== "audit") return;
+    const run = async () => {
+      await fetchAuditLogs();
+    };
+    run();
   }, [tab, fetchAuditLogs]);
 
   useEffect(() => {
     // No stamp details (e.g. 403) -> the card is simply not shown
-    apiGet<AboutInfo>("/admin/about").then(setAbout).catch(() => setAbout(null));
+    apiGet<AboutInfo>("/admin/about")
+      .then(setAbout)
+      .catch(() => setAbout(null));
   }, []);
 
   // Group settings by group_name
@@ -107,11 +109,11 @@ export default function SettingsPage() {
   };
 
   const hasEdits = (groupName: string) => {
-    return groups[groupName]?.some((s) => s.key in edits && edits[s.key] !== s.value);
+    return own(groups, groupName)?.some((s) => s.key in edits && own(edits, s.key) !== s.value);
   };
 
   const saveGroup = async (groupName: string) => {
-    const groupSettings = groups[groupName];
+    const groupSettings = own(groups, groupName);
     if (!groupSettings) return;
 
     const changes = groupSettings
@@ -151,11 +153,7 @@ export default function SettingsPage() {
   };
 
   const hideValue = (key: string) => {
-    setRevealed((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    setRevealed((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== key)));
   };
 
   const getDisplayValue = (s: AppSetting): string => {
@@ -173,7 +171,7 @@ export default function SettingsPage() {
       return (
         <div className="flex items-center gap-3">
           <button
-            onClick={() => canEdit ? handleEdit(s.key, checked ? "false" : "true") : undefined}
+            onClick={() => (canEdit ? handleEdit(s.key, checked ? "false" : "true") : undefined)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!canEdit ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             style={{
               backgroundColor: checked ? "var(--primary)" : "var(--muted)",
@@ -195,25 +193,31 @@ export default function SettingsPage() {
         <input
           type={s.is_sensitive && !(s.key in revealed) ? "password" : "text"}
           value={value}
-          onChange={(e) => canEdit ? handleEdit(s.key, e.target.value) : undefined}
+          onChange={(e) => (canEdit ? handleEdit(s.key, e.target.value) : undefined)}
           readOnly={!canEdit}
           className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-mono ${isEdited ? "ring-2" : ""} ${!canEdit ? "opacity-70" : ""}`}
-          style={{
-            borderColor: isEdited ? "var(--primary)" : "var(--input)",
-            backgroundColor: "var(--background)",
-            color: "var(--foreground)",
-            ringColor: "var(--primary)",
-          }}
+          style={
+            {
+              borderColor: isEdited ? "var(--primary)" : "var(--input)",
+              backgroundColor: "var(--background)",
+              color: "var(--foreground)",
+              // Tailwind's ring reads its colour from this variable; `ringColor` is not a CSS property.
+              "--tw-ring-color": "var(--primary)",
+            } as React.CSSProperties
+          }
         />
         {s.is_sensitive && canEdit && (
           <button
-            onClick={() => s.key in revealed ? hideValue(s.key) : revealValue(s.key)}
+            onClick={() => (s.key in revealed ? hideValue(s.key) : revealValue(s.key))}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors hover:bg-accent"
             style={{ borderColor: "var(--input)" }}
             disabled={revealing[s.key]}
           >
             {revealing[s.key] ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: "var(--muted-foreground)" }} />
+              <RefreshCw
+                className="h-3.5 w-3.5 animate-spin"
+                style={{ color: "var(--muted-foreground)" }}
+              />
             ) : s.key in revealed ? (
               <EyeOff className="h-3.5 w-3.5" style={{ color: "var(--muted-foreground)" }} />
             ) : (
@@ -230,18 +234,16 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-          <p style={{ color: "var(--muted-foreground)" }}>
-            Manage application configuration.
-          </p>
+          <p style={{ color: "var(--muted-foreground)" }}>Manage application configuration.</p>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
-        {([
+        {[
           { id: "settings" as Tab, label: "Configuration", icon: Settings },
           { id: "audit" as Tab, label: "Change History", icon: History },
-        ]).map(({ id, label, icon: Icon }) => (
+        ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -272,7 +274,10 @@ export default function SettingsPage() {
                 style={{ borderColor: "var(--border)", backgroundColor: "var(--card)" }}
               >
                 {/* Group header */}
-                <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: "var(--border)" }}>
+                <div
+                  className="flex items-center justify-between border-b px-5 py-3"
+                  style={{ borderColor: "var(--border)" }}
+                >
                   <h2 className="text-sm font-semibold">{groupName}</h2>
                   {canEdit && hasEdits(groupName) && (
                     <button
@@ -298,7 +303,8 @@ export default function SettingsPage() {
                             <span
                               className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                               style={{
-                                backgroundColor: "color-mix(in oklch, var(--destructive) 10%, transparent)",
+                                backgroundColor:
+                                  "color-mix(in oklch, var(--destructive) 10%, transparent)",
                                 color: "var(--destructive)",
                               }}
                             >
@@ -310,7 +316,8 @@ export default function SettingsPage() {
                             <span
                               className="rounded-full px-2 py-0.5 text-[10px] font-medium"
                               style={{
-                                backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)",
+                                backgroundColor:
+                                  "color-mix(in oklch, var(--primary) 10%, transparent)",
                                 color: "var(--primary)",
                               }}
                             >
@@ -319,17 +326,21 @@ export default function SettingsPage() {
                           )}
                         </div>
                         {s.description && (
-                          <p className="mt-0.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          <p
+                            className="mt-0.5 text-xs"
+                            style={{ color: "var(--muted-foreground)" }}
+                          >
                             {s.description}
                           </p>
                         )}
-                        <p className="mt-1 font-mono text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                        <p
+                          className="mt-1 font-mono text-[10px]"
+                          style={{ color: "var(--muted-foreground)" }}
+                        >
                           {s.key}
                         </p>
                       </div>
-                      <div className="flex items-start">
-                        {renderInput(s)}
-                      </div>
+                      <div className="flex items-start">{renderInput(s)}</div>
                     </div>
                   ))}
                 </div>
@@ -345,17 +356,46 @@ export default function SettingsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-                <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>When</th>
-                <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Who</th>
-                <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Setting</th>
-                <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Old Value</th>
-                <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>New Value</th>
+                <th
+                  className="h-10 px-3 text-left font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  When
+                </th>
+                <th
+                  className="h-10 px-3 text-left font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Who
+                </th>
+                <th
+                  className="h-10 px-3 text-left font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Setting
+                </th>
+                <th
+                  className="h-10 px-3 text-left font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Old Value
+                </th>
+                <th
+                  className="h-10 px-3 text-left font-medium"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  New Value
+                </th>
               </tr>
             </thead>
             <tbody>
               {auditLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="h-24 text-center" style={{ color: "var(--muted-foreground)" }}>
+                  <td
+                    colSpan={5}
+                    className="h-24 text-center"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
                     No changes recorded yet.
                   </td>
                 </tr>
@@ -363,20 +403,28 @@ export default function SettingsPage() {
                 auditLogs.map((log) => {
                   const setting = settings.find((s) => s.id === log.setting_id);
                   return (
-                    <tr key={log.id} className="border-b transition-colors hover:bg-muted/50" style={{ borderColor: "var(--border)" }}>
-                      <td className="px-3 py-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    <tr
+                      key={log.id}
+                      className="border-b transition-colors hover:bg-muted/50"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <td
+                        className="px-3 py-2 text-xs"
+                        style={{ color: "var(--muted-foreground)" }}
+                      >
                         {formatDateTime(log.created_at)}
                       </td>
                       <td className="px-3 py-2 text-xs">{log.changed_by}</td>
                       <td className="px-3 py-2 text-xs font-mono">
                         {setting?.display_name || log.setting_id.slice(0, 8)}
                       </td>
-                      <td className="px-3 py-2 text-xs font-mono" style={{ color: "var(--muted-foreground)" }}>
+                      <td
+                        className="px-3 py-2 text-xs font-mono"
+                        style={{ color: "var(--muted-foreground)" }}
+                      >
                         {log.old_value ?? "-"}
                       </td>
-                      <td className="px-3 py-2 text-xs font-mono">
-                        {log.new_value ?? "-"}
-                      </td>
+                      <td className="px-3 py-2 text-xs font-mono">{log.new_value ?? "-"}</td>
                     </tr>
                   );
                 })
@@ -409,9 +457,7 @@ export default function SettingsPage() {
                   </p>
                 )}
                 {about.runs != null && (
-                  <p style={{ color: "var(--muted-foreground)" }}>
-                    {about.runs} recorded runs
-                  </p>
+                  <p style={{ color: "var(--muted-foreground)" }}>{about.runs} recorded runs</p>
                 )}
                 {about.security_files.changed.length === 0 &&
                 about.security_files.missing.length === 0 ? (
@@ -422,12 +468,19 @@ export default function SettingsPage() {
                   </p>
                 ) : (
                   <>
-                    <p className="inline-flex items-center gap-1.5" style={{ color: "var(--destructive)" }}>
+                    <p
+                      className="inline-flex items-center gap-1.5"
+                      style={{ color: "var(--destructive)" }}
+                    >
                       <AlertTriangle className="h-3.5 w-3.5" />
-                      Sign-in and permission code: {about.security_files.changed.length} changed,{" "}
-                      {about.security_files.missing.length} missing
+                      Sign-in and permission code: {
+                        about.security_files.changed.length
+                      } changed, {about.security_files.missing.length} missing
                     </p>
-                    <ul className="list-disc pl-5 font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+                    <ul
+                      className="list-disc pl-5 font-mono text-xs"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
                       {about.security_files.changed.map((f) => (
                         <li key={`changed-${f}`}>{f} (changed)</li>
                       ))}

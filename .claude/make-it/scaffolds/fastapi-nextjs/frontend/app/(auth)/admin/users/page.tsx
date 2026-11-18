@@ -4,18 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { DataTable } from "@/components/data-table";
 import { DataTableColumnHeader } from "@/components/data-table-column-header";
 import { formatDate } from "@/lib/utils";
 import type { User, Role } from "@/lib/types";
-import {
-  UserPlus,
-  Ban,
-  CheckCircle,
-  Trash2,
-  Search,
-  Loader2,
-} from "lucide-react";
+import { UserPlus, Ban, CheckCircle, Trash2, Search, Loader2 } from "lucide-react";
 
 /** Directory user returned from GET /users/directory */
 interface DirectoryUser {
@@ -50,9 +44,7 @@ export default function UsersPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  useAsyncEffect(fetchUsers);
 
   const handleToggleActive = async (user: User) => {
     try {
@@ -87,24 +79,15 @@ export default function UsersPage() {
   const columns: ColumnDef<User, unknown>[] = [
     {
       accessorKey: "display_name",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Name" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
     },
     {
       accessorKey: "email",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Email" />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
     },
     {
       accessorKey: "role_name",
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title="Role"
-        />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
       cell: ({ row }) => {
         const user = row.original;
         if (!canEdit) return user.role_name || "-";
@@ -133,12 +116,7 @@ export default function UsersPage() {
     },
     {
       accessorKey: "is_active",
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title="Status"
-        />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
       cell: ({ row }) => {
         const active = row.original.is_active;
         return (
@@ -162,12 +140,7 @@ export default function UsersPage() {
     },
     {
       accessorKey: "created_at",
-      header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title="Created"
-        />
-      ),
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Created" />,
       cell: ({ row }) => formatDate(row.original.created_at),
     },
     ...(canEdit || canDelete
@@ -288,11 +261,7 @@ export default function UsersPage() {
 
       {/* Add User modal -- provisions from OIDC directory */}
       {showAddModal && (
-        <AddUserModal
-          roles={roles}
-          onClose={() => setShowAddModal(false)}
-          onAdded={fetchUsers}
-        />
+        <AddUserModal roles={roles} onClose={() => setShowAddModal(false)} onAdded={fetchUsers} />
       )}
     </div>
   );
@@ -322,16 +291,14 @@ function AddUserModal({
 
   // Search the OIDC directory when query changes
   useEffect(() => {
-    if (searchQuery.length < 2) {
-      setDirectoryResults([]);
-      return;
-    }
+    // Fewer than two characters: nothing to search (the input's handler clears the list).
+    if (searchQuery.length < 2) return;
 
     const debounce = setTimeout(async () => {
       setSearching(true);
       try {
         const results = await apiGet<DirectoryUser[]>(
-          `/users/directory?q=${encodeURIComponent(searchQuery)}`,
+          `/users/directory?q=${encodeURIComponent(searchQuery)}`
         );
         setDirectoryResults(results);
       } catch (err) {
@@ -380,10 +347,7 @@ function AddUserModal({
         }}
       >
         <h2 className="text-lg font-semibold">Add User</h2>
-        <p
-          className="mt-1 text-sm"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
           Provision a user from the organization directory.
         </p>
 
@@ -401,6 +365,7 @@ function AddUserModal({
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
+                  if (e.target.value.length < 2) setDirectoryResults([]);
                   setSelectedUser(null);
                 }}
                 placeholder="Search by name or email..."
@@ -445,10 +410,7 @@ function AddUserModal({
                       }}
                     >
                       <span className="font-medium">{user.display_name}</span>
-                      <span
-                        className="text-xs"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
+                      <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                         {user.email}
                       </span>
                     </button>
@@ -468,10 +430,7 @@ function AddUserModal({
               >
                 <div>
                   <span className="font-medium">{selectedUser.display_name}</span>
-                  <span
-                    className="ml-2 text-xs"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
+                  <span className="ml-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
                     {selectedUser.email}
                   </span>
                 </div>

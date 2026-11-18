@@ -2,19 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Lock,
-  Unlock,
-  Save,
-  Play,
-  MapPin,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
+import { ArrowLeft, Lock, Unlock, Save, Play, MapPin, AlertCircle } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatDateTime, formatRelative } from "@/lib/utils";
+import { formatRelative, own } from "@/lib/utils";
 import { PromptEditor } from "@/components/prompt-editor";
 import { VersionTimeline } from "@/components/version-timeline";
 import type {
@@ -110,9 +101,7 @@ export default function PromptDetailPage() {
 
   const fetchAudit = useCallback(async () => {
     try {
-      setAuditLog(
-        await apiGet<PromptAuditLogEntry[]>(`/admin/prompts/${slug}/audit`)
-      );
+      setAuditLog(await apiGet<PromptAuditLogEntry[]>(`/admin/prompts/${slug}/audit`));
     } catch (err) {
       console.error("Failed to load audit log:", err);
     }
@@ -120,25 +109,28 @@ export default function PromptDetailPage() {
 
   const fetchTestCases = useCallback(async () => {
     try {
-      setTestCases(
-        await apiGet<PromptTestCase[]>(`/admin/prompts/${slug}/tests`)
-      );
+      setTestCases(await apiGet<PromptTestCase[]>(`/admin/prompts/${slug}/tests`));
     } catch (err) {
       console.error("Failed to load test cases:", err);
     }
   }, [slug]);
 
   useEffect(() => {
-    Promise.all([fetchPrompt(), fetchVersions()]).then(() =>
-      setLoading(false)
-    );
+    const run = async () => {
+      await Promise.all([fetchPrompt(), fetchVersions()]);
+      setLoading(false);
+    };
+    run();
   }, [fetchPrompt, fetchVersions]);
 
   // Lazy-load tab data
   useEffect(() => {
-    if (activeTab === "usage") fetchUsages();
-    if (activeTab === "audit") fetchAudit();
-    if (activeTab === "tryit") fetchTestCases();
+    const run = async () => {
+      if (activeTab === "usage") await fetchUsages();
+      if (activeTab === "audit") await fetchAudit();
+      if (activeTab === "tryit") await fetchTestCases();
+    };
+    run();
   }, [activeTab, fetchUsages, fetchAudit, fetchTestCases]);
 
   const handleEditorChange = (
@@ -216,10 +208,7 @@ export default function PromptDetailPage() {
       } catch {
         inputData = {};
       }
-      const result = await apiPost<PromptTestRun>(
-        `/admin/prompts/${slug}/tests/run`,
-        inputData
-      );
+      const result = await apiPost<PromptTestRun>(`/admin/prompts/${slug}/tests/run`, inputData);
       setTestResult(result);
     } catch (err) {
       console.error("Failed to run test:", err);
@@ -261,10 +250,7 @@ export default function PromptDetailPage() {
           </button>
           <h1 className="text-2xl font-bold tracking-tight">{prompt.name}</h1>
           {prompt.description && (
-            <p
-              className="mt-1"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <p className="mt-1" style={{ color: "var(--muted-foreground)" }}>
               {prompt.description}
             </p>
           )}
@@ -275,10 +261,7 @@ export default function PromptDetailPage() {
             <span>v{prompt.current_version}</span>
             <span>Updated {formatRelative(prompt.updated_at)}</span>
             {prompt.is_locked && (
-              <span
-                className="inline-flex items-center gap-1"
-                style={{ color: "var(--warning)" }}
-              >
+              <span className="inline-flex items-center gap-1" style={{ color: "var(--warning)" }}>
                 <Lock className="h-3.5 w-3.5" />
                 Locked
               </span>
@@ -314,23 +297,15 @@ export default function PromptDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div
-        className="flex gap-0 border-b"
-        style={{ borderColor: "var(--border)" }}
-      >
+      <div className="flex gap-0 border-b" style={{ borderColor: "var(--border)" }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className="px-4 py-2.5 text-sm font-medium transition-colors"
             style={{
-              borderBottom: `2px solid ${
-                activeTab === tab.id ? "var(--primary)" : "transparent"
-              }`,
-              color:
-                activeTab === tab.id
-                  ? "var(--primary)"
-                  : "var(--muted-foreground)",
+              borderBottom: `2px solid ${activeTab === tab.id ? "var(--primary)" : "transparent"}`,
+              color: activeTab === tab.id ? "var(--primary)" : "var(--muted-foreground)",
             }}
           >
             {tab.label}
@@ -406,12 +381,9 @@ export default function PromptDetailPage() {
             }}
           >
             <h3 className="text-sm font-semibold mb-3">Test Input</h3>
-            <p
-              className="text-xs mb-3"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              Enter test values for the dynamic variables in your instruction.
-              Use JSON format: {`{"variable_name": "test value"}`}
+            <p className="text-xs mb-3" style={{ color: "var(--muted-foreground)" }}>
+              Enter test values for the dynamic variables in your instruction. Use JSON format:{" "}
+              {`{"variable_name": "test value"}`}
             </p>
             <textarea
               value={testInput}
@@ -445,9 +417,7 @@ export default function PromptDetailPage() {
               className="rounded-xl border p-5"
               style={{
                 backgroundColor: "var(--card)",
-                borderColor: testResult.success
-                  ? "var(--success)"
-                  : "var(--destructive)",
+                borderColor: testResult.success ? "var(--success)" : "var(--destructive)",
               }}
             >
               <h3 className="text-sm font-semibold mb-2">Result</h3>
@@ -464,21 +434,14 @@ export default function PromptDetailPage() {
                 className="mt-3 flex items-center gap-4 text-xs"
                 style={{ color: "var(--muted-foreground)" }}
               >
-                {testResult.tokens_in != null && (
-                  <span>Input: {testResult.tokens_in} tokens</span>
-                )}
+                {testResult.tokens_in != null && <span>Input: {testResult.tokens_in} tokens</span>}
                 {testResult.tokens_out != null && (
                   <span>Output: {testResult.tokens_out} tokens</span>
                 )}
-                {testResult.latency_ms != null && (
-                  <span>{testResult.latency_ms}ms</span>
-                )}
+                {testResult.latency_ms != null && <span>{testResult.latency_ms}ms</span>}
               </div>
               {testResult.error && (
-                <p
-                  className="mt-2 text-sm"
-                  style={{ color: "var(--destructive)" }}
-                >
+                <p className="mt-2 text-sm" style={{ color: "var(--destructive)" }}>
                   {testResult.error}
                 </p>
               )}
@@ -502,24 +465,16 @@ export default function PromptDetailPage() {
                     <div>
                       <span className="text-sm font-medium">{tc.name}</span>
                       {tc.notes && (
-                        <p
-                          className="text-xs"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                           {tc.notes}
                         </p>
                       )}
                     </div>
                     <button
-                      onClick={() =>
-                        setTestInput(
-                          JSON.stringify(tc.input_data || {}, null, 2)
-                        )
-                      }
+                      onClick={() => setTestInput(JSON.stringify(tc.input_data || {}, null, 2))}
                       className="rounded-md px-3 py-1 text-xs font-medium transition-colors"
                       style={{
-                        backgroundColor:
-                          "color-mix(in oklch, var(--primary) 10%, transparent)",
+                        backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)",
                         color: "var(--primary)",
                       }}
                     >
@@ -548,8 +503,8 @@ export default function PromptDetailPage() {
                 style={{ color: "var(--muted-foreground)" }}
               />
               <p style={{ color: "var(--muted-foreground)" }}>
-                No usage data recorded yet. Usage appears here once the app
-                starts calling this AI instruction.
+                No usage data recorded yet. Usage appears here once the app starts calling this AI
+                instruction.
               </p>
             </div>
           ) : (
@@ -559,27 +514,20 @@ export default function PromptDetailPage() {
                 className="flex items-center justify-between rounded-lg border px-5 py-4"
                 style={{
                   backgroundColor: "var(--card)",
-                  borderColor: usage.is_primary
-                    ? "var(--primary)"
-                    : "var(--border)",
+                  borderColor: usage.is_primary ? "var(--primary)" : "var(--border)",
                 }}
               >
                 <div className="flex items-center gap-3">
                   <MapPin
                     className="h-4 w-4 shrink-0"
                     style={{
-                      color: usage.is_primary
-                        ? "var(--primary)"
-                        : "var(--muted-foreground)",
+                      color: usage.is_primary ? "var(--primary)" : "var(--muted-foreground)",
                     }}
                   />
                   <div>
                     <p className="text-sm font-medium">{usage.location}</p>
                     {usage.description && (
-                      <p
-                        className="text-xs"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
+                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                         {usage.description}
                       </p>
                     )}
@@ -612,9 +560,7 @@ export default function PromptDetailPage() {
       {activeTab === "audit" && (
         <div className="space-y-2">
           {auditLog.length === 0 ? (
-            <p style={{ color: "var(--muted-foreground)" }}>
-              No audit entries yet.
-            </p>
+            <p style={{ color: "var(--muted-foreground)" }}>No audit entries yet.</p>
           ) : (
             auditLog.map((entry) => (
               <div
@@ -630,19 +576,13 @@ export default function PromptDetailPage() {
                   <p className="text-sm">
                     {entry.user_email || "System"}
                     {entry.version != null && (
-                      <span
-                        className="ml-1"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
+                      <span className="ml-1" style={{ color: "var(--muted-foreground)" }}>
                         (v{entry.version})
                       </span>
                     )}
                   </p>
                 </div>
-                <span
-                  className="shrink-0 text-xs"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
+                <span className="shrink-0 text-xs" style={{ color: "var(--muted-foreground)" }}>
                   {formatRelative(entry.created_at)}
                 </span>
               </div>
@@ -662,13 +602,9 @@ export default function PromptDetailPage() {
             }}
           >
             <h3 className="text-lg font-semibold">Restore Version?</h3>
-            <p
-              className="mt-2 text-sm"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              This will create a new version with the content from version{" "}
-              {restoreVersion}. Your current version is not lost -- it stays in
-              the history.
+            <p className="mt-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
+              This will create a new version with the content from version {restoreVersion}. Your
+              current version is not lost -- it stays in the history.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -712,9 +648,7 @@ export default function PromptDetailPage() {
 
             {diffData.content_diff ? (
               <div className="mt-4">
-                <h4 className="text-sm font-medium mb-2">
-                  Instructions Changes
-                </h4>
+                <h4 className="text-sm font-medium mb-2">Instructions Changes</h4>
                 <pre
                   className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md p-3 text-xs font-mono"
                   style={{
@@ -726,19 +660,14 @@ export default function PromptDetailPage() {
                 </pre>
               </div>
             ) : (
-              <p
-                className="mt-4 text-sm"
-                style={{ color: "var(--muted-foreground)" }}
-              >
+              <p className="mt-4 text-sm" style={{ color: "var(--muted-foreground)" }}>
                 No differences in instructions.
               </p>
             )}
 
             {diffData.system_message_diff && (
               <div className="mt-4">
-                <h4 className="text-sm font-medium mb-2">
-                  AI Behavior Changes
-                </h4>
+                <h4 className="text-sm font-medium mb-2">AI Behavior Changes</h4>
                 <pre
                   className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md p-3 text-xs font-mono"
                   style={{
@@ -787,7 +716,7 @@ const actionColors: Record<string, string> = {
 };
 
 function ActionBadge({ action }: { action: string }) {
-  const color = actionColors[action] || "var(--muted-foreground)";
+  const color = own(actionColors, action) || "var(--muted-foreground)";
   const label = action.replace(/_/g, " ");
   return (
     <span

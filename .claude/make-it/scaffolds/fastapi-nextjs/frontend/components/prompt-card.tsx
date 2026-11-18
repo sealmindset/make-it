@@ -20,13 +20,7 @@ const categoryColors: Record<string, string> = {
   general: "var(--muted-foreground)",
 };
 
-export function PromptCard({
-  prompt,
-  canEdit,
-  onEdit,
-  onTryIt,
-  onHistory,
-}: PromptCardProps) {
+export function PromptCard({ prompt, canEdit, onEdit, onTryIt, onHistory }: PromptCardProps) {
   const categoryColor = categoryColors[prompt.category] || "var(--primary)";
 
   return (
@@ -44,11 +38,9 @@ export function PromptCard({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {prompt.is_locked && (
-            <Lock
-              className="h-3.5 w-3.5"
-              style={{ color: "var(--warning)" }}
-              title="Locked"
-            />
+            <span title="Locked" className="inline-flex">
+              <Lock className="h-3.5 w-3.5" style={{ color: "var(--warning)" }} />
+            </span>
           )}
           <span
             className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
@@ -56,9 +48,7 @@ export function PromptCard({
               backgroundColor: prompt.is_active
                 ? "color-mix(in oklch, var(--success) 15%, transparent)"
                 : "color-mix(in oklch, var(--muted-foreground) 15%, transparent)",
-              color: prompt.is_active
-                ? "var(--success)"
-                : "var(--muted-foreground)",
+              color: prompt.is_active ? "var(--success)" : "var(--muted-foreground)",
             }}
           >
             {prompt.is_active ? "Active" : "Inactive"}
@@ -68,10 +58,7 @@ export function PromptCard({
 
       {/* Description */}
       {prompt.description && (
-        <p
-          className="mt-1.5 line-clamp-2 text-sm"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        <p className="mt-1.5 line-clamp-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
           {prompt.description}
         </p>
       )}
@@ -83,9 +70,7 @@ export function PromptCard({
           style={{ color: "var(--muted-foreground)" }}
         >
           <MapPin className="h-3 w-3 shrink-0" />
-          <span className="truncate">
-            Used in: {prompt.primary_usage_location}
-          </span>
+          <span className="truncate">Used in: {prompt.primary_usage_location}</span>
         </div>
       )}
 
@@ -105,8 +90,7 @@ export function PromptCard({
             key={tag}
             className="inline-flex items-center rounded-full px-2 py-0.5 text-xs"
             style={{
-              backgroundColor:
-                "color-mix(in oklch, var(--foreground) 8%, transparent)",
+              backgroundColor: "color-mix(in oklch, var(--foreground) 8%, transparent)",
               color: "var(--muted-foreground)",
             }}
           >
@@ -114,17 +98,17 @@ export function PromptCard({
           </span>
         ))}
         {prompt.tags.length > 3 && (
-          <span
-            className="text-xs"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
             +{prompt.tags.length - 3} more
           </span>
         )}
       </div>
 
       {/* Footer: version + updated + actions */}
-      <div className="mt-4 flex items-center justify-between border-t pt-3" style={{ borderColor: "var(--border)" }}>
+      <div
+        className="mt-4 flex items-center justify-between border-t pt-3"
+        style={{ borderColor: "var(--border)" }}
+      >
         <div
           className="flex items-center gap-3 text-xs"
           style={{ color: "var(--muted-foreground)" }}

@@ -10,8 +10,7 @@ interface VariablePillProps {
  * Non-technical users see these as clickable labels instead of raw curly braces.
  */
 export function VariablePill({ name, description }: VariablePillProps) {
-  const tooltip =
-    description || `This is replaced with dynamic content when the AI runs`;
+  const tooltip = description || `This is replaced with dynamic content when the AI runs`;
 
   return (
     <span

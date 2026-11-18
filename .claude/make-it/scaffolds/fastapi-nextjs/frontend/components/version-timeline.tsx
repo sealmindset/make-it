@@ -79,8 +79,7 @@ export function VersionTimeline({
         <div className="space-y-0">
           {versions.map((version) => {
             const isCurrent = version.version === currentVersion;
-            const isSelected =
-              compareA === version.version || compareB === version.version;
+            const isSelected = compareA === version.version || compareB === version.version;
 
             return (
               <div key={version.id} className="relative flex gap-4 py-3">
@@ -95,9 +94,7 @@ export function VersionTimeline({
                         : isSelected
                           ? "color-mix(in oklch, var(--primary) 40%, transparent)"
                           : "var(--background)",
-                      borderColor: isCurrent || isSelected
-                        ? "var(--primary)"
-                        : "var(--border)",
+                      borderColor: isCurrent || isSelected ? "var(--primary)" : "var(--border)",
                     }}
                     title={`${isSelected ? "Deselect" : "Select"} for comparison`}
                   />
@@ -106,15 +103,12 @@ export function VersionTimeline({
                 {/* Content */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">
-                      Version {version.version}
-                    </span>
+                    <span className="text-sm font-semibold">Version {version.version}</span>
                     {isCurrent && (
                       <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
                         style={{
-                          backgroundColor:
-                            "color-mix(in oklch, var(--success) 15%, transparent)",
+                          backgroundColor: "color-mix(in oklch, var(--success) 15%, transparent)",
                           color: "var(--success)",
                         }}
                       >
@@ -124,10 +118,7 @@ export function VersionTimeline({
                   </div>
 
                   {version.change_summary && (
-                    <p
-                      className="mt-0.5 text-sm"
-                      style={{ color: "var(--muted-foreground)" }}
-                    >
+                    <p className="mt-0.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
                       {version.change_summary}
                     </p>
                   )}
@@ -146,8 +137,7 @@ export function VersionTimeline({
                       onClick={() => onRestore(version.version)}
                       className="mt-2 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors"
                       style={{
-                        backgroundColor:
-                          "color-mix(in oklch, var(--primary) 10%, transparent)",
+                        backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)",
                         color: "var(--primary)",
                       }}
                       onMouseEnter={(e) => {

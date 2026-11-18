@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, own } from "@/lib/utils";
 
 // Human-readable labels for URL segments.
 // Scaffold defaults are listed first; app-specific labels are added during build.
@@ -24,11 +24,11 @@ const segmentLabels: Record<string, string> = {
 };
 
 function formatSegment(segment: string): string {
-  if (segmentLabels[segment]) return segmentLabels[segment];
+  // `segment` comes from the URL: only an entry of the table itself counts as a label.
+  const label = own(segmentLabels, segment);
+  if (label) return label;
   // Convert kebab-case or snake_case to Title Case
-  return segment
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return segment.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function Breadcrumbs() {
@@ -42,9 +42,8 @@ export function Breadcrumbs() {
     const isLast = index === segments.length - 1;
     // UUIDs and numeric IDs are shown as-is (could be enhanced to fetch entity names)
     const isId =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        segment,
-      ) || /^\d+$/.test(segment);
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment) ||
+      /^\d+$/.test(segment);
     const label = isId ? segment.slice(0, 8) + "..." : formatSegment(segment);
 
     return { href, label, isLast };
@@ -66,9 +65,7 @@ export function Breadcrumbs() {
           ) : (
             <Link
               href={crumb.href}
-              className={cn(
-                "text-muted-foreground transition-colors hover:text-foreground",
-              )}
+              className={cn("text-muted-foreground transition-colors hover:text-foreground")}
             >
               {crumb.label}
             </Link>

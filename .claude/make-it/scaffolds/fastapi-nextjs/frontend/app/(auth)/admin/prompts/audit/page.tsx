@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { formatRelative, formatDateTime } from "@/lib/utils";
 import type { PromptAuditLogEntry } from "@/lib/types";
 
@@ -34,7 +34,6 @@ const actionColors: Record<string, string> = {
 
 export default function PromptAuditPage() {
   const router = useRouter();
-  const { hasPermission } = useAuth();
 
   const [entries, setEntries] = useState<PromptAuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,9 +47,7 @@ export default function PromptAuditPage() {
       if (slugFilter) params.set("prompt_slug", slugFilter);
       params.set("limit", "100");
       const qs = params.toString();
-      const data = await apiGet<PromptAuditLogEntry[]>(
-        `/admin/prompts/audit${qs ? `?${qs}` : ""}`
-      );
+      const data = await apiGet<PromptAuditLogEntry[]>(`/admin/prompts/audit${qs ? `?${qs}` : ""}`);
       setEntries(data);
     } catch (err) {
       console.error("Failed to load audit log:", err);
@@ -59,9 +56,7 @@ export default function PromptAuditPage() {
     }
   }, [actionFilter, slugFilter]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   if (loading) {
     return (
@@ -141,9 +136,7 @@ export default function PromptAuditPage() {
             borderColor: "var(--border)",
           }}
         >
-          <p style={{ color: "var(--muted-foreground)" }}>
-            No audit entries match your filters.
-          </p>
+          <p style={{ color: "var(--muted-foreground)" }}>No audit entries match your filters.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -172,29 +165,21 @@ export default function PromptAuditPage() {
                 {/* Prompt slug as link */}
                 {entry.prompt_slug ? (
                   <button
-                    onClick={() =>
-                      router.push(`/admin/prompts/${entry.prompt_slug}`)
-                    }
+                    onClick={() => router.push(`/admin/prompts/${entry.prompt_slug}`)}
                     className="text-sm font-medium truncate transition-colors"
                     style={{ color: "var(--primary)" }}
                   >
                     {entry.prompt_slug}
                   </button>
                 ) : (
-                  <span
-                    className="text-sm truncate"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
+                  <span className="text-sm truncate" style={{ color: "var(--muted-foreground)" }}>
                     (deleted)
                   </span>
                 )}
 
                 {/* Version */}
                 {entry.version != null && (
-                  <span
-                    className="shrink-0 text-xs"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
+                  <span className="shrink-0 text-xs" style={{ color: "var(--muted-foreground)" }}>
                     v{entry.version}
                   </span>
                 )}

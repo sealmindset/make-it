@@ -2990,7 +2990,7 @@ Every scaffolded app ships with linting, formatting, type checking, secret detec
 
 ### 15b. TypeScript/JavaScript Quality Stack
 
-**ESLint 9 (flat config)** -- `eslint.config.mjs` extends `next/core-web-vitals`, `next/typescript`, and `prettier`. Adds `eslint-plugin-security` for security rules (`no-eval`, `no-implied-eval`, detect-unsafe-regex, etc.).
+**ESLint 9 (flat config)** -- `eslint.config.mjs` imports the native flat configs `eslint-config-next/core-web-vitals`, `eslint-config-next/typescript` and `eslint-config-prettier/flat` (never through `FlatCompat`: with `eslint-config-next` 16 that crashes with "Converting circular structure to JSON"). Keep `eslint-config-next` on the same major version as `next`. Adds `eslint-plugin-security` for security rules (`no-eval`, `no-implied-eval`, detect-unsafe-regex, etc.).
 
 **Prettier** -- `.prettierrc` with sensible defaults (100 char width, 2-space tabs, double quotes, ES5 trailing commas). `.prettierignore` excludes `.next/`, `node_modules/`, `coverage/`.
 

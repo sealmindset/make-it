@@ -1,26 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Sparkles,
-  CheckCircle2,
-  Layers,
-  ClipboardList,
-} from "lucide-react";
+import { ArrowLeft, Sparkles, CheckCircle2, Layers, ClipboardList } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { formatRelative } from "@/lib/utils";
-import type {
-  ManagedPromptListItem,
-  PromptStats,
-  PromptAuditLogEntry,
-} from "@/lib/types";
+import type { ManagedPromptListItem, PromptStats, PromptAuditLogEntry } from "@/lib/types";
 
 export default function PromptAnalyticsPage() {
   const router = useRouter();
-  const { hasPermission } = useAuth();
 
   const [stats, setStats] = useState<PromptStats | null>(null);
   const [prompts, setPrompts] = useState<ManagedPromptListItem[]>([]);
@@ -44,18 +33,13 @@ export default function PromptAnalyticsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   // Group prompts by category
-  const categoryBreakdown = prompts.reduce<Record<string, number>>(
-    (acc, p) => {
-      acc[p.category] = (acc[p.category] || 0) + 1;
-      return acc;
-    },
-    {}
-  );
+  const categoryBreakdown = prompts.reduce<Record<string, number>>((acc, p) => {
+    acc[p.category] = (acc[p.category] || 0) + 1;
+    return acc;
+  }, {});
 
   if (loading) {
     return (
@@ -126,17 +110,11 @@ export default function PromptAnalyticsPage() {
                     backgroundColor: `color-mix(in oklch, ${s.color || "var(--primary)"} 12%, transparent)`,
                   }}
                 >
-                  <s.icon
-                    className="h-5 w-5"
-                    style={{ color: s.color || "var(--primary)" }}
-                  />
+                  <s.icon className="h-5 w-5" style={{ color: s.color || "var(--primary)" }} />
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{s.value}</p>
-                  <p
-                    className="text-xs font-medium"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
+                  <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                     {s.label}
                   </p>
                 </div>
@@ -157,10 +135,7 @@ export default function PromptAnalyticsPage() {
         >
           <h3 className="text-sm font-semibold mb-4">By Category</h3>
           {Object.entries(categoryBreakdown).length === 0 ? (
-            <p
-              className="text-sm"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
               No data yet.
             </p>
           ) : (
@@ -168,28 +143,20 @@ export default function PromptAnalyticsPage() {
               {Object.entries(categoryBreakdown)
                 .sort(([, a], [, b]) => b - a)
                 .map(([category, count]) => {
-                  const maxCount = Math.max(
-                    ...Object.values(categoryBreakdown)
-                  );
+                  const maxCount = Math.max(...Object.values(categoryBreakdown));
                   const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
                   return (
                     <div key={category}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium capitalize">
-                          {category}
-                        </span>
-                        <span
-                          className="text-xs"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
+                        <span className="text-sm font-medium capitalize">{category}</span>
+                        <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                           {count}
                         </span>
                       </div>
                       <div
                         className="h-2 rounded-full"
                         style={{
-                          backgroundColor:
-                            "color-mix(in oklch, var(--primary) 15%, transparent)",
+                          backgroundColor: "color-mix(in oklch, var(--primary) 15%, transparent)",
                         }}
                       >
                         <div
@@ -217,10 +184,7 @@ export default function PromptAnalyticsPage() {
         >
           <h3 className="text-sm font-semibold mb-4">Recent Changes</h3>
           {recentChanges.length === 0 ? (
-            <p
-              className="text-sm"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
               No changes yet.
             </p>
           ) : (
@@ -230,23 +194,19 @@ export default function PromptAnalyticsPage() {
                   key={entry.id}
                   className="flex items-center gap-3 rounded-lg px-3 py-2"
                   style={{
-                    backgroundColor:
-                      "color-mix(in oklch, var(--foreground) 3%, transparent)",
+                    backgroundColor: "color-mix(in oklch, var(--foreground) 3%, transparent)",
                   }}
                 >
                   <span
                     className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
                     style={{
-                      backgroundColor:
-                        "color-mix(in oklch, var(--primary) 15%, transparent)",
+                      backgroundColor: "color-mix(in oklch, var(--primary) 15%, transparent)",
                       color: "var(--primary)",
                     }}
                   >
                     {entry.action.replace(/_/g, " ")}
                   </span>
-                  <span className="text-sm font-medium truncate">
-                    {entry.prompt_slug}
-                  </span>
+                  <span className="text-sm font-medium truncate">{entry.prompt_slug}</span>
                   <span
                     className="ml-auto shrink-0 text-xs"
                     style={{ color: "var(--muted-foreground)" }}

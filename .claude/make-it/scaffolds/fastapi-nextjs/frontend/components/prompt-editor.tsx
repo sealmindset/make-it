@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Eye, EyeOff, HelpCircle } from "lucide-react";
 import { SafetyIndicator } from "@/components/safety-indicator";
 import { VariablePill, extractVariables } from "@/components/variable-pill";
+import { own } from "@/lib/utils";
 
 interface PromptEditorProps {
   content: string;
@@ -53,8 +54,7 @@ export function PromptEditor({
           onClick={() => setGuidedMode(!guidedMode)}
           className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
           style={{
-            backgroundColor:
-              "color-mix(in oklch, var(--foreground) 8%, transparent)",
+            backgroundColor: "color-mix(in oklch, var(--foreground) 8%, transparent)",
             color: "var(--muted-foreground)",
           }}
         >
@@ -77,8 +77,7 @@ export function PromptEditor({
         className="rounded-lg p-4"
         style={{
           borderLeft: "3px solid var(--success)",
-          backgroundColor:
-            "color-mix(in oklch, var(--success) 3%, var(--card))",
+          backgroundColor: "color-mix(in oklch, var(--success) 3%, var(--card))",
         }}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -89,13 +88,9 @@ export function PromptEditor({
         </div>
 
         {guidedMode && (
-          <p
-            className="mb-3 text-xs"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            Write what you want the AI to do. Be specific about the task,
-            format, and any rules it should follow. This is the main text the AI
-            reads before responding.
+          <p className="mb-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
+            Write what you want the AI to do. Be specific about the task, format, and any rules it
+            should follow. This is the main text the AI reads before responding.
           </p>
         )}
 
@@ -117,27 +112,21 @@ export function PromptEditor({
         {variables.length > 0 && (
           <div className="mt-3">
             <div className="flex items-center gap-1.5 mb-2">
-              <span
-                className="text-xs font-medium"
-                style={{ color: "var(--muted-foreground)" }}
-              >
+              <span className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                 Dynamic values in this instruction:
               </span>
               {guidedMode && (
-                <HelpCircle
-                  className="h-3 w-3"
-                  style={{ color: "var(--muted-foreground)" }}
+                <span
                   title="These are placeholders that get replaced with real data when the AI runs"
-                />
+                  className="inline-flex"
+                >
+                  <HelpCircle className="h-3 w-3" style={{ color: "var(--muted-foreground)" }} />
+                </span>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
               {variables.map((v) => (
-                <VariablePill
-                  key={v}
-                  name={v}
-                  description={variableDescriptions[v]}
-                />
+                <VariablePill key={v} name={v} description={own(variableDescriptions, v)} />
               ))}
             </div>
           </div>
@@ -149,8 +138,7 @@ export function PromptEditor({
         className="rounded-lg p-4"
         style={{
           borderLeft: "3px solid var(--warning)",
-          backgroundColor:
-            "color-mix(in oklch, var(--warning) 3%, var(--card))",
+          backgroundColor: "color-mix(in oklch, var(--warning) 3%, var(--card))",
         }}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -161,13 +149,10 @@ export function PromptEditor({
         </div>
 
         {guidedMode && (
-          <p
-            className="mb-3 text-xs"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            This defines the AI&apos;s personality and boundaries. Changes here
-            affect how the AI interprets all instructions. Edit with care --
-            small changes can significantly alter responses.
+          <p className="mb-3 text-xs" style={{ color: "var(--muted-foreground)" }}>
+            This defines the AI&apos;s personality and boundaries. Changes here affect how the AI
+            interprets all instructions. Edit with care -- small changes can significantly alter
+            responses.
           </p>
         )}
 
@@ -191,8 +176,7 @@ export function PromptEditor({
         className="rounded-lg p-4"
         style={{
           borderLeft: "3px solid var(--warning)",
-          backgroundColor:
-            "color-mix(in oklch, var(--warning) 3%, var(--card))",
+          backgroundColor: "color-mix(in oklch, var(--warning) 3%, var(--card))",
         }}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -207,18 +191,11 @@ export function PromptEditor({
             {/* Creativity slider (temperature) */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label
-                  className="text-xs font-medium"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
+                <label className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                   Creativity
                 </label>
                 <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-                  {temperature < 0.3
-                    ? "Precise"
-                    : temperature < 0.7
-                      ? "Balanced"
-                      : "Creative"}
+                  {temperature < 0.3 ? "Precise" : temperature < 0.7 ? "Balanced" : "Creative"}
                 </span>
               </div>
               <input
@@ -227,9 +204,7 @@ export function PromptEditor({
                 max={1}
                 step={0.1}
                 value={temperature}
-                onChange={(e) =>
-                  handleParameterChange("temperature", parseFloat(e.target.value))
-                }
+                onChange={(e) => handleParameterChange("temperature", parseFloat(e.target.value))}
                 disabled={readOnly}
                 className="w-full accent-[var(--primary)]"
               />
@@ -256,10 +231,7 @@ export function PromptEditor({
                 max={128000}
                 value={maxTokens}
                 onChange={(e) =>
-                  handleParameterChange(
-                    "max_tokens",
-                    parseInt(e.target.value) || 2048
-                  )
+                  handleParameterChange("max_tokens", parseInt(e.target.value) || 2048)
                 }
                 disabled={readOnly}
                 className="w-32 rounded-md border px-3 py-1.5 text-sm"
@@ -270,12 +242,8 @@ export function PromptEditor({
                 }}
               />
               {guidedMode && (
-                <p
-                  className="mt-1 text-xs"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
-                  Higher values allow longer responses. 1 token is roughly 4
-                  characters.
+                <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>
+                  Higher values allow longer responses. 1 token is roughly 4 characters.
                 </p>
               )}
             </div>

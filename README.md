@@ -969,6 +969,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.5 -- The scaffold's frontend passes its own lint, type check and build
+
+Reported by a developer on a company branch: with `eslint-config-next` 16 the scaffold's lint
+config crashed, and lint errors blocked every frontend commit of a new app. Reproducing it showed
+the scaffold had never passed its own checks on a fresh copy, version 16 or not.
+
+- **Lint config:** imports the native flat configs; `FlatCompat` is gone. `eslint-config-next` is
+  now on the same major version as `next` (it was 15 against Next 16).
+- **Production build:** 4 type errors made `next build` fail on a fresh copy. Fixed.
+- **Lint errors (15):** 14 `set-state-in-effect` and one hook called after an early return. Pages
+  load through a small `useAsyncEffect` helper; three spots that did set state in an effect now
+  set it in the event that causes it.
+- **Warnings (25), which the zero-warnings hook treats as failures:** the security rule stays on;
+  lookups by a variable key go through one audited helper, `own()`, that reads own properties
+  only. That also fixes a real bug: a URL segment such as `constructor` was looked up on the
+  breadcrumb table's prototype.
+- **Formatting:** 31 files failed the scaffold's own Prettier check. Formatted.
+- **Guard:** a new CI job installs the scaffold's dependencies fresh and runs lint, the hook's
+  commands, the type check and the build, on scaffold changes and weekly.
+- **Not covered:** the second scaffold (`nextjs-fullstack`) has the same old lint config.
+
 ### v1.70.4 -- /wrap-it and /try-it leave the go-live record out of their saves
 
 - **The bug:** only /ship-it may write the go-live record, but /wrap-it saved every changed file

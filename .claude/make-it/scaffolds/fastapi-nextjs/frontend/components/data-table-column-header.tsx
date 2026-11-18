@@ -1,14 +1,7 @@
 "use client";
 
 import { type Column } from "@tanstack/react-table";
-import {
-  ArrowUp,
-  ArrowDown,
-  ChevronsUpDown,
-  Filter,
-  Search,
-  X,
-} from "lucide-react";
+import { ArrowUp, ArrowDown, ChevronsUpDown, Filter, Search, X } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -72,13 +65,11 @@ export function DataTableColumnHeader<TData, TValue>({
           onClick={() => setShowFilter(!showFilter)}
           className={cn(
             "rounded p-0.5 transition-colors hover:bg-accent",
-            isFiltered && "text-primary",
+            isFiltered && "text-primary"
           )}
           title={`Filter ${title}`}
         >
-          <Filter
-            className={cn("h-3 w-3", isFiltered ? "fill-primary/20" : "")}
-          />
+          <Filter className={cn("h-3 w-3", isFiltered ? "fill-primary/20" : "")} />
         </button>
       )}
 
@@ -114,10 +105,7 @@ function ExcelColumnFilter<TData, TValue>({
 
   // Get unique values from the faceted model
   const facetedValues = column.getFacetedUniqueValues();
-  const allValues = Array.from(facetedValues.keys())
-    .map(String)
-    .filter(Boolean)
-    .sort();
+  const allValues = Array.from(facetedValues.keys()).map(String).filter(Boolean).sort();
 
   // Filter the value list by search term
   const filteredValues = search
@@ -136,9 +124,7 @@ function ExcelColumnFilter<TData, TValue>({
   };
 
   const selectAll = () => {
-    column.setFilterValue(
-      filteredValues.length > 0 ? [...filteredValues] : undefined,
-    );
+    column.setFilterValue(filteredValues.length > 0 ? [...filteredValues] : undefined);
   };
 
   const clearAll = () => {
@@ -147,9 +133,7 @@ function ExcelColumnFilter<TData, TValue>({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">
-        Filter: {title}
-      </p>
+      <p className="text-xs font-medium text-muted-foreground">Filter: {title}</p>
 
       {/* Search box */}
       <div className="relative">
@@ -165,10 +149,7 @@ function ExcelColumnFilter<TData, TValue>({
 
       {/* Select All / Clear All */}
       <div className="flex items-center justify-between">
-        <button
-          onClick={selectAll}
-          className="text-xs text-primary hover:underline"
-        >
+        <button onClick={selectAll} className="text-xs text-primary hover:underline">
           Select all ({filteredValues.length})
         </button>
         {isActive && (
@@ -185,9 +166,7 @@ function ExcelColumnFilter<TData, TValue>({
       {/* Checkbox list */}
       <div className="max-h-48 space-y-0.5 overflow-y-auto">
         {filteredValues.length === 0 ? (
-          <p className="py-2 text-center text-xs text-muted-foreground">
-            No values found
-          </p>
+          <p className="py-2 text-center text-xs text-muted-foreground">No values found</p>
         ) : (
           filteredValues.map((value) => {
             const count = facetedValues.get(value) ?? 0;

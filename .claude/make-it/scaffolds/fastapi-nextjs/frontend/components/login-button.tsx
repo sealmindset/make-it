@@ -6,6 +6,7 @@ export function LoginButton() {
       onClick={() => {
         // Browser navigation -- NOT fetch. The backend returns a 302 redirect
         // to the OIDC provider, which must happen in the browser's address bar.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a backend route that redirects to the sign-in provider, not a Next.js page
         window.location.href = "/api/auth/login";
       }}
       className="inline-flex w-full items-center justify-center rounded-md px-6 py-3 text-sm font-medium shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2"

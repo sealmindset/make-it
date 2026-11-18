@@ -26,11 +26,10 @@ export function DataTableToolbar<TData>({
 }: DataTableToolbarProps<TData>) {
   const activeFilterCount = table.getState().columnFilters.length;
   const searchValue = searchKey
-    ? (table.getColumn(searchKey)?.getFilterValue() as string) ?? ""
+    ? ((table.getColumn(searchKey)?.getFilterValue() as string) ?? "")
     : "";
 
-  const isFiltered =
-    activeFilterCount > 0 || (searchKey && searchValue.length > 0);
+  const isFiltered = activeFilterCount > 0 || (searchKey && searchValue.length > 0);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -41,9 +40,7 @@ export function DataTableToolbar<TData>({
           <input
             placeholder={searchPlaceholder}
             value={searchValue}
-            onChange={(e) =>
-              table.getColumn(searchKey)?.setFilterValue(e.target.value)
-            }
+            onChange={(e) => table.getColumn(searchKey)?.setFilterValue(e.target.value)}
             className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
@@ -54,12 +51,7 @@ export function DataTableToolbar<TData>({
         const column = table.getColumn(fc.id);
         if (!column) return null;
         return (
-          <FacetedFilterButton
-            key={fc.id}
-            column={column}
-            title={fc.title}
-            options={fc.options}
-          />
+          <FacetedFilterButton key={fc.id} column={column} title={fc.title} options={fc.options} />
         );
       })}
 
@@ -109,11 +101,6 @@ function FacetedFilterButton<TData>({
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
-  if (!column) return null;
-
-  const filterValue = column.getFilterValue();
-  const selected: string[] = Array.isArray(filterValue) ? filterValue : [];
-
   // Close on outside click
   useEffect(() => {
     if (!open) return;
@@ -126,10 +113,14 @@ function FacetedFilterButton<TData>({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Hooks first, then the early return: a hook after a return runs conditionally.
+  if (!column) return null;
+
+  const filterValue = column.getFilterValue();
+  const selected: string[] = Array.isArray(filterValue) ? filterValue : [];
+
   const filteredOptions = search
-    ? options.filter((o) =>
-        o.label.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
 
   const toggleValue = (value: string) => {
@@ -150,7 +141,7 @@ function FacetedFilterButton<TData>({
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
           selected.length > 0
             ? "border-primary/50 bg-primary/5 text-primary"
-            : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         )}
       >
         <Filter className="h-3.5 w-3.5" />
@@ -202,9 +193,7 @@ function FacetedFilterButton<TData>({
           {/* Options */}
           <div className="max-h-48 space-y-0.5 overflow-y-auto">
             {filteredOptions.length === 0 ? (
-              <p className="py-2 text-center text-xs text-muted-foreground">
-                No options
-              </p>
+              <p className="py-2 text-center text-xs text-muted-foreground">No options</p>
             ) : (
               filteredOptions.map((option) => {
                 const checked = selected.includes(option.value);
@@ -261,9 +250,7 @@ function ColumnVisibilityDropdown<TData>({ table }: { table: Table<TData> }) {
 
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-card p-2 shadow-lg">
-          <p className="mb-1 px-1 text-xs font-medium text-muted-foreground">
-            Toggle columns
-          </p>
+          <p className="mb-1 px-1 text-xs font-medium text-muted-foreground">Toggle columns</p>
           {table.getAllLeafColumns().map((column) => {
             if (!column.getCanHide()) return null;
             return (

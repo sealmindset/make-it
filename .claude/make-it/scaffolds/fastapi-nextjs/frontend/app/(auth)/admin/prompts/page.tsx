@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sparkles,
@@ -13,11 +13,9 @@ import {
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAsyncEffect } from "@/lib/use-async-effect";
 import { PromptCard } from "@/components/prompt-card";
-import type {
-  ManagedPromptListItem,
-  PromptStats,
-} from "@/lib/types";
+import type { ManagedPromptListItem, PromptStats } from "@/lib/types";
 
 export default function PromptsPage() {
   const router = useRouter();
@@ -53,9 +51,7 @@ export default function PromptsPage() {
       const qs = params.toString();
 
       const [promptList, promptStats] = await Promise.all([
-        apiGet<ManagedPromptListItem[]>(
-          `/admin/prompts/${qs ? `?${qs}` : ""}`
-        ),
+        apiGet<ManagedPromptListItem[]>(`/admin/prompts/${qs ? `?${qs}` : ""}`),
         apiGet<PromptStats>("/admin/prompts/stats"),
       ]);
       setPrompts(promptList);
@@ -67,9 +63,7 @@ export default function PromptsPage() {
     }
   }, [search, categoryFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useAsyncEffect(fetchData);
 
   const handleCreate = async () => {
     setCreateError("");
@@ -84,7 +78,9 @@ export default function PromptsPage() {
       await apiPost("/admin/prompts/", {
         ...createForm,
         slug,
-        content: createForm.content || `You are a helpful AI assistant for [APP_NAME].\n\nYour task: ${createForm.name}\n\n{user_input}`,
+        content:
+          createForm.content ||
+          `You are a helpful AI assistant for [APP_NAME].\n\nYour task: ${createForm.name}\n\n{user_input}`,
       });
       setShowCreate(false);
       setCreateForm({
@@ -129,12 +125,9 @@ export default function PromptsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            AI Instructions
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">AI Instructions</h1>
           <p style={{ color: "var(--muted-foreground)" }}>
-            Manage how your AI features behave. Edit instructions, test changes,
-            and track versions.
+            Manage how your AI features behave. Edit instructions, test changes, and track versions.
           </p>
         </div>
         {canCreate && (
@@ -155,27 +148,15 @@ export default function PromptsPage() {
       {/* Stats cards */}
       {stats && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            icon={Sparkles}
-            label="Total"
-            value={stats.total}
-          />
+          <StatCard icon={Sparkles} label="Total" value={stats.total} />
           <StatCard
             icon={CheckCircle2}
             label="Active"
             value={stats.active}
             color="var(--success)"
           />
-          <StatCard
-            icon={Layers}
-            label="Versions"
-            value={stats.versions_count}
-          />
-          <StatCard
-            icon={ClipboardList}
-            label="Categories"
-            value={stats.categories_count}
-          />
+          <StatCard icon={Layers} label="Versions" value={stats.versions_count} />
+          <StatCard icon={ClipboardList} label="Categories" value={stats.categories_count} />
         </div>
       )}
 
@@ -266,10 +247,7 @@ export default function PromptsPage() {
             style={{ color: "var(--muted-foreground)" }}
           />
           <h3 className="text-lg font-semibold">No AI instructions yet</h3>
-          <p
-            className="mt-1 text-sm"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
             {canCreate
               ? "Create your first AI instruction to get started."
               : "No AI instructions have been configured for this app."}
@@ -283,12 +261,8 @@ export default function PromptsPage() {
               prompt={prompt}
               canEdit={canEdit}
               onEdit={(slug) => router.push(`/admin/prompts/${slug}`)}
-              onTryIt={(slug) =>
-                router.push(`/admin/prompts/${slug}?tab=tryit`)
-              }
-              onHistory={(slug) =>
-                router.push(`/admin/prompts/${slug}?tab=versions`)
-              }
+              onTryIt={(slug) => router.push(`/admin/prompts/${slug}?tab=tryit`)}
+              onHistory={(slug) => router.push(`/admin/prompts/${slug}?tab=versions`)}
             />
           ))}
         </div>
@@ -304,13 +278,8 @@ export default function PromptsPage() {
               borderColor: "var(--border)",
             }}
           >
-            <h2 className="text-lg font-semibold">
-              Add AI Instruction
-            </h2>
-            <p
-              className="mt-1 text-sm"
-              style={{ color: "var(--muted-foreground)" }}
-            >
+            <h2 className="text-lg font-semibold">Add AI Instruction</h2>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
               Create a new set of instructions for an AI feature in your app.
             </p>
 
@@ -320,9 +289,7 @@ export default function PromptsPage() {
                 <input
                   type="text"
                   value={createForm.name}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, name: e.target.value })
-                  }
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                   placeholder="e.g., Document Analysis"
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   style={{
@@ -333,9 +300,7 @@ export default function PromptsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Description
-                </label>
+                <label className="block text-sm font-medium mb-1">Description</label>
                 <textarea
                   value={createForm.description}
                   onChange={(e) =>
@@ -355,14 +320,10 @@ export default function PromptsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Category
-                </label>
+                <label className="block text-sm font-medium mb-1">Category</label>
                 <select
                   value={createForm.category}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, category: e.target.value })
-                  }
+                  onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   style={{
                     borderColor: "var(--input)",
@@ -425,7 +386,10 @@ function StatCard({
   value,
   color,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{
+    className?: string;
+    style?: React.CSSProperties;
+  }>;
   label: string;
   value: number;
   color?: string;
@@ -450,10 +414,7 @@ function StatCard({
         </div>
         <div>
           <p className="text-2xl font-bold">{value}</p>
-          <p
-            className="text-xs font-medium"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
             {label}
           </p>
         </div>
