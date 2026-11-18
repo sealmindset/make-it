@@ -1,0 +1,55 @@
+name: contract tests
+
+# Every scripts/test-*.sh pins rules the skills and references must keep: how they ask, what they
+# refuse, what a checker rejects. Until this workflow, only three of them ran in CI, so an edit
+# could drop a rule and nothing would say so. This runs all of them, each on its own, and lists
+# every one that fails (it does not stop at the first).
+# A new scripts/test-*.sh is picked up without touching this file.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: contract tests (every scripts/test-*.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: A git identity for the tests that make throwaway repositories
+        run: |
+          git config --global user.name "contract tests"
+          git config --global user.email "contract-tests@example.invalid"
+          git config --global init.defaultBranch main
+      - name: Run every scripts/test-*.sh
+        run: |
+          failed=""
+          count=0
+          for t in scripts/test-*.sh; do
+            count=$((count + 1))
+            if out="$(bash "$t" 2>&1)"; then
+              echo "ok    $t"
+            else
+              echo "FAIL  $t"
+              failed="$failed $t"
+              echo "::group::output of $t"
+              printf '%s\n' "$out" | tail -n 80
+              echo "::endgroup::"
+            fi
+          done
+          echo "$count test scripts run"
+          if [ "$count" -lt 30 ]; then
+            echo "Fewer than 30 test scripts were found; the glob or the checkout is wrong."
+            exit 1
+          fi
+          if [ -n "$failed" ]; then
+            echo "Failed:$failed"
+            exit 1
+          fi
