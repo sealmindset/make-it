@@ -47,6 +47,12 @@ rows, which environment), one option each.
   blocked again, whatever was answered last time.
 - **A yes to an action is never kept.** A send, a deploy, a delete, a migration, a payment or a
   paused security tool is asked each time it comes up. Keeping a "no" approves nothing.
+- **The same stop twice is make-it's fault, and is said so.** When a stop or an ask comes up
+  again with nothing changed since the user last answered it, don't present it as new. Say one
+  line -- "I'm stopped on the same thing as last time, and I shouldn't be asking you twice: that
+  is a fault in make-it." -- give the way out (the earlier answer, or what would change it), and
+  note it in the run's report so it gets fixed. It stays stopped: a repeat never turns a stop
+  into a go, and this never applies to approving an action, which is asked every time.
 - **No "all of them" option.** When the ask lists several targets, each is its own pick. If an
   answer picks both an action and "not sure" or "stop", it is a stop.
 
