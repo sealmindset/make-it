@@ -14,9 +14,7 @@ export default function RolesPage() {
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
-  const [editingRole, setEditingRole] = useState<RoleWithPermissions | null>(
-    null,
-  );
+  const [editingRole, setEditingRole] = useState<RoleWithPermissions | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const canCreate = hasPermission("admin.roles", "create");
@@ -57,7 +55,7 @@ export default function RolesPage() {
       acc[perm.resource].push(perm);
       return acc;
     },
-    {} as Record<string, Permission[]>,
+    {} as Record<string, Permission[]>
   );
   const resources = Object.keys(grouped).sort();
   const actions = [...new Set(allPermissions.map((p) => p.action))].sort();
@@ -132,8 +130,7 @@ export default function RolesPage() {
                   <div
                     className="flex h-10 w-10 items-center justify-center rounded-lg"
                     style={{
-                      backgroundColor:
-                        "color-mix(in oklch, var(--primary) 12%, transparent)",
+                      backgroundColor: "color-mix(in oklch, var(--primary) 12%, transparent)",
                       color: "var(--primary)",
                     }}
                   >
@@ -154,10 +151,7 @@ export default function RolesPage() {
                         </span>
                       )}
                     </div>
-                    <p
-                      className="mt-0.5 text-sm"
-                      style={{ color: "var(--muted-foreground)" }}
-                    >
+                    <p className="mt-0.5 text-sm" style={{ color: "var(--muted-foreground)" }}>
                       {role.description || "No description"}
                     </p>
                   </div>
@@ -193,17 +187,12 @@ export default function RolesPage() {
                 className="flex items-center justify-between border-t px-5 py-3"
                 style={{ borderColor: "var(--border)" }}
               >
-                <span
-                  className="text-sm"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {role.permissions.length} permission
                   {role.permissions.length !== 1 ? "s" : ""}
                 </span>
                 <button
-                  onClick={() =>
-                    setExpandedRoleId(isExpanded ? null : role.id)
-                  }
+                  onClick={() => setExpandedRoleId(isExpanded ? null : role.id)}
                   className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
                   style={{ color: "var(--muted-foreground)" }}
                 >
@@ -221,17 +210,14 @@ export default function RolesPage() {
 
               {/* Inline permission matrix (read-only) */}
               {isExpanded && (
-                <div
-                  className="border-t px-5 pb-5 pt-3"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <div className="overflow-auto rounded-md border" style={{ borderColor: "var(--border)" }}>
+                <div className="border-t px-5 pb-5 pt-3" style={{ borderColor: "var(--border)" }}>
+                  <div
+                    className="overflow-auto rounded-md border"
+                    style={{ borderColor: "var(--border)" }}
+                  >
                     <table className="w-full text-xs">
                       <thead>
-                        <tr
-                          className="border-b"
-                          style={{ borderColor: "var(--border)" }}
-                        >
+                        <tr className="border-b" style={{ borderColor: "var(--border)" }}>
                           <th
                             className="px-2 py-1.5 text-left font-medium"
                             style={{ color: "var(--muted-foreground)" }}
@@ -256,13 +242,9 @@ export default function RolesPage() {
                             className="border-b last:border-b-0"
                             style={{ borderColor: "var(--border)" }}
                           >
-                            <td className="px-2 py-1.5 font-medium capitalize">
-                              {resource}
-                            </td>
+                            <td className="px-2 py-1.5 font-medium capitalize">{resource}</td>
                             {actions.map((action) => {
-                              const perm = own(grouped, resource)?.find(
-                                (p) => p.action === action,
-                              );
+                              const perm = own(grouped, resource)?.find((p) => p.action === action);
                               if (!perm) {
                                 return (
                                   <td
@@ -278,10 +260,7 @@ export default function RolesPage() {
                                 );
                               }
                               return (
-                                <td
-                                  key={action}
-                                  className="px-2 py-1.5 text-center"
-                                >
+                                <td key={action} className="px-2 py-1.5 text-center">
                                   <input
                                     type="checkbox"
                                     checked={rolePermIds.has(perm.id)}
@@ -301,14 +280,8 @@ export default function RolesPage() {
               )}
 
               {/* Created date */}
-              <div
-                className="border-t px-5 py-2"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <span
-                  className="text-xs"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
+              <div className="border-t px-5 py-2" style={{ borderColor: "var(--border)" }}>
+                <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
                   Created {formatDate(role.created_at)}
                 </span>
               </div>
@@ -354,9 +327,7 @@ function PermissionMatrixModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(
-    new Set(role.permissions.map((p) => p.id)),
-  );
+  const [selected, setSelected] = useState<Set<string>>(new Set(role.permissions.map((p) => p.id)));
   const [saving, setSaving] = useState(false);
 
   const grouped = allPermissions.reduce(
@@ -365,7 +336,7 @@ function PermissionMatrixModal({
       acc[perm.resource].push(perm);
       return acc;
     },
-    {} as Record<string, Permission[]>,
+    {} as Record<string, Permission[]>
   );
 
   const resources = Object.keys(grouped).sort();
@@ -418,14 +389,9 @@ function PermissionMatrixModal({
           color: "var(--card-foreground)",
         }}
       >
-        <h2 className="text-lg font-semibold">
-          Edit Permissions: {role.name}
-        </h2>
+        <h2 className="text-lg font-semibold">Edit Permissions: {role.name}</h2>
         {role.is_system && (
-          <p
-            className="mt-1 text-sm"
-            style={{ color: "var(--warning)" }}
-          >
+          <p className="mt-1 text-sm" style={{ color: "var(--warning)" }}>
             This is a system role. Changes will affect all users with this role.
           </p>
         )}
@@ -435,14 +401,8 @@ function PermissionMatrixModal({
           style={{ borderColor: "var(--border)" }}
         >
           <table className="w-full text-sm">
-            <thead
-              className="sticky top-0"
-              style={{ backgroundColor: "var(--card)" }}
-            >
-              <tr
-                className="border-b"
-                style={{ borderColor: "var(--border)" }}
-              >
+            <thead className="sticky top-0" style={{ backgroundColor: "var(--card)" }}>
+              <tr className="border-b" style={{ borderColor: "var(--border)" }}>
                 <th
                   className="px-3 py-2 text-left font-medium"
                   style={{ color: "var(--muted-foreground)" }}
@@ -462,11 +422,7 @@ function PermissionMatrixModal({
             </thead>
             <tbody>
               {resources.map((resource) => (
-                <tr
-                  key={resource}
-                  className="border-b"
-                  style={{ borderColor: "var(--border)" }}
-                >
+                <tr key={resource} className="border-b" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-2">
                     <button
                       type="button"
@@ -479,17 +435,14 @@ function PermissionMatrixModal({
                     </button>
                   </td>
                   {actions.map((action) => {
-                    const perm = own(grouped, resource)?.find(
-                      (p) => p.action === action,
-                    );
+                    const perm = own(grouped, resource)?.find((p) => p.action === action);
                     if (!perm) {
                       return (
                         <td
                           key={action}
                           className="px-3 py-2 text-center"
                           style={{
-                            color:
-                              "color-mix(in oklch, var(--muted-foreground) 30%, transparent)",
+                            color: "color-mix(in oklch, var(--muted-foreground) 30%, transparent)",
                           }}
                         >
                           -
@@ -515,10 +468,7 @@ function PermissionMatrixModal({
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <span
-            className="text-sm"
-            style={{ color: "var(--muted-foreground)" }}
-          >
+          <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
             {selected.size} of {allPermissions.length} permissions selected
           </span>
           <div className="flex gap-2">
@@ -575,7 +525,7 @@ function CreateRoleModal({
       acc[perm.resource].push(perm);
       return acc;
     },
-    {} as Record<string, Permission[]>,
+    {} as Record<string, Permission[]>
   );
 
   const resources = Object.keys(grouped).sort();
@@ -668,22 +618,14 @@ function CreateRoleModal({
           </div>
 
           <div>
-            <label className="text-sm font-medium">
-              Permissions ({selected.size} selected)
-            </label>
+            <label className="text-sm font-medium">Permissions ({selected.size} selected)</label>
             <div
               className="mt-1 max-h-64 overflow-auto rounded-md border"
               style={{ borderColor: "var(--border)" }}
             >
               <table className="w-full text-sm">
-                <thead
-                  className="sticky top-0"
-                  style={{ backgroundColor: "var(--card)" }}
-                >
-                  <tr
-                    className="border-b"
-                    style={{ borderColor: "var(--border)" }}
-                  >
+                <thead className="sticky top-0" style={{ backgroundColor: "var(--card)" }}>
+                  <tr className="border-b" style={{ borderColor: "var(--border)" }}>
                     <th
                       className="px-3 py-2 text-left font-medium"
                       style={{ color: "var(--muted-foreground)" }}
@@ -720,9 +662,7 @@ function CreateRoleModal({
                         </button>
                       </td>
                       {actions.map((action) => {
-                        const perm = own(grouped, resource)?.find(
-                          (p) => p.action === action,
-                        );
+                        const perm = own(grouped, resource)?.find((p) => p.action === action);
                         if (!perm) {
                           return (
                             <td

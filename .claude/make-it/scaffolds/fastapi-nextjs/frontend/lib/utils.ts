@@ -77,10 +77,7 @@ export function daysUntil(dateString: string): number {
  * something that was never in the table. Use this for every lookup by a
  * variable key; it is the one audited place that indexes an object that way.
  */
-export function own<T>(
-  obj: Record<string, T> | null | undefined,
-  key: string,
-): T | undefined {
+export function own<T>(obj: Record<string, T> | null | undefined, key: string): T | undefined {
   if (!obj || !Object.prototype.hasOwnProperty.call(obj, key)) return undefined;
   // eslint-disable-next-line security/detect-object-injection -- own property, checked on the line above
   return obj[key];

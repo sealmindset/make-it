@@ -6,8 +6,15 @@ import { useAuth } from "@/lib/auth";
 import { useAsyncEffect } from "@/lib/use-async-effect";
 import { formatDateTime, own } from "@/lib/utils";
 import {
-  Activity, RefreshCw, Trash2, Filter, Search,
-  ArrowDownCircle, ArrowUpCircle, Clock, AlertCircle,
+  Activity,
+  RefreshCw,
+  Trash2,
+  Filter,
+  Search,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 
 interface LogEvent {
@@ -116,7 +123,9 @@ export default function ActivityLogsPage() {
             className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${autoRefresh ? "font-medium" : ""}`}
             style={{
               borderColor: autoRefresh ? "var(--primary)" : "var(--input)",
-              backgroundColor: autoRefresh ? "color-mix(in oklch, var(--primary) 10%, transparent)" : "var(--background)",
+              backgroundColor: autoRefresh
+                ? "color-mix(in oklch, var(--primary) 10%, transparent)"
+                : "var(--background)",
               color: autoRefresh ? "var(--primary)" : "var(--foreground)",
             }}
           >
@@ -140,10 +149,31 @@ export default function ActivityLogsPage() {
       {stats && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: "Buffer Usage", value: `${stats.buffer_used} / ${stats.buffer_size}`, icon: Activity, color: "var(--primary)" },
-            { label: "Total Events", value: stats.total_received.toLocaleString(), icon: ArrowDownCircle, color: "var(--muted-foreground)" },
-            { label: "Recent Errors", value: stats.recent_errors, icon: AlertCircle, color: stats.recent_errors > 0 ? "var(--destructive)" : "var(--success, var(--primary))" },
-            { label: "Uptime", value: formatUptime(stats.uptime_seconds), icon: Clock, color: "var(--muted-foreground)" },
+            {
+              label: "Buffer Usage",
+              value: `${stats.buffer_used} / ${stats.buffer_size}`,
+              icon: Activity,
+              color: "var(--primary)",
+            },
+            {
+              label: "Total Events",
+              value: stats.total_received.toLocaleString(),
+              icon: ArrowDownCircle,
+              color: "var(--muted-foreground)",
+            },
+            {
+              label: "Recent Errors",
+              value: stats.recent_errors,
+              icon: AlertCircle,
+              color:
+                stats.recent_errors > 0 ? "var(--destructive)" : "var(--success, var(--primary))",
+            },
+            {
+              label: "Uptime",
+              value: formatUptime(stats.uptime_seconds),
+              icon: Clock,
+              color: "var(--muted-foreground)",
+            },
           ].map(({ label, value, icon: Icon, color }) => (
             <div
               key={label}
@@ -151,7 +181,9 @@ export default function ActivityLogsPage() {
               style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
             >
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{label}</p>
+                <p className="text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
+                  {label}
+                </p>
                 <Icon className="h-4 w-4" style={{ color }} />
               </div>
               <p className="mt-1 text-xl font-bold">{value}</p>
@@ -162,7 +194,10 @@ export default function ActivityLogsPage() {
 
       {/* Status breakdown mini-bar (when data exists) */}
       {stats && Object.keys(stats.events_by_status).length > 0 && (
-        <div className="flex items-center gap-4 text-xs" style={{ color: "var(--muted-foreground)" }}>
+        <div
+          className="flex items-center gap-4 text-xs"
+          style={{ color: "var(--muted-foreground)" }}
+        >
           <span className="font-medium">Status:</span>
           {(["2xx", "3xx", "4xx", "5xx"] as const).map((bucket) => {
             const count = own(stats.events_by_status, bucket) || 0;
@@ -173,10 +208,13 @@ export default function ActivityLogsPage() {
                   className="inline-block h-2 w-2 rounded-full"
                   style={{
                     backgroundColor:
-                      bucket === "2xx" ? "var(--success, var(--primary))" :
-                      bucket === "3xx" ? "var(--primary)" :
-                      bucket === "4xx" ? "var(--warning, var(--destructive))" :
-                      "var(--destructive)",
+                      bucket === "2xx"
+                        ? "var(--success, var(--primary))"
+                        : bucket === "3xx"
+                          ? "var(--primary)"
+                          : bucket === "4xx"
+                            ? "var(--warning, var(--destructive))"
+                            : "var(--destructive)",
                   }}
                 />
                 {bucket}: {count}
@@ -187,7 +225,9 @@ export default function ActivityLogsPage() {
             <>
               <span className="font-medium">|</span>
               {Object.entries(stats.events_by_type).map(([t, c]) => (
-                <span key={t}>{t}: {c}</span>
+                <span key={t}>
+                  {t}: {c}
+                </span>
               ))}
             </>
           )}
@@ -201,7 +241,11 @@ export default function ActivityLogsPage() {
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           className="rounded-md border px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--input)", backgroundColor: "var(--background)", color: "var(--foreground)" }}
+          style={{
+            borderColor: "var(--input)",
+            backgroundColor: "var(--background)",
+            color: "var(--foreground)",
+          }}
         >
           <option value="">All Types</option>
           <option value="inbound">Inbound</option>
@@ -211,7 +255,11 @@ export default function ActivityLogsPage() {
           value={methodFilter}
           onChange={(e) => setMethodFilter(e.target.value)}
           className="rounded-md border px-3 py-1.5 text-sm"
-          style={{ borderColor: "var(--input)", backgroundColor: "var(--background)", color: "var(--foreground)" }}
+          style={{
+            borderColor: "var(--input)",
+            backgroundColor: "var(--background)",
+            color: "var(--foreground)",
+          }}
         >
           <option value="">All Methods</option>
           <option value="GET">GET</option>
@@ -220,14 +268,21 @@ export default function ActivityLogsPage() {
           <option value="DELETE">DELETE</option>
         </select>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
+          <Search
+            className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+            style={{ color: "var(--muted-foreground)" }}
+          />
           <input
             type="text"
             placeholder="Search path, email, service..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="rounded-md border pl-8 pr-3 py-1.5 text-sm w-64"
-            style={{ borderColor: "var(--input)", backgroundColor: "var(--background)", color: "var(--foreground)" }}
+            style={{
+              borderColor: "var(--input)",
+              backgroundColor: "var(--background)",
+              color: "var(--foreground)",
+            }}
           />
         </div>
         <button
@@ -244,27 +299,78 @@ export default function ActivityLogsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b" style={{ borderColor: "var(--border)" }}>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Timestamp</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Type</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Method</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Path / URL</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Status</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Duration</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>Service</th>
-              <th className="h-10 px-3 text-left font-medium" style={{ color: "var(--muted-foreground)" }}>User</th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Timestamp
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Type
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Method
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Path / URL
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Status
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Duration
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Service
+              </th>
+              <th
+                className="h-10 px-3 text-left font-medium"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                User
+              </th>
             </tr>
           </thead>
           <tbody>
             {events.length === 0 ? (
               <tr>
-                <td colSpan={8} className="h-24 text-center" style={{ color: "var(--muted-foreground)" }}>
+                <td
+                  colSpan={8}
+                  className="h-24 text-center"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
                   {loading ? "Loading..." : "No events recorded yet."}
                 </td>
               </tr>
             ) : (
               events.map((event, i) => (
-                <tr key={i} className="border-b transition-colors hover:bg-muted/50" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-3 py-2 font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+                <tr
+                  key={i}
+                  className="border-b transition-colors hover:bg-muted/50"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <td
+                    className="px-3 py-2 font-mono text-xs"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
                     {formatDateTime(event.timestamp)}
                   </td>
                   <td className="px-3 py-2">
@@ -272,7 +378,10 @@ export default function ActivityLogsPage() {
                       {event.type === "inbound" ? (
                         <ArrowDownCircle className="h-3 w-3" style={{ color: "var(--primary)" }} />
                       ) : (
-                        <ArrowUpCircle className="h-3 w-3" style={{ color: "var(--warning, var(--primary))" }} />
+                        <ArrowUpCircle
+                          className="h-3 w-3"
+                          style={{ color: "var(--warning, var(--primary))" }}
+                        />
                       )}
                       <span className="text-xs">{event.type}</span>
                     </span>
@@ -282,40 +391,56 @@ export default function ActivityLogsPage() {
                       className="rounded px-1.5 py-0.5 font-mono text-xs font-medium"
                       style={{
                         backgroundColor:
-                          event.method === "GET" ? "color-mix(in oklch, var(--primary) 10%, transparent)" :
-                          event.method === "POST" ? "color-mix(in oklch, var(--primary) 15%, transparent)" :
-                          event.method === "PUT" ? "color-mix(in oklch, var(--primary) 12%, transparent)" :
-                          "color-mix(in oklch, var(--destructive) 10%, transparent)",
-                        color:
-                          event.method === "DELETE" ? "var(--destructive)" : "var(--primary)",
+                          event.method === "GET"
+                            ? "color-mix(in oklch, var(--primary) 10%, transparent)"
+                            : event.method === "POST"
+                              ? "color-mix(in oklch, var(--primary) 15%, transparent)"
+                              : event.method === "PUT"
+                                ? "color-mix(in oklch, var(--primary) 12%, transparent)"
+                                : "color-mix(in oklch, var(--destructive) 10%, transparent)",
+                        color: event.method === "DELETE" ? "var(--destructive)" : "var(--primary)",
                       }}
                     >
                       {event.method}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs max-w-[300px] truncate" title={event.url || event.path}>
+                  <td
+                    className="px-3 py-2 font-mono text-xs max-w-[300px] truncate"
+                    title={event.url || event.path}
+                  >
                     {event.type === "outbound" && event.url ? event.url : event.path}
                   </td>
                   <td className="px-3 py-2">
                     <span
                       className="font-mono text-xs font-medium"
                       style={{
-                        color: event.status && event.status >= 500 ? "var(--destructive)" :
-                               event.status && event.status >= 400 ? "var(--warning, var(--destructive))" :
-                               event.status && event.status >= 300 ? "var(--muted-foreground)" :
-                               "var(--success, var(--primary))",
+                        color:
+                          event.status && event.status >= 500
+                            ? "var(--destructive)"
+                            : event.status && event.status >= 400
+                              ? "var(--warning, var(--destructive))"
+                              : event.status && event.status >= 300
+                                ? "var(--muted-foreground)"
+                                : "var(--success, var(--primary))",
                       }}
                     >
                       {event.status || "-"}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>
+                  <td
+                    className="px-3 py-2 font-mono text-xs"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
                     {event.duration_ms != null ? `${event.duration_ms}ms` : "-"}
                   </td>
                   <td className="px-3 py-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
                     {event.service || "-"}
                   </td>
-                  <td className="px-3 py-2 text-xs truncate max-w-[150px]" style={{ color: "var(--muted-foreground)" }} title={event.user_email || undefined}>
+                  <td
+                    className="px-3 py-2 text-xs truncate max-w-[150px]"
+                    style={{ color: "var(--muted-foreground)" }}
+                    title={event.user_email || undefined}
+                  >
                     {event.user_email || "-"}
                   </td>
                 </tr>

@@ -19,10 +19,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new ApiError(
-      body || `Request failed with status ${response.status}`,
-      response.status,
-    );
+    throw new ApiError(body || `Request failed with status ${response.status}`, response.status);
   }
   if (response.status === 204) return undefined as T;
   return response.json();
@@ -37,10 +34,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   return handleResponse<T>(response);
 }
 
-export async function apiPost<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     credentials: "include",
@@ -50,10 +44,7 @@ export async function apiPost<T>(
   return handleResponse<T>(response);
 }
 
-export async function apiPut<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "PUT",
     credentials: "include",
@@ -63,10 +54,7 @@ export async function apiPut<T>(
   return handleResponse<T>(response);
 }
 
-export async function apiPatch<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: "PATCH",
     credentials: "include",

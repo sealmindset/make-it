@@ -13,7 +13,7 @@ export function ModeToggle() {
   const mounted = useSyncExternalStore(
     subscribeNever,
     () => true,
-    () => false,
+    () => false
   );
 
   if (!mounted) {

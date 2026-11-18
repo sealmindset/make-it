@@ -48,13 +48,10 @@ export default function LoginPage() {
             className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-bold"
             style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
           >
-            {/* [APP_ICON] */}
-            A
+            {/* [APP_ICON] */}A
           </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          [APP_NAME]
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight">[APP_NAME]</h1>
         <p className="mt-2" style={{ color: "var(--muted-foreground)" }}>
           [APP_TAGLINE]
         </p>
@@ -81,9 +78,7 @@ export default function LoginPage() {
       </div>
 
       {/* [APP_FEATURES] -- optional feature highlights below the sign-in card */}
-      <div className="grid max-w-2xl gap-4 sm:grid-cols-3">
-        {/* [FEATURE_CARDS] */}
-      </div>
+      <div className="grid max-w-2xl gap-4 sm:grid-cols-3">{/* [FEATURE_CARDS] */}</div>
     </div>
   );
 }
