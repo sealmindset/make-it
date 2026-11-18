@@ -22,6 +22,15 @@ it** (or "not rated"), `origin`, `evidence`.
   who accepted it if known; it was accepted alone, not as a link.
 - **`origin: collected`**: this run's own read-only collection (`tenant_access.py`, `exposure.py`,
   `sentinel_coverage.py`, a project collector). `evidence` is the output file under `data/raw/`.
+- **`findings_sources.py <outdir>`** reads what the organisation's own tools already hold, every rating
+  included: Secure Score and its control profiles, Defender for Cloud assessments that are not healthy,
+  Defender XDR alerts and incidents, and AuditGitHub's open findings (false positives and snoozed ones
+  included, marked as such). Each source is saved with its status. A source that could not be read is reported as not read, with the
+  error and who can grant the access: it is never counted as "no findings".
+- **An alert is not a finding.** A Defender XDR alert or incident says something happened, not that something
+  is weak. Use it two ways: a low or informational alert on an asset in a path shows the stage is seen but
+  rated as noise ("Would the tries be seen?"); and an alert that matches a real indicator stops the run, like
+  any other. Never chain an alert as a link.
 - **`origin: reported`**: a tool's finding (AuditGitHub, a scanner, Secure Score) or a report someone dropped
   in (`data/raw/dropped/`: scanner exports, past pen-test and audit reports). Such tools give false positives
   by design and reports go stale, so a reported finding is a lead until this run's own evidence shows it is

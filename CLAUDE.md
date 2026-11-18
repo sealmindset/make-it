@@ -127,6 +127,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 - Prove it or don't report it -- WebFetch is discovery only, never the source of a figure
 - Behaviour first: the briefing leads with what attackers do and the VEX table, not product articles
 - The organisation's own security testing (AuditGitHub and its scanners) is never reported as an attacker; it is excluded by recorded identifier and counted, and its findings are leads to confirm
+- Findings come from what the run collects plus Secure Score, Defender for Cloud, Defender XDR, AuditGitHub and dropped reports; a source that could not be read is reported, never counted as "no findings"
 - A path built from small findings is "not exercised" until a person's test record says otherwise; the skill never runs one, and the test plan carries no exploit code
 - AI is treated as the attacker too, not only a helper: each chain is rated for an AI agent acting on its own, with how fast it could finish against how fast the organisation would notice
 - AI is treated as part of the attacker: "needs a skilled attacker" is never a reason to call a chain unlikely. Ratings are assessments; a claim that AI was used needs a source
