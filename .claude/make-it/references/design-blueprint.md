@@ -881,8 +881,10 @@ ai_features.needed?
     This defines what the AI is ALLOWED to talk about.
 
   attestation_mode: "snapshot" (default)
-    - "snapshot": each /ship-it run creates docs/attestations/YYYY-MM-DD-vN.md
-    - "latest": each /ship-it run overwrites docs/ai-safety-attestation.md
+    - "snapshot": each run creates docs/attestations/YYYY-MM-DD-vN.md
+    - "latest": each run overwrites docs/ai-safety-attestation.md
+    The attestation comes from /nemo-it, before /ship-it (ship-it-guide.md,
+    "What make-it runs before /ship-it").
 ```
 
 **NeMo Guardrails configuration (generated in project):**
@@ -922,7 +924,7 @@ guardrails/
 | Phase | When | Test Depth | Minimum Tests |
 |-------|------|-----------|---------------|
 | Build-verify | During /make-it build | Basic (smoke test) | 3 per category = 18 total |
-| Ship | During /ship-it | Full suite | 10 per category = 60 total |
+| /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Full suite | 10 per category = 60 total |
 
 **Remediation flow (self-healing):**
 1. Run NeMo Guardrails test suite
@@ -944,7 +946,7 @@ guardrails/
 - guardrails/ directory with config.yml and Colang rail files
 - Test suite with minimum 10 cases per category
 - nemoguardrails in dev dependencies (requirements-dev.txt or package.json devDependencies)
-- Attestation document in docs/
+- No attestation document: /nemo-it writes it (ship-it-guide.md, "What make-it runs before /ship-it")
 
 ---
 
@@ -961,7 +963,8 @@ ai_features.needed?
 ```
 
 **This section ensures that every AI-powered app built by /make-it is secure by design.**
-The NeMo Guardrails (section 11) test for safety at build-time and ship-time. This section
+The NeMo Guardrails (section 11) test for safety at build-time and before /ship-it
+(ship-it-guide.md, "What make-it runs before /ship-it"). This section
 implements runtime protections that prevent the issues NeMo tests for from ever reaching
 production. Together, they form a defense-in-depth strategy.
 
@@ -3100,8 +3103,8 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 - [ ] NeMo Guardrails config created (guardrails/config.yml + Colang rails) -- if using AI
 - [ ] NeMo Guardrails basic test suite passes during build-verify (18+ tests) -- if using AI
-- [ ] NeMo Guardrails full test suite passes during /ship-it (60+ tests) -- if using AI
-- [ ] AI Safety Attestation generated in docs/ -- if using AI
+- [ ] NeMo Guardrails full test suite passes in /nemo-it before /ship-it (60+ tests; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
+- [ ] AI Safety Attestation written by /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] sanitizePromptInput() in lib/ai/ strips injection patterns, called by BaseAgent -- if using AI
 - [ ] User input in prompts wrapped in `<user_input>` delimiter tags -- if using AI
 - [ ] System prompts include anti-injection + anti-jailbreak instructions -- if using AI
@@ -3155,7 +3158,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] Safety preamble immutable and auto-prepended by runtime (Tier 2+) -- if using AI
 - [ ] Draft/active workflow enforced: Test required before Publish (Tier 2+) -- if using AI
 - [ ] render_prompt() sanitizes interpolated variable values (Tier 2+) -- if using AI
-- [ ] risk_flag audit entries flagged by /ship-it for security review (Tier 2+) -- if using AI
+- [ ] risk_flag audit entries flagged for security review: no skill does it at ship (ship-it-guide.md, "What make-it runs before /ship-it") (Tier 2+) -- if using AI
 
 ### Production Hardening
 - [ ] Rate limiting on public endpoints
