@@ -51,7 +51,7 @@ usays() { local PAIRS="$UPAIRS"; says "$@"; }
 infl()  { printf '%s' "$FLAT" | gq -iE -- "$1"; }
 
 # the record's checks: the shape the example must have, and the test's own secret check (constraint 6's pattern list)
-export SECRET_RE='sk-|AKIA|ghp_|github_pat_|-----BEGIN|(?i:password|token|secret)=|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{32,}={0,2}'
+export SECRET_RE='sk-|sk_live_|AKIA|AIza|ghp_|github_pat_|xoxb-|-----BEGIN|(?i:password|token|secret|key)=|://[^/\s:@]+:[^/\s@]+@|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{32,}={0,2}'
 PY='
 import json, os, re, sys
 keys = ["terms_privacy", "security_audit", "restore_test", "load_test", "live_payment"]
@@ -148,8 +148,8 @@ check "rule 8 (left-out): the left-out ask and the secret stop come first and ke
   'says "left-out ask" "secret stop" "+\b(before|first)\b" "+own rules" && says "Add \[item\] first" "\b(doesn.t|does not|never|won.t) run"'
 check "rule 8 (secrets): fixed fields only; reason is the user's own words, at most 200 characters, refused and asked again without the secret when it matches a pattern; ship-it runs that check itself before the commit" \
   'says "+fixed fields" && says "reason" "+user.s own words" "+200 characters" && says "+\brefused\b" "+asked again" "without the secret" && says "+\bbefore the commit\b" "\b(check|secret)"'
-check "rule 8 (secrets): the section spells out the pattern list -- sk-, sk-ant-, AKIA, ghp_, github_pat_, -----BEGIN, password=, token=, secret=, a hex or base64 run of 32+" \
-  '( for p in "sk-" "sk-ant-" "AKIA" "ghp_" "github_pat_" "-----BEGIN" "password=" "token=" "secret="; do printf "%s" "$FLAT" | gq -F -- "$p" || exit 1; done ) && says "\bhex\b" "base64" "\b32\b"'
+check "rule 8 (secrets): the section spells out the pattern list -- sk-, sk-ant-, sk_live_, AKIA, AIza, ghp_, github_pat_, xoxb-, -----BEGIN, password=, token=, secret=, key=, a hex or base64 run of 32+ (E02-S48: scripts/test-secret-pattern-shapes.sh pins the sentence and the added shapes)" \
+  '( for p in "sk-" "sk-ant-" "sk_live_" "AKIA" "AIza" "ghp_" "github_pat_" "xoxb-" "-----BEGIN" "password=" "token=" "secret=" "\`key=\`"; do printf "%s" "$FLAT" | gq -F -- "$p" || exit 1; done ) && says "\bhex\b" "base64" "\b32\b"'
 check "rule 8 (secrets): evidence is a URL with no query string and no user:pass@, or a repo-relative path; never amounts, card, bank or account details, or row data" \
   'says "evidence" "no query string|without (a )?query string" "user:pass@" "repo-relative" && says "\bnever\b" "amounts" "\bcard\b" "\bbank\b" "account" "row data"'
 check "rule 8 (secrets): the example record holds nothing the test's own secret check flags (patterns, a query string, user:pass@, a reason over 200 characters)" \
