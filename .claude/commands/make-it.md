@@ -1,6 +1,6 @@
 ---
 name: make-it
-description: Guide a first-time developer from app idea to working application through conversational Q&A. No coding knowledge required. Use when the user runs /make-it, or says they want to build a new app, tool or site from an idea.
+description: Guide a first-time developer from app idea to working application through conversational Q&A. No coding knowledge required. Use when the user runs /make-it, or says they want to build a brand-new app from an idea -- not for a feature in an app that already exists.
 allowed-tools:
   - Read
   - Write

@@ -49,7 +49,7 @@ check "the skills that deploy or reach outside (/ship-it, /argo-it, /demo-it, /t
 check "the never paragraph says: only when the person asks for that outcome, and every ask the skill makes is kept" \
   'printf "%s" "$NPARA" | gq -F "only when the person asks for that outcome" && printf "%s" "$NPARA" | gq -F "keep every ask the skill makes"'
 check "the block tells Claude to say which skill it started, and to start /debug-it before any fix" \
-  'printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "say in one line which one you started" && printf "%s\n" "$BLOCK" | gq -E "/debug-it\`?, before any fix"'
+  'printf "%s\n" "$BLOCK" | tr "\n" " " | tr -s " " | gq -F "say in one line which one you started" && printf "%s\n" "$BLOCK" | gq -E "/debug-it\`?, before any fix"'
 
 # each skill sits in exactly the group it was reviewed for (2026-11-19: /resolve-it ships by default and /git-it merges,
 # so neither may be moved up without a new review)
@@ -58,13 +58,13 @@ check "each skill is in its reviewed group" \
   '[ "$(grp "Start it yourself")" = "clear-it debug-it dispatch-it git-it subagent-it " ] && [ "$(grp "Start it when the person")" = "backlog-it resume-it try-it wrap-it " ] && [ "$(grp "Suggest these")" = "deadcode-it fix-it make-it nemo-it resolve-it retrofit-it " ] && [ "$(grp "Never start these on your own")" = "argo-it demo-it ship-it threats-it " ] || { echo "  yourself: $(grp "Start it yourself")"; echo "  words: $(grp "Start it when the person")"; echo "  suggest: $(grp "Suggest these")"; echo "  never: $(grp "Never start these on your own")"; false; }'
 STARTS="$(printf "%s\n" "$BLOCK" | awk '/^\*\*Start it /{on=1} /^\*\*Suggest these/{on=0} on')"
 check "the two start groups promise nothing that leaves the computer: no live, deploy, ship or push, and a merge waits for the person" \
-  '! printf "%s\n" "$STARTS" | gq -iE "\blive\b|deploy|\bship|\bpush" && printf "%s\n" "$STARTS" | tr "\n" " " | gq -F "A merge into the main branch, and anything sent to GitHub, waits for the person" && printf "%s\n" "$STARTS" | gq -F "git step on this computer"'
+  '! printf "%s\n" "$STARTS" | gq -iE "\blive\b|deploy|\bship|\bpush" && printf "%s\n" "$STARTS" | tr "\n" " " | tr -s " " | gq -F "A merge into the main branch, and anything sent to GitHub, waits for the person" && printf "%s\n" "$STARTS" | gq -F "git step on this computer"'
 check "/resolve-it is only suggested, and only as --propose; a no to a suggestion is kept" \
   'printf "%s\n" "$BLOCK" | gq -F "/resolve-it --propose" && [ "$(printf "%s\n" "$BLOCK" | grep -c "/resolve-it")" = 1 ] && printf "%s\n" "$BLOCK" | gq -F "A no is kept"'
 check "the never paragraph has no way out, and a never-start skill that isn't installed stops the work" \
-  '! printf "%s" "$NPARA" | gq -iE "unless|except|go ahead|clearly needs" && printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "For a never-start skill, stop there"'
+  '! printf "%s" "$NPARA" | gq -iE "unless|except|go ahead|clearly needs" && printf "%s\n" "$BLOCK" | tr "\n" " " | tr -s " " | gq -F "For a never-start skill, stop there"'
 check "a running skill is not restarted, /dispatch-it says its agent count first, and /backlog-it needs a board" \
-  'printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "A skill that is already running is not started again" && printf "%s\n" "$BLOCK" | gq -F "say how many agents before starting" && printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "when the project has a board"'
+  'printf "%s\n" "$BLOCK" | tr "\n" " " | tr -s " " | gq -F "A skill that is already running is not started again" && printf "%s\n" "$BLOCK" | gq -F "say how many agents before starting" && printf "%s\n" "$BLOCK" | tr "\n" " " | tr -s " " | gq -F "when the project has a board"'
 
 # Build step h and S14
 TPL="$(awk '/^      # Project instructions/{on=1} on && /^      ```$/{exit} on' "$MK")"
