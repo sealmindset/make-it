@@ -19,7 +19,7 @@ This guide explains what `/argo-it` produces, what it expects from your cluster,
 - Offers to push and merge to the deploy branch
 
 **What it does NOT do:**
-- Modify application code or Docker Compose files
+- Modify Docker Compose files, or change how your app behaves (before sending an update it may apply the linters' safe automatic fixes -- formatting, imports -- and it lists each file it changed)
 - Apply manifests to the cluster (Argo CD does that)
 - Create namespaces, secrets, or Argo Applications
 - Manage databases or mock services in K8s

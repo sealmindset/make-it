@@ -968,6 +968,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.3 -- /argo-it's lint auto-fix is limited to safe fixes, and it says which files it changed
+
+`/argo-it` told itself two things that could not both hold: auto-fix lint errors in the app's
+code before sending, and never modify application source code.
+
+- **Safe fixes only.** Step 3a now runs `ruff check --fix --no-unsafe-fixes` and
+  `eslint --fix --fix-type layout`. Formatting is tidied; nothing that rewrites what the code does
+  is applied, even when the project's own settings turn unsafe fixes on.
+- **It lists each file the fixes changed** before it saves anything. A note, not a question.
+- **The rule is now "never change how the app behaves".** `docker-compose.yml` is still never
+  modified. Any other change to the code waits for the person's pick.
+- **JavaScript import order is not fixed silently.** eslint cannot fix it without also rewriting
+  code (`var` to `const`, removing an `else`), so an import-order error goes to the ask at the
+  end of the check step.
+- **Checked:** `scripts/test-argo-it-lint-fix-rule.sh` (30 checks), the first test to cover
+  `argo-it.md`. It pins the wording. The flags were tried on ruff 0.15.15 and eslint 9.39.5; no
+  real redeploy was run, and ruff 0.16.0 and ESLint 10 were not tried.
+
 ### v1.71.2 -- The secret pattern list catches a password in a URL, `key=` and three vendor key formats
 
 The go-live record refuses a typed reason that looks like it holds a password or key. Its pattern
