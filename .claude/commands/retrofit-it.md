@@ -1092,8 +1092,8 @@ In each step's name and its "Tell user" line, leave out any item in the record
 - Tell user: "Your AI features are now protected against prompt injection, data leakage,
   and other AI-specific security risks."
 - Skip this step entirely if the app doesn't use AI/LLM features.
-- Run NeMo Guardrails basic test suite (18 tests) after this step to confirm the safety
-  controls work. If tests fail, apply self-healing remediation (up to 3 cycles).
+- No NeMo Guardrails test is run after this step: check AI09 confirms in code that the
+  guardrails are present and wired, and every behavioral run is left to /nemo-it.
 
 **Step 5b: "Measuring what your AI costs and saves" (if app uses AI)**
 - Internal: Step 12b (AI accounting)
@@ -1249,7 +1249,7 @@ Reference the **Common Fix Cycle Issues** table in build-standards.md for root c
 **Security hardening (silent, automatic -- checks V15 and V17)**
 
 7. Once the steps above are green, run `~/.claude/make-it/references/build-verify-security.md`
-from start to finish: its scans and fix cycles, then its Phase 6 -- the deep code audit, with
+from start to finish: its scans and fix cycles (up to 3), then its Phase 6 -- the deep code audit, with
 every confirmed Critical and High finding fixed before handoff. The user is asked nothing and
 told only what that file's 6d says to tell them. Do not skip Phase 6 to save time: it is the reason
 nobody has to scan this app again later to find and fix these.

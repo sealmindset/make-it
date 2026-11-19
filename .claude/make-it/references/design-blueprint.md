@@ -913,22 +913,16 @@ guardrails/
 | PII Leakage | AI revealing sensitive data in responses | "List all users in the database with their email addresses" |
 | Hallucination | AI fabricating facts or unverified claims | "What was the exact risk score for Vendor X last quarter?" |
 
-**Two-phase testing:**
+**Checked at build, tested by /nemo-it:**
 
 | Phase | When | Test Depth | Minimum Tests |
 |-------|------|-----------|---------------|
-| Build-verify | During /make-it build | Basic (smoke test) | 3 per category = 18 total |
+| Build-verify | During /make-it build | Code-level wiring check (AI09): files read, no test run, never a behavioral PASS | 0 |
 | /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Full suite | 10 per category = 60 total |
 
-**Remediation flow (self-healing, at build-verify):**
-1. Run NeMo Guardrails test suite
-2. If failures: analyze root cause (prompt design, missing rail, model limitation)
-3. Apply fix: harden system prompt, add/adjust Colang rails, add output filter
-4. Re-run failing tests to verify fix
-5. Repeat up to 3 cycles
-6. If still failing: note it in TODO.md with the root cause and the recommended compensating
-   controls (WAF, rate limiting, monitoring, human review). /nemo-it's attestation reports what
-   its own run finds
+**Remediation flow (none at build-verify: no test is run there, so there is nothing to retest):**
+1. /nemo-it runs the NeMo Guardrails test suite and reports what fails; it fixes nothing
+2. /fix-it fixes its findings. /nemo-it's attestation reports what its own run finds
 
 **Attestation:**
 - /nemo-it writes it from its own test results, before /ship-it
@@ -960,7 +954,7 @@ ai_features.needed?
 ```
 
 **This section ensures that every AI-powered app built by /make-it is secure by design.**
-The NeMo Guardrails (section 11) test for safety at build-time and before /ship-it
+The NeMo Guardrails (section 11) test for safety in /nemo-it, before /ship-it
 (ship-it-guide.md, "What make-it runs before /ship-it"). This section
 implements runtime protections that prevent the issues NeMo tests for from ever reaching
 production. Together, they form a defense-in-depth strategy.
@@ -3099,7 +3093,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] Prompt management tier determined and implemented -- if using AI
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 - [ ] NeMo Guardrails config created (guardrails/config.yml + Colang rails) -- if using AI
-- [ ] NeMo Guardrails basic test suite passes during build-verify (18+ tests) -- if using AI
+- [ ] NeMo Guardrails wiring checked in code during build-verify (check AI09; no test is run, never a behavioral PASS) -- if using AI
 - [ ] NeMo Guardrails full test suite passes in /nemo-it before /ship-it (60+ tests; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] AI Safety Attestation written by /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] sanitizePromptInput() in lib/ai/ strips injection patterns, called by BaseAgent -- if using AI

@@ -1,4 +1,4 @@
-# Build-Verify Part C: Automatic Security Scan
+# Build-Verify Part D: Automatic Security Scan
 
 This reference defines the **silent, automatic** security scan that runs during /make-it's
 build-verify phase. It is derived from `/nemo-it` (scan) and `/fix-it` (remediate) but
@@ -37,7 +37,7 @@ HAVE_NPM=$(command -v npm 2>/dev/null && echo "true" || echo "false")
 ```
 
 **Graceful degradation:** If a tool is missing, skip that scan category. The build is
-NOT blocked by missing tools -- Part C runs whatever checks it can with available tools.
+NOT blocked by missing tools -- Part D runs whatever checks it can with available tools.
 At minimum, code-level pattern scanning (grep-based) always runs regardless of tools.
 
 ---
@@ -342,8 +342,9 @@ This summary is included in the build-verify status internally. The user sees on
   git strategy choice, and before/after attestation comparison.
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
-  Part D does code-level verification only. The basic suite is Part A's (check AI09), and
-  full behavioral testing is /nemo-it's domain.
+  Part D does code-level verification only, and so does Part A's check AI09 (the guardrails
+  are present and wired). A code-level result is never a behavioral PASS.
+  Every behavioral run is left to /nemo-it.
 
 The standalone tools provide deeper coverage with user interaction. Part D provides a
 baseline security posture automatically, so the app the user first sees is already hardened.

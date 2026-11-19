@@ -177,8 +177,9 @@ production.
 ### What make-it runs before /ship-it
 
 These run before the app reaches /ship-it, so /ship-it doesn't repeat them:
-- **AI safety** (if the app has AI features): build-verify runs the NeMo Guardrails basic suite
-  (check AI09, 18 test cases) and fixes what fails. /nemo-it runs the full suite (60+ test cases
+- **AI safety** (if the app has AI features): build-verify runs no NeMo Guardrails test: check
+  AI09 confirms in code that the guardrails are present and wired, and that result is never a
+  behavioral PASS. Every behavioral run is left to /nemo-it: it runs the full suite (60+ test cases
   across the 6 categories) and writes the AI safety attestation,
   `docs/attestations/nemo-it/YYYY-MM-DD-vN.md`: the attestation GRC asks for before production
   comes from /nemo-it, and /fix-it fixes its findings. No skill puts an attestation summary in

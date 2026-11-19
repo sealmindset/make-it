@@ -349,12 +349,13 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   4. Topic boundary enforcement -- AI stays within its defined domain scope
   5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
-- Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
+- Build-verify runs no NeMo test and makes no AI call: check AI09 is code-level. It reads the
+  files to confirm the guardrails are present and wired, and that result is never a behavioral PASS
 - /nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it
-  (ship-it-guide.md, "What make-it runs before /ship-it")
-- Self-healing at build-verify: a failure of the basic checks triggers automatic remediation
-  (prompt hardening, rail adjustments, output filters). Re-test after each fix attempt (up to
-  3 cycles). /nemo-it reports its failures and fixes nothing
+  (ship-it-guide.md, "What make-it runs before /ship-it"): every behavioral run is left to /nemo-it
+- No fix-and-retest loop at build-verify: no test is run there, so there is nothing to retest.
+  A missing or unwired guardrails file is put right like any other [FIX] check.
+  /nemo-it reports its failures and fixes nothing
 - Unresolvable failures: document with full root cause analysis, impact assessment,
   and recommended compensating controls (WAF rules, rate limiting, human-in-the-loop, etc.)
 - Attestation: /nemo-it writes one dated attestation per run,
@@ -443,7 +444,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   the primary and fallback models
 - Fallback models may have different safety characteristics -- passing on primary does not
   guarantee passing on fallback
-- Build-verify runs against primary model only (speed). /nemo-it runs the suite against each configured model
+- Build-verify runs no NeMo test against any model (check AI09 is code-level). /nemo-it runs the suite against each configured model
   and reports per model: it restarts the app on the fallback only when it started the app itself with Docker Compose,
   and a model it could not run is NOT TESTED, never passed (nemo-it.md, AI-safety phase, step 0b)
 
@@ -711,7 +712,8 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 
 **NeMo Guardrails:**
 - [ ] guardrails/ directory exists with config.yml and Colang rail files
-- [ ] Basic test suite passes (minimum 3 per category = 18 tests)
+- [ ] The six test files exist (minimum 10 cases per category) and nemoguardrails is a dev dependency (check AI09)
+- No NeMo test is run at build-verify: every behavioral run is left to /nemo-it
 - No AI Safety Attestation at build-verify: /nemo-it writes it (ship-it-guide.md, "What make-it runs before /ship-it")
 
 **Prompt Management (Tier 2 MANDATORY for any AI app):**
