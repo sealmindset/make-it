@@ -162,8 +162,10 @@ Q13). Their sections describe them as /ship-it will run them.
 
 Before it commits and pushes, /ship-it scans the diff for what looks like a password, API key,
 token or private key -- including `CLAUDE_CODE_OAUTH_TOKEN` / `sk-ant-oat` Claude Code
-subscription tokens. It skips .example files, TODOs and placeholder values. If it finds nothing,
-it goes on silently.
+subscription tokens. What it looks for includes every secret pattern listed in No secret in the
+record (Go-live checklist) except the long-run pattern, which a lock file's hashes would match:
+one list, stated there. It skips .example files, TODOs and placeholder values. If it finds
+nothing, it goes on silently.
 
 When it finds one, it STOPS and explains in plain language: "I found what looks like a secret in
 your changes." It moves the secret to .env (gitignored) and puts an env var reference in its
@@ -430,10 +432,14 @@ user's own words, at most 200 characters. A typed reason over 200 characters is 
 request for a shorter one, and it is never cut. A stored reason over 200 characters is treated as
 missing, so its item is asked. A reason that matches a secret pattern is refused and
 asked again without the secret: "That looks like a password or key, and this answer goes into
-your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`, `AKIA`,
-`ghp_`, `github_pat_`, `-----BEGIN`, `password=`, `token=`, `secret=`, and a hex or base64 run of
+your code. Please say it again without it." The secret patterns are `sk-`, `sk-ant-`,
+`sk_live_`, `AKIA`, `AIza`, `ghp_`, `github_pat_`, `xoxb-`, `-----BEGIN`, `password=`, `token=`,
+`secret=`, `key=`, a URL that carries a user name and password, and a hex or base64 run of
 32 or more characters. Each pattern matches only at the start of a token: where the text starts,
-or after a character that isn't a letter or digit, so "risk-based" or "task-force" doesn't match.
+or after a character that isn't a letter or digit, so "risk-based" or "task-force" doesn't match,
+and `key=` matches in "API_KEY=" but not in "monkey=". The four patterns that end in `=` match in
+capitals or lower case. The URL pattern is a `user:pass@` between `://` and the host; a URL
+without one doesn't match.
 `evidence` is a URL with no query string and no `user:pass@`, or a
 repo-relative path. Every `evidence` URL is written as scheme, host, port (when the URL has one)
 and path only: any `user:pass@`, query and fragment are removed before it is written, and they
