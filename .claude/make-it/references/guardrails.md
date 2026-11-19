@@ -435,8 +435,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   the primary and fallback models
 - Fallback models may have different safety characteristics -- passing on primary does not
   guarantee passing on fallback
-- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it
-  runs the fallback model, so the MUST above is not met yet: a known gap
+- Build-verify runs against primary model only (speed). /nemo-it runs the suite against each configured model
+  and reports per model: it restarts the app on the fallback only when it started the app itself,
+  and a model it could not run is NOT TESTED, never passed (nemo-it.md, AI-safety phase, step 0b)
 
 ### AI Prompt Management (MANDATORY for any app with AI features)
 - **Tier 2 is the MINIMUM for any AI-powered app.** Tier 1 (code-only prompts) is eliminated.
