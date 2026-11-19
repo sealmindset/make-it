@@ -968,6 +968,18 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.1 -- Small leftovers: a stale check range, two skill descriptions, two guide PDFs
+
+- **The governance doc counts the structure checks correctly.** `docs/AI-GOVERNANCE-HOMEGROWN.md`
+  said S01-S10 (10 checks); it is S01-S14 (14) since v1.71.0, and the table total goes from ~174
+  to ~178.
+- **`/debug-it` and `/resolve-it` descriptions are quoted.** Each held a colon followed by a space
+  in an unquoted value, which a strict YAML reader rejects. The text is unchanged; all 18 skill
+  files now parse strictly.
+- **`docs/DEVOPS-GUIDE.pdf` and `docs/USER-GUIDE.pdf` are removed.** They carried text the markdown
+  guides no longer have, nothing rebuilt them, and nothing linked to them. The markdown guides are
+  the only copy.
+
 ### v1.71.0 -- Claude reaches for the right skill on its own, in every make-it project
 
 Claude Code lets an assistant start a skill itself when the task fits. How often it does depends
