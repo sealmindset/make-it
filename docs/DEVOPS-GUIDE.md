@@ -188,7 +188,7 @@ Scanner scans repo (on push or schedule)
 
 ### AI Safety Attestation
 
-Apps with AI features get a formal attestation document (`docs/attestations/nemo-it/YYYY-MM-DD-vN.md`, written by /nemo-it) with:
+Apps with AI features get a formal attestation document when /nemo-it is run (`docs/attestations/nemo-it/YYYY-MM-DD-vN.md`) with:
 - Pass/fail per NeMo Guardrails category
 - Test details and any unresolved findings
 - This is the GRC-required acceptance qualification for production

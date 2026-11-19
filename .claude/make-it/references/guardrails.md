@@ -349,8 +349,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   3 cycles). /nemo-it reports its failures and fixes nothing
 - Unresolvable failures: document with full root cause analysis, impact assessment,
   and recommended compensating controls (WAF rules, rate limiting, human-in-the-loop, etc.)
-- Attestation: /nemo-it writes one dated file per run,
-  docs/attestations/nemo-it/YYYY-MM-DD-vN.md, before /ship-it (ship-it-guide.md,
+- Attestation: /nemo-it writes one dated attestation per run,
+  docs/attestations/nemo-it/YYYY-MM-DD-vN.md (with a .json or .xml copy when asked), before /ship-it (ship-it-guide.md,
   "What make-it runs before /ship-it"). No setting changes where it goes, and no run
   overwrites an earlier one
 - The attestation IS the sign-off -- no additional human approval required

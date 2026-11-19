@@ -55,7 +55,6 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 │   └── nextjs-fullstack/              # Alternative scaffold (Next.js API routes)
 └── templates/
     ├── app-context.md                 # JSON template for design decisions
-    ├── ai-safety-attestation.md       # AI safety attestation report template
     └── nemo-it-attestation.md         # Security attestation report template (v1.1.0)
 ```
 
@@ -269,7 +268,7 @@ The single source of truth for all design decisions. Populated during ideation a
 - `stack` -- frontend, backend, database, ORM, language
 - `ai_features` -- usage level, prompts, agents, models, management tier
 - `ai_providers` -- primary/fallback, model tiers, provider config
-- `nemo_guardrails` -- categories, topic domain, attestation mode
+- `nemo_guardrails` -- categories, topic domain
 - `mock_services` -- which mocks needed, ports, test users
 - `deployment` -- target environment, containerization, networking
 - `security_scanner` -- optional integration for continuous scanning

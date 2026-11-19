@@ -920,19 +920,21 @@ guardrails/
 | Build-verify | During /make-it build | Basic (smoke test) | 3 per category = 18 total |
 | /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Full suite | 10 per category = 60 total |
 
-**Remediation flow (self-healing):**
+**Remediation flow (self-healing, at build-verify):**
 1. Run NeMo Guardrails test suite
 2. If failures: analyze root cause (prompt design, missing rail, model limitation)
 3. Apply fix: harden system prompt, add/adjust Colang rails, add output filter
 4. Re-run failing tests to verify fix
 5. Repeat up to 3 cycles
-6. If still failing: document in attestation with full root cause analysis and
-   recommended compensating controls (WAF, rate limiting, monitoring, human review)
+6. If still failing: note it in TODO.md with the root cause and the recommended compensating
+   controls (WAF, rate limiting, monitoring, human review). /nemo-it's attestation reports what
+   its own run finds
 
 **Attestation:**
 - /nemo-it writes it from its own test results, before /ship-it
   (ship-it-guide.md, "What make-it runs before /ship-it")
-- One dated file per run: docs/attestations/nemo-it/YYYY-MM-DD-vN.md. No run overwrites an earlier one
+- One dated attestation per run: docs/attestations/nemo-it/YYYY-MM-DD-vN.md (with a .json or
+  .xml copy when asked). No run overwrites an earlier one
 - The attestation IS the sign-off -- test results = acceptance qualification
 
 **Implementation generates:**
