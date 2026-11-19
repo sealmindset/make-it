@@ -351,11 +351,12 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
 - Build-verify's own checks run no NeMo Guardrails test: check AI09 is code-level. It reads the
   files to confirm the guardrails are present and wired, and that result is never a behavioral PASS
-- /nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it
+- /nemo-it writes and runs its own FULL suite (minimum 10 test cases per category = 60 cases) before /ship-it
   (ship-it-guide.md, "What make-it runs before /ship-it"). It runs when someone runs it with a live
   AI provider: recommended before each production deploy, and nothing in make-it enforces it
-- The NeMo suite is run by /nemo-it, and by /fix-it when it verifies a fix. The result that counts
-  for an attestation is /nemo-it's
+- The build generates the app's guardrail suite (guardrails/tests/) and AI09 checks it exists;
+  AI09 does not run it. /fix-it runs it when it verifies a fix.
+  /nemo-it does not use it: it writes and runs its own 60 cases, and the attestation is based on those
 - Check AI09 has no fix-and-retest loop: it runs no test, so there is nothing to retest.
   A missing or unwired guardrails file is put right like any other [FIX] check.
   /nemo-it reports its failures and fixes nothing

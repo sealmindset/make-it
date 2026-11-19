@@ -1093,7 +1093,8 @@ In each step's name and its "Tell user" line, leave out any item in the record
   and other AI-specific security risks."
 - Skip this step entirely if the app doesn't use AI/LLM features.
 - No NeMo Guardrails test is run after this step: check AI09 confirms in code that the
-  guardrails are present and wired. The NeMo suite is run by /nemo-it, and by /fix-it when it verifies a fix.
+  guardrails are present and wired. /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
+  /nemo-it does not use it: it writes and runs its own cases.
 
 **Step 5b: "Measuring what your AI costs and saves" (if app uses AI)**
 - Internal: Step 12b (AI accounting)

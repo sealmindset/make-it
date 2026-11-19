@@ -104,8 +104,9 @@ trivy fs --format json --quiet \
 
 ## Phase 2: AI Safety Scan (if ai_features.needed = true)
 
-Only runs if the app has AI features. Uses **code-level verification** (not behavioral
-testing -- that requires a live AI provider which may not be configured during build).
+Only runs if the app has AI features. Uses **code-level verification**, plus the 2b endpoint
+probe when the app is running (not a NeMo behavioral suite -- that requires a live AI provider
+which may not be configured during build).
 
 ### 2a. Safety Control Wiring Checks
 
@@ -343,9 +344,10 @@ This summary is included in the build-verify status internally. The user sees on
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
   Part D's own AI checks are the wiring checks (2a) and the endpoint probe (2b). The probe is
-  not the NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the
+  not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the
   guardrails are present and wired). A code-level result is never a behavioral PASS.
-  The NeMo suite is run by /nemo-it, and by /fix-it when it verifies a fix.
+  /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
+  /nemo-it does not use it: it writes and runs its own 60 cases, and the attestation is based on those.
 
 The standalone tools provide deeper coverage with user interaction. Part D provides a
 baseline security posture automatically, so the app the user first sees is already hardened.
