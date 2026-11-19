@@ -989,8 +989,8 @@ make-it shipped neither consistently.
 - **Every skill's description now says when to use it.** Ten of 18 were changed: nine had no trigger
   (two read as ads: "Just run /wrap-it when you're done for the day"), and `/threats-it` now says it
   starts only when asked.
-- **Checked:** `scripts/test-skills-on-their-own.sh` (19 checks), with each skill pinned to its group. It pins the wording; it cannot
-  prove what Claude does with it.
+- **Checked:** `scripts/test-skills-on-their-own.sh` (19 checks), with each skill pinned to its
+  group. It pins the wording; it cannot prove what Claude does with it.
 
 ### v1.70.9 -- /nemo-it tests an app's fallback AI model too
 
