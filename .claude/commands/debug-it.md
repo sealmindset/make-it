@@ -1,6 +1,6 @@
 ---
 name: debug-it
-description: Systematic debugging that finds the root cause BEFORE any fix and kills assumption-tunneling. Four phases — root-cause investigation (read the full error, reproduce, check recent changes, instrument component boundaries, trace data flow backward) → pattern analysis (working vs broken) → hypothesis (both "missing step" AND "doing too much" families) → test-first implementation. Two-tier circuit-breaker: flip the lens at 2 failed attempts, question the architecture at 3+. Presents fixes as a tired-friendly decision card. Use for ANY bug, test failure, build failure, or unexpected behavior — before proposing fixes, especially after a fix already failed.
+description: "Systematic debugging that finds the root cause BEFORE any fix and kills assumption-tunneling. Four phases — root-cause investigation (read the full error, reproduce, check recent changes, instrument component boundaries, trace data flow backward) → pattern analysis (working vs broken) → hypothesis (both \"missing step\" AND \"doing too much\" families) → test-first implementation. Two-tier circuit-breaker: flip the lens at 2 failed attempts, question the architecture at 3+. Presents fixes as a tired-friendly decision card. Use for ANY bug, test failure, build failure, or unexpected behavior — before proposing fixes, especially after a fix already failed."
 allowed-tools:
   - Read
   - Write
