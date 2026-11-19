@@ -112,9 +112,10 @@ claims() { sents "$@" | nohist | perl -pe "s#$POINTER##g" | { grep -iE -e "$T.*(
 # fallback FILE...: each sentence that says a skill runs the NeMo tests against the fallback (or every) AI model
 FB='fallback models?[^.|]*\b(safety-)?test(s|ed|ing)?\b|\b(runs?|tests?|tested|testing|exercis(es|ed|ing)|covers?)\b[^.|]*\b(all configured|both( the)? primary|the fallback) models?\b|\bruns? against (all|both)\b|fallback model[^.]*build-verify|build-verify[^.]*fallback model'
 FBOK='\bMUST\b|\bneither\b|\bnone today\b|\bno skill\b|\bnot (run|tested)\b'
-# /nemo-it is the one skill that runs it (its AI-safety phase, step 0b): a sentence that gives the run to /nemo-it alone passes
+# /nemo-it is the one skill that runs it (its AI-safety phase, step 0b): a sentence that names /nemo-it and no other skill passes.
+# A tripwire: it does not judge what such a sentence says about /nemo-it; step 0b's own limits are pinned below.
 FBOTHER='build-verify|/ship-it|/make-it|/try-it|/resume-it'
-fallback() { sents "$@" | nohist | { grep -iE "$T.*($FB)" || true; } | { grep -viE "$T.*($FBOK)" || true; } | awk -F'\t' -v o="$FBOTHER" 'BEGIN{IGNORECASE=1} { l=tolower($2) } l !~ /nemo-it/ || (l ~ o && l !~ /primary( model)? only/)'; }
+fallback() { sents "$@" | nohist | { grep -iE "$T.*($FB)" || true; } | { grep -viE "$T.*($FBOK)" || true; } | awk -F'\t' -v o="$FBOTHER" 'BEGIN{IGNORECASE=1} { l=tolower($2) } l !~ /nemo-it/ || l ~ o'; }
 # unattested FILE...: each sentence that says an AI-safety attestation is generated without naming /nemo-it
 GEN='\b(generates?|generated|generating|generate|creates?|produces?|writes?|emits?|saves?)\b[^.|]{0,40}\battestation\b|\battestation\b( [A-Za-z/`.-]+){0,3} (is |was |are )?(generated|auto-generated|created|produced|written)\b|\battestation\b[^|]*\|[^|]*\bauto-generated\b'
 GENOK='nemo-it|fix-it|quality'
@@ -138,17 +139,20 @@ check "guardrails.md keeps the fallback MUST and points at /nemo-it: each config
 NM=.claude/commands/nemo-it.md
 N0B="$(awk '/^\*\*0b\. Which model each run tests/{on=1; next} on && /^\*\*1\. Configure NeMo Guardrails/{on=0} on' "$NM" | tr '\n' ' ' | tr -s ' ')"
 has() { printf "%s" "$N0B" | gq -F -- "$1"; }
-check "nemo-it.md step 0b: reports per model, reads the names from app-context.json and only a count from .env" \
-  'has "ai_providers.fallback" && has "one result block per model" && grep -E "AI_FAILOVER_PROVIDER" "$NM" | gq -E "grep -cE" && ! grep -E "AI_FAILOVER_PROVIDER" "$NM" | gq -E "cut -d=|printenv AI_FAILOVER|cat \.env"'
-check "nemo-it.md step 0b: the second run happens only when this scan started the app, never on the production path, and changes no project file" \
-  'has "only when all of these hold" && has "this scan started the app itself" && has "PASSIVE_ONLY=false" && has "No file in the project is changed" && has "never \`.env\`"'
-check "nemo-it.md step 0b: a fallback that did not run is NOT TESTED with its reason, never a PASS, and the app is put back on its own model" \
-  'has "NOT TESTED" && has "never a PASS" && has "I did not start this app, so I did not restart it" && has "Put the app back"'
-check "nemo-it.md: the start ask says the app is restarted once for the fallback, and the report tables no longer say no skill runs it" \
-  'gq -F "stop the app once during the scan and start it again on the fallback" "$NM" && ! gq -iE "None today: neither build-verify nor /nemo-it" "$NM" && gq -F "one table per model tested" "$NM"'
-UNATTESTED="$(unattested $DFILES)"
-check "no reference says the AI-safety attestation is generated without naming /nemo-it (build-verify writes none)" \
-  '[ -z "$UNATTESTED" ] || { printf "%s\n" "$UNATTESTED" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
+sen() { has "$1" || { echo "  missing in step 0b: $1"; false; }; }
+no0b() { ! printf "%s" "$N0B" | gq -E -- "$1" || { echo "  must not be in step 0b: $1"; false; }; }
+check "nemo-it.md step 0b: reports per model, and reads names from app-context.json and only counts from .env and the compose file" \
+  'sen "one result block per model" && grep -E "AI_FAILOVER_PROVIDER" "$NM" | grep -E "grep " | gq -E "grep -cE" && ! grep -E "grep [^|]*\.env" "$NM" | grep -E "AI_" | gq -vE "grep -(c|o)"'
+check "nemo-it.md step 0b: the second run needs all five conditions, each written whole" \
+  'sen "only when all of these hold" && sen "this scan started the app itself in preflight step 7, with Docker Compose" && sen "An app that was already running is never stopped or restarted" && sen "\`PASSIVE_ONLY=false\`, and the production check was not passed with \"Go ahead\"" && sen "the hostile-code check found nothing" && no0b "already running on this computer|ask first"'
+check "nemo-it.md step 0b: it stops one service, removes nothing, changes no project file and prints no settings" \
+  'sen "\`docker compose stop <service>\`, never the whole project" && sen "No file in the project is changed: never \`.env\`, never a compose file" && no0b "compose down|[[:space:]]-v[[:space:]]|--volumes|compose config|[^a-z]env\b[^i]|printenv[^ ]| printenv \$|ps e|/proc/|pkill|kill " && sen "every compose file \`START_COMMAND\` uses"'
+check "nemo-it.md step 0b: the fallback counts only with the app's own evidence, and anything else is NOT TESTED, never a PASS" \
+  'sen "shows only that the setting reached the container" && sen "I could not confirm the app was answering from the fallback" && sen "NOT TESTED, never a PASS" && sen "I can only restart a Docker Compose app safely" && sen "I did not start this app, so I did not restart it" && no0b "record the run anyway"'
+check "nemo-it.md step 0b: the app is always put back, whatever happened" \
+  'sen "Always, whatever happened in steps 2 to 4, put the app back" && no0b "only if the person asks|leave it on the fallback"'
+check "nemo-it.md: the start ask itself says the two restarts, and the report tables no longer say no skill runs it" \
+  'grep -F "**Starting your app.**" "$NM" | gq -F "restart the app twice during the scan" && ! gq -iE "None today: neither build-verify nor /nemo-it" "$NM" && gq -F "one table per model tested" "$NM"'
 
 # the attestation_mode setting is gone, and so are the files only it named
 gone() { sents "$@" | nohist | { grep -iE "$T.*(attestation_mode|attestation mode|ai-safety-attestation\.md|docs/attestations/YYYY)" || true; }; }
@@ -212,7 +216,7 @@ check "(control) passes, the sibling fixes: build-verify greps (check I10) befor
   '! plant "Build-verify greps for \`override=True\` in dotenv calls (check I10), before /ship-it (ship-it-guide.md, \"What make-it runs before /ship-it\")." && ! plant "No skill asks for an OT security sign-off at ship (ship-it-guide.md, \"What /ship-it Does\")." && ! plant "| NeMo Guardrails | AI behavioral safety testing | Build-verify (basic) + /nemo-it (full suite), before /ship-it | Mandatory |" && ! plant "\`\`\`mermaid\nsequenceDiagram\n    participant SI as /ship-it\n    SI->>GH: Create branch, push, create PR\n\`\`\`"'
 fb() { printf "%b\n" "$1" > "$TMPD/f.md"; [ -n "$(fallback "$TMPD/f.md")" ]; }
 check "(control) fallback: fails when a skill runs the fallback model (the old wording, \"testing in build-verify\"); passes the MUST and a plain \"neither\"" \
-  'fb "- Build-verify runs against primary model only (speed); the full suite runs against ALL configured\n  models before /ship-it" && fb "| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |" && ! fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | /nemo-it full test suite |" && fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | Build-verify + /nemo-it |" && fb "Build-verify exercises the fallback model too." && ! fb "- Build-verify runs against primary model only (speed). /nemo-it runs the suite against each configured model, the fallback model included" && fb "| Fallback model safety | [Prevented/Missing] | Build-verify checklist |" && ! fb "- If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH\n  the primary and fallback models" && ! fb "- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it runs the fallback model: a known gap"'
+  'fb "- Build-verify runs against primary model only (speed); the full suite runs against ALL configured\n  models before /ship-it" && fb "| AI: Fallback model not safety-tested | Fallback model safety testing in build-verify | Prevented |" && ! fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | /nemo-it full test suite |" && fb "| Fallback model testing | NeMo Guardrails run against BOTH primary and fallback models | Build-verify + /nemo-it |" && fb "Build-verify exercises the fallback model too." && ! fb "- Build-verify runs against primary model only (speed). /nemo-it runs the suite against each configured model, the fallback model included" && fb "Build-verify runs against primary model only at first; then build-verify and /nemo-it both run the suite against the fallback model." && fb "| Fallback model safety | [Prevented/Missing] | Build-verify checklist |" && ! fb "- If the app configures a fallback AI model, NeMo Guardrails tests MUST run against BOTH\n  the primary and fallback models" && ! fb "- Build-verify runs against primary model only (speed). Today neither build-verify nor /nemo-it runs the fallback model: a known gap"'
 att() { printf "%b\n" "$1" > "$TMPD/a.md"; [ -n "$(unattested "$TMPD/a.md")" ]; }
 check "(control) attestation: fails when it is generated with no /nemo-it (a build-verify checklist item, \"Implementation generates:\", \"Yes -- auto-generated\", a feature line); passes /nemo-it, the quality-gate artifact and card E02-S44 lines" \
   'att "**NeMo Guardrails:**\n- [ ] AI Safety Attestation generated in docs/" && att "**Implementation generates:**\n- Attestation document in docs/" && att "| AI safety attestation | Yes -- auto-generated in docs/attestations/ | [PRESENT / ABSENT] |" && att "- Generates GRC-required AI Safety Attestation in \`docs/\`" && ! att "- No AI Safety Attestation at build-verify: /nemo-it writes it (ship-it-guide.md, \"What make-it runs before /ship-it\")" && ! att "Generates \`quality-gate-report.json\` attestation artifact." && ! att "    - \"snapshot\": each run creates docs/attestations/YYYY-MM-DD-vN.md"'
