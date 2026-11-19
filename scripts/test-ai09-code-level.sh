@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# E02-S56 (the owner's call, 2026-11-19): check AI09 is code-level only. The build reads the files to confirm the NeMo
-# guardrails are present and wired; it runs no NeMo test, makes no AI call and has no fix-and-retest loop for them. A
-# code-level result is never a behavioral PASS. Every behavioral run is left to /nemo-it (the test files are still
-# generated at build, by Prompt #10d).
+# E02-S56 (the owner's call, 2026-11-19): check AI09 is code-level only. It reads the files to confirm the NeMo guardrails
+# are present and wired, and runs no NeMo Guardrails test. A code-level result is never a behavioral PASS. The NeMo suite
+# is run by /nemo-it, and by /fix-it when it verifies a fix; a /nemo-it run is recommended before each production deploy
+# and nothing in make-it enforces it. (The test files are still generated at build, by Prompt #10d. The build's AI
+# endpoint probe is a separate, smaller check: this test does not say the build makes no AI call.)
 # Contract these checks pin:
-#   - AI09 names what it reads (config.yml, the five rails, the six test files, the dev dependency, the README) and says,
-#     in whole sentences, that nothing is run, that its result is never a behavioral PASS, and whose the run is.
-#   - Every place that used to say the build ran "the basic suite (18 tests)" now says the same thing as AI09.
-#   - None of them says it the old way again: an 18-test or "basic" suite, the build running a NeMo or behavioral test
-#     (with or without a provider), a code-level result called a PASS, a NeMo fix-and-retest loop at build.
-#   - /nemo-it's own claims stay: the 60 tests, and "Code-level results are never a PASS".
-# A tripwire, not a proof: it reads wording, one sentence or table cell at a time. Version history is not scanned.
-# Usage: test-ai09-code-level.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on six opposites.
+#   - AI09 is exactly the line below: what it reads, that it runs no NeMo test, that its result is never a behavioral
+#     PASS, and who runs the suite.
+#   - The governance doc's table of NeMo categories is exactly the eight rows below (0 by check AI09, 10 by /nemo-it).
+#   - Each place that used to say the build ran "the basic suite (18 tests)" holds the true sentence, whole.
+#   - Every sentence, list item or table cell in any Markdown file that names the build (build-verify, "build", AI09,
+#     Part A or D) together with the NeMo suite (NeMo, guardrails/tests, a behavioral test or PASS, the 60 tests), or a
+#     code-level result together with a pass, is one of the exact units listed below. A new such sentence fails until a
+#     person adds it to the list, which is the point: the list is the review.
+#   - None of the old or disproved wordings is back: an 18-test or "basic" suite, a NeMo loop or pass rate at build,
+#     "no AI call at build", "every behavioral run is left to /nemo-it", "run only by /nemo-it", "/nemo-it before deploy".
+# A tripwire, not a proof. It cannot catch: a false sentence that names neither the build nor the NeMo suite in the same
+# sentence (a claim split across two sentences, or "the pipeline exercises the guardrails"); a claim in a file that is
+# not Markdown; a true-looking listed sentence moved somewhere it is false; anything under a version-history heading.
+# /nemo-it's own pages are not checked for the code-level-and-pass rule: that mode is theirs.
+# Usage: test-ai09-code-level.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on its opposites.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; SELF="$root/scripts/$(basename "$0")"
 R="${1:-$root}"; cd "$R"
@@ -28,85 +36,132 @@ REF=.claude/make-it/references
 BS=$REF/build-standards.md; GR=$REF/guardrails.md; BVS=$REF/build-verify-security.md; SG=$REF/ship-it-guide.md
 BP=$REF/design-blueprint.md; RF=.claude/commands/retrofit-it.md; AT=.claude/make-it/templates/nemo-it-attestation.md
 GOV=docs/AI-GOVERNANCE-HOMEGROWN.md; NM=.claude/commands/nemo-it.md
-FILES="$BS $GR $BVS $SG $BP $RF $AT $GOV README.md docs/DEVOPS-GUIDE.md docs/PENTEST-READINESS.md .claude/commands/make-it.md $REF/prompt-templates.md $REF/fix-strategies.md"
+# every Markdown file but the two logs of finished work
+FILES="$(find . -name '*.md' -not -path './.git/*' -not -path './.claude/worktrees/*' -not -path '*/node_modules/*' -not -name CHANGELOG.md -not -name TODO.md | sed 's|^[.]/||' | sort)"
 
 # one line per file, whitespace flattened: a sentence that wraps still matches
 flat() { tr '\n' ' ' | tr -s ' '; }
 # has FILE SENTENCE: the flattened file holds the whole sentence
 has() { flat < "$1" | gq -F -- "$2" || { echo "  missing in $1: $2"; false; }; }
-# units FILE...: file<TAB>unit, a unit being one sentence, list item or table cell; sections under a version-history heading are
-# dropped (README.md's release notes quote the old wording as history)
+# row FILE LINE: the file holds exactly this line
+row() { gq -xF -- "$2" "$1" || { echo "  no such line in $1: $2"; false; }; }
+# units FILE...: file<TAB>unit, a unit being one sentence, list item, table cell or line of a code block; sections under
+# a version-history heading are dropped (README.md's release notes quote the old wording as history)
 units() {
   local f
   for f in "$@"; do
-    awk '/^##+ /{h = ($0 ~ /^##+ (v[0-9]|.*(Version History|Changelog))/)} h {next} /^[[:space:]]*([-*+] |[0-9]+[.] |#|$)/{print "<BR>"} {print}' "$f" | flat |
-      perl -pe 's/<BR>|\|/\n/g; s/([.!?]["\x27)]?) (?=\S)/$1\n/g' | awk -v f="$f" 'NF {print f "\t" $0}'
+    awk '/^##+ /{h = ($0 ~ /^##+ (v[0-9]|.*(Version History|Changelog))/)} h {next} /^[[:space:]]*```/{c = !c} c || /^[[:space:]]*([-*+] |[0-9]+[.] |#|```|$)/{print "<BR>"} {print}' "$f" | flat |
+      perl -pe 's/<BR>|\|/\n/g; s/([.!?]["\x27)]?) (?=\S)/$1\n/g' | sed -E 's/^ +//; s/ +$//' | awk -v f="$f" 'NF {print f "\t" $0}'
   done
 }
 U="$(units $FILES)"
-# never NAME REGEX [EXCEPT]: no unit matches (case ignored), but the units that match EXCEPT
-never() { local m; m="$(printf "%s\n" "$U" | { grep -iE -- "$2" || true; } | { grep -viE -- "${3:-^$}" || true; })"; [ -z "$m" ] || { printf "%s\n" "$m" | cut -c1-200 | sed "s/^/  $1: /"; false; }; }
+# never NAME REGEX: no unit matches (case ignored)
+never() { local m; m="$(printf "%s\n" "$U" | { grep -iE -- "$2" || true; })"; [ -z "$m" ] || { printf "%s\n" "$m" | cut -c1-200 | sed "s/^/  $1: /"; false; }; }
 
-# 1. AI09 itself
-AI09="$(grep -E '^[*][*]AI09[*][*] ' "$BS" || true)"
-a9() { printf "%s\n" "$AI09" | gq -F -- "$1" || { echo "  missing in AI09: $1"; false; }; }
-check "AI09 is one check, a [FIX], named as the code-level wiring check" \
-  '[ "$(printf "%s\n" "$AI09" | grep -c .)" = 1 ] && a9 "**AI09** [AI] [FIX] **NeMo Guardrails wiring (code-level)** -- Checked by reading the files."'
-check "AI09 runs nothing: no NeMo test, no AI call; the test files are generated and not run" \
-  'a9 "No NeMo test is run and no AI call is made at build." && a9 "they are generated here and not run."'
-check "AI09 names what it reads: config.yml and what it references, the five rails, the six test files, the dev dependency, the README" \
-  'a9 "\`guardrails/config.yml\` exists, names the app'"'"'s AI model and references every rail file in \`guardrails/rails/\`." && ( for x in input_safety.co output_safety.co topic_control.co pii_protection.co factuality.co test_prompt_injection.py test_jailbreak.py test_toxicity_bias.py test_topic_boundaries.py test_pii_leakage.py test_hallucination.py; do a9 "\`$x\`" || exit 1; done ) && a9 "with at least 10 cases each" && a9 "\`nemoguardrails\` is a dev dependency" && a9 "\`guardrails/README.md\` gives the command that runs the suite."'
-check "AI09's result is never a behavioral PASS, and every behavioral run is left to /nemo-it" \
-  'a9 "A code-level result is never reported as a behavioral PASS: every behavioral run is left to /nemo-it."'
+# 1. AI09 itself, the whole line
+IFS= read -r AI09 <<'AI09_EOF' || true
+**AI09** [AI] [FIX] **NeMo Guardrails wiring (code-level)** -- Checked by reading the files: AI09 runs no NeMo Guardrails test. (1) `guardrails/config.yml` exists, names the app's AI model and references every rail file in `guardrails/rails/`. (2) The five Colang rails exist: `input_safety.co`, `output_safety.co`, `topic_control.co`, `pii_protection.co`, `factuality.co`. (3) The six test files exist in `guardrails/tests/` (`test_prompt_injection.py`, `test_jailbreak.py`, `test_toxicity_bias.py`, `test_topic_boundaries.py`, `test_pii_leakage.py`, `test_hallucination.py`), with at least 10 cases each; the build generates them and AI09 does not run them. (4) `nemoguardrails` is a dev dependency (`requirements-dev.txt`, or `guardrails/requirements.txt` for a Node app). (5) `guardrails/README.md` gives the command that runs the suite. A code-level result is never reported as a behavioral PASS. The NeMo suite is run by /nemo-it, and by /fix-it when it verifies a fix; the result that counts for an attestation is /nemo-it's.
+AI09_EOF
+check "AI09 is one check, and it is exactly the code-level wiring check: it runs no NeMo test, is never a behavioral PASS, and names who runs the suite" \
+  '[ "$(grep -cE "^[*][*]AI09[*][*] " "$BS")" = 1 ] && row "$BS" "$AI09"'
+check "AI09 names what it reads: config.yml, the five rails, the six test files, the dev dependency, the README" \
+  '( for x in guardrails/config.yml input_safety.co output_safety.co topic_control.co pii_protection.co factuality.co test_prompt_injection.py test_jailbreak.py test_toxicity_bias.py test_topic_boundaries.py test_pii_leakage.py test_hallucination.py nemoguardrails guardrails/README.md; do printf "%s\n" "$AI09" | gq -F -- "\`$x\`" || { echo "  AI09 does not name $x"; exit 1; }; done )'
 
-# 2. every other place says the same
-check "guardrails.md: build-verify runs no NeMo test, the run is /nemo-it's, and there is no fix-and-retest loop at build" \
-  'has "$GR" "Build-verify runs no NeMo test and makes no AI call: check AI09 is code-level." && has "$GR" "that result is never a behavioral PASS" && has "$GR" "every behavioral run is left to /nemo-it" && has "$GR" "No fix-and-retest loop at build-verify: no test is run there, so there is nothing to retest." && has "$GR" "No NeMo test is run at build-verify: every behavioral run is left to /nemo-it" && has "$GR" "Build-verify runs no NeMo test against any model (check AI09 is code-level)."'
-check "build-verify-security.md: Part D and check AI09 are both code-level, neither a behavioral PASS; the file calls itself Part D throughout" \
-  'has "$BVS" "Part D does code-level verification only, and so does Part A'"'"'s check AI09 (the guardrails are present and wired)." && has "$BVS" "A code-level result is never a behavioral PASS." && has "$BVS" "Every behavioral run is left to /nemo-it." && [ "$(head -1 "$BVS")" = "# Build-Verify Part D: Automatic Security Scan" ] && ! gq -E "Part C (runs|does|applies|is|provides)" "$BVS"'
-check "ship-it-guide.md, design-blueprint.md, retrofit-it.md: no NeMo test at build, the wiring is checked in code" \
-  'has "$SG" "build-verify runs no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and that result is never a behavioral PASS." && has "$SG" "Every behavioral run is left to /nemo-it: it runs the full suite" && has "$BP" "| Build-verify | During /make-it build | Code-level wiring check (AI09): files read, no test run, never a behavioral PASS | 0 |" && has "$BP" "**Remediation flow (none at build-verify: no test is run there, so there is nothing to retest):**" && has "$BP" "NeMo Guardrails wiring checked in code during build-verify (check AI09; no test is run, never a behavioral PASS)" && has "$RF" "No NeMo Guardrails test is run after this step: check AI09 confirms in code that the guardrails are present and wired, and every behavioral run is left to /nemo-it."'
-check "what a GRC reviewer reads (attestation template, governance doc): generated at build, run only by /nemo-it, 0 behavioral tests at build" \
-  'has "$AT" "| NeMo Guardrails test suite | Yes -- 60 tests generated at build and the wiring checked in code (check AI09); run only by /nemo-it, never at build | [PRESENT / ABSENT] |" && has "$GOV" "At build no behavioral test runs: check AI09 confirms in code that the guardrails are present and wired, and that result is never a behavioral PASS |" && has "$GOV" "| **Total** | | **0 behavioral tests** | **60 tests** |" && has "$GOV" "No behavioral test runs at build, so the build has no fix-and-retest loop for these." && has "$GOV" "| No pass rate at build; /nemo-it failures are reported, not fixed |" && has "$GOV" "| AI behavioral | 0 (code-level wiring only) |" && has "$GOV" "| **No AI behavioral testing at build** | Low | Build checks the guardrail wiring in code (check AI09, 0 behavioral tests); /nemo-it runs the 60 tests before deploy |"'
-check "README.md, DEVOPS-GUIDE.md, PENTEST-READINESS.md: no NeMo test at build" \
-  'has README.md "No NeMo test runs during build-verify: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS" && has README.md "No fix-and-retest loop at build-verify (no test is run there); /nemo-it reports its failures and fixes nothing" && has docs/DEVOPS-GUIDE.md "Build-verify checks the wiring in code only (check AI09) and runs no test |" && has docs/PENTEST-READINESS.md "NeMo Guardrails runs 60 tests across 6 categories in /nemo-it, and none at build (the wiring is checked in code)"'
-check "/nemo-it's own claims stay: the 60 tests, a code-level result is never a PASS, and Prompt #10d still generates the tests" \
-  'has "$GR" "/nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it" && has "$NM" "Code-level results are never a PASS: the behavioral tests did not run." && has "$REF/prompt-templates.md" "Create test cases (minimum 10 per category for the full suite):" && has "$GOV" "60 tests, run by /nemo-it before deploy."'
+# 2. the governance doc's NeMo table, row by row
+check "governance doc 5.5: each category is 0 tests by check AI09 and 10 by /nemo-it; the totals are 0 NeMo tests and 60" \
+  'row "$GOV" "| Category | What It Tests | Build check AI09 (code-level) | /nemo-it (Full) |" && row "$GOV" "| 1. Prompt Injection Resistance | Adversarial input cannot override system instructions | 0 tests | 10 tests |" && row "$GOV" "| 2. Jailbreak Resistance | Role-play, encoding tricks, multi-turn escalation blocked | 0 tests | 10 tests |" && row "$GOV" "| 3. Toxicity / Bias Detection | AI outputs free of toxic, offensive, or biased content | 0 tests | 10 tests |" && row "$GOV" "| 4. Topic Boundary Enforcement | AI stays within defined domain scope | 0 tests | 10 tests |" && row "$GOV" "| 5. PII Leakage Prevention | AI does not reveal PII, secrets, or internal system details | 0 tests | 10 tests |" && row "$GOV" "| 6. Hallucination Detection | AI does not fabricate facts or present unverified claims | 0 tests | 10 tests |" && row "$GOV" "| **Total** | | **0 NeMo tests** | **60 tests** |" && [ "$(grep -cE "^[|] [1-6][.] .*[|] [0-9]+ tests [|] [0-9]+ tests [|]$" "$GOV")" = 6 ]'
+check "governance doc: the stage table gives the NeMo suite to no stage, and the risk row keeps its rating" \
+  'row "$GOV" "| AI behavioral (NeMo suite) | 0 in build-verify'"'"'s checks (AI09 is code-level) | None | None | Runtime monitoring |" && has "$GOV" "The NeMo suite runs in none of these stages." && has "$GOV" "| **Build-verify'"'"'s checks run no NeMo Guardrails test** | Low | Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; the 60 NeMo tests run when someone runs /nemo-it with a live AI provider | Run /nemo-it with a live AI provider before each production deploy: recommended, and nothing in make-it enforces it |" && ! gq -E "Full NeMo|60 NeMo tests [|]" "$GOV"'
 
-# 3. nobody says it the old way
+# 3. every other place holds the true sentence, whole
+RUNBY="The NeMo suite is run by /nemo-it, and by /fix-it when it verifies a fix"
+NOENF="recommended before each production deploy, and nothing in make-it enforces it"
+check "who runs the suite: /nemo-it, and /fix-it when it verifies a fix (AI09, guardrails, the security scan, the ship-it guide, /retrofit-it, the attestation template)" \
+  '( for f in "$BS" "$GR" "$BVS" "$SG" "$RF"; do has "$f" "$RUNBY" || exit 1; done ) && has "$GR" "The result that counts for an attestation is /nemo-it'"'"'s" && has "$AT" "| NeMo Guardrails test suite | Yes -- 60 or more tests generated at build and the wiring checked in code (check AI09, which runs none of them); run by /nemo-it, and by /fix-it when it verifies a fix | [PRESENT / ABSENT] |" && has "$BP" "/fix-it fixes its findings and runs guardrails/tests/ again to verify a fix."'
+check "a /nemo-it run is recommended and not enforced (guardrails, the ship-it guide, the governance doc, README.md, DEVOPS-GUIDE.md)" \
+  '( for f in "$GR" "$SG" "$GOV" README.md; do has "$f" "$NOENF" || exit 1; done ) && has docs/DEVOPS-GUIDE.md "recommended before each production deploy, and nothing in make-it enforces a \`/nemo-it\` run" && has "$GOV" "60 tests, run when someone runs /nemo-it with a live AI provider: $NOENF." && has "$GOV" "| Generated for every AI app; the run is recommended, not enforced |"'
+check "build-verify's own checks run no NeMo test, and AI09 has no fix-and-retest loop (guardrails, the security scan, the ship-it guide, the blueprint, /retrofit-it, README.md)" \
+  'has "$GR" "Build-verify'"'"'s own checks run no NeMo Guardrails test: check AI09 is code-level." && has "$GR" "Check AI09 has no fix-and-retest loop: it runs no test, so there is nothing to retest." && has "$BVS" "The probe is not the NeMo suite and gives no NeMo pass count." && has "$BVS" "A code-level result is never a behavioral PASS." && [ "$(head -1 "$BVS")" = "# Build-Verify Part D: Automatic Security Scan" ] && ! gq -E "Part C (runs|does|applies|is|provides)" "$BVS" && has "$SG" "build-verify'"'"'s own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and that result is never a behavioral PASS." && has "$BP" "**Remediation flow (none in check AI09: it runs no test, so there is nothing to retest):**" && has "$RF" "No NeMo Guardrails test is run after this step: check AI09 confirms in code that the guardrails are present and wired." && has README.md "Check AI09 has no fix-and-retest loop (it runs no test); /nemo-it reports its failures and fixes nothing."'
+check "what stays: /nemo-it's 60 tests, its rule that a code-level result is never a PASS, and Prompt #10d generating the tests" \
+  'has "$GR" "/nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it" && has "$NM" "Code-level results are never a PASS: the behavioral tests did not run." && has "$REF/prompt-templates.md" "### Prompt #10d: NeMo Guardrails -- AI Safety Tests (always generated if AI features exist)" && has "$REF/prompt-templates.md" "Create test cases (minimum 10 per category for the full suite):" && has "$BP" "guardrails/requirements.txt for a Node app"'
+
+# 4. a unit that names the build with the NeMo suite, or a code-level result with a pass, is one of these exact units
+cat > "$TMPD/allow" <<'ALLOW_EOF'
+- [ ] NeMo Guardrails wiring checked in code during build-verify (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
+- **AI safety** (if the app has AI features): build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and that result is never a behavioral PASS.
+- Build-verify's own checks run no NeMo Guardrails test (check AI09 is code-level)
+- Build-verify's own checks run no NeMo Guardrails test against any model.
+- Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS
+- Build-verify's own checks run no NeMo Guardrails test: check AI09 is code-level.
+- No NeMo Guardrails test is run after this step: check AI09 confirms in code that the guardrails are present and wired.
+(3) The six test files exist in `guardrails/tests/` (`test_prompt_injection.py`, `test_jailbreak.py`, `test_toxicity_bias.py`, `test_topic_boundaries.py`, `test_pii_leakage.py`, `test_hallucination.py`), with at least 10 cases each; the build generates them and AI09 does not run them.
+**AI09** [AI] [FIX] **NeMo Guardrails wiring (code-level)** -- Checked by reading the files: AI09 runs no NeMo Guardrails test.
+**Build-verify's checks run no NeMo Guardrails test**
+/nemo-it runs 60 NeMo Guardrails tests across 6 categories when it is run with a live AI provider; build-verify's check AI09 reads the wiring in code and runs none
+60 tests when someone runs /nemo-it with a live AI provider; none in build-verify's checks (AI09 is code-level wiring only)
+A code-level result is never a behavioral PASS.
+A code-level result is never reported as a behavioral PASS.
+Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; the 60 NeMo tests run when someone runs /nemo-it with a live AI provider
+Build-verify's check AI09 reads the wiring in code and runs no NeMo test
+Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and that result is never a behavioral PASS.
+Build-verify's own checks run no NeMo Guardrails test.
+Check AI09 confirms in code that the guardrails are present and wired; that result is never a behavioral PASS.
+Code-level wiring check (AI09): files read, no NeMo test run by the check, never a behavioral PASS
+NeMo Guardrails behavioral testing (6 categories) is run by /nemo-it, not by build-verify's checks
+sanitizePromptInput() strips injection patterns; `<user_input>` delimiter tags; system prompt anti-injection instructions; jailbreak resistance instructions; NeMo Guardrails prompt injection tests (10, run by /nemo-it; none by build-verify's checks)
+The 60 tests are generated at build and run when someone runs /nemo-it with a live AI provider: recommended before each production deploy, and nothing in make-it enforces it.
+The build's AI endpoint probe (3 payloads, section 6.1 Phase 2b) is a separate, smaller check: it is not the NeMo suite and gives no NeMo pass count
+The build's AI endpoint probe (3 payloads, section 6.1 Phase 2b) is a separate, smaller check: it is not the NeMo suite and gives no NeMo pass count.
+Uses **code-level verification** (not behavioral testing -- that requires a live AI provider which may not be configured during build).
+Yes -- 60 or more tests generated at build and the wiring checked in code (check AI09, which runs none of them); run by /nemo-it, and by /fix-it when it verifies a fix
+ALLOW_EOF
+NEMOW='NeMo([^-]|$)|guardrails/tests|[Bb]ehaviou?ral (tests?|suite|testing|PASS|runs?)|[Ss]ix (NeMo )?categories|\b60\+? (or more )?tests\b'
+BUILDW='[Bb]uild-verify|\b[Bb]uilds?\b|\bAI09\b|\bPart [AD]\b'
+# unlisted LIST: the units of LIST (file<TAB>unit) that are not in the allow list, as file<TAB>unit
+unlisted() { printf "%s\n" "$1" | awk -F'\t' 'NR == FNR {a[$0] = 1; next} NF && !(substr($0, length($1) + 2) in a)' "$TMPD/allow" -; }
+BN="$(unlisted "$(printf "%s\n" "$U" | { grep -E "	.*($NEMOW)" || true; } | { grep -E "	.*($BUILDW)" || true; })")"
+check "every unit that names the build together with the NeMo suite is a listed, reviewed sentence" \
+  '[ -z "$BN" ] || { printf "%s\n" "$BN" | cut -c1-220 | sed "s/^/  not listed: /"; false; }'
+NEMOPAGES='^([.]claude/commands/nemo-it[.]md|[.]claude/make-it/templates/nemo-it-attestation[.]md|desktop/skills/nemo-it/SKILL[.]md|[.]claude/make-it/confluence-docs/08-nemo-it[.]md)	'
+CP="$(unlisted "$(printf "%s\n" "$U" | { grep -vE "$NEMOPAGES" || true; } | { grep -iE "	.*(code-level|\bAI09\b|wiring checks?)" || true; } | { grep -iE "	.*\bpass(ed|es|ing)?\b" || true; })")"
+check "every unit outside /nemo-it's own pages that names a code-level result (or AI09) together with a pass is a listed, reviewed sentence" \
+  '[ -z "$CP" ] || { printf "%s\n" "$CP" | cut -c1-220 | sed "s/^/  not listed: /"; false; }'
+check "the list has no dead entry: each listed unit is in a file" \
+  'D="$(printf "%s\n" "$U" | cut -f2- | awk "NR == FNR {a[\$0] = 1; next} !(\$0 in a)" - "$TMPD/allow")"; [ -z "$D" ] || { printf "%s\n" "$D" | cut -c1-200 | sed "s/^/  dead: /"; false; }'
+
+# 5. nobody says it the old way, in any Markdown file
 OLD18='\b18\+? (basic |NeMo )?tests?\b|\b18 test cases\b|\b18 \(build\)|\(18\+? tests\)'
 BASIC='\bbasic (test )?suite\b|\bBASIC checks\b|\bbasic checks\b|\bNeMo basic\b|\(basic\)|\b3 basic\b|\(18 basic|\bbasic \(smoke test\)'
-# only a run of something is a claim: a unit that says "no NeMo test" or "no behavioral test" is the rule itself
-NORUN='\bno (NeMo|behaviou?ral)( Guardrails)? tests?\b'
-RUNS='(build-verify|\bbuild\b|part [ad]\b)[^.]{0,80}\bruns? (the |its |a |all |those |these |[0-9]+ )?(NeMo|behaviou?ral|guardrails? test)|(NeMo|behaviou?ral) (tests?|suite)[^.]{0,40}\b(run|runs|ran|pass|passes) (at|during|in) (the )?build|\btests?\b[^.]{0,30}\b(at|in) build-verify, [0-9]'
 LOOP='self-healing at build|100% at build|self-healing remediation|remediation flow \(self-healing|self-healing loop retests|self-healing retests|fix(es)? what fails'
+DISPROVED='no AI call is made at build|makes no AI call|every behaviou?ral run is left to|run only by /nemo-it|\bnever at build\b|/nemo-it before deploy|run by /nemo-it before deploy|no behaviou?ral test runs at build'
 check "no file says an 18-test or \"basic\" NeMo suite" 'never "old claim" "	.*($OLD18)" && never "old claim" "	.*($BASIC)"'
-check "no file says the build runs a NeMo or behavioral test (with a provider or without)" 'never "build run" "	.*($RUNS)" "	.*($NORUN)"'
 check "no file gives the build a NeMo fix-and-retest loop, or a pass rate" 'never "build loop" "	.*($LOOP)"'
-# a unit that says "behavioral PASS", or "code-level" and "PASS" together, says "never"
-CLP="$(printf "%s\n" "$U" | { grep -E "	.*(behaviou?ral PASS|[Cc]ode-level.*\bPASS\b|\bPASS\b.*[Cc]ode-level)" || true; } | { grep -viE "	.*\bnever\b" || true; })"
-check "no file calls a code-level result a PASS" '[ -z "$CLP" ] || { printf "%s\n" "$CLP" | cut -c1-200 | sed "s/^/  pass: /"; false; }'
+check "no file says what round 1 of review disproved: no AI call at build, every run left to /nemo-it, /nemo-it as a step before deploy" 'never "disproved" "	.*($DISPROVED)"'
 
-# 4. controls (this repo only): each opposite fails the checks above
+# 6. controls (this repo only): each opposite fails the checks above
 if [ -z "${1:-}" ]; then
-  # opp FILE PERL: a copy of the scanned files with one edit must fail this script
+  # opp FILE PERL: a copy of the Markdown files with one edit must fail this script
   opp() {
     local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"
-    tar -cf - $FILES "$NM" | tar -xf - -C "$d"
+    tar -cf - $FILES | tar -xf - -C "$d"
     perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1
   }
-  check "(control) fails with the old AI09 line back" \
-    'opp "$BS" "s/^\*\*AI09\*\* [^\n]*/**AI09** [AI] [FIX] **NeMo Guardrails** -- guardrails\/ directory, config.yml, Colang rails. Basic suite (18 tests) passes./m"'
-  check "(control) fails with the claim back in the governance doc only (the totals row)" \
-    'opp "$GOV" "s/\*\*0 behavioral tests\*\*/**18 tests**/"'
-  check "(control) fails with a code-level result made a PASS" \
-    'opp "$BS" "s/A code-level result is never reported as a behavioral PASS/A code-level result is reported as a behavioral PASS/"'
-  check "(control) fails when the build runs the behavioral tests once a provider is set" \
-    'opp "$GR" "s/(- No NeMo test is run at build-verify[^\n]*\n)/\$1- When an AI provider is set, build-verify runs the behavioral tests too\n/"'
-  check "(control) fails with the \"left to /nemo-it\" sentence dropped from AI09" \
-    'opp "$BS" "s/: every behavioral run is left to \/nemo-it\././"'
-  check "(control) fails with the 18 build tests back in the attestation template, and with \"Part C\" back in the security scan" \
-    'opp "$AT" "s/run only by \/nemo-it, never at build/18 tests in build-verify, 60 in \/nemo-it/" && opp "$BVS" "s/Part D runs whatever checks/Part C runs whatever checks/"'
+  # add FILE AFTER LINE: the same, with LINE added after the first line that starts with AFTER
+  add() { A="$2" L="$3" opp "$1" 's/^(\Q$ENV{A}\E[^\n]*\n)/$1$ENV{L}\n/m'; }
+  check "(control) fails with the old AI09 line back, and with \"recorded as passed\" added to AI09" \
+    'opp "$BS" "s/^\*\*AI09\*\* [^\n]*/**AI09** [AI] [FIX] **NeMo Guardrails** -- guardrails\/ directory, config.yml, Colang rails. Basic suite (18 tests) passes./m" && opp "$BS" "s/^(\*\*AI09\*\* [^\n]*)/\$1 When all five hold, AI09 is recorded as passed for AI safety./m"'
+  check "(control) fails with the claim back in the governance doc only: 3 tests per category with the totals left alone, and the old totals row" \
+    'opp "$GOV" "s/\| 0 tests \| 10 tests \|/| 3 tests | 10 tests |/g" && opp "$GOV" "s/\*\*0 NeMo tests\*\*/**18 tests**/"'
+  check "(control) fails with the old claim in a file nobody listed (CLAUDE.md), and reworded with no old phrase in it (guardrails.md)" \
+    'add CLAUDE.md "- The user NEVER needs" "- Build-verify runs the NeMo Guardrails basic suite (18 tests) and fixes what fails" && add "$GR" "- 6 test categories" "- Build-verify also exercises the six NeMo categories against the primary model, three prompts each, and repairs whatever fails"'
+  check "(control) fails when the build runs the suite once a provider or key is set (the ship-it guide, guardrails.md)" \
+    'add "$SG" "### What make-it runs before /ship-it" "When an AI key is set, build-verify launches pytest guardrails/tests/ and loops on failures up to three times." && add "$GR" "- 6 test categories" "- Build-verify runs no NeMo test unless an AI provider is set; then it runs the behavioral suite"'
+  check "(control) fails with a code-level result made a PASS: in AI09, and in a sentence that also says \"never\"" \
+    'opp "$BS" "s/is never reported as a behavioral PASS/is reported as a behavioral PASS/" && add "$BVS" "**When this runs:**" "Build-verify treats it as a behavioral PASS anyway when every wiring check is green, and never asks /nemo-it."'
+  check "(control) fails with who-runs-it dropped from AI09, with /fix-it dropped from the attestation template, and with the not-enforced sentence dropped from the governance doc" \
+    'opp "$BS" "s/ The NeMo suite is run by \/nemo-it, and by \/fix-it when it verifies a fix; the result that counts for an attestation is \/nemo-it.s\.//" && opp "$AT" "s/run by \/nemo-it, and by \/fix-it when it verifies a fix/run only by \/nemo-it, never at build/" && opp "$GOV" "s/60 tests, run when someone runs \/nemo-it with a live AI provider: recommended before each production deploy, and nothing in make-it enforces it\./60 tests, run by \/nemo-it before deploy./"'
+  check "(control) fails with \"no AI call\" back, with /nemo-it's 60 made 30, and with \"Part C\" back in the security scan" \
+    'opp "$GR" "s/own checks run no NeMo Guardrails test: check AI09 is code-level\./own checks run no NeMo Guardrails test and make no AI call: check AI09 is code-level./" && opp "$GR" "s/= 60 tests\) before/= 30 tests) before/" && opp "$BVS" "s/Part D runs whatever checks/Part C runs whatever checks/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \

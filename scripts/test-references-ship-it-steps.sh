@@ -169,13 +169,13 @@ check "no sentence gives a self-healing loop to /nemo-it: it never fixes, the lo
   '[ -z "$HEALER" ] || { printf "%s\n" "$HEALER" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
 NEMOSEC="$(awk '/^- 6 test categories/{on=1} /^### /{on=0} on' .claude/make-it/references/guardrails.md | tr '\n' ' ' | tr -s ' ')"
 RMSEC="$(awk '/^- Full suite \(60\+ tests\) runs in/{on=1; next} on && /^- /{print; exit}' README.md)"
-check "README.md's bullet after \"Full suite ... runs in /nemo-it\" says build-verify has no fix-and-retest loop (no test is run there)" \
-  'printf "%s" "$RMSEC" | gq -F "No fix-and-retest loop at build-verify" && ! printf "%s" "$RMSEC" | gq -iE "self-healing" && printf "%s" "$RMSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
+check "README.md's bullet after \"Full suite ... runs in /nemo-it\" says check AI09 has no fix-and-retest loop (it runs no test)" \
+  'printf "%s" "$RMSEC" | gq -F "Check AI09 has no fix-and-retest loop" && ! printf "%s" "$RMSEC" | gq -iE "self-healing" && printf "%s" "$RMSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
 BPSEC="$(awk '/^\*\*Remediation flow/{on=1} /^\*\*Attestation:\*\*/{on=0} on' .claude/make-it/references/design-blueprint.md | tr '\n' ' ' | tr -s ' ')"
-check "design-blueprint.md's remediation flow: none at build-verify, /nemo-it reports and fixes nothing, and nothing goes into an attestation the build doesn't write" \
-  'printf "%s" "$BPSEC" | gq -F "none at build-verify" && printf "%s" "$BPSEC" | gq -F "/nemo-it runs the NeMo Guardrails test suite and reports what fails; it fixes nothing" && ! printf "%s" "$BPSEC" | gq -iE "document in attestation"'
-check "guardrails.md's NeMo rule says build-verify has no fix-and-retest loop and /nemo-it reports and fixes nothing" \
-  'printf "%s" "$NEMOSEC" | gq -F "No fix-and-retest loop at build-verify" && ! printf "%s" "$NEMOSEC" | gq -iE "self-healing" && printf "%s" "$NEMOSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
+check "design-blueprint.md's remediation flow: none in check AI09, /nemo-it reports and fixes nothing, and nothing goes into an attestation the build doesn't write" \
+  'printf "%s" "$BPSEC" | gq -F "none in check AI09" && printf "%s" "$BPSEC" | gq -F "/nemo-it runs the NeMo Guardrails test suite and reports what fails; it fixes nothing" && ! printf "%s" "$BPSEC" | gq -iE "document in attestation"'
+check "guardrails.md's NeMo rule says check AI09 has no fix-and-retest loop and /nemo-it reports and fixes nothing" \
+  'printf "%s" "$NEMOSEC" | gq -F "Check AI09 has no fix-and-retest loop" && ! printf "%s" "$NEMOSEC" | gq -iE "self-healing" && printf "%s" "$NEMOSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
 
 # no card id in shipped text: cardids FILE... prints each sentence that names one (Version History skipped)
 cardids() { sents "$@" | nohist | { grep -E "$T.*\bE[0-9]{2}-S[0-9]+\b" || true; }; }
