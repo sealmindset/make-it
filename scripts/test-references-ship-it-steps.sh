@@ -173,7 +173,7 @@ check "README.md's bullet after \"Full suite ... runs in /nemo-it\" says check A
   'printf "%s" "$RMSEC" | gq -F "Check AI09 has no fix-and-retest loop" && ! printf "%s" "$RMSEC" | gq -iE "self-healing" && printf "%s" "$RMSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
 BPSEC="$(awk '/^\*\*Remediation flow/{on=1} /^\*\*Attestation:\*\*/{on=0} on' .claude/make-it/references/design-blueprint.md | tr '\n' ' ' | tr -s ' ')"
 check "design-blueprint.md's remediation flow: none in check AI09, /nemo-it reports and fixes nothing, and nothing goes into an attestation the build doesn't write" \
-  'printf "%s" "$BPSEC" | gq -F "none in check AI09" && printf "%s" "$BPSEC" | gq -F "/nemo-it runs the NeMo Guardrails test suite and reports what fails; it fixes nothing" && ! printf "%s" "$BPSEC" | gq -iE "document in attestation"'
+  'printf "%s" "$BPSEC" | gq -F "none in check AI09" && printf "%s" "$BPSEC" | gq -F "/nemo-it writes and runs its own NeMo Guardrails cases and reports what fails; it fixes nothing" && ! printf "%s" "$BPSEC" | gq -iE "document in attestation"'
 check "guardrails.md's NeMo rule says check AI09 has no fix-and-retest loop and /nemo-it reports and fixes nothing" \
   'printf "%s" "$NEMOSEC" | gq -F "Check AI09 has no fix-and-retest loop" && ! printf "%s" "$NEMOSEC" | gq -iE "self-healing" && printf "%s" "$NEMOSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
 
