@@ -1,6 +1,6 @@
 ---
 name: fix-it
-description: Automatically fix security findings from /nemo-it attestation reports. Reads the most recent attestation, classifies fixes as auto-fixable vs manual, applies fixes, verifies the app still works, and re-scans to produce an updated attestation.
+description: Automatically fix security findings from /nemo-it attestation reports. Reads the most recent attestation, classifies fixes as auto-fixable vs manual, applies fixes, verifies the app still works, and re-scans to produce an updated attestation. Use when the user runs /fix-it, or asks to fix what a /nemo-it scan or security report found.
 allowed-tools:
   - Read
   - Write

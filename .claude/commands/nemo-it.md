@@ -1,6 +1,6 @@
 ---
 name: nemo-it
-description: Security attestation skill that scans any application project against NeMo Guardrails AI safety tests and the OWASP Testing Guide. Reports findings only -- never fixes them.
+description: Security attestation skill that scans any application project against NeMo Guardrails AI safety tests and the OWASP Testing Guide. Reports findings only -- never fixes them. Use when the user runs /nemo-it, or asks for a security scan, a security or AI-safety attestation, or whether the app is safe to release.
 allowed-tools:
   - Read
   - Write

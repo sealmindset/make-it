@@ -49,7 +49,7 @@ check "the skills that deploy or reach outside (/ship-it, /argo-it, /demo-it, /t
 check "the never paragraph says: only when the person asks for that outcome, and every ask the skill makes is kept" \
   'printf "%s" "$NPARA" | gq -F "only when the person asks for that outcome" && printf "%s" "$NPARA" | gq -F "keep every ask the skill makes"'
 check "the block tells Claude to say which skill it started, and to start /debug-it before any fix" \
-  'printf "%s\n" "$BLOCK" | gq -F "say in one line which one you started" && printf "%s\n" "$BLOCK" | gq -E "/debug-it\`?, before any fix"'
+  'printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "say in one line which one you started" && printf "%s\n" "$BLOCK" | gq -E "/debug-it\`?, before any fix"'
 
 # Build step h and S14
 TPL="$(awk '/^      # Project instructions/{on=1} on && /^      ```$/{exit} on' "$MK")"
@@ -59,7 +59,7 @@ S14="$(grep -E '^\*\*S14\*\* ' "$BS" || true)"
 check "build-standards S14 back-fills the section: after the Learnings section, once, word for word from skill-triggers.md" \
   'printf "%s" "$S14" | gq -F "$HEAD" && printf "%s" "$S14" | gq -F "skill-triggers.md" && printf "%s" "$S14" | gq -F "word for word" && printf "%s" "$S14" | gq -F "appears once" && printf "%s" "$S14" | gq -F "after the \`## Learnings\` section"'
 check "the skills that run every check say S01-S14, and none still says S01-S13" \
-  'gq -F "S01-S14" "$MK" && gq -F "S01-S14" .claude/commands/retrofit-it.md && gq -F "S01-S14" .claude/commands/resume-it.md && ! gq -F "S01-S13" "$MK" .claude/commands/retrofit-it.md .claude/commands/resume-it.md'
+  'gq -F "S01-S14" "$MK" && gq -F "S01-S14" .claude/commands/retrofit-it.md && gq -F "S01-S14" .claude/commands/resume-it.md && ! cat "$MK" .claude/commands/retrofit-it.md .claude/commands/resume-it.md | gq -F "S01-S13"'
 
 # descriptions
 desc() { awk '/^---/{c++; next} c==1 && /^description:/{sub(/^description: */,""); print; exit}' "$1"; }

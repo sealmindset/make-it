@@ -1,6 +1,6 @@
 ---
 name: resume-it
-description: Resume work on an app previously created by /make-it. Helps with bug fixes, new features, testing, and deployment.
+description: Resume work on an app previously created by /make-it. Helps with bug fixes, new features, testing, and deployment. Use when the user comes back to an existing make-it or retrofitted app and wants to continue, add a feature, change or fix something, test it, or see what's next.
 allowed-tools:
   - Read
   - Write
@@ -450,7 +450,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    build-verify -- it's a lightweight file-existence and pattern check:
 
    For each check category, do a targeted scan:
-   - **Structure (S01-S13):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place). S13, S10, S11 and S12 all write the same file, `CLAUDE.md`: apply them together, S13 first, as one change -- never as separate `/dispatch-it` lanes.
+   - **Structure (S01-S14):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11 and S12 all write the same file, `CLAUDE.md`: apply them together, S13 first, as one change -- never as separate `/dispatch-it` lanes.
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
    - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx

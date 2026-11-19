@@ -968,6 +968,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.0 -- Claude reaches for the right skill on its own, in every make-it project
+
+Claude Code lets an assistant start a skill itself when the task fits. How often it does depends
+on two things: what each skill's one-line description says, and a standing instruction to use them.
+make-it shipped neither consistently.
+
+- **A new section in every project's `CLAUDE.md`: "Which make-it skill, when".** It says which skill
+  to start as part of the work (`/debug-it` before any fix, `/git-it` for git steps), which to start
+  when the person's words ask for it ("I'm done for today" → `/wrap-it`), and which only to suggest.
+  The person never has to type a skill's name. Claude says in one line which skill it started.
+- **Four skills are never started on Claude's own:** `/ship-it`, `/argo-it`, `/demo-it` and
+  `/threats-it`. They deploy, send or reach outside the computer, so they start only when the person
+  asks for that outcome, and every ask the skill makes is kept.
+- **Existing apps get it too.** New check S14: `/resume-it` and `/retrofit-it` add the section, and
+  replace an older copy when the list of skills changes.
+- **Every skill's description now says when to use it.** Ten of 18 were changed: nine had no trigger
+  (two read as ads: "Just run /wrap-it when you're done for the day"), and `/threats-it` now says it
+  starts only when asked.
+- **Checked:** `scripts/test-skills-on-their-own.sh` (13 checks). It pins the wording; it cannot
+  prove what Claude does with it.
+
 ### v1.70.9 -- /nemo-it tests an app's fallback AI model too
 
 The guardrails have always said the NeMo safety tests MUST run against both the primary and the
