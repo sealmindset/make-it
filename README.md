@@ -968,6 +968,24 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.2 -- The secret pattern list catches a password in a URL, `key=` and three vendor key formats
+
+The go-live record refuses a typed reason that looks like it holds a password or key. Its pattern
+list missed several common shapes.
+
+- **Added to the list:** a URL that carries a user name and password (`https://user:pass@host`),
+  `key=` (so `API_KEY=...`), Google `AIza`, Slack `xoxb-` and Stripe `sk_live_`.
+- **Ordinary text still passes.** `key=` matches at the start of a word or after a character that
+  isn't a letter or digit, so "monkey=3" and "the key = value pairs" are accepted; a URL with no
+  password in it is too.
+- **One list.** The pre-push secret scan section now points at it, leaving out the long
+  random-string pattern, which a lock file's hashes would match.
+- **Known limits:** a typed reason holding a literal `key=value` with no spaces is refused, as
+  `token=value` already was. Other Slack prefixes, `rk_live_` and `apikey=` are not on the list.
+- **Checked:** `scripts/test-secret-pattern-shapes.sh` (10 checks), with fixtures built at run
+  time. It pins the wording; `/ship-it` does not run these steps yet, so nothing here is proven in
+  real use.
+
 ### v1.71.1 -- Small leftovers: a stale check range, two skill descriptions, two guide PDFs
 
 - **The governance doc counts the structure checks correctly.** `docs/AI-GOVERNANCE-HOMEGROWN.md`
