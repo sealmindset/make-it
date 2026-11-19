@@ -51,6 +51,21 @@ check "the never paragraph says: only when the person asks for that outcome, and
 check "the block tells Claude to say which skill it started, and to start /debug-it before any fix" \
   'printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "say in one line which one you started" && printf "%s\n" "$BLOCK" | gq -E "/debug-it\`?, before any fix"'
 
+# each skill sits in exactly the group it was reviewed for (2026-11-19: /resolve-it ships by default and /git-it merges,
+# so neither may be moved up without a new review)
+grp() { printf "%s\n" "$BLOCK" | awk -v h="$1" 'index($0, "**" h)==1{on=1} on && !NF{exit} on' | grep -oE '/[a-z]+-it\b' | sed 's#^/##' | sort -u | tr '\n' ' '; }
+check "each skill is in its reviewed group" \
+  '[ "$(grp "Start it yourself")" = "clear-it debug-it dispatch-it git-it subagent-it " ] && [ "$(grp "Start it when the person")" = "backlog-it resume-it try-it wrap-it " ] && [ "$(grp "Suggest these")" = "deadcode-it fix-it make-it nemo-it resolve-it retrofit-it " ] && [ "$(grp "Never start these on your own")" = "argo-it demo-it ship-it threats-it " ] || { echo "  yourself: $(grp "Start it yourself")"; echo "  words: $(grp "Start it when the person")"; echo "  suggest: $(grp "Suggest these")"; echo "  never: $(grp "Never start these on your own")"; false; }'
+STARTS="$(printf "%s\n" "$BLOCK" | awk '/^\*\*Start it /{on=1} /^\*\*Suggest these/{on=0} on')"
+check "the two start groups promise nothing that leaves the computer: no live, deploy, ship or push, and a merge waits for the person" \
+  '! printf "%s\n" "$STARTS" | gq -iE "\blive\b|deploy|\bship|\bpush" && printf "%s\n" "$STARTS" | tr "\n" " " | gq -F "A merge into the main branch, and anything sent to GitHub, waits for the person" && printf "%s\n" "$STARTS" | gq -F "git step on this computer"'
+check "/resolve-it is only suggested, and only as --propose; a no to a suggestion is kept" \
+  'printf "%s\n" "$BLOCK" | gq -F "/resolve-it --propose" && [ "$(printf "%s\n" "$BLOCK" | grep -c "/resolve-it")" = 1 ] && printf "%s\n" "$BLOCK" | gq -F "A no is kept"'
+check "the never paragraph has no way out, and a never-start skill that isn't installed stops the work" \
+  '! printf "%s" "$NPARA" | gq -iE "unless|except|go ahead|clearly needs" && printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "For a never-start skill, stop there"'
+check "a running skill is not restarted, /dispatch-it says its agent count first, and /backlog-it needs a board" \
+  'printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "A skill that is already running is not started again" && printf "%s\n" "$BLOCK" | gq -F "say how many agents before starting" && printf "%s\n" "$BLOCK" | tr "\n" " " | gq -F "when the project has a board"'
+
 # Build step h and S14
 TPL="$(awk '/^      # Project instructions/{on=1} on && /^      ```$/{exit} on' "$MK")"
 check "Build step h puts [SKILLS_SECTION] after the Learnings import, and says where the block comes from" \
@@ -67,8 +82,10 @@ TRIG='Use (when|for|to|mid-session)\b|Only when the user asks'
 no_trigger() { local f; for f in .claude/commands/*.md; do desc "$f" | gq -E "$TRIG" || echo "$(basename "$f" .md)"; done; }
 check "every command's description says when to use it" \
   'X="$(no_trigger)"; [ -z "$X" ] || { echo "  no trigger: $(echo $X)"; false; }'
-never_desc() { local s; for s in argo-it demo-it threats-it; do desc ".claude/commands/$s.md" | gq -F "Only when the user asks" || { echo "  $s"; return 1; }; done; }
-check "/argo-it, /demo-it and /threats-it say \"Only when the user asks\" in their description" 'never_desc'
+never_desc() { local s; for s in argo-it demo-it threats-it; do desc ".claude/commands/$s.md" | gq -F "Only when the user asks" && desc ".claude/commands/$s.md" | gq -F "never start it on your own" && ! desc ".claude/commands/$s.md" | gq -iE "\bor use when\b|Use (when|for|to)\b" || { echo "  $s"; return 1; }; done; }
+check "/argo-it, /demo-it and /threats-it say \"Only when the user asks\" and \"never start it on your own\", with no second trigger" 'never_desc'
+check "S14 and its neighbours: S14 runs last in the one CLAUDE.md change, and is named plainly in the catch-up list" \
+  'printf "%s" "$S14" | gq -F "anywhere else" && printf "%s" "$S14" | gq -F "instructions that help me pick the right tool" && grep -E "^\*\*S13\*\* " "$BS" | gq -F "S14 last" && gq -F "S14 last" .claude/commands/resume-it.md'
 
 # controls
 check "(control) a description with no trigger fails, and one with \"Use when\" passes" \
