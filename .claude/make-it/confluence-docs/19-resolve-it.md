@@ -51,5 +51,5 @@ You choose per project (or per run): **propose** (stop at the plan), **project**
 
 ```
 /resolve-it "Client's evidence from the county still isn't in the case"
-/resolve-it E63-S346
+/resolve-it <card id>
 ```
