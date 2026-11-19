@@ -968,6 +968,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.9 -- /nemo-it tests an app's fallback AI model too
+
+The guardrails have always said the NeMo safety tests MUST run against both the primary and the
+fallback model. No skill did it, and the references said so as a known gap.
+
+- **One result per model.** /nemo-it's AI-safety phase now reports the six categories for the
+  primary and again for the fallback.
+- **How the fallback is run.** An app uses its fallback only when the primary fails, so /nemo-it
+  starts the app a second time on the fallback, for that run only, then puts it back. It does this
+  only for a Docker Compose app it started itself, never on a production path, and it changes no file in the
+  project. The start ask says so before anything is started.
+- **A fallback that did not run is NOT TESTED, never a pass**, with the reason: the app was already
+  running, no AI provider was reachable, the fallback's name isn't recorded, it didn't start, or
+  /nemo-it couldn't confirm the app was really answering from the fallback.
+- **Where the names come from:** `app-context.json` (`ai_providers`). From `.env` and the compose
+  file, /nemo-it reads only whether `AI_FAILOVER_PROVIDER` is set, never its value.
+- **Cost:** with a fallback configured, the AI tests take about twice as long and cost about twice
+  as much.
+
 ### v1.70.8 -- The unused attestation setting is gone, and /nemo-it is no longer credited with fixing
 
 - **`attestation_mode` is removed.** No skill ever read it. /nemo-it writes one dated attestation per run to

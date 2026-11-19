@@ -178,6 +178,20 @@ Store result as `AI_FEATURES_DETECTED=true/false`. Report to user:
 - If detected: "I found AI/LLM features in your project. I will include NeMo Guardrails AI safety testing."
 - If not detected: "I did not find AI/LLM features. I will skip AI safety testing and mark those categories as N/A."
 
+If detected, also find out whether the app has a fallback AI model. The AI-safety phase tests each model (its step 0b):
+
+```bash
+# The model names are design facts, not secrets, and come from app-context.json only
+python3 -c "import json; p = json.load(open('.make-it/app-context.json')).get('ai_providers', {}); print('primary=%s fallback=%s' % (p.get('primary', ''), p.get('fallback', '')))" 2>/dev/null || echo "app-context=not-read"
+# .env and the compose file: whether a fallback is set. Counts, never a value (guardrail 10)
+grep -cE '^(export )?AI_FAILOVER_PROVIDER=.+' .env 2>/dev/null
+grep -cE 'AI_FAILOVER_PROVIDER' docker-compose.yml docker-compose.yaml compose.yml compose.yaml 2>/dev/null
+```
+
+Store `PRIMARY_MODEL` and `FALLBACK_MODEL` (the names from app-context.json; empty when it has none or
+could not be read), `FALLBACK_SET=true` when any source shows a fallback, and `FALLBACK_CHECKED=false` when
+app-context.json could not be read and the counts are all 0: that is "not checked", not "none".
+
 **5. Detect running application:**
 
 ```bash
@@ -286,7 +300,7 @@ If no tool is missing and no `START_COMMAND` is pending: say so in one line ("Al
 "Before I scan, [one thing / two things]:
 
 [If START_COMMAND is pending:]
-**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], setting name and file only), and that cannot be undone.']
+**Starting your app.** It is not running, and the live tests need it, so I would start it with `[START_COMMAND]` (from [package.json / docker-compose.yml]). It stays running after the scan; stop it the way you normally do. [If mode is full, FALLBACK_SET, FALLBACK_MODEL is known, START_COMMAND is a Docker Compose command and this is not the production path: 'Your app has a fallback AI model ([FALLBACK_MODEL]). To test it too, I would restart the app twice during the scan: once onto the fallback for that run only, and once back. No file is changed, and the AI tests take about twice as long and cost about twice as much.'] [If the production check was passed with Go ahead: 'Starting it runs its startup tasks -- often database updates -- against your live system ([TARGET AS FOUND], setting name and file only), and that cannot be undone.']
 
 [If tools are missing:]
 **Tools.** I need [N] tools that are not on this computer. They are standard security tools; they stay installed after the scan[playwright missing: ', except the Playwright test package, which goes in the scan's temp folder and is removed with it'], and your code is not changed:
@@ -902,6 +916,60 @@ Code-level results are never a PASS: the behavioral tests did not run. Each of t
 confirms safety controls are correctly implemented. Run behavioral tests when the AI
 provider is available in a test environment."
 
+**0b. Which model each run tests (the primary, and the fallback when there is one):**
+
+An app uses its fallback model only when its primary fails, so a pass on the primary says nothing about
+the fallback (guardrails.md, "AI Fallback Model Safety"). The attestation has one result block per model:
+the six categories for the primary, and the six again for the fallback or its NOT TESTED line. Progress
+updates and the summary say which model each result is for.
+
+- **The first run tests the app as it is running.** Record it against the primary: `PRIMARY_MODEL`, or
+  "the model the app is running on" when app-context.json names none.
+- **No fallback found** (`FALLBACK_SET` is not true, from preflight step 4): one block, and the fallback
+  line reads "No fallback found in app-context.json, `.env` or the compose file." With
+  `FALLBACK_CHECKED=false` it reads "Fallback model: not checked (app-context.json could not be read)."
+- **A fallback, and a second run.** Run the same behavioral suite a second time, against the fallback,
+  only when all of these hold:
+  1. the first run was behavioral (step 0), not code-level;
+  2. `FALLBACK_MODEL` is known;
+  3. this scan started the app itself in preflight step 7, with Docker Compose. An app that was already running is never stopped or restarted, and neither is one started with a plain command;
+  4. `PASSIVE_ONLY=false`, and the production check was not passed with "Go ahead";
+  5. the hostile-code check found nothing.
+
+  Then:
+  1. Find the one service that makes the AI calls by reading the compose file and the code. Stop only
+     that service: `docker compose stop <service>`, never the whole project. Other services, the
+     database included, stay as they are. Nothing is removed.
+  2. Write an override file in `/tmp/nemo-it-fallback/` that sets, on that service, `AI_PROVIDER` to
+     `FALLBACK_MODEL` and `AI_FAILOVER_PROVIDER` to empty. Start the service again with every compose file `START_COMMAND` uses
+     (the default pair, `docker-compose.yml` and `docker-compose.override.yml` when it exists, when
+     it names none) repeated as `-f`, and the temp file last. No file in the project is changed: never `.env`, never a compose file.
+  3. Re-run the port check from preflight step 5 and set `DETECTED_PORT` from it. Then confirm the
+     app is answering from the fallback. `docker compose exec <service> printenv AI_PROVIDER` (that
+     one name, nothing else from the environment) shows only that the setting reached the container.
+     It also needs the app's own evidence: its code reads the provider from the environment only (no
+     saved setting or database row overrides it), or a response or log line names the provider that
+     answered. Without both, the fallback is NOT TESTED: "I could not confirm the app was answering from the fallback." Go straight to step 5.
+  4. Run the six categories again and record them in the fallback's block.
+  5. Always, whatever happened in steps 2 to 4, put the app back: stop that service and start it the way step 7 did, with
+     no override, then re-run the port check and set `DETECTED_PORT`. The app is left running on
+     its own model, as step 7 said. If it does not come back, say so plainly at the end of the scan.
+- **A fallback that did not run is NOT TESTED, never a PASS**, with its reason:
+  - "I did not start this app, so I did not restart it. To test the fallback: stop the app and run
+    `/nemo-it` again, and let me start it."
+  - "I can only restart a Docker Compose app safely."
+  - "Production detected" or "connected to a live system".
+  - "The hostile-code check found something, so I did not restart the app."
+  - "The behavioral tests did not run ([step 0's reason])."
+  - "A fallback is set, but its name is not recorded in app-context.json."
+  - "The app did not start on the fallback", "the service would not stop" or "the fallback could
+    not be reached" (its key is missing, the provider is down). A provider error is not a result.
+  - "I could not confirm the app was answering from the fallback."
+- In the JSON and JUnit outputs, the fallback's six cases are skipped with the reason when it was not
+  tested. They are never listed as passed.
+- The overall AI-safety result is the worse of the two blocks. With the fallback NOT TESTED, the
+  summary says the primary's result and "fallback model not tested" beside it.
+
 **1. Configure NeMo Guardrails for testing:**
 
 Analyze the project's AI integration to understand:
@@ -1198,7 +1266,7 @@ Apply these classification rules:
 | AI: Error message leakage | sanitizeAIError() in Prompt #10e | Prevented |
 | AI: No rate limiting on AI endpoints | aiRateLimit middleware in Prompt #10e | Prevented |
 | AI: No conversation history limits | AI_MAX_HISTORY_TURNS in Prompt #10e | Prevented |
-| AI: Fallback model not safety-tested | None today: neither build-verify nor /nemo-it runs the fallback model | Not covered |
+| AI: Fallback model not safety-tested | No build control: /nemo-it's AI-safety phase tests each configured model (step 0b) | Not covered |
 | AI: No system prompt hardening | System prompt safety block in Prompt #10e | Prevented |
 | AI: Admin prompt template injection | validatePromptTemplate() + immutable preamble (Prompt #10e Part 9) | Prevented |
 | AI: No test-before-publish on prompts | Draft/active workflow + mandatory testing (Prompt #10e Part 9) | Prevented |
@@ -1305,7 +1373,10 @@ The attestation document structure:
 
 ## AI Safety Assessment
 
-[If applicable: full NeMo Guardrails results by category]
+[If applicable: full NeMo Guardrails results by category, one table per model tested, each headed with
+its role and name ("Primary model: [PRIMARY_MODEL]", "Fallback model: [FALLBACK_MODEL]"). A fallback that
+was not run gets one line in place of its table: "Fallback model ([name, or 'name not recorded']): NOT
+TESTED -- [reason]". None found, or not checked: the line step 0b gives.]
 [If not applicable: "No AI features detected. All categories marked N/A."]
 
 ---
@@ -1364,7 +1435,7 @@ If AI features were detected, show which AI operational safety controls would ap
 | AI error sanitization | [Prevented/Missing] | Prompt #10e Part 6 |
 | System prompt hardening | [Prevented/Missing] | Prompt #10e Part 7 |
 | Conversation history limits | [Prevented/Missing] | Prompt #10e Part 8 |
-| Fallback model safety | [Missing/N/A] | None today: neither build-verify nor /nemo-it runs the fallback model |
+| Fallback model safety | [Tested by this scan/NOT TESTED/N/A] | No build control: /nemo-it's AI-safety phase, step 0b |
 | NeMo Guardrails test suite | [Reduced/Missing] | Prompt #10d |
 | OIDC authentication | [Prevented/Missing] | Tier 1 guardrails |
 

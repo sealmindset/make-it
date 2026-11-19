@@ -253,7 +253,7 @@ This matrix maps security control domains to specific /make-it implementations w
 | **History depth limits** | AI_MAX_HISTORY_TURNS (default 20). Oldest messages truncated when exceeded | Build-verify: send messages exceeding limit |
 | **PII masking** | mask_pii() / unmask_pii() pipeline around AI calls when app processes PII | Code-level verification |
 | **Provider abstraction** | AI_PROVIDER env var. No provider SDK imports in business logic. Factory pattern in lib/ai/ | Build-verify: grep for direct SDK imports |
-| **Fallback model testing** | If fallback model configured, NeMo Guardrails MUST run against BOTH primary and fallback models | Not run today: neither build-verify nor /nemo-it runs the fallback model (a known gap) |
+| **Fallback model testing** | If fallback model configured, NeMo Guardrails MUST run against BOTH primary and fallback models | /nemo-it's AI-safety phase, one result per model. A fallback it could not run is reported NOT TESTED, never passed |
 
 ### 5.5 NeMo Guardrails Test Categories
 
