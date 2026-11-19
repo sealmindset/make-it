@@ -969,6 +969,20 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.70.8 -- The unused attestation setting is gone, and /nemo-it is no longer credited with fixing
+
+- **`attestation_mode` is removed.** No skill ever read it. /nemo-it writes one dated file per run to
+  `docs/attestations/nemo-it/`, as it always has, and no run overwrites an earlier one. The
+  references no longer name the two files only that setting pointed at. An existing app's
+  `app-context.json` may still carry the key; nothing reads it, and nothing needs changing.
+- **The fix-and-retest loop is the build's.** Two governance tables and the guardrails put a
+  self-healing loop beside /nemo-it, which reports and never fixes. They now say whose it is.
+- **Smaller wording:** a "Frequency" column that held no frequency, a "no attestation" line inside a
+  "generates" list, and which part of build-verify runs the basic NeMo suite (Part A, check AI09;
+  Part D is code-level).
+- **The guard test catches rephrasings** it used to miss ("also runs", "re-runs", "/ship-it's PR
+  carries", "exercises the fallback model", "emits the attestation"), and has three new checks.
+
 ### v1.70.7 -- No reference claims a /ship-it step that doesn't run
 
 v1.44.18 made the ship-it guide describe only what /ship-it really runs. Sixteen other files still

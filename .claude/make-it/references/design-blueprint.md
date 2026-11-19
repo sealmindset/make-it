@@ -879,12 +879,6 @@ ai_features.needed?
     - "project forecasting" for a forecasting tool
     - "customer support" for a helpdesk app
     This defines what the AI is ALLOWED to talk about.
-
-  attestation_mode: "snapshot" (default)
-    - "snapshot": each run creates docs/attestations/YYYY-MM-DD-vN.md
-    - "latest": each run overwrites docs/ai-safety-attestation.md
-    The attestation comes from /nemo-it, before /ship-it (ship-it-guide.md,
-    "What make-it runs before /ship-it").
 ```
 
 **NeMo Guardrails configuration (generated in project):**
@@ -936,17 +930,18 @@ guardrails/
    recommended compensating controls (WAF, rate limiting, monitoring, human review)
 
 **Attestation:**
-- Generated from test results using templates/ai-safety-attestation.md
-- Placed in the app's docs/ directory
-- Default: versioned snapshot (docs/attestations/YYYY-MM-DD-vN.md)
-- Configurable: "latest" mode overwrites docs/ai-safety-attestation.md each run
+- /nemo-it writes it from its own test results, before /ship-it
+  (ship-it-guide.md, "What make-it runs before /ship-it")
+- One dated file per run: docs/attestations/nemo-it/YYYY-MM-DD-vN.md. No run overwrites an earlier one
 - The attestation IS the sign-off -- test results = acceptance qualification
 
 **Implementation generates:**
 - guardrails/ directory with config.yml and Colang rail files
 - Test suite with minimum 10 cases per category
 - nemoguardrails in dev dependencies (requirements-dev.txt or package.json devDependencies)
-- No attestation document: /nemo-it writes it (ship-it-guide.md, "What make-it runs before /ship-it")
+
+The build writes no attestation document: /nemo-it does
+(ship-it-guide.md, "What make-it runs before /ship-it").
 
 ---
 

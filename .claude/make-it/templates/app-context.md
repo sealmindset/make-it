@@ -96,7 +96,6 @@ This template is populated by /make-it as the user answers questions. It becomes
   "nemo_guardrails": {
     "enabled": false,
     "version": "latest",
-    "attestation_mode": "snapshot",
     "categories": [
       "prompt_injection",
       "jailbreak",
@@ -228,7 +227,6 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | ai_accounting.infra_tag_key | Design | The cost-allocation tag the cloud bill is split by (default "CostCenter") |
 | ai_accounting.ladder_verdict | Build / Retrofit | "no ladder" \| "fixed per agent" \| "routed per call" -- copied from `.make-it/ai-ladder.md` |
 | nemo_guardrails.enabled | Design | Auto-set to true when ai_features.needed = true |
-| nemo_guardrails.attestation_mode | Design | "snapshot" (default, versioned per run) or "latest" (overwrite each run); the attestation comes from /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") |
 | nemo_guardrails.topic_domain | Design | Inferred from project purpose -- defines the AI's allowed scope (e.g., "vendor risk management") |
 | integrations | Ideation | Detected from features (Jira, Oracle, Tempo, etc.) |
 | cloud.provider | Design | "Where would you like to host this?" (Azure, AWS, Google Cloud, or just local) -- values: "azure" \| "aws" \| "gcp" \| "none" |

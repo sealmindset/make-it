@@ -342,7 +342,8 @@ This summary is included in the build-verify status internally. The user sees on
   git strategy choice, and before/after attestation comparison.
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
-  Part D does code-level verification only. Full behavioral testing is /nemo-it's domain.
+  Part D does code-level verification only. The basic suite is Part A's (check AI09), and
+  full behavioral testing is /nemo-it's domain.
 
 The standalone tools provide deeper coverage with user interaction. Part D provides a
 baseline security posture automatically, so the app the user first sees is already hardened.
