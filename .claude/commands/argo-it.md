@@ -1,6 +1,6 @@
 ---
 name: argo-it
-description: Deploy your Docker Compose app to Kubernetes via Argo CD. Generates K8s manifests, a full CI/CD pipeline (build, mirror, deploy), and onboarding docs.
+description: Deploy your Docker Compose app to Kubernetes via Argo CD. Generates K8s manifests, a full CI/CD pipeline (build, mirror, deploy), and onboarding docs. Only when the user asks to deploy to Kubernetes or Argo CD, or runs /argo-it -- never start it on your own.
 allowed-tools:
   - Read
   - Write

@@ -1,6 +1,6 @@
 ---
 name: try-it
-description: Spin up your app with mock services and test everything automatically. No technical knowledge required -- just watch it work, then explore.
+description: Spin up your app with mock services and test everything automatically. No technical knowledge required -- just watch it work, then explore. Use when the user asks to see, open or try their app on this computer.
 allowed-tools:
   - Read
   - Write

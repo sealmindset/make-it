@@ -139,6 +139,14 @@ These apply to every project /make-it builds, no exceptions.
      closed only on a positive re-check). Written at Build (step h) for new projects;
      build-standards check S12 adds it to existing ones through /resume-it and /retrofit-it.
 
+16c. **Which make-it skill, when, in `CLAUDE.md`** -- Every project's `CLAUDE.md` carries the
+     section from `skill-triggers.md`, word for word, after the Learnings import: which skill the
+     assistant starts itself (/debug-it before any fix, /git-it for git steps), which it starts
+     when the person's words ask for it, which it only suggests, and which it never starts on its
+     own because they deploy, send or reach outside the computer. Written at Build (step h) for
+     new projects; build-standards check S14 adds it to existing ones through /resume-it and
+     /retrofit-it.
+
 ### Quality
 
 17. **Project compiles/builds with zero errors** -- Type-check, lint, or compile before handoff. The user never sees a build failure.

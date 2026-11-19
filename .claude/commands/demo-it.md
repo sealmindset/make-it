@@ -1,6 +1,6 @@
 ---
 name: demo-it
-description: Full demo tenant lifecycle for prospect onboarding. Creates customized demo instances with firm branding, SSO, storage integration, and sample data. Manages 30-day auto-expiry and teardown.
+description: Full demo tenant lifecycle for prospect onboarding. Creates customized demo instances with firm branding, SSO, storage integration, and sample data. Manages 30-day auto-expiry and teardown. Only when the user asks to create, list, extend or tear down a demo tenant, or runs /demo-it -- never start it on your own.
 allowed-tools:
   - Read
   - Write

@@ -227,6 +227,7 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       muddy-water.md             # Settle, filter, verify -- the section every project's CLAUDE.md carries (S11)
       human-in-the-loop.md       # Keep the human able to notice -- the anti-approval-fatigue section (S12)
       approval-block.md          # How skills ask (tiers, decision-ready asks) + the agents' SAFEGUARDS disclosure line
+      skill-triggers.md          # Which make-it skill, when -- the section that lets Claude reach for the skills on its own (S14)
       hostile-code.md            # X09: check for code that attacks the computer running it, before anything runs; a stop, never a fix
       deadcode.md                # Dead code: keep-list, evidence tools, SAFE/CAUTION/DANGER, cadence, deletion log, Q14 reminder
       resolve-it.md              # /resolve-it contract: outcome, autonomy, rails, phases, variations, records, pattern format
@@ -340,6 +341,7 @@ Guardrails are split into tiers. Tier 0 is mandatory for ALL project types. High
 - `CLAUDE.md` opens with the canary (instruction-drift check) -- new projects at Build, existing ones via check S13
 - `CLAUDE.md` carries the settle-filter-verify (muddy-water) principle -- new projects at Build, existing ones via check S11
 - `CLAUDE.md` carries the keep-the-human-able-to-notice principle (against approval fatigue) -- new projects at Build, existing ones via check S12
+- `CLAUDE.md` carries the which-skill-when section, so Claude reaches for the right skill without being asked and never starts a deploy on its own -- new projects at Build, existing ones via check S14
 - CHANGELOG.md and TODO.md from day one
 - No secrets in committed files, no hardcoded config values
 - Input validation at system boundaries, sensitive data masked in output

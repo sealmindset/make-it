@@ -1,6 +1,6 @@
 ---
 name: wrap-it
-description: Wrap up your work session. Saves progress, updates your to-do list, and shuts down the app cleanly. Just run /wrap-it when you're done for the day.
+description: Wrap up your work session. Saves progress, updates your to-do list, and shuts down the app cleanly. Use when the user says they are done for the day or are stopping work until another day.
 allowed-tools:
   - Read
   - Write

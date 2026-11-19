@@ -1,6 +1,6 @@
 ---
 name: make-it
-description: Guide a first-time developer from app idea to working application through conversational Q&A. No coding knowledge required.
+description: Guide a first-time developer from app idea to working application through conversational Q&A. No coding knowledge required. Use when the user runs /make-it, or says they want to build a brand-new app from an idea -- not for a feature in an app that already exists.
 allowed-tools:
   - Read
   - Write
@@ -587,6 +587,8 @@ The user sees progress updates, NOT the technical details.
       ## Learnings
 
       @LEARNINGS.md
+
+      [SKILLS_SECTION]
       ```
 
       If `builder_name` is empty, use a fixed token instead: replace only the canary's first
@@ -609,6 +611,11 @@ The user sees progress updates, NOT the technical details.
       `~/.claude/make-it/references/human-in-the-loop.md`, word for word (Tier 0 guardrail
       "Keep the human able to notice"; build-standards check S12). It sits after the muddy-water
       section and before the Learnings import.
+
+      Replace `[SKILLS_SECTION]` with the "Section -- copy exactly" block from
+      `~/.claude/make-it/references/skill-triggers.md`, word for word (Tier 0 guardrail
+      "Which make-it skill, when"; build-standards check S14). It sits after the Learnings import,
+      so the assistant reaches for the right skill without the person typing its name.
 
       Also create `LEARNINGS.md` containing only the "Header -- copy exactly" block from
       `~/.claude/make-it/references/learnings.md` -- never its example lines. Later sessions add
@@ -1095,7 +1102,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S13**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify and keep-the-human-able-to-notice sections)
+- **S01-S14**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
