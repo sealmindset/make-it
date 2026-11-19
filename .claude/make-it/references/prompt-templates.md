@@ -1655,7 +1655,7 @@ Implementation details: see Prompt #10e Part 9.
 
 ---
 
-### Prompt #10d: NeMo Guardrails -- AI Safety Testing (always runs if AI features exist)
+### Prompt #10d: NeMo Guardrails -- AI Safety Tests (always generated if AI features exist)
 
 ```
 Set up NeMo Guardrails AI safety testing for [PROJECT_NAME].
@@ -2028,7 +2028,7 @@ AI_PII_MASKING_ENABLED=true
 **Required context:** AI features, agents/services list, topic domain, endpoint routes
 **Runs when:** ai_features.needed = true (any AI usage level)
 **Runs AFTER:** Prompt #10-provider and #10a/b/c (needs BaseAgent to exist)
-**Runs BEFORE:** Prompt #10d NeMo Guardrails (safety controls must exist before testing them)
+**Runs BEFORE:** Prompt #10d NeMo Guardrails (safety controls must exist before their tests are generated)
 
 ---
 
