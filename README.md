@@ -652,9 +652,9 @@ Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
 | PII Leakage | Does the AI reveal personal or system information? | 10 |
 | Hallucination | Does the AI generate false or fabricated information? | 10 |
 
-- No NeMo test runs during build-verify: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS
+- Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS
 - Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it")
-- No fix-and-retest loop at build-verify (no test is run there); /nemo-it reports its failures and fixes nothing
+- Check AI09 has no fix-and-retest loop (it runs no test); /nemo-it reports its failures and fixes nothing. A /nemo-it run is recommended before each production deploy, and nothing in make-it enforces it
 - The GRC-required AI Safety Attestation comes from `/nemo-it`, in `docs/attestations/nemo-it/`
 
 ### AI Prompt Management Tiers
