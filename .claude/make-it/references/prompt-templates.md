@@ -1764,10 +1764,8 @@ Create guardrails/README.md explaining:
   - What each rail does
   - How to run the test suite: `python -m pytest guardrails/tests/ -v`
   - How to add new test cases
-  - How the attestation is generated
 
-The test runner must output structured results that can populate the
-attestation template at templates/ai-safety-attestation.md.
+This test suite writes no attestation: /nemo-it does, from its own run.
 ```
 
 **Required context:** AI features, agents/prompts, topic domain

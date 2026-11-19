@@ -23,8 +23,14 @@
 #     MUST, or a "neither ..." / "none today" / "not run" sentence, is no such claim), and guardrails.md says so plainly,
 #     as "a known gap": shipped text names no card id (the board is private).
 #   - The AI-safety attestation: only /nemo-it writes one. No sentence says one is generated without naming /nemo-it (or
-#     /fix-it, which re-scans with it), but the CI quality-gate's "attestation artifact" and the lines card E02-S44 owns
-#     (attestation_mode, docs/ai-safety-attestation.md and its template). nemo-it.md and fix-it.md are its own pages.
+#     /fix-it, which re-scans with it), but the CI quality-gate's "attestation artifact". nemo-it.md and fix-it.md are its
+#     own pages.
+#   - The attestation_mode setting is gone (E02-S44: no skill read it): no file names it, and none names a file nothing
+#     writes (docs/ai-safety-attestation.md, a dated file outside docs/attestations/nemo-it/).
+#   - /nemo-it reports and never fixes (E02-S46): a sentence that names /nemo-it and a self-healing loop says the loop is
+#     the build's. A tripwire, not a proof: it reads one sentence at a time and needs the word "self-healing", so the two
+#     places where the loop is the next bullet after /nemo-it (guardrails.md, README.md) are pinned by name.
+#   - TODO.md is a log of finished work and is not scanned for the gone setting.
 #   - No card id (E01-S1 style) in any file the installer ships (.claude/), but under a Version History heading and in the
 #     /backlog-it skill's own files (its command, bin/, backlog-board.md, its Confluence page), whose ids are made-up
 #     examples of the id format. The board is private, so a real card id there points at nothing the reader can open.
@@ -93,25 +99,27 @@ nohist() { awk -F'\t' '{split($1, a, ":")} a[1] != f {f = a[1]; h = 0} $2 ~ /^#/
 # drop the pointers: they name /ship-it only to say what runs before it, or what it doesn't run yet
 POINTER='What make-it runs before /ship-it|Safety steps /ship-it doesn.t run yet|What /ship-it Does|\b[Bb]efore `?/ship-it\b|\b(not|no) `?/ship-it\b|\b[Nn]o skill\b[^.;:]*'
 T=$'\t'
-VERBS='runs?|checks?|flags?|includes?|creates?|generates?|writes?|overwrites?|produces?|adds?|puts?|scans?|tests?|greps?|requires?'
-DOES="/ship-it\`? +($VERBS)\b|\b(during|each|every|on|by|in|at|from) \`?/ship-it\b|/ship-it\`? +(PR|pull request|run)\b|/ship-it\b[^:]*:\**[[:space:]]+([0-9]+\.|[-*+])[[:space:]].*\b($VERBS)\b|\bship-time\b|\bship time\b|\bat ship\b|\bduring ship\b|\badd[a-z]*\b[^.|]{0,20} to \`?/ship-it\b|\bat deploy( time)?\b|\bPR (with|includes?)\b"
+VERBS='(re-?)?runs?|checks?|flags?|includes?|creates?|generates?|writes?|overwrites?|produces?|adds?|puts?|scans?|tests?|greps?|requires?|attaches|carries|holds|emits?|exercises?'
+ADV='( +(also|then|now|still|always|again|automatically))?'
+AP="('|\xe2\x80\x99)"
+DOES="/ship-it\`?$ADV +($VERBS)\b|\b(during|each|every|on|by|in|at|from) \`?/ship-it\b|/ship-it\`?(${AP}s)? +(PR|pull request|run)\b|/ship-it\b[^:]*:\**[[:space:]]+([0-9]+\.|[-*+])[[:space:]].*\b($VERBS)\b|\bship-time\b|\bship time\b|\bat ship\b|\bduring ship\b|\badd[a-z]*\b[^.|]{0,20} to \`?/ship-it\b|\bat deploy( time)?\b|\bPR (with|includes?)\b"
 # a table row that names /ship-it in any cell (the row is one sentence: its cells are who, when and what)
 ROW="$T\\|.*/ship-it\\b"
 STEP='\bNeMo([^-]|$)|\bPlaywright\b|full (test )?suite|test suite|test cases|attestation|risk[-_ ]flag|AI[- ]safety test|Prompt Safety Review|\bruns? against\b|\bDAST\b|OWASP ZAP|override=True|override: true|\bdotenv\b|ics_ot|\bOT security\b|sign-off'
 # claims FILE...: each sentence that names /ship-it and one of the steps as something /ship-it does, as file:line<TAB>text
 claims() { sents "$@" | nohist | perl -pe "s#$POINTER##g" | { grep -iE -e "$T.*($DOES)" -e "$ROW" || true; } | { grep -iE "$T.*($STEP)" || true; }; }
 # fallback FILE...: each sentence that says a skill runs the NeMo tests against the fallback (or every) AI model
-FB='fallback models?[^.|]*\b(safety-)?test(s|ed|ing)?\b|\b(runs?|tests?|tested|testing)\b[^.|]*\b(all configured|both( the)? primary|the fallback) models?\b|\bruns? against (all|both)\b|fallback model[^.]*build-verify|build-verify[^.]*fallback model'
+FB='fallback models?[^.|]*\b(safety-)?test(s|ed|ing)?\b|\b(runs?|tests?|tested|testing|exercis(es|ed|ing)|covers?)\b[^.|]*\b(all configured|both( the)? primary|the fallback) models?\b|\bruns? against (all|both)\b|fallback model[^.]*build-verify|build-verify[^.]*fallback model'
 FBOK='\bMUST\b|\bneither\b|\bnone today\b|\bno skill\b|\bnot (run|tested)\b'
 fallback() { sents "$@" | nohist | { grep -iE "$T.*($FB)" || true; } | { grep -viE "$T.*($FBOK)" || true; }; }
 # unattested FILE...: each sentence that says an AI-safety attestation is generated without naming /nemo-it
-GEN='\b(generates?|generated|generating|generate|creates?|produces?|writes?)\b[^.|]{0,40}\battestation\b|\battestation\b( [A-Za-z/`.-]+){0,3} (is |was |are )?(generated|auto-generated|created|produced|written)\b|\battestation\b[^|]*\|[^|]*\bauto-generated\b'
-GENOK='nemo-it|fix-it|quality|how the attestation|ai-safety-attestation\.md|attestation_mode|docs/attestations/YYYY'
+GEN='\b(generates?|generated|generating|generate|creates?|produces?|writes?|emits?|saves?)\b[^.|]{0,40}\battestation\b|\battestation\b( [A-Za-z/`.-]+){0,3} (is |was |are )?(generated|auto-generated|created|produced|written)\b|\battestation\b[^|]*\|[^|]*\bauto-generated\b'
+GENOK='nemo-it|fix-it|quality'
 unattested() { sents "$@" | nohist | { grep -iE "$T.*($GEN)" || true; } | { grep -viE "$T.*($GENOK)" || true; }; }
 
 FILES="$(git grep -lIiE -e 'ship|attestation|fallback' -- .claude scripts README.md docs | grep -vxF "$GUIDE" | grep -vE '^scripts/test-[^/]*\.sh$')"
-# /nemo-it and /fix-it write and re-scan the attestation; the ai-safety-attestation template is card E02-S44's
-DFILES="$(printf "%s\n" $FILES | grep -vxE '\.claude/commands/(nemo|fix)-it\.md|\.claude/make-it/templates/ai-safety-attestation\.md')"
+# /nemo-it and /fix-it write and re-scan the attestation
+DFILES="$(printf "%s\n" $FILES | grep -vxE '\.claude/commands/(nemo|fix)-it\.md')"
 
 # 1. no reference names a /ship-it step it doesn't run
 CLAIMS="$(claims $FILES)"
@@ -126,6 +134,29 @@ check "guardrails.md keeps the fallback MUST and says plainly that neither build
 UNATTESTED="$(unattested $DFILES)"
 check "no reference says the AI-safety attestation is generated without naming /nemo-it (build-verify writes none)" \
   '[ -z "$UNATTESTED" ] || { printf "%s\n" "$UNATTESTED" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
+
+# the attestation_mode setting is gone, and so are the files only it named
+gone() { sents "$@" | nohist | { grep -iE "$T.*(attestation_mode|attestation mode|ai-safety-attestation\.md|docs/attestations/YYYY)" || true; }; }
+GFILES="$( { git grep -lIiE -e 'attestation_mode|attestation mode|ai-safety-attestation\.md|docs/attestations/YYYY' -- . ':!CONTENT_MANIFEST' ':!TODO.md' || true; } | grep -vE '^scripts/test-[^/]*\.sh$' || true)"
+GONE="$(gone $GFILES)"
+check "no file names the attestation_mode setting (no skill read it) or an attestation file nothing writes: /nemo-it writes docs/attestations/nemo-it/YYYY-MM-DD-vN.md" \
+  '[ -z "$GONE" ] || { printf "%s\n" "$GONE" | cut -c1-220 | sed "s/^/  named: /"; false; }'
+# /nemo-it reports and never fixes: a self-healing loop named beside it is given to the build
+# "differences from standalone /nemo-it" is build-verify-security.md saying the loop is what /nemo-it lacks
+BUILDS='(at build|build-verify)[^|.]{0,80}self-healing|self-healing[^|.]{0,80}(at build|build-verify)|differences from standalone /nemo-it'
+healer() { sents "$@" | nohist | { grep -iE "$T.*nemo-it" || true; } | { grep -iE "$T.*self[- ]healing" || true; } | { grep -viE "$T.*($BUILDS)" || true; }; }
+HEALER="$(healer $(git grep -lIi -e 'self-healing' -- .claude README.md docs | grep -vE '^scripts/test-[^/]*\.sh$'))"
+check "no sentence gives a self-healing loop to /nemo-it: it never fixes, the loop is the build's" \
+  '[ -z "$HEALER" ] || { printf "%s\n" "$HEALER" | cut -c1-220 | sed "s/^/  claim: /"; false; }'
+NEMOSEC="$(awk '/^- 6 test categories/{on=1} /^### /{on=0} on' .claude/make-it/references/guardrails.md | tr '\n' ' ' | tr -s ' ')"
+RMSEC="$(awk '/^- Full suite \(60\+ tests\) runs in/{on=1; next} on && /^- /{print; exit}' README.md)"
+check "README.md's bullet after \"Full suite ... runs in /nemo-it\" gives the self-healing loop to build-verify" \
+  'printf "%s" "$RMSEC" | gq -F "at build-verify" && printf "%s" "$RMSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
+BPSEC="$(awk '/^\*\*Remediation flow/{on=1} /^\*\*Attestation:\*\*/{on=0} on' .claude/make-it/references/design-blueprint.md | tr '\n' ' ' | tr -s ' ')"
+check "design-blueprint.md's remediation flow is the build's and ends in TODO.md, not in an attestation the build doesn't write" \
+  'printf "%s" "$BPSEC" | gq -F "at build-verify" && printf "%s" "$BPSEC" | gq -F "TODO.md" && ! printf "%s" "$BPSEC" | gq -iE "document in attestation"'
+check "guardrails.md's NeMo rule gives the fix-and-retest loop to build-verify and says /nemo-it reports and fixes nothing" \
+  'printf "%s" "$NEMOSEC" | gq -E "Self-healing at build-verify" && printf "%s" "$NEMOSEC" | gq -F "/nemo-it reports its failures and fixes nothing"'
 
 # no card id in shipped text: cardids FILE... prints each sentence that names one (Version History skipped)
 cardids() { sents "$@" | nohist | { grep -E "$T.*\bE[0-9]{2}-S[0-9]+\b" || true; }; }
@@ -170,6 +201,14 @@ check "(control) fallback: fails when a skill runs the fallback model (the old w
 att() { printf "%b\n" "$1" > "$TMPD/a.md"; [ -n "$(unattested "$TMPD/a.md")" ]; }
 check "(control) attestation: fails when it is generated with no /nemo-it (a build-verify checklist item, \"Implementation generates:\", \"Yes -- auto-generated\", a feature line); passes /nemo-it, the quality-gate artifact and card E02-S44 lines" \
   'att "**NeMo Guardrails:**\n- [ ] AI Safety Attestation generated in docs/" && att "**Implementation generates:**\n- Attestation document in docs/" && att "| AI safety attestation | Yes -- auto-generated in docs/attestations/ | [PRESENT / ABSENT] |" && att "- Generates GRC-required AI Safety Attestation in \`docs/\`" && ! att "- No AI Safety Attestation at build-verify: /nemo-it writes it (ship-it-guide.md, \"What make-it runs before /ship-it\")" && ! att "Generates \`quality-gate-report.json\` attestation artifact." && ! att "    - \"snapshot\": each run creates docs/attestations/YYYY-MM-DD-vN.md"'
+gn() { printf "%b\n" "$1" > "$TMPD/g.md"; [ -n "$(gone "$TMPD/g.md")" ]; }
+hl() { printf "%b\n" "$1" > "$TMPD/h.md"; [ -n "$(healer "$TMPD/h.md")" ]; }
+check "(control) the rephrasings fail: \"also runs\", \"re-runs ... and attaches\", \"/ship-it's PR carries\", \"/nemo-it exercises the fallback model\", \"Build-verify emits the attestation\"" \
+  'plant "/ship-it also runs the 60-case NeMo suite." && plant "/ship-it re-runs NeMo and attaches the attestation." && plant "/ship-it'"'"'s PR carries the attestation summary." && fb "/nemo-it exercises the fallback model too." && att "Build-verify emits the attestation."'
+check "(control) the gone setting: fails on attestation_mode, the \"latest\" file and a dated file outside nemo-it/; passes /nemo-it's own path and Version History" \
+  'gn "  attestation_mode: \"snapshot\" (default)" && gn "- \"latest\": each run overwrites docs/ai-safety-attestation.md" && gn "- Default: versioned snapshot (docs/attestations/YYYY-MM-DD-vN.md)" && gn "- Attestation mode configurable in app-context.json" && gn "populate the attestation template at templates/ai-safety-attestation.md" && att "Build-verify saves the attestation in docs/." && att "Create guardrails/README.md explaining:\n  - How the attestation is generated" && hl "| NeMo pass rate | 60 in /nemo-it | 100% (self healing) |" && ! gn "/nemo-it writes docs/attestations/nemo-it/YYYY-MM-DD-vN.md" && ! gn "## Version History\n\n### v1.70.8\n\n- The attestation_mode setting is gone."'
+check "(control) the self-healing loop: fails beside /nemo-it with no owner; passes when the build owns it, and with no /nemo-it" \
+  'hl "| MEASURE 2.5 | 18 tests at build (basic), 60 tests in /nemo-it before deploy (full). Self-healing loop: test, fix, retest (3 cycles) |" && hl "| NeMo pass rate | 18 tests at build, 60 in /nemo-it before deploy | 100% (self-healing) |" && ! hl "| NeMo pass rate | 18 at build, 60 in /nemo-it | 100% at build (self-healing); /nemo-it reports |" && ! hl "- This is a self-healing loop: test, fail, fix, rebuild, retest until green." && ! hl "**Key differences from standalone /nemo-it + /fix-it:**\n- Self-healing loop: scan, fix, re-scan (up to 3 cycles)" && hl "/nemo-it runs a self-healing loop of up to 3 cycles."'
 ci() { printf "%b\n" "$1" > "$TMPD/c.md"; [ -n "$(cardids "$TMPD/c.md")" ]; }
 check "(control) card ids: fails on \"a known gap (card E02-S45)\" and a code comment \"(E02-S5)\"; passes \"a known gap\", an id under Version History, and a plain word like E2E-S3" \
   'ci "- Today neither build-verify nor /nemo-it runs the fallback model: a known gap (card E02-S45)" && ci "# ponytail: one fixed window. Real agents ran up to 62 min (E02-S5); past this a wait nudges again." && ! ci "- Today neither build-verify nor /nemo-it runs the fallback model: a known gap" && ! ci "## Version History\n\n### v1.44.18\n- Ships card E02-S21" && ! ci "E2E-S3 and SE02-S4X are no card ids"'

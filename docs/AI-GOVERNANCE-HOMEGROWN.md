@@ -58,7 +58,7 @@ The NIST AI RMF organizes AI risk management into four functions: **Govern, Map,
 | **MAP 3.2** | Benefits and costs across demographics | Multi-role RBAC with 4 system roles ensures equitable access; permission boundaries tested during build-verify |
 | **MEASURE 1.1** | Approaches for measurement identified | 100+ enumerated checks with unique IDs, organized by category. Pass/fail with evidence |
 | **MEASURE 2.3** | AI system performance monitored | Activity logs capture all inbound requests and outbound AI calls with response times, error rates, and sanitized URLs |
-| **MEASURE 2.5** | AI system evaluated for safety | NeMo Guardrails: 6 test categories, 18 tests at build (basic), 60 tests in /nemo-it before deploy (full). Self-healing loop: test → fix → retest (3 cycles) |
+| **MEASURE 2.5** | AI system evaluated for safety | NeMo Guardrails: 6 test categories, 18 tests at build (basic), 60 tests in /nemo-it before deploy (full). Self-healing loop at build: test → fix → retest (3 cycles). /nemo-it reports and fixes nothing |
 | **MEASURE 2.6** | Risks mapped to deployment context | Build-verify live verification tests auth flows, permission boundaries, and API endpoints against actual running containers |
 | **MEASURE 2.11** | Fairness assessment | RBAC permission union across all roles prevents under-entitlement. Multi-role model prevents single-role classification |
 | **MANAGE 1.1** | Risk treatment plans | AUTO/SEMI-AUTO/MANUAL classification for security findings. 12 fix strategies with decision tree. Unfixed findings documented with compensating controls |
@@ -267,7 +267,7 @@ This matrix maps security control domains to specific /make-it implementations w
 | 6. Hallucination Detection | AI does not fabricate facts or present unverified claims | 3 tests | 10 tests |
 | **Total** | | **18 tests** | **60 tests** |
 
-Self-healing: test failures trigger automatic remediation (prompt hardening, rail adjustments, output filters). Re-test after each fix (up to 3 cycles). Unresolvable failures documented with root cause analysis and compensating controls.
+Self-healing at build: test failures trigger automatic remediation (prompt hardening, rail adjustments, output filters). Re-test after each fix (up to 3 cycles). Unresolvable failures documented with root cause analysis and compensating controls. /nemo-it reports its failures and fixes nothing.
 
 ---
 
@@ -317,7 +317,7 @@ Phase 6: Report
 | **BLOCK checks passing** | build-standards.md Part A static verification | 100% before handoff |
 | **CRITICAL findings at build** | Build-verify Part D security scan | 0 after 3 fix cycles |
 | **HIGH findings at build** | Build-verify Part D security scan | Logged to TODO.md |
-| **NeMo Guardrails pass rate** | 18 tests at build, 60 in /nemo-it before deploy | 100% (self-healing) |
+| **NeMo Guardrails pass rate** | 18 tests at build, 60 in /nemo-it before deploy | 100% at build (self-healing); /nemo-it failures are reported, not fixed |
 | **Auth flow integrity** | Live E2E auth smoke test (curl-based) | All 9 assertions pass |
 | **Permission boundary coverage** | Per-role verification (V04, V07) | All roles tested |
 | **Dependency CVE count** | npm audit + pip-audit + trivy | 0 critical, 0 high (patched) |

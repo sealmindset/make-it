@@ -344,16 +344,15 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Build-verify runs BASIC checks (minimum 3 test cases per category = 18 tests)
 - /nemo-it runs the FULL suite (minimum 10 test cases per category = 60 tests) before /ship-it
   (ship-it-guide.md, "What make-it runs before /ship-it")
-- Self-healing: failures trigger automatic remediation (prompt hardening, rail adjustments,
-  output filters). Re-test after each fix attempt (up to 3 cycles).
+- Self-healing at build-verify: a failure of the basic checks triggers automatic remediation
+  (prompt hardening, rail adjustments, output filters). Re-test after each fix attempt (up to
+  3 cycles). /nemo-it reports its failures and fixes nothing
 - Unresolvable failures: document with full root cause analysis, impact assessment,
   and recommended compensating controls (WAF rules, rate limiting, human-in-the-loop, etc.)
-- Attestation: generate docs/ai-safety-attestation.md (or versioned snapshot in
-  docs/attestations/) from test results. Template: templates/ai-safety-attestation.md
-- Attestation mode configurable in app-context.json:
-  "snapshot" (default) = versioned file per run, "latest" = overwrite on each run. The
-  attestation comes from /nemo-it, before /ship-it (ship-it-guide.md,
-  "What make-it runs before /ship-it")
+- Attestation: /nemo-it writes one dated attestation per run,
+  docs/attestations/nemo-it/YYYY-MM-DD-vN.md (with a .json or .xml copy when asked), before /ship-it (ship-it-guide.md,
+  "What make-it runs before /ship-it"). No setting changes where it goes, and no run
+  overwrites an earlier one
 - The attestation IS the sign-off -- no additional human approval required
 
 ### AI Operational Safety Controls (if app uses AI/LLM features)

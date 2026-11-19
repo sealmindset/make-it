@@ -654,7 +654,7 @@ Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
 
 - Basic suite (18 tests) runs during build-verify
 - Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it")
-- Self-healing remediation loop for failures
+- Self-healing remediation loop at build-verify; /nemo-it reports its failures and fixes nothing
 - The GRC-required AI Safety Attestation comes from `/nemo-it`, in `docs/attestations/nemo-it/`
 
 ### AI Prompt Management Tiers
@@ -719,7 +719,6 @@ The skill automatically classifies your project during the Design phase based on
       fix-strategies.md            # 12 automated fix strategies for /fix-it
     templates/
       app-context.md              # Template for tracking user answers (includes AI provider config)
-      ai-safety-attestation.md    # AI safety attestation report template
       nemo-it-attestation.md      # Security attestation report template (v1.2.0, includes Secure-by-Design cross-ref)
     scaffolds/
       fastapi-nextjs/             # Pre-built scaffold (61 files) -- Python backend
@@ -968,6 +967,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.70.8 -- The unused attestation setting is gone, and /nemo-it is no longer credited with fixing
+
+- **`attestation_mode` is removed.** No skill ever read it. /nemo-it writes one dated attestation per run to
+  `docs/attestations/nemo-it/`, as it always has, and no run overwrites an earlier one. The
+  references no longer name the two files only that setting pointed at, and the old
+  `ai-safety-attestation.md` template, which nothing read, is deleted. An existing app's
+  `app-context.json` may still carry the key; nothing reads it, and nothing needs changing.
+- **The fix-and-retest loop is the build's.** Two governance tables, the guardrails, the blueprint
+  and this README put a self-healing loop beside /nemo-it, which reports and never fixes. They now
+  say whose it is, and what the build can't fix goes to TODO.md, not into an attestation.
+- **Smaller wording:** a "Frequency" column that held no frequency, a "no attestation" line inside a
+  "generates" list, and which part of build-verify runs the basic NeMo suite (Part A, check AI09;
+  Part D is code-level).
+- **The guard test catches rephrasings** it used to miss ("also runs", "re-runs", "/ship-it's PR
+  carries", "exercises the fallback model", "emits the attestation"), and has five new checks.
 
 ### v1.70.7 -- No reference claims a /ship-it step that doesn't run
 
