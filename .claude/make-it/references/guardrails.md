@@ -436,7 +436,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - Fallback models may have different safety characteristics -- passing on primary does not
   guarantee passing on fallback
 - Build-verify runs against primary model only (speed). /nemo-it runs the suite against each configured model
-  and reports per model: it restarts the app on the fallback only when it started the app itself,
+  and reports per model: it restarts the app on the fallback only when it started the app itself with Docker Compose,
   and a model it could not run is NOT TESTED, never passed (nemo-it.md, AI-safety phase, step 0b)
 
 ### AI Prompt Management (MANDATORY for any app with AI features)

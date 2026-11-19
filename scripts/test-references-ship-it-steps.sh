@@ -140,15 +140,15 @@ NM=.claude/commands/nemo-it.md
 N0B="$(awk '/^\*\*0b\. Which model each run tests/{on=1; next} on && /^\*\*1\. Configure NeMo Guardrails/{on=0} on' "$NM" | tr '\n' ' ' | tr -s ' ')"
 has() { printf "%s" "$N0B" | gq -F -- "$1"; }
 sen() { has "$1" || { echo "  missing in step 0b: $1"; false; }; }
-no0b() { ! printf "%s" "$N0B" | gq -E -- "$1" || { echo "  must not be in step 0b: $1"; false; }; }
+no0b() { ! printf "%s" "$N0B" | gq -iE -- "$1" || { echo "  must not be in step 0b: $1"; false; }; }
 check "nemo-it.md step 0b: reports per model, and reads names from app-context.json and only counts from .env and the compose file" \
   'sen "one result block per model" && grep -E "AI_FAILOVER_PROVIDER" "$NM" | grep -E "grep " | gq -E "grep -cE" && ! grep -E "grep [^|]*\.env" "$NM" | grep -E "AI_" | gq -vE "grep -(c|o)"'
 check "nemo-it.md step 0b: the second run needs all five conditions, each written whole" \
   'sen "only when all of these hold" && sen "this scan started the app itself in preflight step 7, with Docker Compose" && sen "An app that was already running is never stopped or restarted" && sen "\`PASSIVE_ONLY=false\`, and the production check was not passed with \"Go ahead\"" && sen "the hostile-code check found nothing" && no0b "already running on this computer|ask first"'
 check "nemo-it.md step 0b: it stops one service, removes nothing, changes no project file and prints no settings" \
-  'sen "\`docker compose stop <service>\`, never the whole project" && sen "No file in the project is changed: never \`.env\`, never a compose file" && no0b "compose down|[[:space:]]-v[[:space:]]|--volumes|compose config|[^a-z]env\b[^i]|printenv[^ ]| printenv \$|ps e|/proc/|pkill|kill " && sen "every compose file \`START_COMMAND\` uses"'
+  'sen "\`docker compose stop <service>\`, never the whole project" && sen "No file in the project is changed: never \`.env\`, never a compose file" && no0b "compose down|[[:space:]]-v[[:space:]]|--volumes|compose config|[ \`]env[ \`]|printenv[^ ]|printenv [^A]|\bps e|/proc/|pkill|\bkill " && sen "every compose file \`START_COMMAND\` uses"'
 check "nemo-it.md step 0b: the fallback counts only with the app's own evidence, and anything else is NOT TESTED, never a PASS" \
-  'sen "shows only that the setting reached the container" && sen "I could not confirm the app was answering from the fallback" && sen "NOT TESTED, never a PASS" && sen "I can only restart a Docker Compose app safely" && sen "I did not start this app, so I did not restart it" && no0b "record the run anyway"'
+  'sen "shows only that the setting reached the container" && sen "It also needs the app'"'"'s own evidence" && sen "Without both, the fallback is NOT TESTED" && sen "Go straight to step 5" && sen "I could not confirm the app was answering from the fallback" && sen "NOT TESTED, never a PASS" && sen "I can only restart a Docker Compose app safely" && sen "I did not start this app, so I did not restart it" && no0b "record the run anyway|that is enough"'
 check "nemo-it.md step 0b: the app is always put back, whatever happened" \
   'sen "Always, whatever happened in steps 2 to 4, put the app back" && no0b "only if the person asks|leave it on the fallback"'
 check "nemo-it.md: the start ask itself says the two restarts, and the report tables no longer say no skill runs it" \
