@@ -181,9 +181,9 @@ build; a /nemo-it run happens only when someone runs /nemo-it:
 - **AI safety** (if the app has AI features): build-verify's own checks run no NeMo
   Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and
   that result is never a behavioral PASS. /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
-  /nemo-it runs it too: with a live AI provider it runs the app's suite and its own 60 or more cases, and the attestation shows each in its own block.
+  With a live AI provider /nemo-it runs its own 60 or more cases, and the app's suite too when you pick it in /nemo-it's preflight ask; the attestation shows each in its own block (nemo-it.md, step 7b, lists when the app's suite cannot run).
   With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
-  The app's suite is then NOT TESTED, as it is whenever it cannot run: the reason is given, and it is never a PASS or a FAIL. A /nemo-it run is
+  The app's suite is then NOT TESTED, as it is whenever it is not picked or cannot run: the reason is given, and it is never a PASS or a FAIL. It can be NOT TESTED on an app that works: its tests need the AI provider's key, and /nemo-it gives them none. A /nemo-it run is
   recommended before each production deploy, and nothing in make-it enforces it.
   /nemo-it writes the AI safety attestation,
   `docs/attestations/nemo-it/YYYY-MM-DD-vN.md`: the attestation GRC asks for before production
