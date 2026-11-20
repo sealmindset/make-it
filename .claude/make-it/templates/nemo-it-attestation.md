@@ -29,6 +29,7 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 | Categories N/A                | [CATEGORIES_NA]      |
 | Categories with no findings, not all checks run | [CATEGORIES_NO_FINDINGS] |
 | Categories not run            | [CATEGORIES_NOT_RUN] |
+| Categories NOT TESTED (row 24, the app's generated suite; never counted as passed) | [0 / 1] |
 | App's generated suite: rows NOT TESTED (never counted as passed) | [APP_SUITE_ROWS_NOT_TESTED] |
 | Total findings                | [TOTAL_FINDINGS]     |
 | Critical findings             | [CRITICAL_COUNT]     |
@@ -75,7 +76,7 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 | 23 | Deep Code Audit                    | Logic and trust-boundary review       | AUDIT         | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 | 24 | NeMo Guardrails AI Safety          | App's generated suite (guardrails/tests/) | NEMO-APP  | [PASS/FAIL/NO FINDINGS/NOT TESTED/NA] | [COUNT] | [SEVERITY]     |
 
-Rows 1 to 6 are /nemo-it's own cases. Row 24 is the app's own suite, generated at build and run by /nemo-it as a separate block when the user picks it (section 1.7). Leave row 24 out when the project has no `guardrails/tests/` folder.
+Rows 1 to 6 are /nemo-it's own cases. Row 24 is the app's own suite, generated at build and run by /nemo-it as a separate block when the user picks it (section 1.7). Leave row 24 out when the project has no `guardrails/tests/` folder. A NOT TESTED row 24 is counted under "Categories NOT TESTED" in Key Metrics, never under "Categories passed".
 
 ### Severity Distribution
 
@@ -316,9 +317,9 @@ The following likelihood-by-impact matrix is used to classify all findings in th
 - **Block status:** [PASS / FAIL / NO FINDINGS / NOT TESTED]
 - **If NOT TESTED, why:** [REASON -- e.g., You chose not to run the app's own tests; The app's tests could not reach the AI provider: no key was available to them; guardrails/config.yml is missing; nemoguardrails is not installed; No reachable AI provider; Production detected; the hostile-code check's reason; pytest's exit code and message]
 - **Model tested:** [MODEL_NAMED_IN guardrails/config.yml]
-- **Command:** `python -m pytest guardrails/tests/ -v` (counts read from pytest's result file)
+- **Command:** `python -m pytest guardrails/tests/ -v`, as /nemo-it's step 7b runs it (its added flags keep pytest's own files out of the project and write the result file; counts are read from that file)
 - **Date Tested:** [TEST_DATE]
-- **Files the test run added, changed or removed inside the project folder:** [NONE / PATHS / NOT CHECKED] (the project folder only: not `.git`, `node_modules`, `.venv` or `venv`, not anything outside the folder, and not a change the tests put back)
+- **Files the test run added, changed or removed inside the project folder:** [NONE / PATHS / NOT CHECKED] (the project folder only: not `node_modules`, `.venv` or `venv`, not `.git` apart from `.git/hooks` and `.git/config`, not an empty folder, not anything outside the folder, and not a change the tests put back. A test can also rewrite the before-list itself: the list is evidence, not proof)
 
 One row per test file that was collected: the six below, and a row for any other file under `guardrails/tests/`. Every row counts toward the block status. In each row, Passed + Failed + Not tested = Collected.
 

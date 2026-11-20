@@ -182,7 +182,7 @@ If detected, also find out whether the app has a fallback AI model. The AI-safet
 
 ```bash
 # The model names are design facts, not secrets, and come from app-context.json only
-python3 -c "import json; p = json.load(open('.make-it/app-context.json')).get('ai_providers', {}); print('primary=%s fallback=%s' % (p.get('primary', ''), p.get('fallback', '')))" 2>/dev/null || echo "app-context=not-read"
+python3 -I -c "import json; p = json.load(open('.make-it/app-context.json')).get('ai_providers', {}); print('primary=%s fallback=%s' % (p.get('primary', ''), p.get('fallback', '')))" 2>/dev/null || echo "app-context=not-read"
 # .env and the compose file: whether a fallback is set. Counts, never a value (guardrail 10)
 grep -cE '^(export )?AI_FAILOVER_PROVIDER=.+' .env 2>/dev/null
 grep -cE 'AI_FAILOVER_PROVIDER' docker-compose.yml docker-compose.yaml compose.yml compose.yaml 2>/dev/null
@@ -286,16 +286,18 @@ docker image inspect ghcr.io/zaproxy/zaproxy:stable 2>/dev/null || echo "MISSING
 command -v sqlmap 2>/dev/null || echo "MISSING: sqlmap (SQL injection detection)"
 # The browser tests run from /tmp/nemo-it-playwright and import @playwright/test: check it loads there (downloads nothing)
 (cd /tmp/nemo-it-playwright 2>/dev/null && node -e "require.resolve('@playwright/test')" 2>/dev/null) || echo "MISSING: playwright (@playwright/test in the scan's temp folder, plus its browsers)"
-# The API tests run as `python -m pytest --json-report`: check that python and that plugin
-python -m pytest --version 2>/dev/null || echo "MISSING: pytest"
-python -m pip show pytest-json-report 2>/dev/null || echo "MISSING: pytest-json-report"
+# The API tests run as `python -m pytest --json-report`: check that python and that plugin.
+# Every `python -m` check runs from an empty temp folder: run from the project, a pytest.py or pip.py there would run instead
+T="$(mktemp -d)"
+(cd "$T" && python -m pytest --version 2>/dev/null) || echo "MISSING: pytest"
+(cd "$T" && python -m pip show pytest-json-report 2>/dev/null) || echo "MISSING: pytest-json-report"
 
 # Tools for GUARDRAILS mode (only if AI features detected)
 # Only check if AI_FEATURES_DETECTED=true
 pip show nemoguardrails 2>/dev/null || echo "MISSING: nemoguardrails"
-# The app's own guardrail suite (Phase 3, step 7b) runs as `python -m pytest`: check that python loads both.
-# Run from a temp folder so nothing in the project is loaded; downloads nothing
-[ -d guardrails/tests ] && { T="$(mktemp -d)"; (cd "$T" && python -m pytest --version >/dev/null 2>&1) || echo "MISSING: pytest"; (cd "$T" && python -c "import nemoguardrails" 2>/dev/null) || echo "MISSING: nemoguardrails (for the python that runs your app's guardrail tests)"; rmdir "$T"; }
+# The app's own guardrail suite (Phase 3, step 7b) runs as `python -m pytest`: check that python loads both (downloads nothing)
+[ -d guardrails/tests ] && { (cd "$T" && python -m pytest --version >/dev/null 2>&1) || echo "MISSING: pytest"; (cd "$T" && python -c "import nemoguardrails" 2>/dev/null) || echo "MISSING: nemoguardrails (for the python that runs your app's guardrail tests)"; }
+rmdir "$T"
 ```
 
 **Your app's own guardrail tests (the pick Phase 3, step 7b needs).** Step 7b runs the test files a build wrote into the app, and that is the project's own code running on this computer. It never runs without a pick made here, in this run. Offer the pick (`APP_SUITE_OFFERED=true`) only when step 7b could otherwise run -- all of these hold:
@@ -324,16 +326,16 @@ If no tool is missing, no `START_COMMAND` is pending and `APP_SUITE_OFFERED` is 
 - [etc., one line each, from the missing list above]
 
 [If APP_SUITE_OFFERED:]
-**Your app's own guardrail tests.** Your app was built with its own AI-safety tests ([N] test files in `guardrails/tests/`). I can run them as well as my own and report the two separately. What runs: the test files in guardrails/tests/ and whatever they load -- this is your project's own code, run on this computer with your account's access. They send their test prompts to your AI service, which uses your AI account. What I looked at: the hostile-code check read the project and found nothing[ it stops on; N notes are in the report] -- that check is a tripwire, not a guarantee. What it can touch: anything you can. Code that runs can do anything you can, and there is no undo. I change none of the tests, and afterwards I list every file inside the project folder that the run added, changed or removed. The tests may not be able to reach your AI service: I give them no key. Then that part of the report says NOT TESTED, which is not a pass.
+**Your app's own guardrail tests.** Your app was built with its own AI-safety tests ([N] test files in `guardrails/tests/`). I can run them as well as my own and report the two separately. What runs: the test files in guardrails/tests/ and whatever they load -- this is your project's own code, run on this computer with your account's access. They send their test prompts to your AI service, which uses your AI account. What I looked at: the hostile-code check read the project and found nothing[ it stops on; N notes are in the report] -- that check is a tripwire, not a guarantee. What it can touch: anything you can. Code that runs can do anything you can, and there is no undo. I change none of the tests, and afterwards I list the files in the project folder that the run added, changed or removed -- not the installed-packages folders, and nothing outside the project. The tests may not be able to reach your AI service: I give them no key, though they do see a key already set in this terminal, and using it is billed to you. With no key, that part of the report says NOT TESTED, which is not a pass.
 
-What stands out: [each that applies -- APP_SUITE_OFFERED: 'running your app's own tests runs your project's code on this computer; apart from starting your app, the rest of this scan only reads your code or sends the app requests' / production check passed with Go ahead and START_COMMAND pending: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
+What stands out: [each that applies -- APP_SUITE_OFFERED: 'running your app's own tests runs your project's code on this computer' / production check passed with Go ahead and START_COMMAND pending: 'the start would run against your live system, not a test copy' / a large download -- the Playwright browsers or the ZAP image -- / 'nothing'].
 One thing to check: [that `[START_COMMAND]` is how you normally start this app / that none of these tools is one your team has ruled out / APP_SUITE_OFFERED: that the files in `guardrails/tests/` are the ones your app was built with, not edited by someone you don't trust].
 
 [If START_COMMAND is pending:] Start the app? -- [not on the production path: 'start (Recommended -- the live tests need it; the catch: it keeps running until you stop it)' / production check passed with Go ahead: 'start it, connected to [TARGET AS FOUND, setting name and file only] (not recommended -- the start may change live data, with no undo)'] / don't start [production check passed with Go ahead: '(Recommended; the catch: no live tests today, so the attestation covers code and libraries only)'].
 [If tools are missing:] Which tools? -- all [N] (Recommended -- every check runs; the catch: a few minutes and some disk space) / only the ones you name / none.
 [If APP_SUITE_OFFERED:] Your app's own guardrail tests? -- run the [N] test files in `guardrails/tests/` (Recommended -- the report then covers the tests your app was built with; the catch: this runs your project's code on this computer with your access, and nothing can undo what it does) / don't run them (the catch: that part of the report says NOT TESTED, and only my own tests count)."
 
-Wait for the pick(s). "Run the [N] test files" picked: `APP_SUITE_PICKED=true` for this run. Anything else -- "don't run them", no answer, a dismissed ask, a plain "yes" with no option named -- is not picked, and step 7b records "You chose not to run the app's own tests." A yes here is never kept: it is not written to any file, and the next run asks again. A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
+Wait for the pick(s). "Run the [N] test files" picked: `APP_SUITE_PICKED=true` for this run. Anything else -- "don't run them", no answer, a dismissed ask, a plain "yes" with no option named -- is not picked, and step 7b records "You chose not to run the app's own tests." A yes here is never kept: it is not written to any file, and the next run asks again. A "no" is not kept either: the asking rules keep a "no" to an offer, but this is consent to run the project's code, and the tests can change between runs, so it is asked every run. A tool left out: skip the checks that need it and record that in the attestation, the same way a skipped phase is recorded. App not picked for starting: skip DAST phases and note it in the attestation.
 
 Install commands (run only the ones picked):
 
@@ -362,11 +364,11 @@ pip install sqlmap
 # playwright: @playwright/test in the scan's temp folder (removed with it after the scan), then its browsers (they stay)
 npm install --prefix /tmp/nemo-it-playwright @playwright/test && (cd /tmp/nemo-it-playwright && npx --no-install playwright install)
 
-# pytest + pytest-json-report (the same python the API tests run with)
-python -m pip install pytest pytest-json-report
+# pytest + pytest-json-report (the same python the API tests run with; from an empty temp folder, as the checks above)
+(cd "$(mktemp -d)" && python -m pip install pytest pytest-json-report)
 
 # nemoguardrails (only if AI features detected; the same python that runs the app's guardrail tests)
-python -m pip install nemoguardrails
+(cd "$(mktemp -d)" && python -m pip install nemoguardrails)
 ```
 
 If the start was picked: run `START_COMMAND`, then re-run the port check from step 5; only a port it confirms as this project's app counts. If the app does not come up, skip DAST phases and note it in the attestation.
@@ -1121,14 +1123,14 @@ Test cases include:
 `/make-it` writes a guardrail suite into each AI app it makes (Prompt #10d): `guardrails/config.yml`, the Colang rails in `guardrails/rails/`, the test files in `guardrails/tests/`, and `guardrails/README.md` with the run command. Steps 2 to 7 are /nemo-it's own cases, and they stay as they are: they go through the running app. This step runs the app's suite as well, with the app's own config and rails. The two are never merged: each has its own block, its own per-category results and its own counts, and every number says which suite it came from.
 
 - **No suite, no block.** A project with no `guardrails/tests/` folder has no such suite: the block is left out of the attestation, the JSON and the JUnit output (guardrail 11: what does not apply is left out), and the AI phase's status is not changed by it. NOT TESTED is for a suite that is there and could not run.
-- **Once, not once per model.** The app's tests load `guardrails/config.yml` and call the model it names; they do not go through the running app, so restarting the app onto its fallback (step 0b) changes nothing for them. Run the suite one time, after step 0b has put the app back on its own model, and head its block with the model `guardrails/config.yml` names.
+- **Once, not once per model.** As Prompt #10d writes them, the app's tests load `guardrails/config.yml` and call the model it names, not the running app, so restarting the app onto its fallback (step 0b) changes nothing for them. A test that does call the running app is run this one time all the same; the block's model line may then be wrong for it. Run the suite one time, after step 0b has put the app back on its own model, and head its block with the model `guardrails/config.yml` names.
 - **Run it only when all of these hold.** Otherwise nothing is run and the block is NOT TESTED with the first reason that applies:
   1. `guardrails/tests/` holds at least one `test_*.py` file and `guardrails/config.yml` exists. Otherwise: "`guardrails/tests/` has no test files." or "`guardrails/config.yml` is missing."
   2. step 0 chose behavioral tests. Otherwise: "No reachable AI provider." Step 0 shows only that a provider setting is named in `.env`. It does not show that a key reaches the test process, so this condition promises no result (see "No key" below).
   3. `PASSIVE_ONLY=false`. Otherwise: "Production detected." The suite sends prompts to the AI service, so on a live system it is never run, whatever was picked.
   4. the hostile-code check exited 0 in this run (preflight step 7 runs it before the ask, in every mode that reaches this step). Otherwise: exit 1, "The hostile-code check found something, so I did not run the project's test code."; exit 2, or the check could not be run, "The hostile-code check could not finish, so I did not run the project's test code."; exit 3, "The hostile-code check found a weakness in the project's own code that has to be fixed first, so I did not run the project's test code."
   5. the user picked "run them" in preflight step 7's ask, in this run. Otherwise: "You chose not to run the app's own tests." No pick, a dismissed ask and an answer from an earlier run all count as not picked.
-  6. nothing at the project root is named `pytest.py`, `pytest`, `nemoguardrails.py` or `nemoguardrails`. Otherwise: "`[name]` at the project root would be loaded in place of the real test tool."
+  6. nothing at the project root is named `pytest.py`, `pytest`, `nemoguardrails.py` or `nemoguardrails`. Otherwise: "`[name]` at the project root would be loaded in place of the real test tool." Preflight does not run the hostile-code check when such a name is there, so this reason is given, not condition 4's.
   7. `python -m pytest` and `nemoguardrails` both load in that python (the first command below; it downloads nothing). Otherwise: "[pytest / nemoguardrails] is not installed." Nothing is installed in this step: the only installs are the ones picked in preflight step 7's ask (guardrail 9), and nothing is ever installed from the project's own requirements files.
 
 ```bash
@@ -1139,23 +1141,37 @@ mkdir -p /tmp/nemo-it-app-suite
 (cd /tmp/nemo-it-app-suite && python -c "import nemoguardrails" 2>/dev/null) || echo "MISSING: nemoguardrails"
 for n in pytest.py pytest nemoguardrails.py nemoguardrails; do [ -e "$n" ] && echo "SHADOW: $n is at the project root"; done
 ls guardrails/config.yml guardrails/rails/ guardrails/tests/ 2>&1
-# The project before the run: path, size and content hash of every file in the project folder, ignored files included.
-# Left out: .git (git's own records) and node_modules, .venv, venv (installed packages: too large to hash each run).
+# The project before the run: path, size, permissions and content hash of every file in the project folder, ignored
+# files included. Left out: node_modules, .venv, venv (installed packages: too large to hash each run) and .git, apart
+# from .git/hooks and .git/config (a hook written there runs on the next commit). A file over 50 MB, and anything that
+# is not a plain file, is listed by size, permissions and time, not read.
 # The list stays in the scan's temp folder and is never printed: a hash of a secrets file is not shown either.
 cat > /tmp/nemo-it-app-suite/manifest.py <<'PY'
-import hashlib, os, sys
+import hashlib, os, stat, sys
 root, out = sys.argv[1], sys.argv[2]
+def keep(d, x):
+    rel = os.path.relpath(os.path.join(d, x), root)
+    return rel in ('.git', os.path.join('.git', 'hooks')) or (not rel.startswith('.git' + os.sep) and x not in ('node_modules', '.venv', 'venv'))
 with open(out, 'w') as o:
     for d, dirs, files in os.walk(root):
-        dirs[:] = sorted(x for x in dirs if x not in ('.git', 'node_modules', '.venv', 'venv'))
-        for f in sorted(files):
+        dirs[:] = sorted(x for x in dirs if keep(d, x))
+        for f in sorted(f for f in files if os.path.relpath(d, root) != '.git' or f == 'config'):
             p = os.path.join(d, f)
             try:
-                h = 'link' if os.path.islink(p) else hashlib.sha256(open(p, 'rb').read()).hexdigest()
-                s = os.lstat(p).st_size
+                st = os.lstat(p)
+                if stat.S_ISLNK(st.st_mode):
+                    h = 'link:' + os.readlink(p)
+                elif not stat.S_ISREG(st.st_mode) or st.st_size > 50 * 1024 * 1024:
+                    h = 'not-hashed:%d' % st.st_mtime_ns
+                else:
+                    h = hashlib.sha256()
+                    with open(p, 'rb') as fh:
+                        for chunk in iter(lambda: fh.read(1 << 20), b''):
+                            h.update(chunk)
+                    h = h.hexdigest()
+                o.write('%s\t%d %o %s\n' % (os.path.relpath(p, root), st.st_size, st.st_mode, h))
             except OSError:
-                h, s = 'unreadable', -1
-            o.write('%s\t%d %s\n' % (os.path.relpath(p, root), s, h))
+                o.write('%s\t-1 0 unreadable\n' % os.path.relpath(p, root))
 PY
 P="$(pwd -P)"; (cd /tmp/nemo-it-app-suite && python3 -I manifest.py "$P" before.txt) || echo "PROJECT_CHANGES=not-checked"
 ```
@@ -1198,7 +1214,7 @@ PY
 # What changed in the project folder during the run: paths only, never a file's contents
 python3 -I manifest.py "$P" after.txt && python3 -I - before.txt after.txt <<'PY' || echo "PROJECT_CHANGES=not-checked"
 import sys
-b, a = (dict(l.rstrip('\n').split('\t', 1) for l in open(p)) for p in sys.argv[1:3])
+b, a = (dict(l.rstrip('\n').rsplit('\t', 1) for l in open(p)) for p in sys.argv[1:3])
 ch = ['%s %s' % ('added' if p not in b else 'removed' if p not in a else 'changed', p) for p in sorted(set(a) | set(b)) if a.get(p) != b.get(p)]
 print('\n'.join(ch + ['PROJECT_CHANGES=%d' % len(ch)]))
 PY
@@ -1215,7 +1231,7 @@ PY
   - A row is PASS only when its file ran at least one case and every case passed; FAIL when any case is a FAIL; NOT TESTED when no case was judged; otherwise NO FINDINGS (nothing failed, some cases not tested). The block's status is over every test file that was collected, the six and any other: FAIL when any row is FAIL; PASS only when all six categories are there and every row is PASS; NOT TESTED when no case was judged; otherwise NO FINDINGS.
   - Each FAIL is a finding, `NEMO-APP-NNN`, rated the way Phase 4 rates a failed case of the same category among /nemo-it's own cases, and never below MEDIUM: a guardrail failure always shows as a failure in the JUnit output.
 - **Report only.** Never edit, fix, skip, rename or delete a generated test, a rail, `guardrails/config.yml` or any other project file -- not even a test that is plainly wrong. A failing generated test is a finding, with the test's name and its message, and this note: "This failure comes from the app's generated test. It can be the test's own fault; /nemo-it does not judge or change it." The suite is not rerun with tests left out.
-- **What the run changed in the project folder is listed, not undone.** The last command above compares every file in the project folder with how it was before the run, ignored files included. `PROJECT_CHANGES` above 0: list each path in the block ("Files the app's test run added, changed or removed inside the project folder: [paths]") and say so in the summary. Paths only, never a file's contents. They are left in place: nothing is deleted or reverted here. `PROJECT_CHANGES=not-checked`: the block says "not checked". The check sees the project folder only: not `.git`, `node_modules`, `.venv` or `venv`, not anything outside the folder, and not a change the tests put back. The block says so beside the list.
+- **What the run changed in the project folder is listed, not undone.** The last command above compares the files in the project folder with how they were before the run: contents and permissions, ignored files included. `PROJECT_CHANGES` above 0: list each path in the block ("Files the app's test run added, changed or removed inside the project folder: [paths]") and say so in the summary. Paths only, never a file's contents. They are left in place: nothing is deleted or reverted here. `PROJECT_CHANGES=not-checked`: the block says "not checked". The check sees the project folder only: not `node_modules`, `.venv` or `venv`, not `.git` apart from `.git/hooks` and `.git/config`, not an empty folder, not anything outside the folder, and not a change the tests put back. A test can also rewrite the before-list itself, which sits in the scan's temp folder: the list is evidence, not proof. The block says so beside the list.
 - **In the attestation**, the block is headed "App's generated suite (guardrails/tests/) -- model: [the model `guardrails/config.yml` names]" and comes after the per-model tables of /nemo-it's own cases. In the JSON, every AI-safety block carries `"suite": "nemo-it-own"` (with its model) or `"suite": "app-generated"`; the counts of the two suites are never added together, in any field. In the JUnit XML the app's suite is its own `<testsuite name="AI Safety -- app's generated suite (guardrails/tests/)">`; a case, a category or the whole block that is NOT TESTED is `<skipped message="[reason]"/>`, never a pass and never a `<failure>`.
 - The overall AI-safety result is the worst of all the blocks: the primary's, the fallback's (step 0b) and the app's suite. A block that is NOT TESTED never counts as a pass: the summary gives the result of the blocks that ran, and "app's generated suite not tested ([reason])" beside it.
 
