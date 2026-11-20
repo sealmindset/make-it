@@ -13,7 +13,7 @@ Every finding from a `/nemo-it` attestation is classified using these rules:
 | Classification | Criteria |
 |---------------|----------|
 | **AUTO** | Fix is mechanical, deterministic, and cannot change application behavior. No human judgment needed. |
-| **SEMI-AUTO** | Fix is well-defined but touches application logic. Show the diff, get implicit approval (user can object). |
+| **SEMI-AUTO** | Fix is well-defined but touches application logic. Show the diff; the fix is kept only when the user picks it (/fix-it asks once per step, each fix its own pick). |
 | **MANUAL** | Fix requires understanding business logic, architectural decisions, or has multiple valid approaches. |
 | **SKIP** | Finding is informational, accepted risk, or N/A. |
 | **AUDIT** | A CRITICAL or HIGH finding from the deep code audit (`AUDIT-`). Touches application logic, so it is fixed test first and re-checked by a fresh agent (Strategy 13). No approval is asked. Run by /fix-it, the fix goes only on a `fix-it/[date]` branch and the branch is the undo; inside a build it is made in place, one commit per finding. |

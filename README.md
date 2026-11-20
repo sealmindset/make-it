@@ -968,6 +968,30 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.6 -- /fix-it asks properly before it rolls back, keeps a fix, or moves a secret
+
+`/fix-it` still had two bare asks: a numbered "would you like me to" menu before a full rollback,
+and "let the user confirm" for fixes that change how the app's code works.
+
+- **A full rollback is its own ask, and never a plain yes.** It says which check is failing, exactly
+  what a rollback discards (the fixes that pass included), what happens to work you had before the
+  run, and what can and cannot be brought back. Rolling back is never the recommended option, and
+  nothing is rolled back unless you pick it.
+- **Fixes that change app logic: one pick-list per step.** Each fix is its own pick, shown with its
+  diff. There is no "apply all". A fix you do not pick is reverted and goes on the manual list;
+  dismissing the ask keeps nothing.
+- **A fix that moves a secret is asked separately and never shows the value.** It names the file,
+  the line and the kind of secret, shows the diff with the value hidden, and says what git shows
+  about `.env`. It also says what the move does not do: the old value is still in git history and
+  should be rotated, and `/fix-it` does not rotate it.
+- **Every earlier gate is kept:** approval before any change, the save choice with its "not now",
+  the per-fix revert before any full rollback, and the ten guardrails.
+- **Checked:** `scripts/test-fix-it-asks.sh` (90 checks). It pins the wording; no real `/fix-it` run
+  was made, and this change had no independent review.
+- **Known and filed, not fixed here.** `/fix-it` moves uncommitted work into git's stash before it
+  starts and never puts it back. And its hardcoded-secret fix never checks that git ignores
+  `.env`, so a value written there can be committed. The new asks tell the truth about both.
+
 ### v1.71.5 -- /nemo-it can run your app's own guardrail tests too, when you pick it
 
 A build writes a guardrail test suite into every AI app (`guardrails/tests/`). `/nemo-it`, whose
