@@ -968,6 +968,37 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.7 -- The compliance documents stop presenting NeMo Guardrails as a run-time control
+
+A build writes NeMo Guardrails files into every AI app: a config, five rails and six test files.
+They are test-time files. Nothing make-it generates loads the rails when the app runs. The
+governance and pentest-readiness documents said otherwise in about twenty rows ("topic boundary
+enforcement", "hallucination detection", "toxicity/bias detection").
+
+- **Those rows now say what is true:** NeMo here is a test suite, run when someone runs it, not a
+  run-time filter. Each row names the control that does act when the app runs, where one exists.
+- **Three verdicts changed** in `docs/PENTEST-READINESS.md`, each decided by the project owner:
+  - *Harmful Content Generation* is now **GAP** (was COVERED). Nothing generated filters toxic or
+    biased AI output. It is listed as a new gap, GAP-26.
+  - *Direct Prompt Injection* is now **PARTIAL** (was COVERED), and the risk for direct injection
+    is Low-Medium (was Low). The sanitizer replaces a fixed list of known phrases; a reworded
+    injection is not caught. The row's example claimed a phrase was "blocked" that the list does
+    not even match.
+  - The two competitor and reputational rows stay PARTIAL, on a model instruction alone.
+- **`/nemo-it`'s attestation table agrees.** Jailbreak, hallucination and topic boundaries name
+  their real control and stay "Reduced"; toxicity and bias is "Not covered"; prompt injection is
+  "Reduced" (was "Prevented").
+- **"Present and wired" is gone.** Check AI09 confirms the guardrail files exist and the config
+  references every rail, and the documents now use those words.
+- **New apps say so themselves.** Each generated `guardrails/README.md` now opens by saying the
+  rails are loaded by the tests only.
+- **Checked:** `scripts/test-nemo-rails-not-runtime.sh` pins the changed rows with their verdict
+  words. One independent review confirmed that no scaffold file, overlay or build prompt loads
+  the rails. No real `/make-it` build was inspected.
+- **Worth knowing:** several AI controls these documents list exist as build-prompt instructions,
+  not as scaffold code. In the scaffold today only error sanitization is called; the build is
+  what adds the rest.
+
 ### v1.71.6 -- /fix-it asks properly before it rolls back, keeps a fix, or moves a secret
 
 `/fix-it` still had two bare asks: a numbered "would you like me to" menu before a full rollback,
