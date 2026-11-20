@@ -356,8 +356,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   AI provider: recommended before each production deploy, and nothing in make-it enforces it
 - The build generates the app's guardrail suite (guardrails/tests/) and AI09 checks it exists;
   AI09 does not run it. /fix-it runs it when it verifies a fix.
-  /nemo-it does not use it: with a live AI provider it writes and runs its own 60 or more cases, and the attestation is based on those.
-  With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS
+  /nemo-it runs it too: with a live AI provider it runs the app's suite and its own 60 or more cases, and the attestation shows each in its own block.
+  With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
+  The app's suite is then NOT TESTED, as it is whenever it cannot run: the reason is given, and it is never a PASS or a FAIL
 - Check AI09 has no fix-and-retest loop: it runs no test, so there is nothing to retest.
   A missing or unwired guardrails file is put right like any other [FIX] check.
   /nemo-it reports its failures and fixes nothing

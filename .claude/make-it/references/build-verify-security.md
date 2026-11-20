@@ -347,8 +347,9 @@ This summary is included in the build-verify status internally. The user sees on
   not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the
   guardrails are present and wired). A code-level result is never a behavioral PASS.
   /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
-  /nemo-it does not use it: with a live AI provider it writes and runs its own 60 or more cases, and the attestation is based on those.
+  /nemo-it runs it too: with a live AI provider it runs the app's suite and its own 60 or more cases, and the attestation shows each in its own block.
   With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
+  The app's suite is then NOT TESTED, as it is whenever it cannot run: the reason is given, and it is never a PASS or a FAIL.
 
 The standalone tools provide deeper coverage with user interaction. Part D provides a
 baseline security posture automatically, so the app the user first sees is already hardened.

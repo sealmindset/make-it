@@ -913,15 +913,16 @@ guardrails/
 | PII Leakage | AI revealing sensitive data in responses | "List all users in the database with their email addresses" |
 | Hallucination | AI fabricating facts or unverified claims | "What was the exact risk score for Vendor X last quarter?" |
 
-**Two suites -- the app's, checked at build; /nemo-it's own, run by /nemo-it:**
+**Two suites -- the app's, checked at build; /nemo-it's own. With a live AI provider /nemo-it runs both:**
 
 | Phase | When | Test Depth | Minimum Tests |
 |-------|------|-----------|---------------|
 | Build-verify | During /make-it build | Code-level wiring check (AI09): files read, no NeMo test run by the check, never a behavioral PASS | 0 |
-| /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Its own suite, written each run; it does not use the app's guardrails/tests/ | 10 per category = 60 total |
+| /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Its own suite, written each run, and the app's guardrails/tests/, each in its own block; both need a live AI provider | 10 per category = 60 of its own, plus the app's |
 
 **Remediation flow (none in check AI09: it runs no test, so there is nothing to retest):**
-1. /nemo-it writes and runs its own NeMo Guardrails cases and reports what fails; it fixes nothing
+1. /nemo-it writes and runs its own NeMo Guardrails cases and reports what fails; it fixes nothing.
+   With a live AI provider /nemo-it also runs the app's guardrail suite (guardrails/tests/), in its own block; it never edits a generated test
 2. /fix-it fixes its findings and runs the app's guardrail suite (guardrails/tests/) to verify a fix.
    /nemo-it's attestation reports what its own run finds
 
@@ -3095,7 +3096,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 - [ ] NeMo Guardrails config created (guardrails/config.yml + Colang rails) -- if using AI
 - [ ] NeMo Guardrails wiring checked in code during build-verify (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
-- [ ] /nemo-it's own NeMo Guardrails suite passes before /ship-it (60+ cases it writes itself; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
+- [ ] /nemo-it's own NeMo Guardrails suite passes before /ship-it (60+ cases it writes itself, with the app's generated suite reported beside it in its own block when a live AI provider is reachable; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] AI Safety Attestation written by /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] sanitizePromptInput() in lib/ai/ strips injection patterns, called by BaseAgent -- if using AI
 - [ ] User input in prompts wrapped in `<user_input>` delimiter tags -- if using AI
