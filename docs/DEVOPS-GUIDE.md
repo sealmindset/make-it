@@ -166,7 +166,7 @@ The full checklist is in `build-standards.md`. When new checks are added, `/resu
 | **Dependency audit** | `/ship-it` | pip-audit (Python), npm audit (Node.js) -- auto-upgrades vulnerable packages |
 | **Secret detection (gitleaks)** | Build-verify | Scans for hardcoded keys, tokens, passwords in committed files (pre-commit hook) |
 | **Trivy config** | Build-verify | Container scanning config verified (CI consumption) |
-| **NeMo Guardrails** | `/nemo-it` (its own 60 or more cases and, in a separate block when picked, the app's generated `guardrails/tests/`; both need a live AI provider), when someone runs `/nemo-it`: recommended before each production deploy, and nothing in make-it enforces a `/nemo-it` run -- if AI features. Build-verify's check AI09 reads the wiring in code and runs no NeMo test | 60+ test cases: prompt injection, jailbreak, toxicity, PII leakage, hallucination |
+| **NeMo Guardrails** | `/nemo-it` (its own 60 or more cases and, in a separate block when picked, the app's generated `guardrails/tests/`; both need a live AI provider, and nemo-it.md, step 7b, lists when the app's suite cannot run), when someone runs `/nemo-it`: recommended before each production deploy, and nothing in make-it enforces a `/nemo-it` run -- if AI features. Build-verify's check AI09 reads the wiring in code and runs no NeMo test | 60+ test cases: prompt injection, jailbreak, toxicity, PII leakage, hallucination |
 | **OWASP patterns** | Build-verify | Input validation, parameterized queries, security headers |
 
 ### What Happens Post-Build (If Scanner Configured)
