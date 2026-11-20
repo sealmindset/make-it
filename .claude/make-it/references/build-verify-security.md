@@ -147,7 +147,7 @@ Payload 3: Input exceeding AI_MAX_PROMPT_CHARS
 
 ## Phase 3: Auto-Fix (Silent)
 
-Apply fixes for all findings following the priority order from fix-strategies.md.
+Apply the fixes in the fix order below, following the priority order from fix-strategies.md.
 No user approval needed -- this is part of the build process.
 
 ### Fix Order (least risky first)
@@ -161,12 +161,18 @@ No user approval needed -- this is part of the build process.
    - Replace `pdf-parse` default import with `pdf-parse/lib/pdf-parse`
    - Remove external font CDN imports, replace with system font stacks
    - Fix module-level throws (wrap in runtime functions)
-4. **AI safety wiring** (if AI app):
-   - Add missing sanitizePromptInput() calls
-   - Add missing validateAgentOutput() calls
-   - Add missing delimiter tags around user input in prompts
-   - Add missing rate limiting middleware to AI routes
-   - Wire safety preamble to managed prompts missing it
+4. **AI safety wiring** (if AI app) -- logged, not fixed. The fix is SEMI-AUTO (fix-strategies.md,
+   Strategy 8), so the scan changes nothing in the app for it:
+   - A Phase 2 finding that a safety control is missing or not wired in (a sanitizePromptInput() or
+     validateAgentOutput() call, delimiter tags around user input in a prompt, rate limiting
+     middleware on an AI route, the safety preamble on a managed prompt)
+     gets one line in TODO.md under "## Security Improvements": the finding, the file, and
+     "/fix-it applies this fix, with an ask, after a /nemo-it scan reports it".
+   - The scan runs no NeMo Guardrails test for such a finding, and does not run the app's guardrail
+     suite (guardrails/tests/).
+   - This rule is for the scan's findings only. Before the scan, Part A's checks complete the app
+     being generated: a safety control that a [FIX] check in build-standards.md (AI02-AI07, AI10)
+     finds missing is added then, as any [FIX] item is.
 5. **Hardcoded secrets** (move to env vars + .env.example)
 
 ### Fix Rules
@@ -218,6 +224,9 @@ After 3 cycles, accept remaining findings and classify them:
   Do NOT block handoff -- the app is still structurally sound.
 - **HIGH/MEDIUM remaining:** Log to TODO.md under "## Security Improvements".
 - **LOW/INFO remaining:** Log to TODO.md under "## Security Improvements (Optional)".
+- **AI safety wiring findings (Phase 3, item 4):** logged to TODO.md under "## Security Improvements"
+  in the first cycle, whatever their severity, and never fixed in any cycle. They do not start
+  another cycle.
 
 ---
 
@@ -315,6 +324,7 @@ Security Scan Summary:
   Tools skipped: [list of tools not installed]
   Total findings: [N]
   Auto-fixed: [N]
+  AI safety wiring findings logged to TODO.md, not fixed: [N]
   Remaining: [N] (CRITICAL: [n], HIGH: [n], MEDIUM: [n], LOW: [n])
   Fix cycles: [1-3]
   Deep code audit: [ran, quick profile, partial coverage / no change since the last audit / NOT RUN (reason)]
@@ -342,6 +352,7 @@ This summary is included in the build-verify status internally. The user sees on
 - **/fix-it (standalone):** Full triage with user approval, semi-auto fixes with diff review,
   git strategy choice, and before/after attestation comparison.
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
+  An AI safety wiring finding from its scan is logged to TODO.md, not fixed: /fix-it applies that fix, with an ask.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
   Part D's own AI checks are the wiring checks (2a) and the endpoint probe (2b). The probe is
   not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the guardrail files exist and the config references every rail). A code-level result is never a behavioral PASS.
@@ -375,5 +386,6 @@ Findings are classified using the same scale as /nemo-it:
 | INFO | Awareness only, no action required | No (skip) |
 
 The key constraint: for scanner findings, only AUTO-class fixes from fix-strategies.md are applied
-silently; SEMI-AUTO and MANUAL ones are logged to TODO.md. Deep-audit findings follow Phase 6:
+silently; SEMI-AUTO and MANUAL ones are logged to TODO.md, AI safety wiring (Strategy 8) among them.
+Deep-audit findings follow Phase 6:
 Critical and High are fixed by Strategy 13, the rest are logged to TODO.md.
