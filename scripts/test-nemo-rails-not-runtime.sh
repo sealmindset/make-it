@@ -102,8 +102,8 @@ docs/PENTEST-READINESS.md	| **GAP-26:** No filter for harmful AI output | NeMo A
 .claude/commands/nemo-it.md	| AI: Toxicity/bias | No /make-it control: tested by the NeMo Guardrails suite when someone runs it | Not covered |
 .claude/commands/nemo-it.md	| AI: No prompt injection resistance | sanitizePromptInput() in Prompt #10e: a fixed list of known phrases, so a reworded injection is not caught | Reduced |
 ROWS_EOF
-check "each rewritten row is exactly the reviewed line, verdict word included (24 rows: the governance doc, the pentest doc, /nemo-it's prevention table)" \
-  '[ "$(grep -c . "$TMPD/rows")" = 24 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'
+check "each rewritten row is exactly the reviewed line, verdict word included (25 rows: the governance doc, the pentest doc, /nemo-it's prevention table)" \
+  '[ "$(grep -c . "$TMPD/rows")" = 25 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'
 check "the one form is used, whole, in the governance doc (4 times) and the pentest doc (7 times)" \
   '[ "$(grep -oF -- "$FORM" "$GOV" | grep -c .)" = 4 ] && [ "$(grep -oF -- "$FORM" "$PEN" | grep -c .)" = 7 ]'
 check "the governance doc says once, in section 5.5, that nothing generated loads the rails at run time" \
