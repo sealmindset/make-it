@@ -968,6 +968,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.8 -- The build's security scan logs missing AI-safety wiring and no longer fixes it silently
+
+The scan a build runs on the app it just generated contradicted itself. One step said it adds
+missing AI-safety calls without asking. The same file said only fully mechanical fixes are
+silent, and the fix list classes those calls as needing a look.
+
+- **Logged, not fixed.** When the scan finds a safety control missing or not wired in (a
+  sanitizer or output-validation call, delimiter tags, rate limiting on an AI route, the safety
+  preamble), it writes one line to `TODO.md` and changes nothing in the app. `/fix-it` applies
+  that fix, with an ask.
+- **The scan runs no NeMo Guardrails test** for such a finding, and does not run the app's
+  guardrail suite.
+- **This is about the scan's findings only.** Before the scan, the build's own checks still
+  complete the app it is generating: a safety control one of those checks finds missing is added
+  then, as before.
+- **Checked:** `scripts/test-scan-ai-fixes-log-only.sh` (28 checks). It pins the wording; no real
+  build was run, and this change had no independent review.
+- **Known and filed, not fixed here.** `/retrofit-it` applies those same build checks to code you
+  already had, without asking. And the scan's fix list still moves hardcoded secrets silently,
+  along with a few other fixes its own rule says must not be silent.
+
 ### v1.71.7 -- The compliance documents stop presenting NeMo Guardrails as a run-time control
 
 A build writes NeMo Guardrails files into every AI app: a config, five rails and six test files.
