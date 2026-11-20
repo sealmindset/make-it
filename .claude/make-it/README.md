@@ -164,9 +164,9 @@ When administrators can edit AI prompts through the UI, the saved content become
 |---------|---------|
 | `validatePromptTemplate()` | Hybrid blocklist on save -- blocks injection overrides, code injection, encoded payloads, preamble tampering |
 | Immutable Safety Preamble | Locked safety instructions auto-prepended at runtime. Admin UI never shows it. No code path skips it. |
-| Draft/Test/Publish Workflow | New edits save as draft. Test button runs blocklist + sanitize + test cases + mini NeMo check. Publish only enabled after all tests pass. |
+| Draft/Test/Publish Workflow | New edits save as draft. Test button runs blocklist + sanitize + test cases + 5 adversarial inputs sent to the AI with the draft prompt (Prompt #10e names this step "mini NeMo"; it specifies no use of the NeMo Guardrails rails). Publish only enabled after all tests pass. |
 | `renderPromptSafe()` | Sanitizes ALL template variable values via `sanitizePromptInput()` before interpolation. Escapes HTML entities. |
-| `testPromptDraft()` | Mandatory test gate: validation + 5 adversarial NeMo inputs against draft prompt |
+| `testPromptDraft()` | Mandatory test gate: validation + 5 adversarial inputs (3 injection, 2 jailbreak) sent to the AI with the draft prompt |
 | Risk Warnings | Friendly yellow banners for suspicious patterns (no jargon). Overrides logged with `risk_flag` for security review. |
 | /ship-it Integration | None: no skill flags `risk_flag` audit entries at ship (ship-it-guide.md, "What make-it runs before /ship-it") |
 

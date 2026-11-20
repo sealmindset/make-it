@@ -627,7 +627,7 @@ When administrators can edit AI prompts through the UI (Tier 2/3 prompt manageme
 **Mandatory Test-Before-Publish:**
 - New edits save as `status: draft` (not active -- agents never see draft prompts)
 - The admin must click "Test" before "Publish" becomes enabled
-- Test runs: blocklist check + sanitize rendered output + all saved test cases + mini NeMo Guardrails check (3 injection + 2 jailbreak adversarial inputs)
+- Test runs: blocklist check + sanitize rendered output + all saved test cases + 5 adversarial inputs sent to the AI with the draft prompt (3 injection + 2 jailbreak; Prompt #10e names this step "mini NeMo", and it specifies no use of the NeMo Guardrails rails)
 - All tests must pass before the prompt version can go live
 
 **Variable Interpolation Safety:**
@@ -946,7 +946,7 @@ Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your exis
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
 
 **What prevents someone from injecting malicious prompts through the admin UI?**
-Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that runs adversarial NeMo Guardrails tests against every draft prompt before it can go live. Additionally, template variables are sanitized at render time and risk-flagged edits are logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it").
+Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that sends 5 adversarial inputs to the AI with every draft prompt before it can go live (it specifies no use of the NeMo Guardrails rails). Additionally, template variables are sanitized at render time and risk-flagged edits are logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it").
 
 **What if the AI returns something dangerous (XSS, hallucinated data, etc.)?**
 Every AI response passes through `validateAgentOutput()` before it reaches the database or the UI. Structured responses are validated against schemas with value range checks. Free-text responses are scanned for HTML/script tags, markdown injection, and system prompt leakage. AI-generated content in the frontend uses escaped rendering -- never `dangerouslySetInnerHTML`.

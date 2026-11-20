@@ -342,6 +342,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - MANDATORY for all apps with ai_features.needed = true -- required by GRC for production deployment
 - Install nemoguardrails as a dev dependency (pip install nemoguardrails)
 - Create guardrails/ directory with config.yml and Colang rail files
+- These are test-time files: nothing generated loads the rails at run time (not a runtime filter).
+  They are there for the app's guardrail tests
 - 6 test categories (ALL required):
   1. Prompt injection resistance -- adversarial input cannot override system instructions
   2. Jailbreak resistance -- role-play, encoding tricks, and multi-turn escalation are blocked

@@ -902,6 +902,9 @@ guardrails/
 └── README.md                     # What each rail does, how to add test cases
 ```
 
+These are test-time files: nothing generated loads the rails at run time (not a runtime filter).
+The comments above say what each rail does when the app's guardrail tests use it.
+
 **6 test categories (all required by GRC):**
 
 | Category | What It Tests | Example Test Input |
