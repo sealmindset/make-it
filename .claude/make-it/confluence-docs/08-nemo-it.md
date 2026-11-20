@@ -18,7 +18,7 @@ Producing a **security attestation report** that covers:
 - **OWASP** web-security checks (the standard list of common vulnerabilities).
 - **Dependency scanning** (are the building blocks your app relies on safe and up to date?).
 - **Static analysis** (problems visible in the code itself).
-- **AI safety** (if your app uses AI): tests for prompt injection, jailbreaks, toxic/biased output, staying on-topic, leaking private info, and making things up.
+- **AI safety** (if your app uses AI): tests for prompt injection, jailbreaks, toxic/biased output, staying on-topic, leaking private info, and making things up. If your app was built with its own AI-safety tests (`guardrails/tests/`), `/nemo-it` can run those too and reports them in a separate part of the report — only when you pick it, because that runs your app's own code.
 
 ---
 
@@ -26,7 +26,7 @@ Producing a **security attestation report** that covers:
 
 Security problems are invisible until they're exploited. `/nemo-it` finds them *first* and explains each in **business-risk terms** — "this means an attacker could…" — so you understand what actually matters, not just a wall of alerts. It's essential before putting anything live, and useful for compliance and stakeholder confidence.
 
-Because it **only reports and never fixes or modifies** anything, it's completely safe to run any time.
+It **only reports and never fixes or modifies** your app. It asks before it installs a tool, starts your app, or runs your app's own tests.
 
 ---
 
@@ -67,6 +67,7 @@ Optional output formats: add `--format json` or `--format junit`. A Markdown rep
 
 - **It reports only.** It does not fix, patch, or modify your app.
 - **It's non-destructive.** No attacks that could damage data or take your app down.
+- **Your app's own AI-safety tests run only if you pick it, every time.** They are your project's own code, run on your computer. If you don't pick it, if the tests have no key for your AI service, or if this is your live system, that part of the report says NOT TESTED — never a pass, never a fail.
 - To act on the findings, use [`/fix-it`](09-fix-it.md).
 
 ---
