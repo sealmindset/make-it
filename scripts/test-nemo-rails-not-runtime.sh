@@ -100,6 +100,7 @@ docs/PENTEST-READINESS.md	| **GAP-26:** No filter for harmful AI output | NeMo A
 .claude/commands/nemo-it.md	| AI: Hallucination | validateAgentOutput() schema, range and contradiction checks, and the never-fabricate instruction (Prompt #10e Parts 2 and 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
 .claude/commands/nemo-it.md	| AI: Topic boundary violations | Domain-scope instruction in the safety preamble (Prompt #10e Part 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
 .claude/commands/nemo-it.md	| AI: Toxicity/bias | No /make-it control: tested by the NeMo Guardrails suite when someone runs it | Not covered |
+.claude/commands/nemo-it.md	| AI: No prompt injection resistance | sanitizePromptInput() in Prompt #10e: a fixed list of known phrases, so a reworded injection is not caught | Reduced |
 ROWS_EOF
 check "each rewritten row is exactly the reviewed line, verdict word included (24 rows: the governance doc, the pentest doc, /nemo-it's prevention table)" \
   '[ "$(grep -c . "$TMPD/rows")" = 24 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'

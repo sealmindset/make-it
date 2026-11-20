@@ -1399,7 +1399,7 @@ Apply these classification rules:
 | Missing RBAC | Database-driven RBAC, require_permission() | Prevented |
 | Vulnerable dependencies | Latest stable versions, build-verify check | Reduced |
 | Missing rate limiting (general) | Not in base guardrails | Not covered |
-| AI: No prompt injection resistance | sanitizePromptInput() in Prompt #10e | Prevented |
+| AI: No prompt injection resistance | sanitizePromptInput() in Prompt #10e: a fixed list of known phrases, so a reworded injection is not caught | Reduced |
 | AI: No prompt size validation | AI_MAX_PROMPT_CHARS in Prompt #10e | Prevented |
 | AI: PII sent to AI unmasked | maskPII()/unmaskPII() in Prompt #10e | Prevented |
 | AI: No output validation | validateAgentOutput() in Prompt #10e | Prevented |
