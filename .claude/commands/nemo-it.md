@@ -1412,10 +1412,10 @@ Apply these classification rules:
 | AI: Admin prompt template injection | validatePromptTemplate() + immutable preamble (Prompt #10e Part 9) | Prevented |
 | AI: No test-before-publish on prompts | Draft/active workflow + mandatory testing (Prompt #10e Part 9) | Prevented |
 | AI: Variable interpolation injection | renderPromptSafe() sanitizes variables (Prompt #10e Part 9) | Prevented |
-| AI: Jailbreak susceptibility | NeMo Guardrails test suite (Prompt #10d) | Reduced |
-| AI: Hallucination | NeMo Guardrails test suite (Prompt #10d) | Reduced |
-| AI: Topic boundary violations | NeMo Guardrails test suite (Prompt #10d) | Reduced |
-| AI: Toxicity/bias | NeMo Guardrails test suite (Prompt #10d) | Reduced |
+| AI: Jailbreak susceptibility | System prompt safety block (Prompt #10e Part 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+| AI: Hallucination | validateAgentOutput() schema, range and contradiction checks, and the never-fabricate instruction (Prompt #10e Parts 2 and 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+| AI: Topic boundary violations | Domain-scope instruction in the safety preamble (Prompt #10e Part 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+| AI: Toxicity/bias | No /make-it control: tested by the NeMo Guardrails suite when someone runs it | Not covered |
 | Container misconfiguration | Trivy scan in build-verify | Reduced |
 | Insecure deserialization | Framework defaults, input validation | Reduced |
 | SSRF | Not in base guardrails | Not covered |
