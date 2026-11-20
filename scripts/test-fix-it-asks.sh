@@ -8,6 +8,10 @@
 #   - SEMI-AUTO fixes are one ask per step: one multi-select, each fix its own pick with its diff, no "all" option, never
 #     one ask per fix. An unpicked fix is reverted, goes on the manual list, and is not asked about again in the run; a
 #     dismissed ask keeps nothing.
+#   - A fix that moves a secret (owner, 2026-11-19) is never in that pick-list: it is its own high-stakes ask, each fix
+#     its own pick, naming file, line and kind of secret and never the value. It says where the value goes, what git
+#     does with that place, that the old value stays in history and is not rotated by /fix-it. Unpicked or dismissed,
+#     the fix is reverted and not asked about again.
 #   - Every /fix-it gate stays: approval before any change, the git strategy pick with its "not now", the audit branch
 #     never merged or pushed, the ten guardrails, the never-do list, per-fix revert before any full rollback.
 # A wording test is a tripwire, not a proof: it catches these rules being dropped or reversed, not an agent ignoring them.
@@ -34,7 +38,8 @@ CTX="$(between '^<execution_context>' '^</execution_context>')"
 TRI="$(between '<step name="triage">' '^</step>' | flat)"
 FIX="$(between '<step name="fix">' '^</step>' | flat)"
 # bracket forms, not backslashes: gawk warns about "\*" in a -v string, and this test fails on any stderr
-SA="$(between '^[*][*]SEMI-AUTO fixes: one ask per step' '^[*][*]Step 1: ' | flat)"
+SA="$(between '^[*][*]SEMI-AUTO fixes: one ask per step' '^[*][*]A fix that moves a secret' | flat)"
+SEC="$(between '^[*][*]A fix that moves a secret' '^[*][*]Step 1: ' | flat)"
 RB="$(between '^<rollback-strategy>' '^</rollback-strategy>' | flat)"
 GUARD="$(between '^<guardrails>' '^</guardrails>' | flat)"
 PERSONA="$(between '^<persona>' '^</persona>' | flat)"
@@ -125,7 +130,7 @@ check "SEMI-AUTO ask: in Step 7 an unpicked fix is reverted by its commit, and t
 check "SEMI-AUTO ask: no option (a list item led by a bold name) holds the word 'all'" \
   '! between "<step name=\"fix\">" "^</step>" | gq -iE "^ *- \*\*[^*]*\ball\b[^*]*\*\*"'
 check "SEMI-AUTO ask: no 'all' pick is offered in any other words" \
-  '! printf "%s" "$FIX" | sed "s/There is no \"all of them\" option\.//" | gq -iE "(keep|apply|pick|select|accept|approve) (them )?all\b|[\"*]all of (them|the above)|\beverything\b[^.]{0,20}\b(option|pick)"'
+  '! printf "%s" "$FIX" | sed "s/There is no \"all of them\" option\.//g" | gq -iE "(keep|apply|pick|select|accept|approve) (them )?all\b|[\"*]all of (them|the above)|\beverything\b[^.]{0,20}\b(option|pick)"'
 check "SEMI-AUTO ask: nothing in the fix step asks fix by fix" \
   '! printf "%s" "$FIX" | sed "s/Never one ask per fix\.//" | gq -iE "one ask per fix|(ask|confirm|approve)[^.]{0,60}\b(each|every) fix\b[^.]{0,30}(in turn|one at a time|one by one|separately|before the next)|after each fix[^.]{0,30}\b(ask|confirm)"'
 check "SEMI-AUTO ask: nothing keeps or applies fixes on a dismissed ask" \
@@ -138,6 +143,53 @@ check "Step 5 sends its diffs to the one ask" \
   'has "$FIX" "6. Keep its diff for this step'"'"'s one SEMI-AUTO ask (above)"'
 check "guardrail 7: SEMI-AUTO fixes are kept only when picked, diff shown in the one ask" \
   'has "$GUARD" "7. **SEMI-AUTO fixes are kept only when picked.** Do not silently apply complex changes. Show each fix'"'"'s diff in its step'"'"'s one SEMI-AUTO ask (Phase 2); a fix that is not picked is reverted and goes on the manual list."'
+
+# 4b. a fix that moves a secret: its own high-stakes ask, never the value (owner decision, 2026-11-19)
+check "secret ask: the paragraph was found, and the pick-list paragraph ends before it" '[ -n "$SEC" ] && [ -n "$SA" ]'
+check "secret ask: such a fix is never in the pick-list, whatever its step" \
+  'has "$SEC" "**A fix that moves a secret is asked on its own (high-stakes).** A fix that takes a hardcoded password, key or token out of the code (Strategy 12), or reads, writes or moves a secret value in any other way, is never in the SEMI-AUTO pick-list, whatever step it is in."'
+check "secret ask: the pick-list says so too" \
+  'has "$SA" "A fix that moves a secret is not in this ask: it has its own (below)."'
+check "secret ask: its own ask, never batched with the pick-list or the rollback ask, never a plain yes" \
+  'has "$SEC" "It gets its own ask at the end of its step, never batched with the pick-list or with the rollback ask, and never a plain yes."'
+check "secret ask: each fix its own pick, no 'all' option" \
+  'has "$SEC" "Each such fix is its own pick (a multi-select when the step has several). There is no \"all of them\" option."'
+check "secret ask: file, line and kind are named; the value never is, anywhere" \
+  'has "$SEC" "Name the file, the line and the kind of secret it looks like (\"an API key\"). Never show the value, not even part of it: not in the ask, the diff, the report or a commit message. In the diff, put \`[value hidden]\` where the value was."'
+check "secret ask: the agent looks at what git does with .env before asking" \
+  'has "$SEC" "Look before asking -- \`git check-ignore -v .env\` and \`git ls-files .env\` -- so the ask says what you saw."'
+check "secret ask: says the fixes are made but not committed, and asks for picks" \
+  'has "$SEC" "\"[N] fixes in this step move a secret out of your code. They are in your files and not committed yet. Pick the ones to keep."'
+check "secret ask: the option names kind, file and line; Recommended carries its counter-argument; the diff hides the value" \
+  'has "$SEC" "- **Move [kind of secret] out of [file]:[line]** (Recommended) -- the code reads \`[NAME]\` from the environment instead, and \`.env.example\` gets a placeholder, not the value. Against it: the app will not start until \`[NAME]\` is set everywhere it runs, and the move alone protects nothing until the old value is rotated. [diff: the changed lines, \`[value hidden]\` in place of the value]"'
+check "secret ask: where the value goes" \
+  'has "$SEC" "Where the value goes: the real value belongs in \`.env\`. [I did not write it there / I wrote it there]."'
+check "secret ask: the evidence -- what git does with .env, told as seen, and the checks run" \
+  'has "$SEC" "What I checked: [what \`git check-ignore -v .env\` and \`git ls-files .env\` showed: \`.env\` is ignored and not tracked / \`.env\` is NOT ignored, or is already tracked: git would save the value, and this run'"'"'s commit would include it]. [The tests and checks run after these fixes, and what they showed.]"'
+check "secret ask: blast radius and undo" \
+  'has "$SEC" "What a pick touches: the lines shown, and \`.env.example\`. To take one back later: \`git revert\` its commit."'
+check "secret ask: the old value stays in history, should be rotated, and /fix-it does not rotate it" \
+  'has "$SEC" "What a pick does not do: the old value is still in git history, so moving it does not make it safe. It should be rotated (replaced with a new one where it was issued). /fix-it does not rotate it."'
+check "secret ask: what is unusual, and the one thing to check" \
+  'has "$SEC" "What is unusual: [what differs from the usual move, or \"nothing\"]." && has "$SEC" "The one thing to check: that \`.env\`, where the value goes, is not saved by git.\""'
+check "secret ask: not Recommended when git would save .env" \
+  'has "$SEC" "Do not mark a fix Recommended when \`.env\` is not ignored or is already tracked."'
+check "secret ask: an unpicked fix is reverted, listed without the value, and not asked about again" \
+  'has "$SEC" "A fix that is not picked is reverted, goes on the manual list and in the report (file, line and kind only), and is not asked about again in this run."'
+check "secret ask: a dismissed ask keeps nothing; a pick is used once" \
+  'has "$SEC" "If the ask is dismissed or left unanswered, no fix is picked: revert every one of them the same way. Only a picked fix is kept. A pick is used once: the next secret fix is asked again."'
+check "secret ask: every 'Recommended' option carries 'Against it:'" \
+  'a=$(printf "%s" "$SEC" | grep -o "(Recommended)" | grep -c . || true); b=$(printf "%s" "$SEC" | grep -oE "\(Recommended\) -- .{0,200} Against it: " | grep -c . || true); [ "$a" -ge 1 ] && [ "$a" = "$b" ]'
+check "secret ask: nothing shows, quotes or confirms the value" \
+  '! printf "%s" "$ALL" | sed "s/Never show the value, not even part of it//" | gq -iE "\b(show|shows|showing|include|quote|display|print|repeat)\b[^.]{0,40}\b(the|its|secret.s) (old |real |current )?value\b|(first|last) [0-9a-z]+ characters|confirm (the|its) value|value[^.]{0,30}so (the user|they|you) can"'
+check "secret ask: nothing says the move makes the secret safe" \
+  '! printf "%s" "$ALL" | sed "s/so moving it does not make it safe//" | gq -iE "(moving|the move|a pick)[^.]{0,60}\b(makes?|is|are) (it |the secret |the value |now )?(safe|secure)\b|no longer (exposed|at risk)|(is|are) (now )?(safe|secured)\b[^.]{0,40}(secret|value|key)"'
+check "secret ask: nothing says /fix-it rotates the secret" \
+  '! printf "%s" "$ALL" | sed "s/\/fix-it does not rotate it//" | gq -iE "(/fix-it|I|this run) (also |then )?(rotates?|rotated|will rotate)"'
+check "secret ask: no secret fix is sent to the pick-list anywhere in the fix step" \
+  '! printf "%s" "$FIX" | sed "s/is never in the SEMI-AUTO pick-list//; s/never batched with the pick-list//; s/never in the pick-list)//" | gq -iE "secret[^.]{0,80}\b(in|joins?|goes (in|into)|with) the (SEMI-AUTO )?(pick-list|SEMI-AUTO ask)"'
+check "Step 4 sends hardcoded secrets to their own ask" \
+  'has "$FIX" "- Hardcoded secrets: extract to env vars (asked on its own, never in the pick-list)"'
 
 # 5. the two small asks named with options
 check "a risky or ambiguous fix is asked with named options" \

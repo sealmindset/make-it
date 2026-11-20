@@ -309,7 +309,48 @@ about again in this run. If the ask is dismissed or left unanswered, no fix is p
 every one of them the same way. Only a picked fix is kept. A pick covers that fix only: the next
 step's fixes are asked in that step's own ask. In Step 7 each finding is already its own commit,
 so there the ask comes after the last finding and an unpicked fix is reverted with `git revert`;
-the CRITICAL and HIGH audit fixes are not in it.
+the CRITICAL and HIGH audit fixes are not in it. A fix that moves a secret is not in this ask: it
+has its own (below).
+
+**A fix that moves a secret is asked on its own (high-stakes).** A fix that takes a hardcoded
+password, key or token out of the code (Strategy 12), or reads, writes or moves a secret value in
+any other way, is never in the SEMI-AUTO pick-list, whatever step it is in. It gets its own ask at
+the end of its step, never batched with the pick-list or with the rollback ask, and never a plain
+yes. Each such fix is its own pick (a multi-select when the step has several). There is no "all of
+them" option. Name the file, the line and the kind of secret it looks like ("an API key"). Never
+show the value, not even part of it: not in the ask, the diff, the report or a commit message. In
+the diff, put `[value hidden]` where the value was. Look before asking --
+`git check-ignore -v .env` and `git ls-files .env` -- so the ask says what you saw.
+
+"[N] fixes in this step move a secret out of your code. They are in your files and not committed
+yet. Pick the ones to keep.
+
+- **Move [kind of secret] out of [file]:[line]** (Recommended) -- the code reads `[NAME]` from the
+  environment instead, and `.env.example` gets a placeholder, not the value. Against it: the app
+  will not start until `[NAME]` is set everywhere it runs, and the move alone protects nothing
+  until the old value is rotated.
+  [diff: the changed lines, `[value hidden]` in place of the value]
+- ...
+
+Where the value goes: the real value belongs in `.env`. [I did not write it there / I wrote it
+there].
+What I checked: [what `git check-ignore -v .env` and `git ls-files .env` showed: `.env` is ignored
+and not tracked / `.env` is NOT ignored, or is already tracked: git would save the value, and this
+run's commit would include it]. [The tests and checks run after these fixes, and what they
+showed.]
+What a pick touches: the lines shown, and `.env.example`. To take one back later: `git revert`
+its commit.
+What a pick does not do: the old value is still in git history, so moving it does not make it
+safe. It should be rotated (replaced with a new one where it was issued). /fix-it does not rotate
+it.
+What is unusual: [what differs from the usual move, or "nothing"].
+The one thing to check: that `.env`, where the value goes, is not saved by git."
+
+Do not mark a fix Recommended when `.env` is not ignored or is already tracked. A fix that is not
+picked is reverted, goes on the manual list and in the report (file, line and kind only), and is
+not asked about again in this run. If the ask is dismissed or left unanswered, no fix is picked:
+revert every one of them the same way. Only a picked fix is kept. A pick is used once: the next
+secret fix is asked again.
 
 **Step 1: Dependency upgrades**
 
@@ -369,7 +410,7 @@ Apply fixes that need review:
 - SQL injection: convert f-string queries to parameterized
 - HTML injection: add escaping
 - Pickle: replace with JSON
-- Hardcoded secrets: extract to env vars
+- Hardcoded secrets: extract to env vars (asked on its own, never in the pick-list)
 - Insecure temp files: use tempfile module
 
 For each fix:
