@@ -75,8 +75,8 @@ check "the \"never does\" list (no deploy-branch push, no production deploy) is 
   '[ "$NEVER" = "**What /ship-it never does in the two modes above:**" ] && ! gq -F "**What /ship-it never does:**" "$G" && ! sents < "$G" | gq -iE "/ship-it (never|doesn.t|does not) (push(es)? to the deploy branch|triggers? production deploy)"'
 
 # 4. the make-it section gives each dropped step to build-verify or /nemo-it, or says no skill does it; never to /ship-it
-check "make-it section: build-verify runs the NeMo basic suite; the attestation GRC asks for before production comes from /nemo-it" \
-  'printf "%s\n" "$MAKEIT" | sents | grep -F build-verify | gq -F "NeMo Guardrails basic suite" && printf "%s\n" "$MAKEIT" | sents | grep -F attestation | grep -F /nemo-it | gq -iE "\bbefore production\b"'
+check "make-it section: build-verify's own checks run no NeMo test (check AI09 is code-level, never a behavioral PASS); the attestation GRC asks for before production comes from /nemo-it" \
+  'printf "%s\n" "$MAKEIT" | sents | grep -F build-verify | grep -F "own checks run no NeMo Guardrails test" | gq -F "never a behavioral PASS" && ! printf "%s\n" "$MAKEIT" | gq -iE "basic suite" && printf "%s\n" "$MAKEIT" | sents | grep -F attestation | grep -F /nemo-it | gq -iE "\bbefore production\b"'
 check "make-it section: says so where no skill does it (the attestation summary in the PR, the risk_flag prompt edits at ship)" \
   'printf "%s\n" "$MAKEIT" | sents | gq -E "^No skill puts an attestation summary in the PR\.$" && printf "%s\n" "$MAKEIT" | sents | grep -F risk_flag | gq -E "\bno skill flags them\b"'
 check "make-it section: /ship-it runs none of it, and every other skill it names is one of make-it's (none invented)" \

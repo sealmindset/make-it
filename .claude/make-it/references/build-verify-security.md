@@ -1,4 +1,4 @@
-# Build-Verify Part C: Automatic Security Scan
+# Build-Verify Part D: Automatic Security Scan
 
 This reference defines the **silent, automatic** security scan that runs during /make-it's
 build-verify phase. It is derived from `/nemo-it` (scan) and `/fix-it` (remediate) but
@@ -37,7 +37,7 @@ HAVE_NPM=$(command -v npm 2>/dev/null && echo "true" || echo "false")
 ```
 
 **Graceful degradation:** If a tool is missing, skip that scan category. The build is
-NOT blocked by missing tools -- Part C runs whatever checks it can with available tools.
+NOT blocked by missing tools -- Part D runs whatever checks it can with available tools.
 At minimum, code-level pattern scanning (grep-based) always runs regardless of tools.
 
 ---
@@ -104,8 +104,9 @@ trivy fs --format json --quiet \
 
 ## Phase 2: AI Safety Scan (if ai_features.needed = true)
 
-Only runs if the app has AI features. Uses **code-level verification** (not behavioral
-testing -- that requires a live AI provider which may not be configured during build).
+Only runs if the app has AI features. Uses **code-level verification**, plus the 2b endpoint
+probe when the app is running (not a NeMo behavioral suite -- that requires a live AI provider
+which may not be configured during build).
 
 ### 2a. Safety Control Wiring Checks
 
@@ -342,8 +343,12 @@ This summary is included in the build-verify status internally. The user sees on
   git strategy choice, and before/after attestation comparison.
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
-  Part D does code-level verification only. The basic suite is Part A's (check AI09), and
-  full behavioral testing is /nemo-it's domain.
+  Part D's own AI checks are the wiring checks (2a) and the endpoint probe (2b). The probe is
+  not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the
+  guardrails are present and wired). A code-level result is never a behavioral PASS.
+  /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
+  /nemo-it does not use it: with a live AI provider it writes and runs its own 60 or more cases, and the attestation is based on those.
+  With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
 
 The standalone tools provide deeper coverage with user interaction. Part D provides a
 baseline security posture automatically, so the app the user first sees is already hardened.

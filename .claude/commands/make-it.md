@@ -1408,7 +1408,7 @@ The app should be in the best possible state.
 **Security hardening (silent, automatic -- checks V15 and V17)**
 
 39b. Once the steps above are green, run `~/.claude/make-it/references/build-verify-security.md`
-from start to finish: its scans and fix cycles, then its Phase 6 -- the deep code audit, with
+from start to finish: its scans and fix cycles (up to 3), then its Phase 6 -- the deep code audit, with
 every confirmed Critical and High finding fixed before handoff. The user is asked nothing and
 told only what that file's 6d says to tell them. Do not skip Phase 6 to save time: it is the reason
 nobody has to scan this app again later to find and fix these.

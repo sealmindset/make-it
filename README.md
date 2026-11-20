@@ -652,9 +652,9 @@ Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
 | PII Leakage | Does the AI reveal personal or system information? | 10 |
 | Hallucination | Does the AI generate false or fabricated information? | 10 |
 
-- Basic suite (18 tests) runs during build-verify
-- Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it")
-- Self-healing remediation loop at build-verify; /nemo-it reports its failures and fixes nothing
+- Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS
+- Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it"): these are `/nemo-it`'s own cases, written each run, not the generated files in the table above. `/fix-it` runs the generated files when it verifies a fix
+- Check AI09 has no fix-and-retest loop (it runs no test); /nemo-it reports its failures and fixes nothing. A /nemo-it run is recommended before each production deploy, and nothing in make-it enforces it
 - The GRC-required AI Safety Attestation comes from `/nemo-it`, in `docs/attestations/nemo-it/`
 
 ### AI Prompt Management Tiers
@@ -967,6 +967,37 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.71.4 -- Nothing claims a NeMo test runs at build, and the two guardrail suites are named apart
+
+Check AI09 said "Basic suite (18 tests) passes" at build. No file defined those 18 tests, the check
+runs before the app starts, and a build often has no AI provider. A dozen places repeated the
+claim, some of them read by compliance reviewers.
+
+- **AI09 is a code-level wiring check.** It reads the guardrail config, the five rails, the six
+  generated test files, the dev dependency and the run command. It runs no NeMo Guardrails test,
+  and a code-level result is never reported as a behavioral pass.
+- **There are two suites, and the documents now say so.** The build generates the app's suite in
+  `guardrails/tests/`; `/fix-it` runs it when it verifies a fix. `/nemo-it` does not use it: with
+  a live AI provider it writes and runs its own 60 or more cases, and the attestation is based on
+  those. With no reachable provider, or read-only against a live system, `/nemo-it`'s AI-safety
+  checks are code-level only, never a pass.
+- **A `/nemo-it` run is recommended, not enforced.** The governance document said the 60 tests
+  run "before deploy"; nothing in make-it makes anyone run them. The risk row for this is now
+  rated Medium (was Low).
+- **The NeMo fix-and-retest loop at build is gone from the documents,** because no test runs
+  there. The security scan's own fix cycles (up to 3) are unchanged, and the count is now stated
+  in the steps that run the scan.
+- **Also corrected:** the build's AI endpoint probe (3 payloads, when the app is running) is named
+  as a separate, smaller check; `build-verify-security.md` calls itself Part D throughout;
+  `nemoguardrails` is a Python dev dependency for Node apps too.
+- **Checked:** `scripts/test-ai09-code-level.sh` pins the exact sentences and table rows across
+  every Markdown file, after three independent reviews. It is a tripwire, not a proof: it cannot
+  catch a claim split across sentences, other words for "build" or "pass", or non-Markdown files.
+  No real `/make-it`, `/nemo-it` or `/fix-it` run was made.
+- **Known and filed, not fixed here:** the security scan contradicts itself on whether it applies
+  AI-safety wiring fixes silently; `/nemo-it` never runs the suite a build generates; and some
+  compliance rows still present NeMo rails as runtime enforcement, which no generated app has.
 
 ### v1.71.3 -- /argo-it's lint auto-fix is limited to safe fixes, and it says which files it changed
 
