@@ -76,7 +76,7 @@ The NIST AI RMF organizes AI risk management into four functions: **Govern, Map,
 | **7.2** | Competence | Non-developers build apps through guided Q&A. /make-it enforces standards silently -- no security expertise required from the builder |
 | **7.5** | Documented information | app-context.json (design decisions), build-standards.md (compliance checks), CHANGELOG.md (changes), TODO.md (known issues), AI safety attestation (test results) |
 | **8.2** | AI risk assessment process | Multi-phase: static analysis (code patterns, semgrep, bandit) → dependency audit (npm audit, pip-audit, trivy) → AI safety wiring → AI endpoint probe → live verification, at build. Behavioral testing (NeMo Guardrails) when someone runs /nemo-it |
-| **8.3** | AI risk treatment process | Priority-ordered fix application: dependencies → config → code patterns → AI safety wiring → hardcoded secrets. Never changes application logic. Reverts if fix breaks build |
+| **8.3** | AI risk treatment process | Priority-ordered fix application: dependencies → config → code patterns → hardcoded secrets. AI safety wiring findings from the scan are logged to TODO.md, not fixed (/fix-it applies those, with an ask). Never changes application logic. Reverts if fix breaks build |
 | **8.4** | AI system lifecycle | 5-phase build lifecycle (Preflight → Ideation → Design → Build → Ship) + operational lifecycle (/resume-it iterate → /ship-it deploy → monitor) |
 | **9.1** | Monitoring, measurement, analysis | Build-standards.md provides measurable criteria. Build-verify generates internal security scan summary. /nemo-it generates formal attestation documents |
 | **9.2** | Internal audit | /resume-it catch-up scan functions as automated internal audit against latest standards. Gaps surfaced automatically |
@@ -296,7 +296,8 @@ Phase 2: AI Safety Scan (if AI features present)
   └─ 2b. AI endpoint probe (injection payloads, size limits)
 
 Phase 3: Auto-Fix (silent, no user interaction)
-  └─ Priority order: deps → config → code patterns → AI safety → secrets
+  └─ Priority order: deps → config → code patterns → secrets
+  └─ AI safety wiring findings: logged to TODO.md, not fixed
   └─ Only AUTO-class fixes applied (mechanical, no logic changes)
 
 Phase 4: Re-Scan (verification)
