@@ -179,7 +179,7 @@ production.
 None of these is a /ship-it step, so /ship-it doesn't repeat them. Build-verify's checks run at
 build; a /nemo-it run happens only when someone runs /nemo-it:
 - **AI safety** (if the app has AI features): build-verify's own checks run no NeMo
-  Guardrails test: check AI09 confirms in code that the guardrails are present and wired, and
+  Guardrails test: check AI09 confirms in code that the guardrail files exist and the config references every rail, and
   that result is never a behavioral PASS. /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
   With a live AI provider /nemo-it runs its own 60 or more cases, and the app's suite too when you pick it in /nemo-it's preflight ask; the attestation shows each in its own block (nemo-it.md, step 7b, lists when the app's suite cannot run).
   With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.

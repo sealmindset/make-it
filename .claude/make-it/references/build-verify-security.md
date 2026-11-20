@@ -344,8 +344,7 @@ This summary is included in the build-verify status internally. The user sees on
   Part D applies AUTO-class fixes silently, plus Phase 6's deep-audit fixes.
 - **NeMo Guardrails behavioral testing:** Requires a live AI provider connection.
   Part D's own AI checks are the wiring checks (2a) and the endpoint probe (2b). The probe is
-  not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the
-  guardrails are present and wired). A code-level result is never a behavioral PASS.
+  not a NeMo suite and gives no NeMo pass count. Part A's check AI09 is code-level (the guardrail files exist and the config references every rail). A code-level result is never a behavioral PASS.
   /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
   With a live AI provider /nemo-it runs its own 60 or more cases, and the app's suite too when you pick it in /nemo-it's preflight ask; the attestation shows each in its own block (nemo-it.md, step 7b, lists when the app's suite cannot run).
   With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
