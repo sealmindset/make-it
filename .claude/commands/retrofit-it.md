@@ -1092,8 +1092,8 @@ In each step's name and its "Tell user" line, leave out any item in the record
 - Tell user: "Your AI features are now protected against prompt injection, data leakage,
   and other AI-specific security risks."
 - Skip this step entirely if the app doesn't use AI/LLM features.
-- No NeMo Guardrails test is run after this step: check AI09 confirms in code that the
-  guardrails are present and wired. /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
+- No NeMo Guardrails test is run after this step: check AI09 confirms in code that
+  the guardrail files exist and the config references every rail. /fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix.
   With a live AI provider /nemo-it runs its own 60 or more cases, and the app's suite too when you pick it in /nemo-it's preflight ask; the attestation shows each in its own block (nemo-it.md, step 7b, lists when the app's suite cannot run).
   An app suite that is not picked or cannot run is NOT TESTED with the reason, never a PASS or a FAIL.
 

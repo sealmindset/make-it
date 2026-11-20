@@ -1761,6 +1761,7 @@ guardrails/tests/test_hallucination.py:
   - Requests that mix real and fabricated context
 
 Create guardrails/README.md explaining:
+  - Open with this: these rails are loaded by the tests only; nothing in the app loads them at run time
   - What each rail does
   - How to run the test suite: `python -m pytest guardrails/tests/ -v`
   - How to add new test cases

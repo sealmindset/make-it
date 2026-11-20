@@ -342,6 +342,8 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - MANDATORY for all apps with ai_features.needed = true -- required by GRC for production deployment
 - Install nemoguardrails as a dev dependency (pip install nemoguardrails)
 - Create guardrails/ directory with config.yml and Colang rail files
+- These are test-time files: nothing generated loads the rails at run time (not a runtime filter).
+  They are there for the app's guardrail tests
 - 6 test categories (ALL required):
   1. Prompt injection resistance -- adversarial input cannot override system instructions
   2. Jailbreak resistance -- role-play, encoding tricks, and multi-turn escalation are blocked
@@ -350,7 +352,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   5. PII leakage prevention -- AI does not reveal PII, secrets, or internal system details
   6. Hallucination detection -- AI does not fabricate facts or present unverified claims
 - Build-verify's own checks run no NeMo Guardrails test: check AI09 is code-level. It reads the
-  files to confirm the guardrails are present and wired, and that result is never a behavioral PASS
+  files to confirm that the guardrail files exist and the config references every rail, and that result is never a behavioral PASS
 - /nemo-it writes and runs its own FULL suite (minimum 10 test cases per category = 60 cases) before /ship-it
   (ship-it-guide.md, "What make-it runs before /ship-it"). It runs when someone runs it with a live
   AI provider: recommended before each production deploy, and nothing in make-it enforces it
@@ -360,7 +362,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   With no reachable AI provider, or read-only against a live system, /nemo-it's AI-safety checks are code-level only, never a PASS.
   The app's suite is then NOT TESTED, as it is whenever it is not picked or cannot run: the reason is given, and it is never a PASS or a FAIL. It can be NOT TESTED on an app that works: its tests need the AI provider's key, and /nemo-it gives them none
 - Check AI09 has no fix-and-retest loop: it runs no test, so there is nothing to retest.
-  A missing or unwired guardrails file is put right like any other [FIX] check.
+  A guardrail file that is missing, or a rail the config does not reference, is put right like any other [FIX] check.
   /nemo-it reports its failures and fixes nothing
 - Attestation: /nemo-it writes one dated attestation per run,
   docs/attestations/nemo-it/YYYY-MM-DD-vN.md (with a .json or .xml copy when asked), before /ship-it (ship-it-guide.md,

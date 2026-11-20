@@ -627,7 +627,7 @@ When administrators can edit AI prompts through the UI (Tier 2/3 prompt manageme
 **Mandatory Test-Before-Publish:**
 - New edits save as `status: draft` (not active -- agents never see draft prompts)
 - The admin must click "Test" before "Publish" becomes enabled
-- Test runs: blocklist check + sanitize rendered output + all saved test cases + mini NeMo Guardrails check (3 injection + 2 jailbreak adversarial inputs)
+- Test runs: blocklist check + sanitize rendered output + all saved test cases + 5 adversarial inputs sent to the AI with the draft prompt (3 injection + 2 jailbreak; Prompt #10e names this step "mini NeMo", and it specifies no use of the NeMo Guardrails rails)
 - All tests must pass before the prompt version can go live
 
 **Variable Interpolation Safety:**
@@ -652,7 +652,7 @@ Every AI-powered app gets a NeMo Guardrails test suite covering 6 categories:
 | PII Leakage | Does the AI reveal personal or system information? | 10 |
 | Hallucination | Does the AI generate false or fabricated information? | 10 |
 
-- Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrails are present and wired, never a behavioral PASS
+- Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrail files exist and the config references every rail, never a behavioral PASS
 - Full suite (60+ tests) runs in `/nemo-it`, before `/ship-it` (ship-it-guide.md, "What make-it runs before /ship-it"): these are `/nemo-it`'s own cases, written each run, not the generated files in the table above. `/fix-it` runs the generated files when it verifies a fix, and with a live AI provider, when you pick it, `/nemo-it` runs them too, in their own block of the attestation (nemo-it.md, step 7b, lists when it cannot)
 - Check AI09 has no fix-and-retest loop (it runs no test); /nemo-it reports its failures and fixes nothing. A /nemo-it run is recommended before each production deploy, and nothing in make-it enforces it
 - The GRC-required AI Safety Attestation comes from `/nemo-it`, in `docs/attestations/nemo-it/`
@@ -946,7 +946,7 @@ Yes. `/retrofit-it` is designed exactly for this. It reverse-engineers your exis
 Yes. If your app uses AI features, the skill automatically adds a multi-provider abstraction layer (Azure AI Foundry, Anthropic, OpenAI, Ollama) with configurable model tiering. It also sets up prompt management that scales with your needs -- from simple prompts in code to a full database-managed prompt platform with admin UI. See [AI Security Architecture](#ai-security-architecture) for the full safety stack.
 
 **What prevents someone from injecting malicious prompts through the admin UI?**
-Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that runs adversarial NeMo Guardrails tests against every draft prompt before it can go live. Additionally, template variables are sanitized at render time and risk-flagged edits are logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it").
+Three things: (1) A `validatePromptTemplate()` blocklist that rejects known injection patterns, code injection, and encoded payloads on every save. (2) An immutable safety preamble that is always prepended to prompts at runtime -- admins can't see it, edit it, or remove it. (3) A mandatory test-before-publish workflow that sends 5 adversarial inputs to the AI with every draft prompt before it can go live (it specifies no use of the NeMo Guardrails rails). Additionally, template variables are sanitized at render time and risk-flagged edits are logged for security review (no skill flags them at ship: ship-it-guide.md, "What make-it runs before /ship-it").
 
 **What if the AI returns something dangerous (XSS, hallucinated data, etc.)?**
 Every AI response passes through `validateAgentOutput()` before it reaches the database or the UI. Structured responses are validated against schemas with value range checks. Free-text responses are scanned for HTML/script tags, markdown injection, and system prompt leakage. AI-generated content in the frontend uses escaped rendering -- never `dangerouslySetInnerHTML`.
@@ -967,6 +967,37 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.71.7 -- The compliance documents stop presenting NeMo Guardrails as a run-time control
+
+A build writes NeMo Guardrails files into every AI app: a config, five rails and six test files.
+They are test-time files. Nothing make-it generates loads the rails when the app runs. The
+governance and pentest-readiness documents said otherwise in about twenty rows ("topic boundary
+enforcement", "hallucination detection", "toxicity/bias detection").
+
+- **Those rows now say what is true:** NeMo here is a test suite, run when someone runs it, not a
+  run-time filter. Each row names the control that does act when the app runs, where one exists.
+- **Three verdicts changed** in `docs/PENTEST-READINESS.md`, each decided by the project owner:
+  - *Harmful Content Generation* is now **GAP** (was COVERED). Nothing generated filters toxic or
+    biased AI output. It is listed as a new gap, GAP-26.
+  - *Direct Prompt Injection* is now **PARTIAL** (was COVERED), and the risk for direct injection
+    is Low-Medium (was Low). The sanitizer replaces a fixed list of known phrases; a reworded
+    injection is not caught. The row's example claimed a phrase was "blocked" that the list does
+    not even match.
+  - The two competitor and reputational rows stay PARTIAL, on a model instruction alone.
+- **`/nemo-it`'s attestation table agrees.** Jailbreak, hallucination and topic boundaries name
+  their real control and stay "Reduced"; toxicity and bias is "Not covered"; prompt injection is
+  "Reduced" (was "Prevented").
+- **"Present and wired" is gone.** Check AI09 confirms the guardrail files exist and the config
+  references every rail, and the documents now use those words.
+- **New apps say so themselves.** Each generated `guardrails/README.md` now opens by saying the
+  rails are loaded by the tests only.
+- **Checked:** `scripts/test-nemo-rails-not-runtime.sh` pins the changed rows with their verdict
+  words. One independent review confirmed that no scaffold file, overlay or build prompt loads
+  the rails. No real `/make-it` build was inspected.
+- **Worth knowing:** several AI controls these documents list exist as build-prompt instructions,
+  not as scaffold code. In the scaffold today only error sanitization is called; the build is
+  what adds the rest.
 
 ### v1.71.6 -- /fix-it asks properly before it rolls back, keeps a fix, or moves a secret
 
