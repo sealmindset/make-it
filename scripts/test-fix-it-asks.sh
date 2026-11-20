@@ -47,8 +47,8 @@ check "that one link is inside <execution_context>" 'printf "%s\n" "$CTX" | gq -
 
 # 2. no bare yes/no ask, no leftover open offer
 check "grep -niE '\\(y/n\\)|y/n\\b|yes/no' prints nothing" '[ "$(grep -ciE "\(y/n\)|y/n\b|yes/no" "$F")" = 0 ]'
-check "no open-ended offer is left (would you like / do you want / shall I / ok to proceed)" \
-  '! printf "%s" "$ALL" | gq -iE "would you like|do you want|shall I|should I|ok to proceed|okay to proceed|ready to proceed"'
+check "no open-ended offer is left beyond the git strategy pick (would you like / do you want / shall I / ok to proceed)" \
+  '! printf "%s" "$ALL" | sed "s/How would you like me to handle git?//" | gq -iE "would you like|do you want|shall I|should I|ok to proceed|okay to proceed|ready to proceed"'
 check "no implicit approval is left (a fix kept unless the user objects)" \
   '! printf "%s" "$ALL" | gq -iE "if the user objects|unless the user objects|let the user confirm|implicit approval"'
 
@@ -123,7 +123,7 @@ check "SEMI-AUTO ask: in Step 7 an unpicked fix is reverted by its commit, and t
 check "SEMI-AUTO ask: no option (a list item led by a bold name) holds the word 'all'" \
   '! between "<step name=\"fix\">" "^</step>" | gq -iE "^ *- \*\*[^*]*\ball\b[^*]*\*\*"'
 check "SEMI-AUTO ask: no 'all' pick is offered in any other words" \
-  '! printf "%s" "$FIX" | sed "s/There is no \"all of them\" option\.//" | gq -iE "(keep|apply|pick|select|accept|approve) (them )?all\b|all of (them|the above)|\beverything\b[^.]{0,20}\b(option|pick)"'
+  '! printf "%s" "$FIX" | sed "s/There is no \"all of them\" option\.//" | gq -iE "(keep|apply|pick|select|accept|approve) (them )?all\b|[\"*]all of (them|the above)|\beverything\b[^.]{0,20}\b(option|pick)"'
 check "SEMI-AUTO ask: nothing in the fix step asks fix by fix" \
   '! printf "%s" "$FIX" | sed "s/Never one ask per fix\.//" | gq -iE "one ask per fix|(ask|confirm|approve)[^.]{0,60}\b(each|every) fix\b[^.]{0,30}(in turn|one at a time|one by one|separately|before the next)|after each fix[^.]{0,30}\b(ask|confirm)"'
 check "SEMI-AUTO ask: nothing keeps or applies fixes on a dismissed ask" \

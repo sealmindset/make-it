@@ -76,7 +76,7 @@ understand that every code change carries risk, so you verify after every fix ca
 **Communication rules:**
 - Show the user exactly what you plan to change before changing it
 - After each fix category, briefly report what was changed
-- If a fix is risky or ambiguous, explain the trade-off and ask
+- If a fix is risky or ambiguous, explain the trade-off and ask, with named options to pick from
 - Never minimize the importance of verification -- a fix that breaks the app is worse than the vulnerability
 - Use plain language. "I upgraded Next.js to fix the remote code execution bug" not "Bumped next@16.0.7 to remediate CVE-2025-55182"
 
@@ -285,6 +285,32 @@ run; if a fix has to touch one of those files, that finding is MANUAL.
 **Order matters.** Dependencies first (they may resolve other findings), then config,
 then code patterns, then AI safety wiring. This order minimizes cascading issues.
 
+**SEMI-AUTO fixes: one ask per step, after the step's fixes are made.** A step that made
+SEMI-AUTO fixes (Steps 1, 4, 5, 6 and 7) ends with one ask for all of them, before anything from
+that step is committed. It is one multi-select and each fix is its own pick. There is no "all of
+them" option. Never one ask per fix. Each item shows what changes, in plain words, and its diff
+(the changed lines, not the whole file).
+
+"I made [N] fixes in this step that change how your app's code works. They are in your files and
+not committed yet. Pick the ones to keep.
+
+- **[Finding title] ([file])** -- [what changes, in plain words]
+  [diff: the changed lines]
+- ...
+
+What I checked: [the tests and checks run after these fixes, and what they showed].
+What a pick touches: only the lines shown. To take one back later: `git revert` its commit.
+What is unusual: [what differs from a routine fix, or "nothing"].
+The one thing to check: [the one behaviour most likely to have changed, such as "search still
+returns the same rows"]."
+
+A fix that is not picked is reverted, goes on the manual list and in the report, and is not asked
+about again in this run. If the ask is dismissed or left unanswered, no fix is picked: revert
+every one of them the same way. Only a picked fix is kept. A pick covers that fix only: the next
+step's fixes are asked in that step's own ask. In Step 7 each finding is already its own commit,
+so there the ask comes after the last finding and an unpicked fix is reverted with `git revert`;
+the CRITICAL and HIGH audit fixes are not in it.
+
 **Step 1: Dependency upgrades**
 
 For npm:
@@ -349,8 +375,9 @@ Apply fixes that need review:
 For each fix:
 - Read the surrounding code to understand context
 - Apply the fix
-- Show a brief diff to the user (not the full file, just the changed lines)
-- If the user objects, revert and add to manual list
+
+Then this step's one SEMI-AUTO ask (above): every fix of the step with its diff, each its own
+pick.
 
 Report: "Fixed [N] code patterns (reviewed)."
 
@@ -367,7 +394,7 @@ This is the most complex category. For each file:
 3. Add safety imports at the top
 4. Wrap each call site with the safety pipeline
 5. Preserve existing error handling
-6. Show the diff for review
+6. Keep its diff for this step's one SEMI-AUTO ask (above)
 
 Report: "Integrated AI safety controls into [N] files."
 
@@ -678,12 +705,37 @@ with: `git checkout pre-fix-it`"
 
 **If verification completely fails after self-healing:**
 
-```bash
-# Offer full rollback
-"Verification is failing after multiple fix attempts. Would you like me to:
-1. Continue with the fixes that work and skip the problematic ones
-2. Roll back all changes to the pre-fix-it state"
-```
+Rolling back is high-stakes: it discards work, and part of that cannot be brought back. It is its
+own ask, never batched with another, and never a plain yes: the user picks the named outcome. Look
+before asking -- `git diff --stat pre-fix-it`, `git log --oneline pre-fix-it..HEAD`,
+`git status --short` and `git stash list` -- so every line of the ask is what you saw, not what
+you assume.
+
+"Verification is still failing after [N] rounds of fixing. Nothing has been rolled back yet.
+
+What I saw: [which check fails, and its error in one line]. [K] fixes pass on their own: [names].
+[M] do not: [names].
+What a rollback discards: every change since the `pre-fix-it` snapshot -- [N] files ([names, or
+the count and the first few]) and [C] commits -- the fixes that pass included. I would run: [the
+exact command].
+Your own work from before this run: [none was uncommitted / it is in git's stash (`[stash
+entry]`). A rollback does not touch it and nothing in this run puts it back: `git stash pop`
+does.]
+Undo: fixes already committed can be brought back from commit `[SHA]`. Changes not committed
+([list, or "none"]) cannot: no undo.
+What is unusual: [what differs from an ordinary failed fix, or "nothing"].
+The one thing to check: [the single fact, such as whether `[failing check]` passed before this
+run].
+
+- **Keep the [K] fixes that pass** -- the [M] that fail are reverted one at a time and go on the
+  manual list. Nothing else is discarded.
+- **Roll back all [N] files to `pre-fix-it`** -- every fix is discarded, the [K] that pass
+  included, and all [K+M] findings stay open."
+
+The rollback is never the Recommended option. Roll back only when that outcome is picked. If the
+ask is dismissed or left unanswered, roll nothing back and change nothing more: stop, and say in
+the report that verification is still failing. A pick is used once: a later failure is asked
+again.
 
 </rollback-strategy>
 
@@ -707,8 +759,9 @@ with: `git checkout pre-fix-it`"
 6. **Log every change.** The report must list every file modified and what was changed.
    The user must be able to review every change.
 
-7. **SEMI-AUTO fixes require showing the diff.** Do not silently apply complex changes.
-   Show the relevant diff and let the user confirm.
+7. **SEMI-AUTO fixes are kept only when picked.** Do not silently apply complex changes.
+   Show each fix's diff in its step's one SEMI-AUTO ask (Phase 2); a fix that is not picked is
+   reverted and goes on the manual list.
 
 8. **Major dependency upgrades need verification.** A major version bump (e.g., Next.js 15 -> 16)
    can introduce breaking changes. Always run the full test suite after major upgrades.
@@ -726,7 +779,8 @@ with: `git checkout pre-fix-it`"
 
 **If the attestation cannot be parsed:**
 - Tell the user the attestation format is not recognized
-- Ask if they want to run `/nemo-it` fresh
+- Offer two named options: **Run /nemo-it now** -- a fresh scan that writes a new attestation -- or
+  **Not now** -- nothing is changed
 
 **If a dependency upgrade fails (version conflict):**
 - Try the next compatible version
