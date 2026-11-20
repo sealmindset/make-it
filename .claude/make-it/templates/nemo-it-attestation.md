@@ -72,6 +72,9 @@ This report provides a point-in-time security attestation for **[APP_NAME]** ver
 | 21 | Static Analysis                    | Semgrep                               | SAST-SEMGREP  | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 | 22 | Static Analysis                    | Bandit / ESLint Security              | SAST-LINT     | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
 | 23 | Deep Code Audit                    | Logic and trust-boundary review       | AUDIT         | [PASS/FAIL/NO FINDINGS/NOT RUN/NA] | [COUNT]  | [SEVERITY]       |
+| 24 | NeMo Guardrails AI Safety          | App's generated suite (guardrails/tests/) | NEMO-APP  | [PASS/FAIL/NO FINDINGS/NOT TESTED/NA] | [COUNT] | [SEVERITY]     |
+
+Rows 1 to 6 are /nemo-it's own cases. Row 24 is the app's own suite, generated at build and run by /nemo-it as a separate block (section 1.7).
 
 ### Severity Distribution
 
@@ -298,6 +301,40 @@ The following likelihood-by-impact matrix is used to classify all findings in th
   - [CONTROL_2 -- e.g., Confidence scoring threshold]
   - [CONTROL_3 -- e.g., Citation enforcement in responses]
 - **Remediation type:** [PROGRAMMATIC_FIX | TECHNOLOGICAL_CONTROL | PROCESS_CONTROL | ACCEPT_RISK]
+- **Evidence:** [LINK_OR_REFERENCE_TO_RAW_OUTPUT]
+
+---
+
+### 1.7 The app's generated guardrail suite (NEMO-APP)
+
+> Sections 1.1 to 1.6 are /nemo-it's own cases. This section is the app's own suite, generated at build. The two are never merged, and no count here is added to a count above.
+> /nemo-it runs the suite as it is and never edits a test, a rail or the config. A failure here can be the generated test's own fault; each one quotes the test's message.
+
+- **Block status:** [PASS / FAIL / NO FINDINGS / NOT TESTED]
+- **If NOT TESTED, why:** [REASON -- e.g., this project has no generated guardrail suite (no guardrails/tests/); guardrails/config.yml is missing; nemoguardrails is not installed; no reachable AI provider; production detected; the hostile-code check found something; pytest's exit code and message]
+- **Model tested:** [MODEL_NAMED_IN guardrails/config.yml]
+- **Command:** `python -m pytest guardrails/tests/ -v` (counts read from pytest's result file)
+- **Date Tested:** [TEST_DATE]
+- **Files the test run wrote or changed in the project:** [NONE / PATHS / NOT CHECKED (not a git project)]
+
+| Category | Test file | Status | Passed | Ran | Not tested (reason) |
+|----------|-----------|--------|--------|-----|---------------------|
+| Prompt Injection | `guardrails/tests/test_prompt_injection.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+| Jailbreak | `guardrails/tests/test_jailbreak.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+| Toxicity / Bias | `guardrails/tests/test_toxicity_bias.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+| Topic Boundaries | `guardrails/tests/test_topic_boundaries.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+| PII Leakage | `guardrails/tests/test_pii_leakage.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+| Hallucination | `guardrails/tests/test_hallucination.py` | [PASS / FAIL / NO FINDINGS / NOT TESTED] | [N] | [N] | [N (REASON)] |
+
+- **Overall AI-safety result (the worst of all the blocks: /nemo-it's own cases per model, and this one):** [PASS / FAIL / NO FINDINGS (code-level) / NO FINDINGS][a block that did not run is named beside it: "fallback model not tested", "app's generated suite not tested ([REASON])"]
+
+#### Findings
+
+##### NEMO-APP-[NNN]: [TEST_FILE]::[TEST_NAME]
+
+- **Severity:** [CRITICAL / HIGH / MEDIUM / LOW / INFO]
+- **What happened:** [THE_TEST'S_OWN_FAILURE_MESSAGE, no secret value]
+- **Note:** This failure comes from the app's generated test. It can be the test's own fault; /nemo-it does not judge or change it.
 - **Evidence:** [LINK_OR_REFERENCE_TO_RAW_OUTPUT]
 
 ---
@@ -904,7 +941,7 @@ understand the value of secure-by-design practices vs. post-hoc scanning.
 | PII masking before AI submission | Yes -- lib/ai/pii-masker.ts with pseudonymization | [PRESENT / ABSENT] |
 | AI error sanitization | Yes -- lib/ai/errors.ts, generic client messages | [PRESENT / ABSENT] |
 | Conversation history limits | Yes -- AI_MAX_HISTORY_TURNS with server-side storage | [PRESENT / ABSENT] |
-| NeMo Guardrails test suite | Yes -- 60 or more tests generated at build in guardrails/tests/; check AI09 confirms they exist and runs none of them; /fix-it runs them when it verifies a fix. /nemo-it does not use them: this attestation is based on /nemo-it's own cases when it ran with a live AI provider, and on code-level checks (never a pass) when it did not | [PRESENT / ABSENT] |
+| NeMo Guardrails test suite | Yes -- 60 or more tests generated at build in guardrails/tests/; check AI09 confirms they exist and runs none of them; /fix-it runs them when it verifies a fix. /nemo-it runs them too when it has a live AI provider: this attestation shows them in their own block (section 1.7), apart from /nemo-it's own cases. With no reachable AI provider, or read-only against a live system, /nemo-it's own cases are code-level checks (never a pass) and the generated tests are NOT TESTED | [PRESENT / ABSENT] |
 | AI safety attestation | No -- /nemo-it writes it, in docs/attestations/nemo-it/ | [PRESENT / ABSENT] |
 
 ### Coverage Statistics
@@ -950,10 +987,11 @@ A tool that did not run shows **not run** and the reason in place of its version
 | PASS                    | Every check in the category ran, and none failed                                                    |
 | NO FINDINGS             | Some checks in the category did not run; the ones that ran found nothing. Not a pass                |
 | NOT RUN                 | No check in the category ran (tool missing or not picked, app not running, read-only scan); the reason is stated. Not a pass |
+| NOT TESTED | The app's generated suite, one of its files or one of its cases could not run (no suite, a missing file or tool, no reachable AI provider, read-only scan, a provider error); the reason is stated. Not a pass, and not a fail |
 | N/A                     | Category is not applicable to this application (e.g., no AI features for NeMo suite)                |
 
 ---
 
 *This attestation is informational only and does not constitute a release gate. It is intended to support GRC oversight and continuous risk monitoring. Findings should be triaged through the organization's standard vulnerability management process.*
 
-*Template version: 1.2.0 | Skill: /nemo-it | Added: NO FINDINGS and NOT RUN statuses*
+*Template version: 1.3.0 | Skill: /nemo-it | Added: the app's generated guardrail suite as its own block (1.7), and the NOT TESTED status*
