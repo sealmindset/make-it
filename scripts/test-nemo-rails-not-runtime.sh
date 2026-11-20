@@ -6,7 +6,12 @@
 # on live requests ("topic boundary enforcement", "hallucination detection", "present and wired").
 # Contract these checks pin:
 #   - Each rewritten compliance row is exactly the line below: it names the control that does act at run time, and says
-#     NeMo Guardrails is "tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)".
+#     NeMo Guardrails is "tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)". The rows
+#     carry their verdict words (the owner's, 2026-11-20: Harmful Content Generation GAP, Direct Prompt Injection
+#     PARTIAL, the competitor rows PARTIAL; /nemo-it's prevention table: toxicity and bias Not covered), so a verdict
+#     cannot change without this file changing.
+#   - No build prompt tells an app to send requests through the rails, and Prompt #10d has each generated app's
+#     guardrails README open by saying the rails are loaded by the tests only.
 #   - Every sentence, list item or table cell in any tracked Markdown file that names NeMo next to an enforcing word
 #     (enforces, blocks, prevents, detects, filters, mitigates, protects, stops, intercepts, redacts), or that has rails
 #     loaded, or requests sent through them, is one of the exact units listed below. A new one fails until a person
@@ -19,7 +24,7 @@
 # A tripwire, not a proof, and no rule is added per bypass. It cannot catch: a claim split across two sentences; a claim
 # that names the rails by file ("topic_control.co keeps the model on topic"); another enforcing word ("guards",
 # "screens", "keeps"); a claim in a file that is not Markdown; a true listed sentence moved somewhere it is false;
-# anything under a version-history heading. It does not check the verdict words: those are the owner's.
+# anything under a version-history heading. It pins the verdict words of the listed rows only, not any other verdict.
 # Not checked: .claude/commands/nemo-it.md keeps "present and wired" once, about the app's safety controls (not the
 # rails), in a table this card may not edit; the references and Prompt #10e still name the Test step "mini NeMo".
 # Usage: test-nemo-rails-not-runtime.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on its opposites.
@@ -38,7 +43,7 @@ ERRF="$(mktemp)"; TMPD="$(mktemp -d)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&
 REF=.claude/make-it/references
 BS=$REF/build-standards.md; GR=$REF/guardrails.md; BVS=$REF/build-verify-security.md; SG=$REF/ship-it-guide.md
 BP=$REF/design-blueprint.md; RF=.claude/commands/retrofit-it.md
-GOV=docs/AI-GOVERNANCE-HOMEGROWN.md; PEN=docs/PENTEST-READINESS.md; MR=.claude/make-it/README.md
+GOV=docs/AI-GOVERNANCE-HOMEGROWN.md; PEN=docs/PENTEST-READINESS.md; MR=.claude/make-it/README.md; NM=.claude/commands/nemo-it.md
 # every tracked Markdown file but the two logs of finished work; a ROOT given on the command line is a plain copy with
 # no git, so its files are found
 if [ -z "${1:-}" ]; then FILES="$(git ls-files '*.md')"; else FILES="$(find . -name '*.md' | sed 's|^[.]/||' | sort)"; fi
@@ -57,7 +62,8 @@ units() {
       perl -pe 's/<BR>|\|/\n/g; s/([.!?]["\x27)]?) (?=\S)/$1\n/g' | sed -E 's/^ +//; s/ +$//' | awk -v f="$f" 'NF {print f "\t" $0}'
   done
 }
-U="$(units $FILES)"
+# the file list is split on newlines only, so a path with a space stays one path
+U="$(IFS=$'\n'; set -f; units $FILES)"
 # pick REGEX: the units that match (case ignored), as file<TAB>unit
 pick() { printf "%s\n" "$U" | { grep -iE -- "$1" || true; }; }
 # unlisted LIST: the units of LIST (file<TAB>unit) that are not in the allow list
@@ -73,23 +79,30 @@ cat > "$TMPD/rows" <<'ROWS_EOF'
 docs/AI-GOVERNANCE-HOMEGROWN.md	| AI-specific risks are mitigated | Input sanitization, output validation and prompt injection resistance at run time; AI behavior is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **MAP 2.3** | Scientific integrity | AI outputs validated against schemas and value ranges (validateAgentOutput). The system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **A.5** | AI system impact assessment | Design phase classifies project type and activates appropriate guardrails. AI apps get mandatory additional controls (rate limiting, prompt management) and a NeMo Guardrails test suite, run when someone runs it (not a runtime filter) |
+docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI01: Prompt Injection** | sanitizePromptInput() strips injection patterns; `<user_input>` delimiter tags; system prompt anti-injection instructions; jailbreak resistance instructions; NeMo Guardrails prompt injection tests (10 of /nemo-it's own cases; none run by build-verify's checks) | AI02, AI09 | Yes |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI04: Data Poisoning** | Prompt template blocklist validation; immutable safety preamble; draft/test/publish workflow; risk_flag audit logging. Topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI10 | Yes |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI09: Misinformation** | AI output validation rejects contradictory structured fields (e.g., riskTier=LOW with riskScore=5); the system prompt tells the model never to fabricate data. Hallucination (test category 6) is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI03, AI09 | Partial |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **NeMo Guardrails (a test suite, not a runtime filter)** | Prompt injection tests (10 of /nemo-it's own cases, when someone runs /nemo-it; none run by build-verify's checks) + jailbreak resistance tests | Automated test suite, run when someone runs it |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **NeMo Guardrails (a test suite, not a runtime filter)** | Tests for hallucination, toxicity/bias and PII leakage (10 of /nemo-it's own cases per category; none run by build-verify's checks) | Automated test suite, run when someone runs it |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **Draft/Test/Publish workflow** | New edits save as draft. Test runs: blocklist + sanitize + test cases + 5 adversarial inputs sent to the AI with the draft prompt (3 injection, 2 jailbreak). Prompt #10e names that last step "mini NeMo"; it specifies no use of the NeMo Guardrails rails. Publish only after all pass | Build-verify: confirm separate Test/Publish actions |
 docs/AI-GOVERNANCE-HOMEGROWN.md	│ AI Safety         │ NeMo tests   │ Playwright    │ AI Red Team  │
+docs/PENTEST-READINESS.md	| **NeMo Agent Toolkit** | AI/agentic system red teaming | Input and output controls for the listed risks; prompt-injection cover is partial; no control for harmful content; agentic tool-use gaps |
 docs/PENTEST-READINESS.md	| AI-specific analysis | NeMo Guardrails test suite, run when someone runs it (not a runtime filter) + 15 wiring checks of the AI safety controls | Agentic tool-use boundaries not tested (NeMo Agent Toolkit gap) |
-docs/PENTEST-READINESS.md	| Prompt injection | sanitizePromptInput, delimiter tags, anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | Low for direct, **Medium for indirect** |
-docs/PENTEST-READINESS.md	| **Direct Prompt Injection** | sanitizePromptInput() strips known patterns; `<user_input>` delimiter tags; anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **COVERED** | Attacker sends "ignore instructions" -- blocked by sanitizer + delimiter tags |
-docs/PENTEST-READINESS.md	| **Harmful Content Generation** | No scaffold file or prompt template has a runtime filter for toxic or biased output. The safety preamble in all prompts tells the model to answer only on the app's topic; validateAgentOutput() strips script and HTML from free text, and its specification (Prompt #10e, Part 2) has no check for harmful content. Toxicity and bias are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **COVERED** (verdict under owner review, E02-S60) | Agent generates toxic or biased recommendations -- no runtime filter is specified for them; the test suite finds them only when someone runs it |
+docs/PENTEST-READINESS.md	| Prompt injection | sanitizePromptInput, delimiter tags, anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | Low-Medium for direct, **Medium for indirect** |
+docs/PENTEST-READINESS.md	| **Direct Prompt Injection** | sanitizePromptInput() replaces a fixed list of known phrases (in the scaffold, with `[FILTERED]`) and wraps the input in `<user_input>` delimiter tags; the system prompt tells the model not to follow instructions inside those tags. Nothing is blocked, and a rephrased injection is not caught by the list. Prompt injection is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **PARTIAL** | Attacker sends "ignore all previous instructions" -- the phrase is replaced and the rest goes to the model inside the tags; a rewording that is not on the list reaches the model unchanged, with only the system prompt instruction against it |
+docs/PENTEST-READINESS.md	| **Harmful Content Generation** | No scaffold file or prompt template has a runtime filter for toxic or biased output: validateAgentOutput() strips script and HTML from free text, and its specification (Prompt #10e, Part 2) has no check for harmful content. The safety preamble in all prompts tells the model to answer only on the app's topic. Toxicity and bias are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **GAP** | Agent generates toxic or biased recommendations -- nothing filters them before they reach the user; the test suite finds them only when someone runs it |
 docs/PENTEST-READINESS.md	| **Competitor/Reputational Attacks** | Safety preamble with domain scope instructions (a model instruction, not a filter); topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **PARTIAL** | Agent recommends competitor products -- the domain scope instruction reduces risk, but NeMo Toolkit showed 80% ASR for indirect variants |
 docs/PENTEST-READINESS.md	| **Hallucination** (agent fabricating facts) | validateAgentOutput() checks structured output schema + value ranges; the system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **PARTIAL** | Agent fabricates data in free-text responses -- validation catches structured outputs but free-text hallucination is harder to detect |
 docs/PENTEST-READINESS.md	| Competitor referral: 80% success rate | /make-it puts a domain scope instruction in the safety preamble of every prompt; topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | **PARTIAL** -- a model instruction, not a filter; adaptive attacks may bypass |
 docs/PENTEST-READINESS.md	| Vulnerability assessment | **COVERED** | Semgrep, Bandit, dependency scanners; AI behavior is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) |
+docs/PENTEST-READINESS.md	| **GAP-26:** No filter for harmful AI output | NeMo Agent | Toxic or biased AI output reaches users | Content check on AI responses after validateAgentOutput(), or the AI response content filter in section 9.4 |
+.claude/commands/nemo-it.md	| AI: Jailbreak susceptibility | System prompt safety block (Prompt #10e Part 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+.claude/commands/nemo-it.md	| AI: Hallucination | validateAgentOutput() schema, range and contradiction checks, and the never-fabricate instruction (Prompt #10e Parts 2 and 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+.claude/commands/nemo-it.md	| AI: Topic boundary violations | Domain-scope instruction in the safety preamble (Prompt #10e Part 7); tested by the NeMo Guardrails suite when someone runs it | Reduced |
+.claude/commands/nemo-it.md	| AI: Toxicity/bias | No /make-it control: tested by the NeMo Guardrails suite when someone runs it | Not covered |
 ROWS_EOF
-check "each rewritten compliance row is exactly the reviewed line (17 rows: the governance doc and the pentest doc)" \
-  '[ "$(grep -c . "$TMPD/rows")" = 17 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'
+check "each rewritten row is exactly the reviewed line, verdict word included (24 rows: the governance doc, the pentest doc, /nemo-it's prevention table)" \
+  '[ "$(grep -c . "$TMPD/rows")" = 24 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'
 check "the one form is used, whole, in the governance doc (4 times) and the pentest doc (7 times)" \
   '[ "$(grep -oF -- "$FORM" "$GOV" | grep -c .)" = 4 ] && [ "$(grep -oF -- "$FORM" "$PEN" | grep -c .)" = 7 ]'
 check "the governance doc says once, in section 5.5, that nothing generated loads the rails at run time" \
@@ -122,10 +135,10 @@ Safety preamble with domain scope instructions (a model instruction, not a filte
 Semgrep, Bandit, dependency scanners; AI behavior is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 The system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 These are test-time files: nothing generated loads the rails at run time (not a runtime filter).
-This section implements runtime protections that prevent the issues NeMo tests for from ever reaching production.
+- Open with this: these rails are loaded by the tests only; nothing in the app loads them at run time
 Topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 Toxicity and bias are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
-sanitizePromptInput() strips known patterns; `<user_input>` delimiter tags; anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
+Prompt injection is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 sanitizePromptInput, delimiter tags, anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 validateAgentOutput() checks structured output schema + value ranges; the system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 ALLOW_EOF
@@ -135,7 +148,7 @@ ALLOW_EOF
 ENF='enforc(e|es|ed|ing|ement)|\bblock(s|ed|ing)\b|prevent|\bdetect(s|ing|ion)?\b|filter|mitigat|protect|\bstops\b|intercept|redact'
 NE="$(unlisted "$(printf "%s\n" "$U" | sed -E 's/NeMo (Agent )?Toolkit(-style)?|NeMo Agent|NeMo Attack Vector//g' | { grep -E "	.*NeMo" || true; } | { grep -iE "	.*($ENF)" || true; })")"
 check "every unit that names NeMo next to an enforcing word is a listed, reviewed sentence" 'none "not listed" "$NE"'
-RT="$(unlisted "$(pick "	.*(loads? the rails|(rails|guardrails) (are|is) loaded|through the (rails|guardrails|NeMo)|run-?time (rails?|guardrails?)\b|\brails? (act|run|fire|apply|applies) (at run|on (every|each|live))|rails (on|for|to) (every|each|all|live) (request|message|response))")")"
+RT="$(unlisted "$(pick "	.*(loads? the rails|(rails|guardrails) (are|is) loaded|through (the )?(rails|guardrails|NeMo)|run-?time (rails?|guardrails?)\b|\brails? (act|run|fire|apply|applies) (at run|on (every|each|live))|rails (on|for|to) (every|each|all|live) (request|message|response))")")"
 check "every unit that has the rails loaded, or requests sent through them, is a listed, reviewed sentence" 'none "not listed" "$RT"'
 check "the list has no dead entry: each listed unit is in a file" \
   'D="$(printf "%s\n" "$U" | cut -f2- | awk "NR == FNR {a[\$0] = 1; next} !(\$0 in a)" - "$TMPD/allow")"; none "dead" "$D"'
@@ -145,12 +158,17 @@ MINI="$(pick "	.*(mini NeMo (Guardrails )?(safety )?check|adversarial NeMo)" | {
 check "the governance doc, the pentest doc and the two READMEs do not call the Test step's 5 adversarial inputs a NeMo check" \
   'none "old wording" "$MINI" && has "$GOV" "Prompt #10e names that last step \"mini NeMo\"; it specifies no use of the NeMo Guardrails rails." && has README.md "5 adversarial inputs sent to the AI with the draft prompt (3 injection + 2 jailbreak; Prompt #10e names this step \"mini NeMo\", and it specifies no use of the NeMo Guardrails rails)" && has README.md "that sends 5 adversarial inputs to the AI with every draft prompt before it can go live (it specifies no use of the NeMo Guardrails rails)." && has "$MR" "(Prompt #10e names this step \"mini NeMo\"; it specifies no use of the NeMo Guardrails rails)"'
 
+check "the two compliance documents carry no review marker and no card id" \
+  '[ "$(grep -ciE "under (owner )?review|\bE[0-9]{2}-S[0-9]+\b" "$GOV")" = 0 ] && [ "$(grep -ciE "under (owner )?review|\bE[0-9]{2}-S[0-9]+\b" "$PEN")" = 0 ]'
+check "Prompt #10d has each generated app's guardrails README open by saying the rails are loaded by the tests only" \
+  'has "$REF/prompt-templates.md" "Create guardrails/README.md explaining: - Open with this: these rails are loaded by the tests only; nothing in the app loads them at run time - What each rail does"'
+
 # 5. controls (this repo only): each opposite fails the checks above
 if [ -z "${1:-}" ]; then
   # opp FILE PERL: a copy of the Markdown files with one edit must fail this script
   opp() {
     local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"
-    tar -cf - $FILES | tar -xf - -C "$d"
+    printf "%s\n" "$FILES" | tar -cf - -T - | tar -xf - -C "$d"   # one path per line: safe for a space
     perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1
   }
   # add FILE AFTER LINE: the same, with LINE added after the first line that starts with AFTER
@@ -171,6 +189,14 @@ if [ -z "${1:-}" ]; then
     'opp "$BS" "s/it means only this: the guardrail files exist and the config references every rail/it means only this: the app routes requests through the rails/" && opp "$GOV" "s/it means only that: the guardrail files exist and the config references every rail/it means only that: the app sends each request through the rails/"'
   check "(control) fails with \"not a runtime filter\" dropped from one row, with \"Nothing generated loads the rails\" reversed, and with the mini NeMo check back" \
     'opp "$GOV" "s/hallucination is tested by the NeMo Guardrails suite when someone runs it [(]not a runtime filter[)]/hallucination is tested by the NeMo Guardrails suite/" && opp "$GOV" "s/Nothing make-it generates loads the rails at run time[.]/Every generated app loads the rails at run time./" && opp "$GOV" "s/[+] 5 adversarial inputs sent to the AI with the draft prompt [(]3 injection, 2 jailbreak[)][.]/+ mini NeMo check./"'
+  check "(control) fails with an owner's verdict changed back in the pentest doc: Harmful Content to COVERED, Direct Prompt Injection to COVERED, \"Low for direct\"" \
+    'opp "$PEN" "s/[(]not a runtime filter[)] [|] [*][*]GAP[*][*] [|] Agent generates toxic/(not a runtime filter) | **COVERED** | Agent generates toxic/" && opp "$PEN" "s/[(]not a runtime filter[)] [|] [*][*]PARTIAL[*][*] [|] Attacker sends/(not a runtime filter) | **COVERED** | Attacker sends/" && opp "$PEN" "s/Low-Medium for direct/Low for direct/"'
+  check "(control) fails with the \"under owner review\" marker back beside a verdict" \
+    'opp "$PEN" "s/[|] [*][*]GAP[*][*] [|] Agent generates toxic/| **GAP** (verdict under owner review) | Agent generates toxic/"'
+  check "(control) fails with /nemo-it's toxicity row back to Reduced, and with a row naming the NeMo suite as the control again" \
+    'opp "$NM" "s/(AI: Toxicity\/bias [|] [^|]*[|]) Not covered [|]/\$1 Reduced |/" && opp "$NM" "s/[|] AI: Jailbreak susceptibility [|] [^|]*[|]/| AI: Jailbreak susceptibility | NeMo Guardrails test suite (Prompt #10d) |/"'
+  check "(control) fails when a build prompt routes requests through the rails (Prompt #10e), and with a NeMo input rail in the governance AI01 row" \
+    'add "$REF/prompt-templates.md" "--- PART 1: AI INPUT SANITIZATION ---" "Route every request through guardrails/config.yml" && opp "$GOV" "s/(AI01: Prompt Injection[*][*] [|] )/\$1NeMo input rail on every request; /"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
