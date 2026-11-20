@@ -49,6 +49,8 @@ check "that one link is inside <execution_context>" 'printf "%s\n" "$CTX" | gq -
 check "grep -niE '\\(y/n\\)|y/n\\b|yes/no' prints nothing" '[ "$(grep -ciE "\(y/n\)|y/n\b|yes/no" "$F")" = 0 ]'
 check "no open-ended offer is left beyond the git strategy pick (would you like / do you want / shall I / ok to proceed)" \
   '! printf "%s" "$ALL" | sed "s/How would you like me to handle git?//" | gq -iE "would you like|do you want|shall I|should I|ok to proceed|okay to proceed|ready to proceed"'
+check "fix-strategies.md classes SEMI-AUTO the same way: kept only when the user picks it, no implicit approval" \
+  '[ "$(grep -cF "the fix is kept only when the user picks it (/fix-it asks once per step, each fix its own pick)" .claude/make-it/references/fix-strategies.md)" = "1" ] && [ "$(grep -ciE "implicit approval|user can object" .claude/make-it/references/fix-strategies.md)" = "0" ]'
 check "no implicit approval is left (a fix kept unless the user objects)" \
   '! printf "%s" "$ALL" | gq -iE "if the user objects|unless the user objects|let the user confirm|implicit approval"'
 
