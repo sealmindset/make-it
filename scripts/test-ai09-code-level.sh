@@ -111,7 +111,7 @@ cat > "$TMPD/allow" <<'ALLOW_EOF'
 (3) The six test files exist in `guardrails/tests/` (`test_prompt_injection.py`, `test_jailbreak.py`, `test_toxicity_bias.py`, `test_topic_boundaries.py`, `test_pii_leakage.py`, `test_hallucination.py`), with at least 10 cases each; the build generates them and AI09 does not run them.
 **AI09** [AI] [FIX] **NeMo Guardrails wiring (code-level)** -- Checked by reading the files: AI09 runs no NeMo Guardrails test.
 **Build-verify's checks run no NeMo Guardrails test**
-/nemo-it writes and runs its own 60 or more NeMo Guardrails cases across 6 categories, and runs the app's generated suite in a separate block when picked, when it is run with a live AI provider; build-verify's check AI09 reads the wiring in code and runs none
+/nemo-it writes and runs its own 60 or more NeMo Guardrails cases across 6 categories, and runs the app's generated suite in a separate block when picked (nemo-it.md, step 7b, lists when the suite cannot run), when it is run with a live AI provider; build-verify's check AI09 reads the wiring in code and runs none
 A code-level result is never a behavioral PASS.
 A code-level result is never reported as a behavioral PASS.
 Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; /nemo-it runs its own 60 or more cases and, when picked, the app's generated suite, each in its own block, when someone runs /nemo-it with a live AI provider
