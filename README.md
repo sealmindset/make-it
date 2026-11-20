@@ -968,6 +968,39 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.5 -- /nemo-it can run your app's own guardrail tests too, when you pick it
+
+A build writes a guardrail test suite into every AI app (`guardrails/tests/`). `/nemo-it`, whose
+result goes into the safety attestation, never ran it: it only ran cases it wrote itself.
+
+- **A second, separate block in the attestation.** With a live AI provider, and when you pick it
+  in `/nemo-it`'s preflight ask, `/nemo-it` runs the app's own suite once and reports it beside
+  its own 60 or more cases. The two are never merged, and the overall AI-safety result is the
+  worst block.
+- **It asks every run, and a yes is never kept.** Running those tests runs your project's own
+  code on your computer with your account's access. The ask says so, says what the hostile-code
+  check found (a tripwire, not a guarantee), and says there is no undo. Not picked: that block
+  reads NOT TESTED.
+- **NOT TESTED is never a pass and never a fail.** It is what the block says when the suite could
+  not run: no pick, no reachable AI provider, a live system, a missing tool, or a test that could
+  not load. A project with no suite gets no block at all.
+- **Expect NOT TESTED often, for now.** The app's tests need the AI provider's key and `/nemo-it`
+  gives them none. Getting a key to them safely is a separate change, not in this release.
+- **It is evidence, not proof.** The results come from code the project controls, and there is no
+  sandbox. Afterwards `/nemo-it` lists the files in the project folder that the run added,
+  changed or removed (git hooks and permission changes included; installed-package folders and
+  anything outside the project are not covered). It never edits a test and installs nothing in
+  that step.
+- **Fixed on the way: preflight could run a file planted in a project.** The checks for pytest and
+  pip ran from the project folder, so a `pytest.py` or `pip.py` at a project's root was executed
+  in every scan, with no ask. They now run from an empty temp folder.
+- **Checked:** `scripts/test-nemo-it-runs-app-suite.sh` (73 checks) pins the new step, the ask and
+  the attestation section, and runs the result reader on a sample file. Two independent reviews.
+  No real `/nemo-it` run and no real generated suite were run.
+- **Known and filed, not fixed here:** `/nemo-it` offers to start the app before the hostile-code
+  check has run; `npx` can run a tool planted in a project's `node_modules`; and a few later
+  result readers still run Python from the project folder.
+
 ### v1.71.4 -- Nothing claims a NeMo test runs at build, and the two guardrail suites are named apart
 
 Check AI09 said "Basic suite (18 tests) passes" at build. No file defined those 18 tests, the check
