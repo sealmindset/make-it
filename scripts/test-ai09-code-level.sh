@@ -81,7 +81,7 @@ check "AI09 names what it reads: config.yml, the five rails, the six test files,
 check "governance doc 5.5: each category is 0 tests by check AI09 and 10 by /nemo-it; the totals are 0 NeMo tests and 60" \
   'row "$GOV" "| Category | What It Tests | Build check AI09 (code-level) | /nemo-it (its own cases, minimum) |" && row "$GOV" "| 1. Prompt Injection Resistance | Adversarial input cannot override system instructions | 0 tests | 10 tests |" && row "$GOV" "| 2. Jailbreak Resistance | Role-play, encoding tricks, multi-turn escalation blocked | 0 tests | 10 tests |" && row "$GOV" "| 3. Toxicity / Bias Detection | AI outputs free of toxic, offensive, or biased content | 0 tests | 10 tests |" && row "$GOV" "| 4. Topic Boundary Enforcement | AI stays within defined domain scope | 0 tests | 10 tests |" && row "$GOV" "| 5. PII Leakage Prevention | AI does not reveal PII, secrets, or internal system details | 0 tests | 10 tests |" && row "$GOV" "| 6. Hallucination Detection | AI does not fabricate facts or present unverified claims | 0 tests | 10 tests |" && row "$GOV" "| **Total** | | **0 NeMo tests** | **60 tests** |" && [ "$(grep -cE "^[|] [1-6][.] .*[|] [0-9]+ tests [|] [0-9]+ tests [|]$" "$GOV")" = 6 ]'
 check "governance doc: the stage table gives the NeMo suite to no stage, and the risk row is rated Medium (the owner's call)" \
-  'row "$GOV" "| AI behavioral (NeMo suite) | 0 in build-verify'"'"'s checks (AI09 is code-level) | None | None | Runtime monitoring |" && has "$GOV" "None of these stages'"'"' own checks runs a NeMo suite." && has "$GOV" "| **Build-verify'"'"'s checks run no NeMo Guardrails test** | Medium | Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; /nemo-it runs its own 60 or more cases and, when picked, the app'"'"'s generated suite, each in its own block, when someone runs /nemo-it with a live AI provider | Run /nemo-it with a live AI provider before each production deploy: recommended, and nothing in make-it enforces it |" && ! gq -E "Full NeMo|60 NeMo tests [|]" "$GOV"'
+  'row "$GOV" "| AI behavioral (NeMo suite) | 0 in build-verify'"'"'s checks (AI09 is code-level) | None | None | None |" && has "$GOV" "None of these stages'"'"' own checks runs a NeMo suite." && has "$GOV" "| **Build-verify'"'"'s checks run no NeMo Guardrails test** | Medium | Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; /nemo-it runs its own 60 or more cases and, when picked, the app'"'"'s generated suite, each in its own block, when someone runs /nemo-it with a live AI provider | Run /nemo-it with a live AI provider before each production deploy: recommended, and nothing in make-it enforces it |" && ! gq -E "Full NeMo|60 NeMo tests [|]" "$GOV"'
 
 # 3. every other place holds the true sentence, whole
 FIXIT="/fix-it runs the app's guardrail suite (guardrails/tests/) when it verifies a fix"
@@ -100,7 +100,7 @@ check "what stays: /nemo-it's 60 tests, its rule that a code-level result is nev
 
 # 4. a unit that names the build with the NeMo suite, or a code-level result with a pass, is one of these exact units
 cat > "$TMPD/allow" <<'ALLOW_EOF'
-- [ ] NeMo Guardrails wiring checked in code during build-verify (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
+- [ ] NeMo Guardrails files checked in code during build-verify: the guardrail files exist and the config references every rail (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
 - **AI safety** (if the app has AI features): build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrail files exist and the config references every rail, and that result is never a behavioral PASS.
 - Build-verify's own checks run no NeMo Guardrails test (check AI09 is code-level)
 - Build-verify's own checks run no NeMo Guardrails test against any model.
@@ -111,15 +111,15 @@ cat > "$TMPD/allow" <<'ALLOW_EOF'
 (3) The six test files exist in `guardrails/tests/` (`test_prompt_injection.py`, `test_jailbreak.py`, `test_toxicity_bias.py`, `test_topic_boundaries.py`, `test_pii_leakage.py`, `test_hallucination.py`), with at least 10 cases each; the build generates them and AI09 does not run them.
 **AI09** [AI] [FIX] **NeMo Guardrails files present and referenced (code-level)** -- Checked by reading the files: AI09 runs no NeMo Guardrails test.
 **Build-verify's checks run no NeMo Guardrails test**
-/nemo-it writes and runs its own 60 or more NeMo Guardrails cases across 6 categories, and runs the app's generated suite in a separate block when picked (nemo-it.md, step 7b, lists when the suite cannot run), when it is run with a live AI provider; build-verify's check AI09 reads the wiring in code and runs none
+/nemo-it writes and runs its own 60 or more NeMo Guardrails cases across 6 categories, and runs the app's generated suite in a separate block when picked (nemo-it.md, step 7b, lists when the suite cannot run), when it is run with a live AI provider; build-verify's check AI09 confirms in code that the guardrail files exist and the config references every rail, and runs none
 A code-level result is never a behavioral PASS.
 A code-level result is never reported as a behavioral PASS.
 Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; /nemo-it runs its own 60 or more cases and, when picked, the app's generated suite, each in its own block, when someone runs /nemo-it with a live AI provider
-Build-verify's check AI09 reads the wiring in code and runs no NeMo test
+Build-verify's check AI09 confirms in code that the guardrail files exist and the config references every rail, and runs no NeMo test
 Build-verify's own checks run no NeMo Guardrails test: check AI09 confirms in code that the guardrail files exist and the config references every rail, and that result is never a behavioral PASS.
 Build-verify's own checks run no NeMo Guardrails test.
 Check AI09 confirms in code that the guardrail files exist and the config references every rail; that result is never a behavioral PASS.
-Code-level wiring check (AI09): files read, no NeMo test run by the check, never a behavioral PASS
+Code-level check (AI09) that the guardrail files exist and the config references every rail: files read, no NeMo test run by the check, never a behavioral PASS
 NeMo Guardrails behavioral testing (6 categories) is run by /nemo-it on its own cases, not by build-verify's checks
 sanitizePromptInput() strips injection patterns; `<user_input>` delimiter tags; system prompt anti-injection instructions; jailbreak resistance instructions; NeMo Guardrails prompt injection tests (10 of /nemo-it's own cases; none run by build-verify's checks)
 The build generates a separate suite in the app (guardrails/tests/): check AI09 confirms it exists and does not run it, /fix-it runs it when it verifies a fix, and /nemo-it runs it too when it has a live AI provider and the user picks it, in its own block of the attestation (nemo-it.md, step 7b, lists when it cannot).

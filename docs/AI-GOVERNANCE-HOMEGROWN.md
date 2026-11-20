@@ -443,7 +443,7 @@ Phase 6: Report
 | Input validation | Static scan | On code changes | Re-scan | WAF (recommended) |
 | Dependency CVEs | npm/pip audit | On resume | Full scan + Snyk | Dependabot PRs |
 | AI safety wiring | 15 code checks | On AI code changes | Re-verify | - |
-| AI behavioral (NeMo suite) | 0 in build-verify's checks (AI09 is code-level) | None | None | Runtime monitoring |
+| AI behavioral (NeMo suite) | 0 in build-verify's checks (AI09 is code-level) | None | None | None |
 | Prompt management | Draft/test/publish | Risk_flag audit | Risk_flag PR review | Audit trail |
 | Secret management | Grep scan | Grep scan | Grep scan | ENFORCE_SECRETS |
 | Container security | Dockerfile review | On Dockerfile changes | Image scan (rec.) | Non-root runtime |

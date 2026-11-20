@@ -920,7 +920,7 @@ The comments above say what each rail does when the app's guardrail tests use it
 
 | Phase | When | Test Depth | Minimum Tests |
 |-------|------|-----------|---------------|
-| Build-verify | During /make-it build | Code-level wiring check (AI09): files read, no NeMo test run by the check, never a behavioral PASS | 0 |
+| Build-verify | During /make-it build | Code-level check (AI09) that the guardrail files exist and the config references every rail: files read, no NeMo test run by the check, never a behavioral PASS | 0 |
 | /nemo-it | Before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") | Its own suite, written each run, and the app's guardrails/tests/, each in its own block; both need a live AI provider, and the app's also needs your pick in /nemo-it's preflight ask | 10 per category = 60 of its own, plus the app's |
 
 **Remediation flow (none in check AI09: it runs no test, so there is nothing to retest):**
@@ -961,8 +961,8 @@ ai_features.needed?
 **This section ensures that every AI-powered app built by /make-it is secure by design.**
 The NeMo Guardrails (section 11) test for safety when someone runs /nemo-it, before /ship-it
 (ship-it-guide.md, "What make-it runs before /ship-it"). This section
-implements runtime protections that prevent the issues NeMo tests for from ever reaching
-production. Together, they form a defense-in-depth strategy.
+implements runtime protections for prompt injection, output format, PII, rate and errors.
+NeMo's tests also cover things no runtime control addresses, such as toxicity and bias.
 
 **AI Input Safety Layer (generated in lib/ai/):**
 
@@ -3098,7 +3098,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] Prompt management tier determined and implemented -- if using AI
 - [ ] AI prompt seed data generated (Tier 2/3 -- database must not start empty) -- if using AI
 - [ ] NeMo Guardrails config created (guardrails/config.yml + Colang rails) -- if using AI
-- [ ] NeMo Guardrails wiring checked in code during build-verify (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
+- [ ] NeMo Guardrails files checked in code during build-verify: the guardrail files exist and the config references every rail (check AI09 runs no NeMo test; never a behavioral PASS) -- if using AI
 - [ ] /nemo-it's own NeMo Guardrails suite passes before /ship-it (60+ cases it writes itself, with the app's generated suite reported beside it in its own block when a live AI provider is reachable and you pick it; ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] AI Safety Attestation written by /nemo-it, before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") -- if using AI
 - [ ] sanitizePromptInput() in lib/ai/ strips injection patterns, called by BaseAgent -- if using AI
