@@ -41,4 +41,6 @@ curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
 echo "Mock-oidc users seeded."
 
 echo "Starting server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# --no-proxy-headers: X-Forwarded-For is read by the app, only from the proxies in TRUSTED_PROXIES
+# (app/middleware/trusted_proxies.py); uvicorn would otherwise also believe it from 127.0.0.1.
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers

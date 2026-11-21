@@ -31,7 +31,7 @@ async def _serve_and_get(*paths):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config("app.main:app"))
+    server = uvicorn.Server(uvicorn.Config("app.main:app", proxy_headers=False))  # entrypoint.sh's flag
     task = asyncio.create_task(server.serve(sockets=[sock]))
     try:
         for _ in range(500):

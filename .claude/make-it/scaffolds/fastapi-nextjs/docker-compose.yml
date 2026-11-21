@@ -76,6 +76,9 @@ services:
       - BACKEND_URL=http://localhost:${BACKEND_PORT:-[BACKEND_PORT]}
       - ENFORCE_SECRETS=false
       - LOG_BUFFER_SIZE=10000
+      # The proxy whose X-Forwarded-For is believed: the frontend, by service name. Deployed behind
+      # an ingress, set it to the ingress controller's addresses or network instead.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-frontend}
       # [ADDITIONAL_SERVICE_URLS]
       # - JIRA_BASE_URL=http://mock-jira:8443
       # - JIRA_AUTH_TOKEN=mock-jira-token

@@ -84,3 +84,11 @@ class TrailingSlashASGI:
 
 
 app = TrailingSlashASGI(_fastapi_app)  # type: ignore[assignment]
+
+# --------------------------------------------------------------------------
+# The visitor's address, believed from X-Forwarded-For only when a proxy named in TRUSTED_PROXIES
+# sent it (compose: the frontend). Outermost, so the activity log sees the visitor, not the proxy.
+# --------------------------------------------------------------------------
+from app.middleware.trusted_proxies import TrustedProxyHeaders  # noqa: E402
+
+app = TrustedProxyHeaders(app, settings.TRUSTED_PROXIES)  # type: ignore[assignment]
