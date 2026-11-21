@@ -443,42 +443,84 @@ Never show raw Python tracebacks.
 
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
-# Nothing is staged yet, so scan what step 4 will actually send: unsaved edits, new files
-# (ignored ones excluded), and saved changes not sent yet (step 1's range). Three separate
-# scans: a binary new file can't hide the others, and the ask below treats a hit in a saved
-# change differently. .env is left out of the first two -- its values live there on purpose.
-# The two diff scans read added (+) lines only -- a removed line never adds a secret -- and
-# awk tags each line with its file from the "+++ b/" header, so every hit reads file:+line.
-# Each scan prints its label first; the ask below goes by the label a hit sits under.
-# SKIP is matched on the line after the file tag, never on the path (lib/placeholder_image.py
-# can hold a real secret). The git flags pin the output the awk tagger reads, whatever the
-# user's git config says: no color codes, no external diff tool, a/ b/ prefixes, and names unquoted unless they hold a
-# double quote, backslash or control character (git still quotes those).
-PATTERN='(password|secret|token|api_key|private_key)\s*[:=]\s*["'\''][^"'\'']{8,}'
-SKIP='\(\.example\|TODO\|placeholder\|changeme\|your-.*-here\)'
-TAG='/^\+\+\+ b\//{f=substr($0,7);sub(/\t$/,"",f);next} /^\+/{print f":"$0}'
-echo "== unsaved edits =="
-git -c core.quotePath=false diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD -- . ':!.env' \
-  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true
-echo "== new files =="
-git ls-files --others --exclude-standard -z -- . ':!.env' \
-  | xargs -0 grep -HiIE "$PATTERN" /dev/null | grep -v "^[^:]*:.*$SKIP" || true   # one at a time, name shown
-echo "== saved, not sent =="
-git -c core.quotePath=false log --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -p --cc --format= HEAD --not --remotes \
-  | LC_ALL=C awk "$TAG" | grep -iE "$PATTERN" | grep -v ":+.*$SKIP" || true   # every unsent commit, merges included
+# Scans what step 4 will send, under three labels: == unsaved edits == and == new files ==
+# (as step 4 will stage them), then == saved, not sent == (every unsent commit). Each hit is
+# printed under its label as file:line -- never a value or any other part of the line.
+# Exit 0 = clean, 1 = hits, 2 = couldn't check. Needs git 2.25 or later.
+python3 ~/.claude/make-it/scripts/secret-scan.py
 ```
 
-If potential secrets are found: STOP. A secret is involved, so this is active confirmation, per
-the approval block: the user picks what to move, a plain yes isn't an answer.
+Run it from the project root with a 120-second timeout, then read the result:
+- **Exit 0**, the three labels each once, in that order, and nothing else: no secrets found;
+  3e passes.
+- **Exit 1**, the three labels each once, in that order, and every other line a hit: the gate
+  below. A hit reads `file:line`; split it on its **last** `:` (a file name can hold one) --
+  the line number is after it, the file before it, exactly as printed (spaces too). The file's
+  path starts at the repo's top folder (`git rev-parse --show-toplevel`), not at the
+  project root, so open it from there. One exception, under any label: never open a hit's file
+  if it is on step 4's keep-out list (its secret, key and database files; `.env.example` isn't
+  on it), is a registry file (the first rule below), or is another file operator-safety §1 never
+  reads -- a password-manager export, or a browser profile or cookie store (for example a vault
+  export, `logins.json` or `cookies.sqlite`; judge by its name and folders alone) -- not even to
+  check the line.
+- **Anything else** -- any other exit (2 means it couldn't check), a timeout, a label missing or
+  repeated, a line that is neither a label nor `file:line`, or exit 1 with no hit: STOP, steps 4
+  and later don't run. Tell the user:
+
+  "I couldn't check your changes for secrets, so I haven't saved or sent anything[; the small
+  fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. [the reason
+  and what to do, in plain words]"
+
+  The reason, by what you find (never the raw output): `python3` not found -- "This check needs
+  Python 3, which isn't on this computer. Install it from python.org, then run /argo-it again."
+  The script not found -- "The tool that does this check is missing. Type /make-it update, then
+  run /argo-it again." `git --version` older than 2.25 -- "This check needs a newer version of
+  Git (2.25 or later). Update Git, then run /argo-it again." A timeout -- "The check took too
+  long to finish." Anything else -- "The check stopped before it finished." For those last two,
+  add: "Run /argo-it again; if it happens again, ask your DevOps team for help."
+
+Name each hit only by its file and line number. Nothing from a hit's line -- not a value, not
+part of one, not the rest of the line -- goes into anything you tell the user; the one exception
+is the setting name you give for DevOps after a move.
+
+If potential secrets are found (exit 1): STOP. A secret is involved, so this is active
+confirmation, per the approval block: the user picks what to move, a plain yes isn't an answer.
+
+**First, if any hit is in a file named `.npmrc`, `.pypirc` or `.yarnrc.yml` (in any folder, under
+any label): stop here -- this comes before both branches below.** These files hold the login for a
+package registry. Never open or read them, and never move a value out of them (operator-safety
+§1): the login belongs in a pipeline secret, which DevOps sets up. Tell the user:
+
+"I found what looks like a registry login -- the password or token for the service your project
+gets its code libraries from or publishes them to -- on **line [N] of [file]** [, one per hit in a
+`.npmrc`, `.pypirc` or `.yarnrc.yml` file]. [If there are other hits and no hit sits under
+`== saved, not sent ==`: I also found what looks like a password or secret key on
+**line [N] of [file]** [, one per other hit].] Secrets should never be
+saved in code, so I won't send this. [If no hit sits under `== saved, not sent ==`: I haven't
+saved or sent anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b
+or 3c made any]. What to do next: ask your DevOps team to move the registry login into a pipeline
+secret -- a protected setting they keep outside your code (for npm, that line then reads
+`${NPM_TOKEN}`) -- then run /argo-it again.] [If any hit, registry or other, sits under
+`== saved, not sent ==`: What looks like a secret on **line [N] of [file]** [, one per such hit]
+is in a change you already saved but haven't sent yet. [If a hit outside a registry file also sits
+under the other labels: I also found one on **line [N] of [file]** [, one per such hit] in changes
+you haven't saved yet; that one needs moving too.] Because it's already in your saved history,
+moving the value now wouldn't take it out of what gets sent -- so I'm stopping here. I haven't saved
+or sent anything new; the small fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do
+next: ask your DevOps team to help remove it from the saved history before sending, and to keep
+the registry login in a pipeline secret instead.] If any login or other value I found has already
+been shared or used anywhere, have it changed too."
+
+Then stop -- steps 4 and later don't run.
 
 **If any hit sits under `== saved, not sent ==`: the only option is stop here.** Step
 4 sends the saved change that holds the value, so moving it out of the current files can't keep
 it out of the send. Say so plainly, and what to do next; offer nothing else:
 
 "I found what looks like a password or secret key in a change you already saved but haven't sent
-yet: **[VAR_NAME] in [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
-under the other labels: I also found **[VAR_NAME] in [file]** in changes you haven't saved yet; that
-one needs moving too.] Secrets should never be saved in code, so
+yet: **line [N] of [file]** [, one per hit under `== saved, not sent ==` only]. [If hits also sit
+under the other labels: I also found one on **line [N] of [file]** in changes you haven't saved yet;
+that one needs moving too.] Secrets should never be saved in code, so
 I won't send this. Because it's already in your saved history, moving the value now wouldn't take
 it out of what gets sent -- so I'm stopping here. I haven't saved or sent anything new; the small
 fixes already made earlier in this step (3a, 3b, 3c) stay in your files. What to do next: ask your
@@ -489,7 +531,27 @@ Then stop -- steps 4 and later don't run.
 
 **Otherwise (every hit sits under `== unsaved edits ==` or `== new files ==`), ask which to move:**
 
-"I found what looks like a password or secret key in your changes: **[VAR_NAME] in [file]**
+First, if any hit's path holds `\xNN` or `\uXXXX` -- the scanner's escape for a control or
+unusual character in a file or folder name, not a literal backslash, so that file can't be opened
+safely -- don't ask: stop, steps 4 and later don't run. Tell the user: "I found what looks like a
+password or secret key on line [N] of a file whose name, or the name of a folder it sits in, has
+a hidden or unusual character in it ([file] -- the part starting with a backslash stands for that
+character), so I can't open it safely, and I won't send this. I haven't saved or sent
+anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made
+any]. What to do next: give that file, and the folders it sits in, plain names (letters,
+numbers, dots, dashes and underscores only), then run /argo-it again."
+
+Next, if any hit is in a password-manager export or a browser profile or cookie store (the
+never-open files under Exit 1 above), don't ask: stop, steps 4 and later don't run, and never
+open that file. Tell the user: "I found what looks like a password or secret key on line [N] of
+[file] [, one per such hit]. That file looks like saved passwords or browser data -- a password
+manager's export, or a web browser's saved logins or cookies -- so I won't open it, and I won't
+send this. I haven't saved or sent anything[; the small fixes I made a moment ago stay in your
+files -- only if 3a, 3b or 3c made any]. What to do next: move that file out of your project
+folder -- it doesn't belong with your code -- then run /argo-it again. If any password in it has
+been shared or sent anywhere, change it."
+
+"I found what looks like a password or secret key in your changes: **line [N] of [file]**
 [, one per value found]. Secrets should never be saved in code, so I won't send this as it is.
 I can move the value into your local settings file (.env) and have the code read it from there
 -- those lines change, and your project history keeps the old version. Your deployed app will
@@ -498,15 +560,80 @@ send them. This isn't part of a normal send -- it only comes up when something l
 secret. The one thing to check: has this value already been shared or used anywhere? If it has,
 moving it isn't enough -- it should also be changed, and **stop here** is the safer pick.
 
-Which should I move -- **[VAR_NAME]** [each, by name] -- or **stop here** so you can sort it
-out yourself?"
+Which should I move? [one option per hit, so each pick names one line; a multi-select when there
+are several]
+- **Move line [N] of [file]** [one per hit, by file and line]
+- **Stop here** -- I move nothing, and you sort it out yourself"
 
-Move only the ones they picked: the value goes to `.env`, the code gets an `os.getenv()` /
-`process.env.` reference, and tell the user the setting name(s) to pass to DevOps. 'Stop here':
-nothing is saved or sent; the small fixes already made earlier in this step (3a, 3b, 3c) stay in
-your files. If any found value is still in the code (not named, or called a
-sample), stop and say which one is holding things up -- never send with a found secret still in
-the code, whatever they say.
+Move only the ones they picked. If they pick **stop here** (on its own or with any line), or pick
+none of them (they call them samples, or just say yes), move nothing: stop, steps 4 and later
+don't run, and tell the user which values are holding the send up: "I won't send this while what looks like a password or
+secret key is still in the code: **line [N] of [file]** [, one per value found]. I haven't saved
+or sent anything[; the small fixes I made a moment ago stay in your files -- only if 3a, 3b or
+3c made any]. What to do next: run /argo-it again and pick which to move, or take them out of the
+code yourself." Before you write anything to `.env`, make sure it stays on this computer. From
+the project root (where step 4 runs), first run step 4's own `.gitignore` line, exactly as step
+4 has it; that line stays in `.gitignore` whatever happens next. Its `grep -qxF` part (before
+the `||`) decides whether it adds `.env*` and `!.env.example`: exit 0 means a line that reads
+exactly `.env*` is there and nothing is added. So run that part alone first, and remember its
+exit:
+`grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore`
+Then run the check below. If it exits anything but 0 -- `.env` is a folder, is a link to another
+file, or git tracks it or doesn't leave it out (`git ls-files`, `git check-ignore`: under any mix
+of capital and small letters, in its name or its folders') -- stop: steps 4 and later don't run.
+`test ! -L .env && { test ! -e .env || test -n "$(find .env -prune -type f -links 1)"; } && test -z "$(git ls-files -co --exclude-standard -- ":(top,icase)$(git rev-parse --show-prefix).env")" && git check-ignore -q .env`
+To tell which, check in this order and use the first reason
+that fits: if `test -L .env || test -n "$(find .env -prune -type f -links +1)"` is true, `.env`
+is a link (a shortcut, or a second name for another file); if `test -d .env` is true, it's a
+folder; if `git ls-files --error-unmatch ":(top,icase)$(git rev-parse --show-prefix).env"` finds
+it, git tracks it, under the name(s) it prints; otherwise git isn't set to leave it out, and
+`git ls-files -o --exclude-standard -- ":(top,icase)$(git rev-parse --show-prefix).env"` prints
+its name, if the file exists. If a name was printed and none of them is `.env` itself, the file
+is a look-alike: use the look-alike wording below. Tell the user: "I can't move it safely: [your
+local settings file (.env) / for a look-alike: a file named [the name printed], which matches your
+local settings file (.env) apart from capital letters,] [is a shortcut to another file / is a
+folder, not a settings file / is already in your saved history / isn't set to stay on this
+computer], so [the value could still be sent / for a folder: there's no file to put the value
+in]. I haven't moved, saved or sent anything[; I added .env to your .gitignore file -- the list
+of files git leaves out -- and that change stays: only if the line just added it][; the small
+fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any]. What to do next:
+ask your DevOps team to help [make .env a plain file that stays on this computer / for a
+look-alike: keep [the name printed] out of what gets sent / for a folder: free up the name .env
+(if that folder is a Python virtual environment, make a new one named .venv and remove this one
+-- a renamed one stops working)], then run /argo-it again." Once it exits 0: open each picked
+line yourself (from the top folder) -- every one, before you move any; if one can't be opened,
+the next paragraph applies -- to learn the setting names, and move every secret-looking
+value on that line, not just the first. A value that opens with a quote mark (`"`, `'` or a
+backtick) that doesn't close on that line, as in `KEY="`, runs on to its closing quote on a later
+line: move all of it, every line up to and including that closing quote, not just the picked
+line. Each value goes to the `.env` in the project root, the
+one you just checked; the code gets an `os.getenv()` / `process.env.` reference; and tell the
+user the setting name(s) to pass to DevOps. After all the picked values are moved, run the 3e block
+again from the project root, once, and read the result as above, except that exit 1 -- any hit
+left -- means stop, not a new ask: steps 4 and later don't run. A hit left is one they
+didn't pick, one called a sample, or a second value on a moved line. Tell the user: "I moved
+what you picked, but I still found what looks like a password or secret key on **line [N] of
+[file]** [, one per hit left], so I won't send this. I haven't saved or sent anything; the values
+I moved stay in .env, which stays on this computer[; I added .env to your .gitignore file -- the
+list of files git leaves out -- and that change stays: only if the line just added it][; the
+small fixes I made a moment ago stay in your files -- only if 3a, 3b or 3c made any].
+What to do next: run /argo-it again and pick [that line / those lines] to move too, or take the
+value out of the code yourself." Never send with a found secret still in the code, whatever they
+say. On any other stop after a move, also tell the user the moved values stay in .env, which
+stays on this computer[, and that I added .env to your .gitignore file -- only if the line just
+added it].
+
+If a picked hit's file can't be opened -- it's missing (nothing is at that path), or it isn't the
+file the scan flagged (for example, it has no line [N], or nothing on that line looks like a
+password or secret key and no quoted value opens on it that runs on to a later line) -- move
+nothing and edit no file: stop, steps 4 and later don't run. Tell
+the user: "I found what looks like a password or secret key on line [N] of [file], but I can't
+open that file by the name the check gave me, so I won't send this. I haven't moved, saved or
+sent anything[; I added .env to your .gitignore file -- the list of files git leaves out -- and
+that change stays: only if the line just added it][; the small fixes I made a moment ago stay in
+your files -- only if 3a, 3b or 3c made any]. What to do next: give that file, and the folders it
+sits in, plain names (letters, numbers, dots, dashes and underscores only), then run /argo-it
+again -- or take the value out of the code yourself."
 
 **If ALL checks pass:** proceed to step 4 with no ask -- the user hears nothing about the review
 beyond 3a's list of changed files, if there is one.
@@ -530,22 +657,23 @@ the manifests automatically.
 
 ```bash
 # Commit if there are uncommitted changes. Never stage secret or database files (3e may have
-# just moved a secret into .env) -- the operator-safety §1 list plus databases, at any depth:
-# make sure each is ignored (own line, even if .gitignore lacks a final newline), then unstage
-# them in case any is tracked. :(top,...) = from the repo root, so a nested repo's pre-staged
-# files stay out too. If the save fails, stop here: nothing is sent.
+# just moved a secret into .env) -- operator-safety §1's ignore patterns plus service-account
+# keys, *.p12 / *.pfx and local databases (secret-scan.py's KEEP_OUT; retrofit-it's snapshot uses
+# the same list), at any depth: make sure each is ignored (own line, even if .gitignore lacks a
+# final newline), then unstage them in case any is tracked. :(top,...) = from the repo root, so
+# a nested repo's pre-staged files stay out too. If the save fails, stop here: nothing is sent.
 fail() { echo "SAVE FAILED: $1"; exit 1; }
 grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
 for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
-         '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.p12' '*.pfx'; do
+         '.git-credentials' '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
   grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
 done
 { git add -A && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
   ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
   ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
-  ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
-  ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
-  ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
+  ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/.git-credentials' \
+  ':(top,glob)**/*credentials*.json' ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' \
+  ':(top,glob)**/*.db' ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
 git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
 
 # Push current branch -- CI takes over from here
@@ -1856,22 +1984,143 @@ edit files in `{manifest_dir}/dev/` and push. CI will deploy the changes.
 There is NO manual merge to the deploy branch. The CI workflow (PHASE 3) automatically
 mirrors the source tree and patches manifests on every push.
 
-**1. Commit the generated files:**
+**1. Don't save the generated files yet:** nothing is saved or sent before the user's pick in
+step 3. 2b checks what this send would carry; only on 'Send it' does Option 1 check once more,
+build argo-it's save of its files by name (no branch moves, and a save that holds anything but
+argo-it's files is never sent), check exactly that save, and send it by its id -- the same order
+as PHASE 5b, where 3e checks before step 4 saves.
+
+In a make-it project (one with `.make-it/app-context.json`), run the seal step now, before step 2:
+it writes its files beside argo-it's, and the check and the save on 'Send it' must both see them.
+The seal's files count as argo-it's files: one save holds both. Then list them, from the project
+root:
 
 ```bash
-git add env/ .github/workflows/ ONBOARDING-K8S.md
-git commit -m "Add K8s manifests and CI workflow for Argo CD deployment"
+# The seal's files, each by its exact name (none when the seal step was skipped): the four it rewrites, if there, and
+# each ledger entry it added that isn't saved yet (watermark.py names them NNNN-<12 hex>.json) -- never a folder or a
+# pattern, so a file beside them, or one that only looks like them, is never saved with argo-it's
+for f in .make-it/manifest.json .make-it/sealed-files.txt MAKE-IT.md backend/make-it-stamp.json; do
+  [ -f "$f" ] && printf '%s\n' "$f"
+done
+git ls-files --others -- .make-it/ledger/ | sed -n -E '/^\.make-it\/ledger\/[0-9]{4,}-[0-9a-f]{12}\.json$/p'
 ```
 
 **2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
-it' in step 4, after the user's go; nothing leaves the machine before the ask):
+it' in step 4, after the user's go; nothing leaves the machine before the ask). First remember
+`git rev-parse HEAD` as `{asked_head}`: the commit the step-3 ask will be shown on, remembered
+before 2b's check (in a repo with no commits yet it prints `HEAD` and an error: remember `HEAD`).
+Write `{deploy_branch}` alone on one line to `$(git rev-parse --git-dir)/argo-it-deploy-branch`
+(in the folder `git rev-parse --git-dir` prints) with your file tool, never a shell command. The
+block keeps the branch the ask will be shown on in a file too, so a branch name is never pasted
+into a command. `{generated_files}` are argo-it's files, by name, as Option 1 lists them. Then:
 
 ```bash
-# Check if deploy branch exists remotely
-git fetch origin {deploy_branch} 2>/dev/null || true
-git rev-parse --verify origin/{deploy_branch} 2>/dev/null   # remember the result for step 3
-git log --oneline HEAD --not --remotes   # step 3 names every saved change listed here other than the one step 1 just made
+# Sends go where reads come from, or argo-it stops here, before reading anything: one address for both
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || { echo "SPLIT ORIGIN"; exit 1; }
+# Read everything GitHub has -- every branch and tag -- into argo-it's own names (refs/argo-it/gh/...), never the
+# user's branches, remote-tracking refs or tags; in a shallow clone, all the history first, so what GitHub has is exact
+[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
+git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
+git branch --show-current > "$(git rev-parse --git-dir)/argo-it-asked-branch"
+# GitHub's own branch lines, read once for steps 2 and 3: the deploy branch, and any copy of argo-it's save
+git ls-remote --heads origin || { echo "FETCH FAILED"; exit 1; }
+# The tree argo-it's save would hold now: this commit's files plus argo-it's, by name, in a temporary index,
+# past any `git replace`; no commit is made
+i="$(git rev-parse --absolute-git-dir)/argo-it-index"; rm -f "$i"
+{ ! git rev-parse -q --verify HEAD >/dev/null || GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree HEAD; } &&
+  GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null update-index --add -- {generated_files} &&
+  t=$(GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null write-tree) && echo "tree $t"
+rm -f "$i"
+git log --oneline HEAD --not --glob='refs/argo-it/gh/*'   # step 3 names each saved change listed here but argo-it's own
 ```
+
+If the block prints `SPLIT ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent,
+and GitHub hasn't been read: this project sends changes to a different address than it reads
+them from, so nothing argo-it reads could tell it what its send would reach. Tell the user:
+
+"I haven't saved or sent anything: this project is set to send changes to a different place than
+it reads them from, and I only send to the same place I read from. What to do next: ask whoever
+set up the fork, or remove the separate sending address, then run /argo-it again."
+
+What GitHub already has is what argo-it's own names (`refs/argo-it/gh/`) reach: every branch and
+tag GitHub had at this fetch. Step 2's list, 2b and Option 1's check of the save all count only
+that as sent. The `git ls-remote` lines are GitHub's own answer, read once for this run (a project copied with
+only one branch still gets every line). The deploy branch exists only if a line's name -- its
+second field, compared whole -- is exactly `refs/heads/{deploy_branch}`, never a name that only
+ends in it. The `tree <id>` line is the tree argo-it's save would hold now: step 3 compares each
+GitHub line's own tree with it, and the save on 'Send it' builds its tree the same way. If no
+`tree` line is printed (one of argo-it's files is missing, say), no GitHub line counts as holding
+argo-it's files. In a repo with no commits yet, `git log` prints an error there: read it as
+nothing listed. If the block prints `FETCH FAILED`, stop -- don't show the step-3 ask; nothing is
+sent: without a current copy of what GitHub holds, 2b can't tell what was already sent. Tell the
+user:
+
+"I couldn't tell what reached GitHub: I couldn't reach it to see what's already there [if
+argo-it's files are already saved here (`git ls-files` lists them and `git status` shows them
+unchanged): -- the setup files I made are saved on this computer, and nothing more was sent this
+time / otherwise: , so I haven't saved or sent anything]. [the reason, in plain words -- e.g. 'Git
+can't sign in to GitHub on this computer'] What to do next: [the fix], then run /argo-it again."
+
+**2b. Secret check on what step 4 will send** -- the same check as PHASE 5b step 3e, run after
+step 2's lookup (so its saved-not-sent list is current) and before anything is saved, as 3e runs
+before step 4 saves. `{generated_files}` are the files the save on 'Send it' will save (Option 1
+names them); `--also` has the check read them even when `.gitignore` hides them, since that save
+takes them in by name:
+```bash
+# Prints the three labels -- == unsaved edits ==, == new files ==, == saved, not sent == -- and
+# each hit under its label as file:line, never a value. Exit 0 = clean, 1 = hits, 2 = couldn't check.
+python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --also {generated_files}
+```
+
+Run it from the project root with a 120-second timeout, and read the result exactly as 3e does.
+A hit counts here when it sits under `== saved, not sent ==`, or when it is in a file the save on
+'Send it' will save (one of argo-it's generated files, by its path from the repo's top folder),
+whatever its label. A hit whose path holds `\xNN` or `\uXXXX` counts too, whatever its label: its
+name can't be matched to a file safely. Other hits, under `== unsaved edits ==` or `== new files ==`,
+don't stop this send: step 4 sends saved changes only, and the save on 'Send it' saves argo-it's
+files only. Name each hit only by its file and line number; nothing from a hit's line goes into
+anything you tell the user, and never open a hit's file here.
+
+- **Anything else** (any result 3e's third bullet covers): STOP -- don't show the step-3 ask;
+  nothing is sent. Tell the user:
+
+  "I couldn't check your changes for secrets, so I haven't saved or sent anything. [the reason
+  and what to do, in plain words, as 3e gives them]"
+
+**If any hit counts (under `== saved, not sent ==`, in a file the save on 'Send it' will save, or
+with an escaped path): stop here.** Step 4 would send the value, so the only option is stop: don't
+show the step-3 ask, send nothing, and offer nothing else. Tell the user:
+
+"I found what looks like a password or secret key on **line [N] of [file]** [, one per hit that
+counts]. [If a hit's path holds `\xNN` or `\uXXXX`: say 3e's escaped-name sentences for that file
+(why I can't open it safely, and what the part starting with a backslash stands for).] [If a hit
+sits under `== saved, not sent ==`: [The one in **[file]** is / The ones in **[files]** are] in a
+change you already saved but haven't sent yet.] [If a hit is in a file argo-it generated in this
+run, and the first check this run found it there or I wrote that line myself: **[file]** is one of
+the setup files I made. That one is a mistake on my side, not something you did -- the setup files
+I make should never hold a secret.] [If a hit is in a file argo-it generated, and an earlier check
+this run found that file clean and I didn't write that line: **[file]** is one of the setup files I
+made, and it changed after I made it.] Secrets should never be saved in code, so I won't send
+this. [If a hit sits under `== saved, not sent ==`: Because it's already in your saved history,
+moving the value now wouldn't take it out of what gets sent -- so I'm stopping here.] I haven't
+saved or sent anything. What to do next: [for a hit whose path holds `\xNN` or `\uXXXX`, not under
+`== saved, not sent ==`, 3e's next step for it: give that file, and the folders it sits in, plain
+names (letters, numbers, dots, dashes and underscores only), then run /argo-it again; with other
+hits too, say both, joined by and] [only if a hit under `== saved, not sent ==`, or a hit with a
+plain path, counts: ask your DevOps team to help [for a hit under `== saved, not sent ==`: remove
+it from the saved history before sending][for a hit in a setup file I made: keep that value out of
+the setup files -- it belongs in a protected setting they keep outside your code; with both kinds
+of hit, say both, joined by and][, and to keep the registry login -- the password or token for the
+service your project gets its code libraries from or publishes them to -- in a pipeline secret
+instead: only if a hit is in a `.npmrc`, `.pypirc` or `.yarnrc.yml` file], and if this value has
+already been shared or used anywhere, have it changed too]."
+
+Then stop -- steps 3 and later don't run. Both of 2b's stops hold whatever the user says: never
+send past either one.
+
+**If no hit counts** -- none under `== saved, not sent ==`, none in a file the save on 'Send it'
+will save and none with an escaped path (exit 0 or exit 1, with the three labels each once, in
+order, read as 3e reads them): go on to step 3 -- the user never sees this check.
 
 **3. Ask the user what they want to do:**
 
@@ -1881,8 +2130,18 @@ If the hostname was left as a TODO placeholder, write "the address still marked 
 deployment files" wherever {hostname} appears below, and make the one thing to check: who will
 fill that in before it can go live.
 
-"I've generated your deployment pipeline and saved it in your project folder -- nothing has been
-sent anywhere yet. Here's what's ready:
+"I've generated your deployment pipeline -- the files are in your project folder, and nothing has
+been saved or sent yet [if any branch line step 2's `git ls-remote --heads origin` printed has a
+commit whose tree (`git --no-replace-objects rev-parse -q --verify <line id>^{tree}`) equals the
+`tree <id>` step 2 printed, and argo-it's files aren't saved here, in place of that: a copy of them
+is already on GitHub from last time, but they aren't saved here yet] [if argo-it's files are
+already saved from an earlier run (`git ls-files` lists them and `git status` shows them
+unchanged), in place of that: they're saved from last time [if the lines step 2's
+`git ls-remote --heads origin` printed show that earlier save on GitHub, so step 2's list leaves
+it out: , and a copy is already on GitHub / otherwise: , but nothing has been sent yet]]. [If this
+ask is shown again because something changed since the last one: Since I last asked, [your branch
+changed -- any new save is named below / you switched your project to **[branch]**], so I checked
+again.] Here's what's ready:
 
 **Generated files:**
 - `{manifest_dir}/dev/` -- [N] deployment files for dev
@@ -1893,39 +2152,244 @@ sent anywhere yet. Here's what's ready:
 If I send this to GitHub, then from now on, every time anyone sends code to this project it
 builds and deploys to **{hostname}** on its own, for everyone who uses it. [If step 2 found the
 deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy the deployment
-system watches.] [If step 2 listed saved changes other than the one step 1 just made: This also
-sends the [M] other saved changes you haven't sent yet, which touch [one line on what they touch].] Nothing goes live until your DevOps
-team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, this send goes
-live too. To undo, I'd remove these files and send again -- the pipeline stops, but whatever
-already went live stays until it's replaced. [What stands out, e.g. 'the database runs inside
-the cluster for dev' / 'this sits next to an existing workflow' / 'nothing unusual']. The one
-thing to check: is **{hostname}** the right address for the dev version of your app?
+system watches.] [If step 2 listed saved changes other than argo-it's own earlier save of these
+files: This also sends the [M] other saved changes you haven't sent yet, which touch [one line on
+what they touch].] Nothing goes live until your DevOps team finishes the one-time setup in
+ONBOARDING-K8S.md; if that's already done, this send goes live too. To undo, I'd remove these
+files and send again -- the pipeline stops, but whatever already went live stays until it's
+replaced. The checks your project runs when you save don't run on the setup files I made; my
+secret check does. [What stands out, e.g. 'the database runs inside the cluster for dev' /
+'this sits next to an existing workflow' / 'nothing unusual']. The one thing to check: is
+**{hostname}** the right address for the dev version of your app?
 
 **What would you like to do?**
 
-1. **Send it -- deploys to {hostname}** -- builds it and deploys it automatically
+1. **Send it -- deploys to {hostname}** -- I save these files in your project and send them; it
+   builds and deploys automatically
 2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
    [only if kubectl is present AND `kubectl config current-context` is a local cluster:
    rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared
    cluster -- leave this option out]
-3. **Show me the files first** -- nothing is sent
-4. **Not now** -- everything stays saved in your project folder; nothing is sent"
+3. **Show me the files first** -- nothing is saved or sent
+4. **Not now** -- the files stay in your project folder, not saved yet [if argo-it's files are
+   already saved, in place of that: saved from last time]; nothing is sent"
 
 Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which.
 
 **4. Execute based on user choice:**
 
-**Option 1 (send -- CI deploys automatically):**
-```bash
-# Create the deploy branch first if step 2 found it missing
-if ! git rev-parse --verify origin/{deploy_branch} 2>/dev/null; then
-  git checkout -b {deploy_branch}
-  git push -u origin {deploy_branch}
-  git checkout {previous_branch}
-fi
+**Option 1 (send -- CI deploys automatically):** remember `git rev-parse HEAD` as `{checked_head}`
+(in a repo with no commits yet it prints `HEAD` and an error: remember `HEAD`), then run 2b's check
+again and read it the same way. On a stop, use 2b's stop as written -- nothing has been saved or
+sent. If no hit counts, first make sure nothing changed since the ask -- no new save, and no switch
+to another branch:
 
-git push origin {current_branch}
+```bash
+# Go on only from the commit and the branch the step-3 ask was shown on (the branch from step 2's file)
+[ "$(git rev-parse HEAD)" = "{asked_head}" ] && [ "$(git branch --show-current)" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked-branch")" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
 ```
+
+If it prints `CHANGED SINCE THE ASK`, nothing was saved or sent: the branch changed (a save, a pull
+or an undone save), or another branch was switched to, after the ask, so run step 2 and 2b again,
+then show the step-3 ask again, naming what is new -- never send a change the ask didn't name.
+Otherwise build argo-it's save of its files, one by one -- `{generated_files}` = the path of every
+file this run generated (each manifest under `{manifest_dir}/dev/` and `{manifest_dir}/prod/`, the
+workflow file under `.github/workflows/`, and `ONBOARDING-K8S.md`) and each seal file step 1 listed,
+never a folder: so nothing else in those folders is saved. The block uses git's low-level commands and a temporary index, each
+with the project's hooks folder turned off and reading past any `git replace` (so the save is built
+on the very commit the check read), so HEAD and the branch don't move, and anything the user had
+staged stays staged, out of this save. A hook set in git's own settings (git 2.54 and later) can
+still run there, so the block then checks that the save differs from that commit by argo-it's files
+alone. It reads GitHub's branch lines once: when GitHub already holds exactly this save on the
+branch the ask was shown on (a send whose report was lost), the block uses that copy instead of
+making a new one, and when GitHub can't be read, it stops before saving anything:
+
+```bash
+# Build the save only on top of the commit the check just read -- if anything was saved since, stop first
+[ "$(git rev-parse HEAD)" = "{checked_head}" ] || { echo "SAVED SINCE THE CHECK"; exit 3; }
+# GitHub's branch lines, read once; a failed read stops here, before anything is saved
+gl=$(git ls-remote --heads origin) || { echo "FETCH FAILED"; exit 1; }
+# A temporary index: that commit's files plus argo-it's, by name -- the real commit, past any `git replace`
+i="$(git rev-parse --absolute-git-dir)/argo-it-index"; rm -f "$i"
+{ [ "{checked_head}" = HEAD ] || GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree "{checked_head}"; } &&
+  GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null update-index --add -- {generated_files} &&
+  tree="$(GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null write-tree)" || { rm -f "$i"; echo "SAVE FAILED"; exit 1; }
+rm -f "$i"
+# The save: {checked_head} itself when argo-it's files are already saved there, unchanged; else GitHub's copy
+# on the branch the ask was shown on when it is exactly this save on {checked_head} (a send whose report was
+# lost); else a new commit on {checked_head} (the first commit, in a repo with no commits yet)
+b="$(cat "$(git rev-parse --git-dir)/argo-it-asked-branch")"
+p="{checked_head}"; [ "$p" != HEAD ] || p=
+# GitHub's commit on that branch: the line whose name is exactly refs/heads/<branch>
+gh=$(printf '%s\n' "$gl" | awk -v r="refs/heads/$b" '$2 == r {print $1}')
+if [ -n "$p" ] && [ "$tree" = "$(git --no-replace-objects rev-parse "${p}:")" ]; then
+  s="$p"
+elif [ -n "$gh" ] && [ "$(git --no-replace-objects rev-parse -q --verify "${gh}:" 2>/dev/null)" = "$tree" ] &&
+  [ "$(git --no-replace-objects rev-list --parents -n 1 "$gh" 2>/dev/null)" = "$gh${p:+ $p}" ]; then
+  s="$gh"
+elif [ -z "$p" ]; then
+  s="$(git --no-replace-objects commit-tree -m "Add K8s manifests and CI workflow for Argo CD deployment" "$tree")" || { echo "SAVE FAILED"; exit 1; }
+else
+  s="$(git --no-replace-objects commit-tree -p "$p" -m "Add K8s manifests and CI workflow for Argo CD deployment" "$tree")" || { echo "SAVE FAILED"; exit 1; }
+fi
+# The save must differ from {checked_head} by argo-it's files alone (a hook set in git's own settings can add
+# more): name every file it changes, then only argo-it's, and stop unless the two lists match
+base="$p"; [ -n "$base" ] || base="$(git hash-object -t tree /dev/null)"
+all="$(git --no-replace-objects diff-tree -r --name-only "$base" "$s")" &&
+  ours="$(git --no-replace-objects diff-tree -r --name-only "$base" "$s" -- {generated_files})" || { echo "SAVE FAILED"; exit 1; }
+[ "$all" = "$ours" ] || { echo "SAVE HOLDS MORE"; exit 3; }
+echo "$s"
+```
+
+If the block prints `SAVE FAILED`, stop -- nothing was sent. Tell the user: "I couldn't save the
+setup files I made, so nothing was sent. [the reason, in plain words, as PHASE 5b step 4 gives
+it]" If it prints `SAVED SINCE THE CHECK`, nothing was saved or sent: something was saved after
+the check (a change the user saved between the check and this block, say), so go back to step 2,
+run 2b again, and show the step-3 ask again before anything is sent, naming what is new. If it
+prints `FETCH FAILED`, GitHub couldn't be read, so nothing was saved or sent: stop, and tell the
+user step 2's message for `FETCH FAILED`.
+
+If it prints `SAVE HOLDS MORE`, stop -- nothing was saved or sent; never send past this stop.
+Something on this computer (a hook set in git's own settings, say, which runs even with the
+project's hooks folder turned off) added files argo-it didn't write to its save. Those files aren't
+a change the user saved, so don't use 2b's stop wording here. Tell the user:
+
+"I stopped before sending anything: something on this computer added files I didn't write to the
+setup I was saving, so I haven't saved or sent anything. What to do next: ask your DevOps team which
+setting on this computer adds files whenever changes are saved, and to turn it off for this
+project, then run /argo-it again."
+
+Otherwise remember the commit id it prints as `{saved_head}`: the commit the check read plus
+argo-it's files, on no branch yet -- the one commit the push sends. Check exactly that commit:
+
+```bash
+# Checks {saved_head} and every commit it reaches that GitHub doesn't have (step 2's refs/argo-it/gh/): the three
+# labels, each hit under == saved, not sent == as file:line, never a value. Exit 0 = clean, 1 = hits, 2 = couldn't check.
+python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit {saved_head}
+```
+
+Run it from the project root with a 120-second timeout, and read it as 3e reads a result; every
+hit it prints sits under `== saved, not sent ==`. Any hit, or any result 3e's third bullet covers,
+stops here with nothing sent: use 2b's stop as written, reading a hit in one of argo-it's files as
+one in a file argo-it generated, not in a change you already saved. If no hit counts, send
+`{saved_head}`:
+
+```bash
+# Send {saved_head} -- the commit argo-it built and checked -- by its id, never HEAD as it is now, to
+# the branch the step-3 ask was shown on, and first to the deploy branch if GitHub doesn't have it
+# (both names read from step 2's files, never pasted in)
+b="$(cat "$(git rev-parse --git-dir)/argo-it-asked-branch")"
+d="$(cat "$(git rev-parse --git-dir)/argo-it-deploy-branch")"
+# Once a copy is on GitHub, move that branch here to it, but only while it still holds the commit the
+# check read (none, in a repo with no commits yet): a save of the user's own is never dropped. If it is
+# checked out, then mark argo-it's files saved (the index only; every file stays as it is); if that
+# can't be done, move the branch back, so argo-it's files are never left marked for deletion.
+move() {
+  old="{checked_head}"; [ "$old" != HEAD ] || old=
+  [ -n "$b" ] || return 1
+  [ ! -e "$(git rev-parse --git-path index.lock)" ] || { echo "INDEX BUSY"; return 1; }
+  git update-ref "refs/heads/$b" "{saved_head}" "$old" 2>/dev/null || { echo "BRANCH KEPT"; return 1; }
+  [ "$(git symbolic-ref -q HEAD)" = "refs/heads/$b" ] || { echo "SAVED ON ANOTHER BRANCH"; return 1; }
+  git reset -q -- {generated_files} && return 0
+  [ -z "$old" ] || git update-ref "refs/heads/$b" "$old" "{saved_head}"
+  echo "INDEX BUSY"; return 1
+}
+# GitHub's deploy branch line: 0 = found, 2 = no such branch, anything else = GitHub couldn't be read, so
+# push nothing; it counts only when its name is exactly refs/heads/<deploy branch>
+out=$(git ls-remote --exit-code --heads origin "refs/heads/$d"); case $? in 0|2) ;; *) echo "FETCH FAILED"; exit 1;; esac
+found=$(printf '%s\n' "$out" | awk -v r="refs/heads/$d" '$2 == r')
+if [ -z "$found" ]; then
+  git push origin "{saved_head}:refs/heads/$d" || { echo "PUSH 1 FAILED"; exit 1; }
+  git push origin "{saved_head}:refs/heads/$b" || { move; echo "PUSH 2 FAILED"; exit 1; }
+else
+  # A push that reports a failure may still have reached GitHub: then move the branch here to it too
+  git push origin "{saved_head}:refs/heads/$b" || {
+    # only an exact refs/heads/<branch> line holding the save counts; a failed read moves nothing, and the
+    # read after the send decides what the user hears
+    gl=$(git ls-remote --heads origin "refs/heads/$b")
+    on=$(printf '%s\n' "$gl" | awk -v r="refs/heads/$b" '$2 == r {print $1}')
+    [ "$on" != "{saved_head}" ] || move; echo "PUSH 2 FAILED"; exit 1; }
+fi
+move
+```
+
+If the block prints `FETCH FAILED`, its read of GitHub failed before the first push, so it pushed
+nothing and the deploy branch wasn't touched; go on to the read below, as for any line it prints.
+
+**After the send, whatever the block printed** -- every push worked, or one failed -- read what
+GitHub holds now before you tell the user anything about what was sent: run
+`git ls-remote --heads origin`. Every message below about what was sent comes from what it shows,
+never from what the block printed alone: the setup reached GitHub only if a branch line
+(`refs/heads/…`) other than `refs/heads/{deploy_branch}` holds `{saved_head}`, and when none does,
+the rule for a failed push below holds, whatever the block printed. If it fails (GitHub can't be
+reached), tell the user only this, then stop -- skip step 5:
+
+"I couldn't tell what reached GitHub: [the reason, in plain words -- e.g. 'the connection to GitHub
+dropped']. What to do next: run /argo-it again once GitHub can be reached -- it reads GitHub first,
+and checks your changes again before it sends anything."
+
+If it prints `BRANCH KEPT` as its last line, the send went through, but the branch here changed
+after the check (a save, a pull or an undone save, say), so argo-it left it as it is and argo-it's
+files aren't saved in it. Tell the user, then go on as if every push worked:
+
+"I sent your setup to GitHub, but your branch here changed after I checked (a save, a pull or an
+undone save, say), so I left it as it is, and the setup files I made aren't saved in it [if your
+branch here still builds on what I checked and holds saves GitHub doesn't have yet: -- those saves
+are newer than what I sent, and none of them were sent]. What to do next: get the latest from
+GitHub into your project without sending anything (in VS Code: Pull, in the Source Control menu --
+not Sync, which would also send your changes). If it says some files are in the way, move these
+setup files out of your project folder first -- the copies on GitHub are the same: [each of the
+setup files I listed in the ask, by name]. Then run /argo-it again: I'll check your own changes and
+ask before sending them."
+
+If it prints `SAVED ON ANOTHER BRANCH` as its last line, the send went through and the branch the
+ask was shown on now holds it, but the project here was switched to another branch during the
+send, so argo-it's files are still in the folder as new files, and git won't switch back while
+they're there. Tell the user, then go on as if every push worked:
+
+"I sent your setup to GitHub and saved it on [the branch the ask was shown on], but your project
+here is on another branch now, so the setup files I made are still in your project folder as new
+files, and they'll block the way back. What to do next: before you switch back to [the branch the
+ask was shown on], move these setup files out of your project folder: [each of the setup files I
+listed in the ask, by name]. That branch already holds them, just as I sent them."
+
+If it prints `INDEX BUSY` as its last line, the send went through, but another program (VS Code,
+say, or one that closed suddenly) held git's index of the project here, so argo-it left the branch
+here as it was and argo-it's files aren't saved in it. Tell the user, then go on as if every push
+worked:
+
+"I sent your setup to GitHub, but another program was busy with your project here (VS Code, say),
+so I left your copy here as it was, and the setup files I made aren't marked saved in it yet. What
+to do next: once that program is done, get the latest from GitHub into your project without
+sending anything (in VS Code: Pull, in the Source Control menu -- not Sync, which would also send
+your changes). If it says some files are in the way, move these setup files out of your project
+folder first -- the copies on GitHub are the same: [each of the setup files I listed in the ask, by
+name]. If it still says the project is busy, ask your DevOps team for help. Then run /argo-it
+again."
+
+**If either push fails** (the block prints `PUSH 1 FAILED` or `PUSH 2 FAILED`), never say
+"Pushed!". What was sent comes from that read of GitHub (`git ls-remote --heads origin`): if a
+branch line (`refs/heads/…`) other than `refs/heads/{deploy_branch}` holds `{saved_head}`, the save
+already reached GitHub anyway (a connection that dropped after GitHub took it, say), whatever the
+block printed. Otherwise, if the `refs/heads/{deploy_branch}` line holds it -- this run's first
+push went through, or it already held it from an earlier run -- only that copy is set up, and
+nothing else was sent. Otherwise, nothing was sent. Tell the user, in plain words, never the raw
+output:
+
+"I couldn't send your setup to GitHub, so [nothing was sent [if the step-3 ask said a copy is
+already on GitHub: this time -- the copy from last time is still there / otherwise: and nothing is
+deploying] / if only `{deploy_branch}` on GitHub holds the save: only the copy the deployment
+system watches, `{deploy_branch}`, was set up there, and nothing else was sent / if GitHub holds
+the save outside `{deploy_branch}`: it reached GitHub anyway, so it may be building and deploying
+now]. [the reason, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] What to
+do next: [the fix], then run /argo-it again."
+
+If the block printed `BRANCH KEPT`, `SAVED ON ANOTHER BRANCH` or `INDEX BUSY` before its failure
+line, the copy on GitHub couldn't be marked saved in the branch here: after this message, tell the
+user that line's message too, leaving out its opening words about what was sent -- this message
+has already said that.
+
+**If every push worked:**
 
 "Pushed! Here's what happens next:
 - CI is building your container images now
@@ -1938,7 +2402,8 @@ Share that file with your DevOps team."
 
 **Option 2 (local test):** only offered when step 3 found a local context; pin every command to
 that context ({local_context} = the `kubectl config current-context` value step 3 found) so a
-context switch in another terminal can't send this to a shared cluster.
+context switch in another terminal can't send this to a shared cluster. It works on the unsaved
+files: nothing is saved.
 ```bash
 docker compose build
 kubectl --context {local_context} apply -k {manifest_dir}/dev/
@@ -1948,11 +2413,14 @@ kubectl --context {local_context} get svc -n {namespace}
 
 Then say what came up, in plain words, and go back to the step-3 pick without option 2 (the
 same gate -- 'Send it -- deploys to {hostname}' by name, 'Show me the files first', or 'Not now').
+If the local try shows something to fix in the files this run generated, fix it there and leave
+it unsaved: it stays unsaved until 'Send it', whose check reads it first.
 
-**Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask),
-then go back to the step-3 pick without option 3.
+**Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask);
+nothing is saved or sent. Then go back to the step-3 pick without option 3.
 
-**Option 4 (not now):** say the files are saved in the project folder and nothing was sent;
+**Option 4 (not now):** say the files stay in the project folder, not saved yet [if argo-it's
+files are already saved, in place of that: they're saved from last time], and nothing was sent;
 stop here. Skip step 5.
 
 **5. Report success:**
@@ -2396,7 +2864,7 @@ existing pattern.
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
 - The user NEVER sees linter names, tool output, or raw error messages
-- Auto-fix only what's safe (3a's safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate -- the user names which
+- Auto-fix only what's safe (3a's safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user picks which
 - STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
 - If env vars in docker-compose.yml don't match K8s manifests, auto-add them to manifests
 - Maximum effort: if a check fails and can't be auto-fixed, explain in plain language and offer to help

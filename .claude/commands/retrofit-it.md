@@ -594,7 +594,7 @@ app=$(pwd -P); bak="$app.pre-retrofit"   # the backup folder, beside the app
 skip=(--exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ --include=.env.example
   --exclude='.env*' --exclude='*.pem' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*'
   --exclude='id_ecdsa*' --exclude='id_dsa*' --exclude='*.keychain*' --exclude=.aws/credentials
-  --exclude=.netrc --exclude='*credentials*.json' --exclude='*service-account*.json'
+  --exclude=.netrc --exclude=.git-credentials --exclude='*credentials*.json' --exclude='*service-account*.json'
   --exclude='*.p12' --exclude='*.pfx')
 command -v rsync >/dev/null || fail "the copy tool (rsync) is missing"
 mkdir -p "$bak" && echo '*' > "$bak/.gitignore" || fail "could not make the backup folder $bak"
@@ -613,14 +613,15 @@ else
   if [ -n "$(git status --porcelain)" ]; then
     grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
     for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
-             '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
+             '.git-credentials' '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
       grep -qxF "$p" .gitignore 2>/dev/null || printf '\n%s\n' "$p" >> .gitignore
     done
     # :(top,...) = from the repo root, so a nested repo's pre-staged files stay out too
     { git add -A . && git reset -q -- ':(top,glob)**/.env*' ':(top,glob,exclude)**/.env.example' \
       ':(top,glob)**/*.pem' ':(top,glob)**/*.key' ':(top,glob)**/id_rsa*' ':(top,glob)**/id_ed25519*' \
       ':(top,glob)**/id_ecdsa*' ':(top,glob)**/id_dsa*' ':(top,glob)**/*.keychain*' \
-      ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/*credentials*.json' \
+      ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/.git-credentials' \
+      ':(top,glob)**/*credentials*.json' \
       ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
       ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
     git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
@@ -669,7 +670,7 @@ bak="$app.pre-retrofit"
 skip=(--exclude=.git --exclude=node_modules/ --exclude=.venv/ --exclude=venv/ --include=.env.example
   --exclude='.env*' --exclude='*.pem' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*'
   --exclude='id_ecdsa*' --exclude='id_dsa*' --exclude='*.keychain*' --exclude=.aws/credentials
-  --exclude=.netrc --exclude='*credentials*.json' --exclude='*service-account*.json'
+  --exclude=.netrc --exclude=.git-credentials --exclude='*credentials*.json' --exclude='*service-account*.json'
   --exclude='*.p12' --exclude='*.pfx')
 top=$(git -C "$app" rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
 if [ -n "$top" ] && [ "$top" != "$app" ]; then
