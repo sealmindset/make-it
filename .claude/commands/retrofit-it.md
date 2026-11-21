@@ -1214,7 +1214,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **G01-G07**: Application settings
 - **X01-X09**: Security (X09 is the hostile-code check: re-run it, because this retrofit added code)
 - **T01-T05**: Test infrastructure
-- **AI01-AI10**: AI features (if ai_features.needed = true)
+- **AI01-AI29**: AI features (if ai_features.needed = true)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
 - **WM01-WM07**: Build record and seal (`~/.claude/make-it/references/watermark.md`), written after Part D
 - **Q01-Q14**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)

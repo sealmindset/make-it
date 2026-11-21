@@ -471,7 +471,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
      Install `pip-audit` if not available: `pip install pip-audit`
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **Code Quality (Q01-Q14):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs; Q14 is the dead-code upkeep reminder: it runs no tools and writes nothing, just reads the dates in `docs/DELETION_LOG.md` (`deadcode.md` §8)
-   - **AI (AI01-AI28):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
+   - **AI (AI01-AI29):** Only if AI features detected -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), a text-only Claude-subscription provider (AI29: read `lib/ai/providers/claude_agent.py`; an app built before the check fails it and is fixed from the scaffold's copy), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Build record and seal (WM01-WM07):** Check the project is sealed and the seal matches the code (an app built before the seal existed gets its first one at the end of this session), that the app reports its stamp to admins, and that its quality-gate workflow has the `watermark` job. Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
    - **AI Accounting (AC01-AC16):** Only if AI features detected -- check for the `ai_usage_events` table in migrations/schema, one metering wrapper (no AI SDK import or provider URL outside the provider layer), the AC03 CI test, `model_prices`, `.make-it/ai-ladder.md`, the Control Plane and the seven admin pages, `INFRA_COST_SOURCE` in .env.example. If AI features exist but there is no ledger (AC01 GAP), mark every AC check N/A in the gaps list and offer the whole feature as one suggestion (not auto-applied), which routes to `ai-accounting-addition`. Once the ledger exists, AC gaps go in the gaps list like any other.
@@ -494,6 +494,9 @@ e. **Classify gap severity for suggestion priority:**
    - **Critical gaps** (BLOCK checks): missing auth patterns, security issues
    - **Important gaps** (FIX checks): missing UI components, settings, activity logs
    - **Nice-to-have gaps** (WARN checks): test infrastructure, minor improvements
+   - **Security fixes** (a GAP on a check marked `[SECURITY FIX]`, AI29 for example): not in any of
+     the three groups above. Each is presented first, on its own (greet-and-suggest, "A security
+     fix comes first").
 
 The gaps list feeds into the greet-and-suggest phase as a suggested action.
 
@@ -572,6 +575,36 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
 file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
+
+**A security fix comes first, on its own.** A gap on a check marked `[SECURITY FIX]` in
+build-standards.md is a security finding, not an offer: something in the app is open now. It is
+not in [N], the counts, the must-do or improvements groups, or their ask. Say it before the
+suggestions above and before the catch-up ask, one finding at a time, in plain words, filled
+from what you saw:
+
+"Before anything else: your app has a security problem that is open right now.
+What is exposed: [in plain words, from the check -- for AI29: anyone who can type into your
+app's AI chat could make the assistant run commands and read files inside your app, where its
+passwords and your Claude sign-in are kept].
+This applies even while the app only runs on this computer.
+What I saw: [the evidence -- for AI29: the file that connects your app to Claude turns the
+assistant's permission checks off (`permission_mode="bypassPermissions"`)].
+The fix: [what changes -- for AI29: one file, the connection to Claude, is replaced with the
+safe version, and its tests are added. The AI answers the same way as before]. Your app
+restarts once. Undo: it is one saved change, and I can take it back.
+The one thing to check: after the fix, ask the AI a question and see that it still answers."
+
+Two named options: "Fix it now (Recommended -- the catch: your app restarts)" and "Not now".
+- **Fix it now:** apply the check's Fix from build-standards.md, run the tests it names, rebuild,
+  re-run the check, and say the result. Then go on with the session.
+- **Not now** (a dismissed or unanswered ask is the same): the user carries on with other work
+  this session. That is all it does. A security finding is never put off (approval-block.md), so:
+  it is not written under `## Put off by your choice` or `## Left out by your choice` (the record
+  `~/.claude/make-it/references/left-out-record.md` defines); it cannot be left out as "set up
+  that way on purpose"; the check runs again and this same ask comes
+  first in every session until the check passes; the status summary and the session's last
+  message each say it is still open; and it still holds what a `[BLOCK]` holds -- no handoff to
+  /ship-it and no other deploy step while it is open.
 
 **When standards gaps are found, present them in plain language:**
 

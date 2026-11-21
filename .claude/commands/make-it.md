@@ -420,7 +420,7 @@ reviewed, and hardened behind the scenes.
     -> This is a SILENT smart default: select it, MENTION it in the plain-English Design
        summary ("uses your Claude Code subscription -- no cost beyond your plan"), and keep
        switching to an API key a one-line .env change. No extra question needed.
-    -> When chosen, the Build phase must add `claude-agent-sdk` to requirements, install the
+    -> When chosen, the Build phase must add `claude-agent-sdk>=0.2.186,<0.3` to requirements, install the
        Claude Code CLI in the backend Dockerfile, and wire CLAUDE_CODE_OAUTH_TOKEN through
        .env / .env.example / docker-compose (see design-blueprint.md + build-standards AI01d).
   - Enterprise/corporate -> "anthropic_foundry". Multi-user/shared/team -> "anthropic".
@@ -746,10 +746,13 @@ whole-branch review, keeping your own context for coordination. Stay sequential 
      The scaffold config.py already includes AI_PROVIDER, AI_FAILOVER_PROVIDER, model tier,
      and provider-specific env vars (including the claude_agent provider + CLAUDE_CODE_OAUTH_TOKEN).
    - **If ai_providers.primary == "claude_agent"** (the default for single-user local apps):
-     a. Add `claude-agent-sdk` to backend/requirements.txt.
+     a. Add `claude-agent-sdk>=0.2.186,<0.3` to backend/requirements.txt -- pinned, never bare: the provider's
+        text-only options were read against this range, and the SDK runs the CLI bundled with it.
      b. Install the Claude Code CLI in the backend Dockerfile (after `USER appuser`):
         `ENV PATH="/home/appuser/.local/bin:${PATH}"` then
         `RUN curl -fsSL https://claude.ai/install.sh | bash || echo "CLI install skipped"`.
+        This CLI is a coding agent that can run commands and read files in the container, and the prompts it
+        gets are typed by the app's users, so the provider must keep every tool off (build-standards AI29).
      c. Set AI_PROVIDER=claude_agent and add CLAUDE_CODE_OAUTH_TOKEN (empty) to .env and
         .env.example; pass CLAUDE_CODE_OAUTH_TOKEN through the backend service in docker-compose.
      d. In the Design summary and README, tell the user to run `claude setup-token` once and
@@ -1114,7 +1117,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **X01-X09**: Security (secrets, validation, deps, headers, no Java, no module throws, X09 hostile code: `~/.claude/make-it/references/hostile-code.md`, a stop rather than a fix, run before Part B starts anything)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
 - **Q01-Q14**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow, dead-code upkeep reminder -- N/A in this first build)
-- **AI01-AI28**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
+- **AI01-AI29**: AI features (if ai_features.needed = true) -- AI01+AI01a/b/c verify provider scaffold, self-annealing, failover, cost tracking; AI29 verifies the Claude-subscription provider is text-only (no tools, never the bypass mode); AI16-AI22 verify agent registry, BaseAgent, context builders, routing, fallback, batch job tracking; AI23-AI28 verify agent composition (invoke_agent primitive, depends_on, pipeline/delegation/fan-out patterns)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true) -- ledger, one metering wrapper, no unnamed call, dated prices with no silent $0, tiers and the ladder report, escalation, replay proof, outcomes and ROI, Control Plane, budget caps, infra spend, statements, the seven pages, totals that add up
 - **WM01-WM07**: Build record and seal (`~/.claude/make-it/references/watermark.md`) -- written in step 40b, after everything else has passed
 - **BN01-BN13**: Brain layer (if brain_features.enabled = true) -- brain tables, curator agent, context injection, scope filtering, isolation, RBAC, transparency UI, REST API, curation jobs, env vars, seed data

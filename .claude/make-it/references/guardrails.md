@@ -316,9 +316,13 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   ask in ship-it-guide.md), and never commit/ship the personal token.
 - **claude_agent (Claude Code subscription) auth:**
   - Auth via `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) -- NO `ANTHROPIC_API_KEY`.
-  - Uses `claude-agent-sdk` (Python) driving the local Claude Code CLI subprocess in
-    single-shot, no-tools mode (behaves like a plain system+user completion).
-  - When selected, the build MUST: add `claude-agent-sdk` to requirements, install the
+  - Uses `claude-agent-sdk` (Python) driving the Claude Code CLI subprocess single-shot and
+    text-only: no tools in the model's context, permission mode `dontAsk` (never
+    `bypassPermissions`), nothing loaded from disk or saved to it. The CLI's session report is
+    checked before the model's reply is read; a reply that shows a tool ends the call, which
+    detects but does not prevent (build-standards AI29). An empty `allowed_tools` list is not a
+    restriction.
+  - When selected, the build MUST: add `claude-agent-sdk>=0.2.186,<0.3` to requirements, install the
     Claude Code CLI in the backend Dockerfile (`curl -fsSL https://claude.ai/install.sh | bash`),
     and wire `CLAUDE_CODE_OAUTH_TOKEN` through .env / .env.example / docker-compose.
   - Agent layer treats AI as available only when the token is set; otherwise returns a
@@ -684,8 +688,8 @@ When ai_features.needed = true, the build-verify phase MUST verify ALL of the fo
 - [ ] If AI_PROVIDER=anthropic_foundry: dual-mode auth -- uses AZURE_AI_FOUNDRY_API_KEY
       if set (API key passed directly to Anthropic SDK), falls back to DefaultAzureCredential
       if no API key (azure-identity required in dependencies for fallback mode)
-- [ ] If AI_PROVIDER=claude_agent (default for single-user local apps): `claude-agent-sdk`
-      in requirements; Claude Code CLI installed in backend Dockerfile (`claude --version`
+- [ ] If AI_PROVIDER=claude_agent (default for single-user local apps): `claude-agent-sdk>=0.2.186,<0.3`
+      in requirements; the provider is text-only (AI29); Claude Code CLI installed in backend Dockerfile (`claude --version`
       runs in the container); `CLAUDE_CODE_OAUTH_TOKEN` wired through .env/.env.example/
       docker-compose; with no token set, AI endpoints return the friendly "run
       `claude setup-token`" message (available:false) instead of erroring

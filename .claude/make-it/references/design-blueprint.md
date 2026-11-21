@@ -523,6 +523,8 @@ AI features mentioned?
   Multi-user / shared / team (not a single individual), still pre-deployment:
     -> Direct Anthropic API (Claude)   [a personal subscription token is single-identity;
        do NOT default a multi-user app to claude_agent]
+    The claude_agent provider is configured text-only (no tools, nothing loaded from the
+    container), and build check AI29 verifies it.
     -> OR OpenAI API
     -> OR local Ollama (for privacy / offline development)
 
@@ -596,7 +598,7 @@ carries the subscription login, so there is no API key and no per-token billing 
 counts against the Claude Pro/Max plan, which has its own rate/usage limits).
 
 Build-time requirements when `ai_providers.primary == "claude_agent"`:
-1. Add `claude-agent-sdk` to `backend/requirements.txt`.
+1. Add `claude-agent-sdk>=0.2.186,<0.3` to `backend/requirements.txt`.
 2. Install the Claude Code CLI in the backend Dockerfile (after `USER appuser`):
    ```dockerfile
    ENV PATH="/home/appuser/.local/bin:${PATH}"
