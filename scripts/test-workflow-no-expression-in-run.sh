@@ -3,17 +3,27 @@
 # GitHub pastes a `${{ }}` expression into the script text before the shell runs it, so a branch named with shell code
 # ran that code in the CI runner (Semgrep: yaml.github-actions.security.run-shell-injection).
 # Contract these checks pin:
-#   - No workflow make-it ships or templates has `${{` in a step's script text: the value of `run:` (one line, a `|`/`>`
-#     block, or a plain value that continues on deeper lines) or of `script:` (actions/github-script, or a list of
-#     commands). Expressions in `env:`, `with:`, `if:`, `uses:` and `defaults: run:` are allowed. Files read: every
-#     tracked `.github/workflows/*.yml|yaml` (the repo's own, the scaffolds', the overlays'), and every ```yaml / ```yml
-#     fence in every tracked Markdown file (the workflow templates in the commands and references).
+#   - No workflow make-it ships or templates has `${{` in a step's script text. Script text is everything after a
+#     `run:` or `script:` key (plain, or as `- run:` in a list) on its own line, plus every following line indented
+#     deeper than the key: a one-line value, a `|`/`>` block, a plain value continued on deeper lines, and an empty
+#     `run:` whose script starts on the next, deeper line. An empty `run:` whose first deeper line is a key
+#     (`shell:`, `working-directory:`) is `defaults: run:`, a mapping, and its keys are not script. `script:` covers
+#     actions/github-script and a list of commands. `\r` is stripped first (CRLF files). Expressions in `env:`,
+#     `with:`, `if:` and `uses:` are allowed. Files read: every tracked `.github/workflows/*.yml|yaml` (the repo's own,
+#     the scaffolds', the overlays'), and every ```yaml / ```yml fence in every tracked Markdown file (the workflow
+#     templates in the commands and references). A Markdown example that shows the bad pattern on purpose ("don't do
+#     this") must be fenced as ```text, not ```yaml: there is no exemption.
+#     NOT covered (a tripwire, not a YAML parser): quoted keys (`"run":`), a space before the colon (`run :`),
+#     explicit `? run` keys, anchors and aliases, flow mappings (`{run: ...}`); composite actions
+#     (`.github/actions/*/action.yml`); GitLab, Jenkins and Azure DevOps pipelines.
 #   - The attestation step still records the branch, through `env:` (BRANCH) and the quoted "$BRANCH".
-#   - build-standards check Q16 exists once, [Tier 0] [BLOCK] [SECURITY FIX], is the last Q check, and says the rule,
-#     why, the fix and that apps already built fail it; nothing in it says script-text expressions are fine.
-#   - Every Code Quality range in make-it.md, resume-it.md, retrofit-it.md and DEVOPS-GUIDE.md reads Q01-Q16, and
-#     resume-it's catch-up names Q16 as a security fix.
-# A line scanner is a tripwire, not a YAML parser: a flow-style mapping (`{run: ...}`) or an anchor is not followed.
+#   - build-standards check Q16 reads exactly as pinned here, the whole line: [Tier 0] [BLOCK], NOT [SECURITY FIX]
+#     (owner, 2026-11-21: the scaffold's workflow runs only on pull_request, where the PR's own code already runs with
+#     the same read-only token, so it is not exploitable there). The whole-line pin is the guard against an added
+#     sentence that allows script-text expressions; there is no must-not regex. Q16 is the last Q check.
+#   - Every Code Quality range in make-it.md, resume-it.md, retrofit-it.md and DEVOPS-GUIDE.md reads Q01-Q16;
+#     make-it's bullet marks only Q14 N/A in the first build; resume-it's catch-up lists Q16 as an ordinary check and
+#     no line of resume-it routes Q16 through "A security fix comes first".
 # Usage: test-workflow-no-expression-in-run.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on
 # planted opposites. ROOT must be a git work tree (files come from `git ls-files`).
 set -euo pipefail
@@ -39,6 +49,7 @@ cat > "$TMPD/scan.py" <<'PY'
 import re, subprocess, sys
 
 KEY = re.compile(r'^(\s*)(- +)?(run|script):(?:\s+(.*))?$')
+MAPKEY = re.compile(r'^\s*[A-Za-z_][\w-]*:(\s|$)')
 
 def scan(lines, where):
     """lines: list of (lineno, text). Returns (hits, number of script keys seen)."""
@@ -54,7 +65,8 @@ def scan(lines, where):
         body = []
         while i < len(lines) and (lines[i][1].strip() == "" or len(lines[i][1]) - len(lines[i][1].lstrip()) > col):
             body.append(lines[i]); i += 1
-        if name == "run" and value == "":
+        first = next((b for b in body if b[1].strip()), None)
+        if name == "run" and value == "" and first is not None and MAPKEY.match(first[1]):
             # `defaults: run:` -- a mapping (shell, working-directory), not a script; its keys are still scanned
             i -= len(body)
             continue
@@ -71,11 +83,11 @@ hits, keys, scanned = [], 0, 0
 for f in files:
     if re.search(r'(^|/)\.github/workflows/[^/]+\.ya?ml$', f):
         with open(f, encoding="utf-8") as fh:
-            lines = list(enumerate(fh.read().split("\n"), 1))
+            lines = list(enumerate(fh.read().replace("\r", "").split("\n"), 1))
         h, k = scan(lines, f); hits += h; keys += k; scanned += 1
     elif f.endswith(".md"):
         with open(f, encoding="utf-8") as fh:
-            all_lines = fh.read().split("\n")
+            all_lines = fh.read().replace("\r", "").split("\n")
         fence, block = None, []
         for no, text in enumerate(all_lines, 1):
             s = text.strip()
@@ -105,33 +117,34 @@ check "no \${{ }} expression inside a run: or script: block in any shipped or te
 check "the attestation step still records the branch, from env: through the quoted \"\$BRANCH\"" \
   '[ "$(grep -cxF "          BRANCH: \${{ github.head_ref }}" "$QG")" = 1 ] && [ "$(grep -cxF "            --arg branch \"\$BRANCH\" \\" "$QG")" = 1 ] && [ "$(grep -cxF "            --arg commit \"\$COMMIT\" \\" "$QG")" = 1 ]'
 
-# 2. the check
+# 2. the check: the whole Q16 line is pinned, so an added sentence (a reversal, a [SECURITY FIX] claim) fails here
+cat > "$TMPD/q16" <<'EOF'
+**Q16** [Tier 0] [BLOCK] **No `${{ }}` expression in a workflow step's script text** -- In every file under `.github/workflows/`, no `${{` appears in a step's script text: the value of `run:` (one line or a `|` or `>` block) or the `script:` input of `actions/github-script`. GitHub pastes an expression into the script before the shell runs it, so a value someone else chooses (a branch name, a pull request title, an issue or commit message) would run as code in the CI runner. In a workflow that runs only on `pull_request`, like the scaffold's, that gives an attacker nothing extra: the pull request's own code already runs there with the same read-only token. Under a `pull_request_target`, `issue_comment` or `workflow_run` trigger it is a real hole, so the pattern is kept out of every workflow. Expressions in `env:`, `with:`, `if:` and `uses:` are not script text and are fine. **Fix:** move each expression out of the script into the step's `env:` under an upper-case name and use the quoted variable instead (`BRANCH: ${{ github.head_ref }}` in `env:`, then `"$BRANCH"` in the script; in `script:`, `process.env.BRANCH`), the way the scaffold's `quality-gate.yml` does. The workflow's output stays the same. An app built before this check fails it (its `quality-gate.yml` puts the branch name into the attestation step's shell command), and /resume-it's catch-up fixes it with the other must-do updates. This check reads only `.github/workflows/`: composite actions (`.github/actions/`) and other CI systems' pipelines (GitLab, Jenkins, Azure DevOps) are not covered. N/A when the project has no `.github/workflows/`.
+EOF
+cat > "$TMPD/mk" <<'EOF'
+- **Q01-Q16**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow, Q16 no `${{ }}` expression in a workflow step's script text, dead-code upkeep reminder -- N/A in this first build)
+EOF
+cat > "$TMPD/rs" <<'EOF'
+; Q16 (a [BLOCK] check, so a must-do update): no `${{ }}` expression in a step's `run:` or `script:` text in `.github/workflows/`
+EOF
 Q16="$(grep -E '^[*][*]Q16[*][*] ' "$BS" || true)"
-check "Q16 exists once, is [Tier 0] [BLOCK] [SECURITY FIX], and is this check" \
-  '[ "$(grep -cE "^[*][*]Q16[*][*] " "$BS")" = 1 ] && [ "$(grep -cF "**Q16** [Tier 0] [BLOCK] [SECURITY FIX] **No \`\${{ }}\` expression in a workflow step'"'"'s script text** -- " "$BS")" = 1 ]'
+check "Q16 exists once" '[ "$(grep -cE "^[*][*]Q16[*][*] " "$BS")" = 1 ]'
+check "Q16 reads exactly as pinned (rule, why, when it is a real hole, allowed forms, fix, catch-up, not covered, N/A)" \
+  '[ "$Q16" = "$(cat "$TMPD/q16")" ] || { echo "  got: $Q16" | cut -c1-200; false; }'
+check "Q16 is [Tier 0] [BLOCK] and not [SECURITY FIX] (owner, 2026-11-21)" \
+  'printf "%s" "$Q16" | gq -F "**Q16** [Tier 0] [BLOCK] **" && ! printf "%s" "$Q16" | gq -F "[SECURITY FIX]"'
 check "Q16 is the last Q check" '[ "$(grep -oE "^[*][*]Q[0-9]+[*][*]" "$BS" | tail -1)" = "**Q16**" ]'
-check "Q16 says the rule" \
-  'has "$Q16" "In every file under \`.github/workflows/\`, no \`\${{\` appears in a step'"'"'s script text: the value of \`run:\` (one line or a \`|\` or \`>\` block) or the \`script:\` input of \`actions/github-script\`."'
-check "Q16 says why: GitHub pastes the value into the script, so text someone else chose runs as code" \
-  'has "$Q16" "GitHub pastes an expression into the script before the shell runs it, so a value someone else chooses (a branch name, a pull request title, an issue or commit message) runs as code in the CI runner."'
-check "Q16 says what is allowed" \
-  'has "$Q16" "Expressions in \`env:\`, \`with:\`, \`if:\` and \`uses:\` are not script text and are fine."'
-check "Q16 says the fix and that the output stays the same" \
-  'has "$Q16" "**Fix:** move each expression out of the script into the step'"'"'s \`env:\` under an upper-case name and use the quoted variable instead (\`BRANCH: \${{ github.head_ref }}\` in \`env:\`, then \`\"\$BRANCH\"\` in the script; in \`script:\`, \`process.env.BRANCH\`), the way the scaffold'"'"'s \`quality-gate.yml\` does. The workflow'"'"'s output stays the same."'
-check "Q16 says apps already built fail it and /resume-it presents it first" \
-  'has "$Q16" "An app built before this check fails it: its \`quality-gate.yml\` puts the branch name into the attestation step'"'"'s shell command. /resume-it'"'"'s catch-up presents it first, as a security fix."'
-check "Q16 says when it is N/A" 'has "$Q16" "N/A when the project has no \`.github/workflows/\`."'
-check "nothing in Q16 allows script-text expressions or downgrades it" \
-  '! printf "%s" "$Q16" | gq -E "(in|inside) .(run|script):.[^.]*(are|is) (fine|allowed|ok)|script text (is|are) (fine|allowed|ok)|\[WARN\]|\[FIX\]"'
 check "build-standards still says once what [SECURITY FIX] means" \
   '[ "$(grep -cxF -- "- \`[SECURITY FIX]\` after the severity = the check closes a hole that is open now in apps already built." "$BS")" = 1 ]'
 
-# 3. the ranges
+# 3. the ranges and the catch-up route
 check "make-it.md, retrofit-it.md, resume-it.md and DEVOPS-GUIDE.md read Q01-Q16" \
   'gq -F -- "- **Q01-Q16**: Code quality" "$MK" && gq -F -- "- **Q01-Q16**: Code quality" "$RF" && gq -F -- "**Code Quality (Q01-Q16):**" "$RS" && gq -F "code quality (Q01-Q16)" "$DV"'
 check "no stale Q01-Q14 range is left in them" '[ "$(cat "$MK" "$RF" "$RS" "$DV" | grep -c "Q01-Q14")" = 0 ]'
-check "resume-it's catch-up names Q16 as a security fix" \
-  'gq -F "Q16 is a security fix: no \`\${{ }}\` expression in a step'"'"'s \`run:\` or \`script:\` text in \`.github/workflows/\` (\`[SECURITY FIX]\`, presented first)" "$RS"'
+check "make-it's build-verify bullet marks only Q14 N/A in the first build" '[ "$(grep -cxF -f "$TMPD/mk" "$MK")" = 1 ]'
+check "resume-it's catch-up lists Q16 as an ordinary [BLOCK] check" 'gq -F -f "$TMPD/rs" "$RS"'
+check "no line of resume-it routes Q16 through the security-first flow" \
+  '[ "$(grep -F "Q16" "$RS" | grep -ciE "security fix|presented first|comes first|on its own" || true)" = 0 ]'
 
 if [ -z "${1:-}" ]; then
   # Controls: each planted opposite must fail (or, for an allowed form, still pass) in a throwaway git copy.
@@ -160,12 +173,29 @@ if [ -z "${1:-}" ]; then
   check "(control) fails with the branch dropped from the attestation instead of moved to env:" \
     'opp "$QG" "s/          BRANCH: \\\$\{\{ github.head_ref \}\}\n//"'
   check "(control) fails with Q16 removed" 'opp "$BS" "s/^\*\*Q16\*\* [^\n]*\n\n?//m"'
-  check "(control) fails with Q16 downgraded to [WARN], and with [SECURITY FIX] dropped" \
-    'opp "$BS" "s/^\*\*Q16\*\* \[Tier 0\] \[BLOCK\]/**Q16** [Tier 0] [WARN]/m" && opp "$BS" "s/^\*\*Q16\*\* \[Tier 0\] \[BLOCK\] \[SECURITY FIX\]/**Q16** [Tier 0] [BLOCK]/m"'
-  check "(control) fails with the rule reversed (script-text expressions are fine)" \
-    'opp "$BS" "s/Expressions in \`env:\`, \`with:\`, \`if:\` and \`uses:\` are not script text and are fine[.]/Expressions in \`run:\` are fine too./"'
-  check "(control) fails with the why dropped" \
-    'opp "$BS" "s/GitHub pastes an expression into the script before the shell runs it, [^\n]*?CI runner[.] //"'
+  check "(control) fails with Q16 marked [SECURITY FIX] again" \
+    'opp "$BS" "s/^\*\*Q16\*\* \[Tier 0\] \[BLOCK\]/**Q16** [Tier 0] [BLOCK] [SECURITY FIX]/m"'
+  check "(control) fails with Q16 downgraded to [WARN], and to [FIX]" \
+    'opp "$BS" "s/^\*\*Q16\*\* \[Tier 0\] \[BLOCK\]/**Q16** [Tier 0] [WARN]/m" && opp "$BS" "s/^\*\*Q16\*\* \[Tier 0\] \[BLOCK\]/**Q16** [Tier 0] [FIX]/m"'
+  # each reversal is ADDED after the allowed-forms sentence, which stays: only the whole-line pin can catch it
+  for REV in 'An expression in a `run:` block is fine when the value is trusted.' 'Expressions in run: are fine too.' \
+             'A `${{ }}` in `run:` is acceptable.' 'Trusted values such as `github.sha` can stay in `run:`.'; do
+    export REV
+    check "(control) fails with a reversal added, the allowed sentence kept: $REV" \
+      'opp "$BS" "s/(are not script text and are fine[.])/\$1 \$ENV{REV}/"'
+  done
+  check "(control) fails with the why dropped, and with the real-hole triggers dropped" \
+    'opp "$BS" "s/GitHub pastes an expression into the script before the shell runs it, [^\n]*?CI runner[.] //" && opp "$BS" "s/Under a \`pull_request_target\`[^\n]*?every workflow[.] //"'
+  check "(control) fails with resume-it naming Q16 a security fix, and with Q16 in the security-fixes group" \
+    'opp "$RS" "s/; Q16 \(a \[BLOCK\] check, so a must-do update\):/; Q16 is a security fix, presented first:/" && opp "$RS" "s/AI29 for example\)/AI29 or Q16 for example)/"'
+  check "(control) fails with make-it's bullet reading as if Q16 were N/A in the first build" \
+    'opp "$MK" "s/CI quality gate workflow, Q16 no \`\\\$\{\{ \}\}\` expression in a workflow step.s script text, dead-code upkeep reminder -- N\/A in this first build\)/CI quality gate workflow, dead-code upkeep reminder -- N\/A in this first build, Q16 no \`\\\${{ }}\` expression in a workflow step\x27s script text)/"'
+  check "(control) fails with an empty run: whose script starts on the next, deeper line" \
+    'd="$TMPD/m"; mkcopy "$d"; printf "%s\n" "on: pull_request" "jobs:" "  x:" "    runs-on: ubuntu-latest" "    steps:" "      - run:" "          echo \${{ github.head_ref }}" > "$d/.github/workflows/other.yml"; git -C "$d" add -A >/dev/null 2>&1; ! bash "$SELF" "$d" >/dev/null 2>&1'
+  check "(control) fails with the same in a CRLF file" \
+    'd="$TMPD/m"; mkcopy "$d"; printf "%s\r\n" "on: pull_request" "jobs:" "  x:" "    runs-on: ubuntu-latest" "    steps:" "      - run:" "          echo \${{ github.head_ref }}" > "$d/.github/workflows/other.yml"; git -C "$d" add -A >/dev/null 2>&1; ! bash "$SELF" "$d" >/dev/null 2>&1'
+  check "(control) still passes with an expression in a defaults: run: mapping (not script text)" \
+    'd="$TMPD/m"; mkcopy "$d"; printf "%s\r\n" "on: pull_request" "defaults:" "  run:" "    working-directory: \${{ github.workspace }}" "jobs:" "  x:" "    runs-on: ubuntu-latest" "    steps:" "      - run: echo ok" > "$d/.github/workflows/other.yml"; git -C "$d" add -A >/dev/null 2>&1; bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control) fails with a stale Q01-Q14 range back in make-it.md, and in resume-it.md" \
     'opp "$MK" "s/- \*\*Q01-Q16\*\*: Code quality/- **Q01-Q14**: Code quality/" && opp "$RS" "s/\*\*Code Quality \(Q01-Q16\):\*\*/**Code Quality (Q01-Q14):**/"'
 fi
