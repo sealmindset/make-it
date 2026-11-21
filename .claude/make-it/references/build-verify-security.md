@@ -13,7 +13,7 @@ pass, but BEFORE /try-it presents the app to the user.
 - Auto-fixes everything possible without asking -- mechanical fixes for what the scanners find, and tested, independently re-checked fixes for the Critical and High logic flaws the deep code audit confirms (Phase 6)
 - Self-healing loop: scan → fix → re-scan (up to 3 cycles)
 - Only blocks handoff if CRITICAL findings remain unfixed after all cycles
-- Skips phases that require external tools not already installed (graceful degradation)
+- Runs every scanner from a pinned container image, so nothing is installed on the computer; a scanner that cannot run is skipped with its reason (graceful degradation)
 - No attestation document generated (that's /nemo-it's job when run standalone)
 - Findings and fixes are logged internally for the build-verify report
 
@@ -23,22 +23,38 @@ and it does stop handoff. Everything below is for honest code with flaws.
 
 ---
 
-## Phase 0: Tool Detection (Silent)
+## Phase 0: Scanner Images (Silent)
 
-Check which security tools are available. Do NOT install anything -- use what exists.
+Every scanner runs from a pinned container image on every build, whatever is installed on the
+computer -- even when the tool is installed, so every machine gives the same result. Docker is
+already a make-it prerequisite; nothing is installed on the computer. The project is mounted
+read-only, so a scanner never writes into the project. Each report, and the tool's error output
+beside it, goes to a folder outside the project.
 
 ```bash
-# Check available tools (silent -- no user prompts)
-HAVE_SEMGREP=$(command -v semgrep 2>/dev/null && echo "true" || echo "false")
-HAVE_BANDIT=$(command -v bandit 2>/dev/null && echo "true" || echo "false")
-HAVE_TRIVY=$(command -v trivy 2>/dev/null && echo "true" || echo "false")
-HAVE_PIP_AUDIT=$(command -v pip-audit 2>/dev/null && echo "true" || echo "false")
-HAVE_NPM=$(command -v npm 2>/dev/null && echo "true" || echo "false")
+PROJECT="$(pwd)"  # the project root
+REPORT_DIR="$(mktemp -d)"  # outside the project; keep the printed path
+echo "$REPORT_DIR"
+SEMGREP_IMAGE="semgrep/semgrep:1.85.0@sha256:b4c2272e0a2e59ca551ff96d3bbae657bd2b7356e339af557b27a96d9e751544"
+BANDIT_IMAGE="ghcr.io/pycqa/bandit/bandit@sha256:b405a808f5d50156aee921a77fb17c044d69d90ecef6499447a037678967c936"  # 1.9.4; it publishes no version tags
+TRIVY_IMAGE="aquasec/trivy:0.68.2@sha256:05d0126976bdedcd0782a0336f77832dbea1c81b9cc5e4b3a5ea5d2ec863aca7"
+NODE_IMAGE="node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a"
+PYTHON_IMAGE="python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"  # pip-audit has no public image
 ```
 
-**Graceful degradation:** If a tool is missing, skip that scan category. The build is
-NOT blocked by missing tools -- Part D runs whatever checks it can with available tools.
-At minimum, code-level pattern scanning (grep-based) always runs regardless of tools.
+Each digest is the multi-architecture index, so the same pin runs on arm64 and amd64 computers.
+Shell variables do not carry from one command to the next: set these again before each command
+below, with `REPORT_DIR` set to the path printed the first time.
+
+**What counts as ran:** A scanner ran only if its report file exists and parses, never on its exit
+code alone: Bandit exits 1 when it has findings, and Semgrep with no network exits 2 with empty
+output. A report that is only an error is NOT RUN too: npm audit with no network writes its
+failure as JSON with an `error` key. A scanner whose report is missing or does not parse is NOT
+RUN: it is skipped, the build is not blocked, and the internal report lists it with the reason
+from its `.err` file (for example, the image could not be pulled, or no network) -- never as
+clean or as no findings. Semgrep, pip-audit and npm audit need the network on every run; Trivy
+needs it to download its database, which is kept in a volume between runs. At minimum,
+code-level pattern scanning (grep-based) always runs regardless of tools.
 
 ---
 
@@ -68,37 +84,63 @@ Scan for:
 - ICS/OT protocol references in service clients, dependencies, or env vars (X08)
 ```
 
-### 1b. Semgrep Scan (if available)
+### 1b. Semgrep Scan
 
 ```bash
-semgrep scan --config p/owasp-top-ten --config p/security-audit \
-  --json --quiet \
+docker run --rm -v "$PROJECT":/src:ro -w /src "$SEMGREP_IMAGE" \
+  semgrep scan --config p/owasp-top-ten --config p/security-audit \
+  --json \
   --exclude="node_modules" --exclude=".venv" --exclude="__pycache__" \
-  . 2>/dev/null
+  . > "$REPORT_DIR/semgrep.json" 2> "$REPORT_DIR/semgrep.err" < /dev/null
 ```
 
-### 1c. Bandit Scan (Python projects, if available)
+### 1c. Bandit Scan (Python projects)
 
 ```bash
-bandit -r backend/ -f json \
+docker run --rm -v "$PROJECT":/src:ro -w /src "$BANDIT_IMAGE" \
+  -r backend/ -f json \
   --exclude=".venv,venv,node_modules,__pycache__,tests" \
-  --quiet 2>/dev/null
+  --quiet > "$REPORT_DIR/bandit.json" 2> "$REPORT_DIR/bandit.err" < /dev/null
 ```
 
 ### 1d. Dependency Scan
 
 ```bash
-# npm audit (always available if Node project)
-npm audit --json 2>/dev/null
+# npm audit: in each folder with a tracked package-lock.json (the project root may have none)
+git -C "$PROJECT" ls-files "*package-lock.json" | while read -r lock; do
+  dir="$(dirname "$lock")"; name="npm-audit-$(printf '%s' "$dir" | tr '/.' '__')"
+  docker run --rm -v "$PROJECT":/src:ro -w "/src/$dir" "$NODE_IMAGE" \
+    npm audit --json > "$REPORT_DIR/$name.json" 2> "$REPORT_DIR/$name.err" < /dev/null
+done
 
-# pip-audit (if available)
-pip-audit --format=json 2>/dev/null
+# pip-audit: on each tracked requirements file (with no file it audits the image's own Python)
+git -C "$PROJECT" ls-files "*requirements*.txt" | while read -r req; do
+  name="pip-audit-$(printf '%s' "$req" | tr '/.' '__')"
+  docker run --rm -v "$PROJECT":/src:ro -w /src "$PYTHON_IMAGE" \
+    sh -c 'pip install -q --root-user-action=ignore pip-audit==2.9.0 >&2 && pip-audit --format=json -r "$1"' sh "$req" \
+    > "$REPORT_DIR/$name.json" 2> "$REPORT_DIR/$name.err" < /dev/null
+done
 
-# trivy filesystem scan (if available)
-trivy fs --format json --quiet \
+# trivy filesystem scan: its database is kept in a named volume between runs
+docker run --rm -v "$PROJECT":/src:ro -w /src -v make-it-trivy-cache:/root/.cache/trivy "$TRIVY_IMAGE" \
+  fs --format json --quiet \
   --skip-dirs node_modules --skip-dirs .venv \
-  . 2>/dev/null
+  . > "$REPORT_DIR/trivy.json" 2> "$REPORT_DIR/trivy.err" < /dev/null
 ```
+
+### 1e. Which scanners ran
+
+```bash
+docker run --rm -v "$REPORT_DIR":/r:ro "$NODE_IMAGE" node -e '
+const fs = require("fs");
+for (const f of fs.readdirSync("/r").filter((f) => f.endsWith(".json"))) {
+  try { if (JSON.parse(fs.readFileSync("/r/" + f, "utf8")).error) throw 0; console.log("parses: " + f); }
+  catch (e) { console.log("NOT RUN: " + f + " (see " + f.replace(/[.]json$/, ".err") + ")"); }
+}' < /dev/null
+```
+
+A report that parses is read for its findings. A NOT RUN one is recorded as Phase 0 says. Semgrep
+runs without `--quiet`, so a failed run leaves its reason in `semgrep.err`.
 
 ---
 
@@ -244,10 +286,12 @@ line in 6d.
 ```bash
 AUDIT_DIR="$HOME/.claude/make-it/security-audit"
 [ -f "$AUDIT_DIR/SKILL.md" ] || echo "MISSING: the security-audit files"
-command -v node >/dev/null 2>&1 || echo "MISSING: node"
 ```
 
-If either is missing, the deep code audit is NOT RUN. Nothing is installed for it and the build is
+Node is not needed on the computer: the audit's two checkers run from the pinned node image
+(`NODE_IMAGE`, Phase 0).
+
+If the security-audit files are missing, the deep code audit is NOT RUN. Nothing is installed for it and the build is
 not blocked, but a check that did not run is never recorded as clean or as no findings: write
 "Deep code audit: NOT RUN ([reason])" in the internal report, and one line in TODO.md under
 "## Security Improvements": "The deep code check did not run on this build ([reason])."
@@ -273,9 +317,16 @@ installed, and no request goes to the app or any port in this step. A secret is 
 and line, never by value.
 
 The audit ran only if its run folder holds `findings.json` and `coverage-ledger.json` and both
-checkers exit 0 (`node "$AUDIT_DIR/validate-findings.cjs" <run>/findings.json`, `node
-"$AUDIT_DIR/validate-coverage-ledger.cjs" <run>/coverage-ledger.json`). Otherwise it is NOT RUN,
-recorded as in 6a. If it stopped early (`run_status: "incomplete"`), what it confirmed still counts
+checkers exit 0, run from the pinned node image with the audit folder and the run folder mounted
+read-only:
+
+```bash
+docker run --rm -v "$AUDIT_DIR":/audit:ro -v "<run>":/audit-run:ro "$NODE_IMAGE" node /audit/validate-findings.cjs /audit-run/findings.json
+docker run --rm -v "$AUDIT_DIR":/audit:ro -v "<run>":/audit-run:ro "$NODE_IMAGE" node /audit/validate-coverage-ledger.cjs /audit-run/coverage-ledger.json
+```
+
+Otherwise it is NOT RUN, recorded as in 6a, with the checker's error output as the reason (a
+checker that could not start, such as an image that could not be pulled, is a reason too). If it stopped early (`run_status: "incomplete"`), what it confirmed still counts
 and the report carries its reason.
 
 ### 6c. Fix
@@ -320,8 +371,8 @@ Build an internal summary (NOT shown to user) that feeds into the build-verify r
 
 ```
 Security Scan Summary:
-  Tools used: [list of tools that were available]
-  Tools skipped: [list of tools not installed]
+  Scanners run: [each scanner whose report parses, with its image]
+  Scanners NOT RUN: [each, with the reason from its .err file]
   Total findings: [N]
   Auto-fixed: [N]
   AI safety wiring findings logged to TODO.md, not fixed: [N]

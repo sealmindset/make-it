@@ -71,12 +71,16 @@ check "no scanner or checker throws its error output away (Phases 0, 1 and 6)" \
   'none "$P0$P1$P6" "2>/dev/null|2>&1|>/dev/null"'
 check "each scanner keeps its error output beside its report" \
   '[ "$(printf "%s\n" "$P1" | grep -cF "2> \"\$REPORT_DIR/")" -ge 5 ]'
-check "no scanner runs from the computer (a code line starting with the tool's own name)" \
-  'none "$P1" "^[[:space:]]*(semgrep|bandit|trivy|pip-audit|npm audit|npx)[[:space:]]"'
+# a command that starts with the tool's own name, not continuing a "docker run ... \\" line
+starts() { printf "%s\n" "$1" | awk '/^[[:space:]]*(semgrep|bandit|trivy|pip-audit|npm audit|npx|node)[[:space:]]/ && prev !~ /[\\]$/ {print} {prev = $0}'; }
+check "no scanner or checker runs from the computer (a command starting with the tool's own name)" \
+  'none "$(starts "$P1$P6")" "."'
 
 # 4. the exact command shapes
 check "Semgrep runs from its pin, project read-only, report and errors kept" \
   'row "$P1" "docker run --rm -v \"\$PROJECT\":/src:ro -w /src \"\$SEMGREP_IMAGE\" \\" && row "$P1" "  . > \"\$REPORT_DIR/semgrep.json\" 2> \"\$REPORT_DIR/semgrep.err\" < /dev/null"'
+check "Semgrep runs without --quiet, so a failed run leaves its reason (with --quiet and no network its error output is empty)" \
+  'row "$P1" "  --json \\" && none "$P1" "^  --json --quiet"'
 check "Bandit runs from its pin" \
   'row "$P1" "docker run --rm -v \"\$PROJECT\":/src:ro -w /src \"\$BANDIT_IMAGE\" \\" && row "$P1" "  --quiet > \"\$REPORT_DIR/bandit.json\" 2> \"\$REPORT_DIR/bandit.err\" < /dev/null"'
 check "npm audit runs in each folder with a tracked package-lock.json, never from the root alone" \
@@ -90,7 +94,7 @@ check "Trivy keeps its database in a named volume between runs" \
 
 # 5. what "ran" means, and what a scanner that cannot run leaves
 check "a scanner ran only if its report file exists and parses, never on its exit code alone" \
-  'has "$P0" "A scanner ran only if its report file exists and parses, never on its exit code alone: Bandit exits 1 when it has findings, and Semgrep with no network exits 2 with empty output." && has "$P1" "JSON.parse"'
+  'has "$P0" "A scanner ran only if its report file exists and parses, never on its exit code alone: Bandit exits 1 when it has findings, and Semgrep with no network exits 2 with empty output." && has "$P1" "JSON.parse" && has "$P0" "A report that is only an error is NOT RUN too: npm audit with no network writes its failure as JSON with an \`error\` key." && has "$P1" ".error) throw 0"'
 check "one that cannot run is skipped with its reason, the build not blocked, never clean" \
   'has "$P0" "A scanner whose report is missing or does not parse is NOT RUN: it is skipped, the build is not blocked, and the internal report lists it with the reason from its \`.err\` file (for example, the image could not be pulled, or no network) -- never as clean or as no findings."'
 check "the internal report names what ran from which image, and what did not and why" \
@@ -98,7 +102,7 @@ check "the internal report names what ran from which image, and what did not and
 
 # 6. the audit needs no node on the computer
 check "6a: a missing node is no longer a NOT RUN; the security-audit files still are" \
-  'none "$P6" "MISSING: node" && row "$P6" "[ -f \"\$AUDIT_DIR/SKILL.md\" ] || echo \"MISSING: the security-audit files\"" && has "$P6" "If they are missing, the deep code audit is NOT RUN." && has "$P6" "Node is not needed on the computer: the audit'"'"'s two checkers run from the pinned node image (\`NODE_IMAGE\`, Phase 0)."'
+  'none "$P6" "MISSING: node" && row "$P6" "[ -f \"\$AUDIT_DIR/SKILL.md\" ] || echo \"MISSING: the security-audit files\"" && has "$P6" "If the security-audit files are missing, the deep code audit is NOT RUN." && has "$P6" "Node is not needed on the computer: the audit'"'"'s two checkers run from the pinned node image (\`NODE_IMAGE\`, Phase 0)."'
 check "6b: both checkers run from the node image, the audit and run folders read-only" \
   'row "$P6" "docker run --rm -v \"\$AUDIT_DIR\":/audit:ro -v \"<run>\":/audit-run:ro \"\$NODE_IMAGE\" node /audit/validate-findings.cjs /audit-run/findings.json" && row "$P6" "docker run --rm -v \"\$AUDIT_DIR\":/audit:ro -v \"<run>\":/audit-run:ro \"\$NODE_IMAGE\" node /audit/validate-coverage-ledger.cjs /audit-run/coverage-ledger.json" && none "$P6" "(^|[\` ])node \"[$]AUDIT_DIR"'
 
