@@ -50,7 +50,7 @@ The user types `/make-it` and answers questions about their idea in plain Englis
 3. **Clarification** -- Ask targeted questions about ambiguities (NOT a full interview -- max 3-5 questions)
 4. **Plan** -- Present the retrofit plan with risk assessment, get user approval
 5. **Retrofit** -- Execute changes (single-pass if risk score <= 35, phased with user verification if higher)
-6. **Verify** -- Build-verify identical to /make-it, plus preservation checks (existing features still work)
+6. **Verify** -- Build-verify identical to /make-it, plus preservation checks (existing features still work); a missing AI-safety control in code the app already had is logged for /fix-it, not added
 7. **Ship** -- Hand off to /ship-it
 
 ### Risk Score System
