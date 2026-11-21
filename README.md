@@ -968,6 +968,39 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.9 -- Security fix: the Claude-subscription AI provider gives the model no tools
+
+The scaffold's Claude-subscription provider sends what an app's users type to the Claude Code
+CLI, a coding agent that can run commands and read and write files. Its comment said "pure text
+completion -- no tools". That was wrong: it turned the CLI's permission checks off and removed
+no tool, so anyone who could type into an app's AI chat could have the assistant run commands
+in the backend, next to the app's secrets and the owner's Claude sign-in.
+
+- **Who is affected.** An app that runs on this provider with a sign-in token in it. An app on
+  another provider carries the same file, unused.
+- **No tools, nothing loaded.** The provider now passes an empty tool list, names every
+  built-in tool as disallowed, uses the `dontAsk` permission mode, refuses any tool call in a
+  hook, loads no settings, skills or MCP servers, and runs in an empty folder.
+- **Checked before the reply.** The CLI reports the session's tools before the model runs. If
+  that report shows a tool, an MCP server or another permission mode, the call ends there.
+- **An alarm on the reply.** A reply that shows a tool call ends the call and leaves a log
+  line. This detects; it does not prevent, because the CLI runs a tool before the provider can
+  read the message. A stopped call is never retried on the failover provider.
+- **No transcript kept.** The CLI is told not to save each prompt and reply on the backend's
+  disk.
+- **New build check AI29, marked `[SECURITY FIX]`.** `/resume-it` shows a failing one first, on
+  its own, and says what is exposed. "Not now" lets the session go on and nothing else: it is
+  asked again every session and still blocks the handoff to `/ship-it`.
+- **Checked:** the scaffold's provider tests (58 with the SDK, now run in CI) and
+  `scripts/test-claude-agent-text-only.sh`, with 23 planted defects, each caught. One
+  independent security review; its six findings were fixed in this release.
+- **Not checked.** No call to a real model was made. The session check, the alarm and the
+  no-transcript flag have not seen a live session. If a real text-only session reports a tool,
+  every call on this provider stops until that is fixed.
+- **Known and left.** The CLI process still inherits the backend's environment variables. The
+  scaffold's Docker Compose file publishes its ports on every network interface (filed, not
+  fixed here).
+
 ### v1.71.8 -- The build's security scan logs missing AI-safety wiring and no longer fixes it silently
 
 The scan a build runs on the app it just generated contradicted itself. One step said it adds
