@@ -106,6 +106,7 @@ b7697dd703e705e9e0598003b81d39d2bb0abcf39abe89c5216d6a60040aaa2f  make-it/scaffo
 7a4db1918798061e5c848952e5f74173ea32d350004d7ee73d0e05b8511a0cc6  make-it/scaffolds/fastapi-nextjs/backend/alembic/versions/002_app_settings_schema.py
 ac67bab932a2c7e975fa6be7d96512feb3ce3d6dab920cb429448e5567a72727  make-it/scaffolds/fastapi-nextjs/backend/alembic/versions/003_prompt_management.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/__init__.py
+1716e9364e427b755074c14be3f2e60c85d2fd8bc1075a0f1ffa2459ce2ecdb4  make-it/scaffolds/fastapi-nextjs/backend/app/access_log.py
 177ef346e750fcee6946f0e0275e07d4eb49658ebe88b069939623ea94d2e5ab  make-it/scaffolds/fastapi-nextjs/backend/app/config.py
 a5e03708cc755d9b68068202541f46ca1f1b4656cee84f377b4a537d777b8cfd  make-it/scaffolds/fastapi-nextjs/backend/app/database.py
 28f4b42b1ab1cb42d22082cd1c120180c44036e1e81777af5a766f8aabdf27e6  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/__init__.py
@@ -123,7 +124,7 @@ b47c1611c681344e45e6b95ffe81245969e9eaf94908944e035ea43226ac434e  make-it/scaffo
 b79d1137aba1082652b664a42e0ee18318f4513801ffb42f750ab8bbbeedf325  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/sanitize.py
 921c25c5fcec494b8085cbe393228b17ff9410f6356f244876275bba7fde0055  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/self_annealing.py
 e715a781b70639295e68098868bd393cf871ed2a38eb95ed14ea68eed62b3678  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/validate.py
-80a1e84c8dcb474a2d1d2f7e429aad30fccfeb854f94243995086457577a9bd1  make-it/scaffolds/fastapi-nextjs/backend/app/main.py
+f5666aa6eb10dfd0ff100242d8931a2228a17c6c76280fac1419dc73f966c95f  make-it/scaffolds/fastapi-nextjs/backend/app/main.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/__init__.py
 b665bda56a43802414dce48f7789ed788f953ae870d31717707094041f829e3a  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/auth.py
 11ddd1049787a8bddfb685c8cf9aa90878e53af5834f95d557e37727a904f231  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/logging.py
