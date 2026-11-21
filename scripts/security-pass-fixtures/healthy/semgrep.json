@@ -1,0 +1,686 @@
+{
+ "errors": [
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line backend/Dockerfile:1:",
+   "path": "backend/Dockerfile",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 9,
+       "line": 21,
+       "offset": 523
+      },
+      "path": "backend/Dockerfile",
+      "start": {
+       "col": 22,
+       "line": 1,
+       "offset": 0
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line frontend/Dockerfile:2:",
+   "path": "frontend/Dockerfile",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 25,
+       "line": 22,
+       "offset": 583
+      },
+      "path": "frontend/Dockerfile",
+      "start": {
+       "col": 22,
+       "line": 2,
+       "offset": 0
+      }
+     },
+     {
+      "end": {
+       "col": 13,
+       "line": 35,
+       "offset": 79
+      },
+      "path": "frontend/Dockerfile",
+      "start": {
+       "col": 22,
+       "line": 30,
+       "offset": 0
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line mock-services/mock-oidc/Dockerfile:1:",
+   "path": "mock-services/mock-oidc/Dockerfile",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 67,
+       "line": 7,
+       "offset": 228
+      },
+      "path": "mock-services/mock-oidc/Dockerfile",
+      "start": {
+       "col": 1,
+       "line": 1,
+       "offset": 0
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line scripts/worktree.sh:32:",
+   "path": "scripts/worktree.sh",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 33,
+       "line": 32,
+       "offset": 5
+      },
+      "path": "scripts/worktree.sh",
+      "start": {
+       "col": 28,
+       "line": 32,
+       "offset": 0
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line scripts/watermark-check.sh:28:",
+   "path": "scripts/watermark-check.sh",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 48,
+       "line": 28,
+       "offset": 13
+      },
+      "path": "scripts/watermark-check.sh",
+      "start": {
+       "col": 35,
+       "line": 28,
+       "offset": 0
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line .github/workflows/quality-gate.yml:54:",
+   "path": ".github/workflows/quality-gate.yml",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 44,
+       "line": 54,
+       "offset": 1117
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 19,
+       "line": 54,
+       "offset": 1092
+      }
+     },
+     {
+      "end": {
+       "col": 48,
+       "line": 55,
+       "offset": 1119
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 21,
+       "line": 55,
+       "offset": 1092
+      }
+     },
+     {
+      "end": {
+       "col": 34,
+       "line": 56,
+       "offset": 1112
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 14,
+       "line": 56,
+       "offset": 1092
+      }
+     },
+     {
+      "end": {
+       "col": 38,
+       "line": 57,
+       "offset": 1114
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 16,
+       "line": 57,
+       "offset": 1092
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line .github/workflows/quality-gate.yml:105:",
+   "path": ".github/workflows/quality-gate.yml",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 38,
+       "line": 105,
+       "offset": 2367
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 16,
+       "line": 105,
+       "offset": 2345
+      }
+     },
+     {
+      "end": {
+       "col": 42,
+       "line": 106,
+       "offset": 2369
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 18,
+       "line": 106,
+       "offset": 2345
+      }
+     },
+     {
+      "end": {
+       "col": 32,
+       "line": 107,
+       "offset": 2364
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 13,
+       "line": 107,
+       "offset": 2345
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line .github/workflows/quality-gate.yml:176:",
+   "path": ".github/workflows/quality-gate.yml",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 42,
+       "line": 176,
+       "offset": 4387
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 18,
+       "line": 176,
+       "offset": 4363
+      }
+     },
+     {
+      "end": {
+       "col": 44,
+       "line": 177,
+       "offset": 4388
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 19,
+       "line": 177,
+       "offset": 4363
+      }
+     },
+     {
+      "end": {
+       "col": 44,
+       "line": 178,
+       "offset": 4388
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 19,
+       "line": 178,
+       "offset": 4363
+      }
+     },
+     {
+      "end": {
+       "col": 36,
+       "line": 179,
+       "offset": 4384
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 15,
+       "line": 179,
+       "offset": 4363
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "code": 3,
+   "level": "warn",
+   "message": "Syntax error at line .github/workflows/quality-gate.yml:280:",
+   "path": ".github/workflows/quality-gate.yml",
+   "type": [
+    "PartialParsing",
+    [
+     {
+      "end": {
+       "col": 31,
+       "line": 280,
+       "offset": 7888
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 19,
+       "line": 280,
+       "offset": 7876
+      }
+     },
+     {
+      "end": {
+       "col": 36,
+       "line": 281,
+       "offset": 7893
+      },
+      "path": ".github/workflows/quality-gate.yml",
+      "start": {
+       "col": 19,
+       "line": 281,
+       "offset": 7876
+      }
+     }
+    ]
+   ]
+  }
+ ],
+ "paths": {
+  "scanned": [
+   ".env.example",
+   ".gitattributes",
+   ".github/workflows/quality-gate.yml",
+   ".gitignore",
+   ".gitleaks.toml",
+   ".make-it/ai-ladder.md",
+   ".make-it/app-context.json",
+   ".make-it/design.md",
+   ".make-it/ledger/0001-d77e3da6e3ae.json",
+   ".make-it/ledger/0002-d33442ebf0bc.json",
+   ".make-it/manifest.json",
+   ".make-it/preflight-status.json",
+   ".make-it/prototypes/app.html",
+   ".make-it/sealed-files.txt",
+   ".make-it-state.md",
+   ".pre-commit-config.yaml",
+   "CHANGELOG.md",
+   "CLAUDE.md",
+   "LEARNINGS.md",
+   "MAKE-IT.md",
+   "README.md",
+   "TODO.md",
+   "backend/.dockerignore",
+   "backend/Dockerfile",
+   "backend/alembic/env.py",
+   "backend/alembic/script.py.mako",
+   "backend/alembic/versions/001_rbac_schema.py",
+   "backend/alembic/versions/002_app_settings_schema.py",
+   "backend/alembic/versions/003_prompt_management.py",
+   "backend/alembic/versions/004_domain_schema.py",
+   "backend/alembic/versions/005_ai_chat.py",
+   "backend/alembic/versions/006_notifications.py",
+   "backend/alembic/versions/007_seed_data.py",
+   "backend/alembic/versions/008_ai_accounting.py",
+   "backend/alembic/versions/009_ai_accounting_seed.py",
+   "backend/alembic/versions/010_prompt_draft_publish.py",
+   "backend/alembic.ini",
+   "backend/app/__init__.py",
+   "backend/app/ai_daily.py",
+   "backend/app/config.py",
+   "backend/app/database.py",
+   "backend/app/lib/ai/__init__.py",
+   "backend/app/lib/ai/agents/__init__.py",
+   "backend/app/lib/ai/agents/base_agent.py",
+   "backend/app/lib/ai/agents/notes_assistant.py",
+   "backend/app/lib/ai/agents/registry.py",
+   "backend/app/lib/ai/availability.py",
+   "backend/app/lib/ai/errors.py",
+   "backend/app/lib/ai/factory.py",
+   "backend/app/lib/ai/metering.py",
+   "backend/app/lib/ai/model_tier.py",
+   "backend/app/lib/ai/output_validation.py",
+   "backend/app/lib/ai/pii_masker.py",
+   "backend/app/lib/ai/provider.py",
+   "backend/app/lib/ai/providers/__init__.py",
+   "backend/app/lib/ai/providers/anthropic_direct.py",
+   "backend/app/lib/ai/providers/anthropic_foundry.py",
+   "backend/app/lib/ai/providers/claude_agent.py",
+   "backend/app/lib/ai/providers/failover.py",
+   "backend/app/lib/ai/providers/ollama.py",
+   "backend/app/lib/ai/providers/openai_provider.py",
+   "backend/app/lib/ai/rate_limit.py",
+   "backend/app/lib/ai/sanitize.py",
+   "backend/app/lib/ai/self_annealing.py",
+   "backend/app/lib/ai/validate.py",
+   "backend/app/lib/ai/validate_template.py",
+   "backend/app/main.py",
+   "backend/app/middleware/__init__.py",
+   "backend/app/middleware/auth.py",
+   "backend/app/middleware/logging.py",
+   "backend/app/middleware/permissions.py",
+   "backend/app/middleware/security_headers.py",
+   "backend/app/models/__init__.py",
+   "backend/app/models/ai_accounting.py",
+   "backend/app/models/app_setting.py",
+   "backend/app/models/assistant_question.py",
+   "backend/app/models/base.py",
+   "backend/app/models/category.py",
+   "backend/app/models/conversation.py",
+   "backend/app/models/managed_prompt.py",
+   "backend/app/models/note.py",
+   "backend/app/models/notification.py",
+   "backend/app/models/permission.py",
+   "backend/app/models/role.py",
+   "backend/app/models/user.py",
+   "backend/app/models/user_role.py",
+   "backend/app/routers/__init__.py",
+   "backend/app/routers/about.py",
+   "backend/app/routers/ai_accounting.py",
+   "backend/app/routers/ai_chat.py",
+   "backend/app/routers/auth.py",
+   "backend/app/routers/categories.py",
+   "backend/app/routers/dashboard.py",
+   "backend/app/routers/logs.py",
+   "backend/app/routers/notes.py",
+   "backend/app/routers/notifications.py",
+   "backend/app/routers/permissions.py",
+   "backend/app/routers/prompts.py",
+   "backend/app/routers/questions.py",
+   "backend/app/routers/roles.py",
+   "backend/app/routers/settings.py",
+   "backend/app/routers/user_roles.py",
+   "backend/app/routers/users.py",
+   "backend/app/schemas/__init__.py",
+   "backend/app/schemas/ai_accounting.py",
+   "backend/app/schemas/app_setting.py",
+   "backend/app/schemas/auth.py",
+   "backend/app/schemas/chat.py",
+   "backend/app/schemas/domain.py",
+   "backend/app/schemas/notification.py",
+   "backend/app/schemas/prompt.py",
+   "backend/app/schemas/role.py",
+   "backend/app/schemas/user.py",
+   "backend/app/schemas/user_role.py",
+   "backend/app/services/ai_accounting.py",
+   "backend/app/services/ai_control.py",
+   "backend/app/services/current_user.py",
+   "backend/app/services/infra_cost.py",
+   "backend/app/services/log_service.py",
+   "backend/app/services/note_refs.py",
+   "backend/app/services/notification_service.py",
+   "backend/app/services/permission_service.py",
+   "backend/app/services/prompt_service.py",
+   "backend/app/services/settings_service.py",
+   "backend/entrypoint.sh",
+   "backend/make-it-stamp.json",
+   "backend/pytest.ini",
+   "backend/requirements-dev.txt",
+   "backend/requirements.txt",
+   "docker-compose.yml",
+   "e2e/package.json",
+   "e2e/playwright.config.ts",
+   "frontend/.dockerignore",
+   "frontend/.prettierignore",
+   "frontend/.prettierrc",
+   "frontend/Dockerfile",
+   "frontend/app/(auth)/admin/ai/agents/page.tsx",
+   "frontend/app/(auth)/admin/ai/control/page.tsx",
+   "frontend/app/(auth)/admin/ai/infra/page.tsx",
+   "frontend/app/(auth)/admin/ai/monitor/page.tsx",
+   "frontend/app/(auth)/admin/ai/page.tsx",
+   "frontend/app/(auth)/admin/ai/spend/page.tsx",
+   "frontend/app/(auth)/admin/ai/statements/page.tsx",
+   "frontend/app/(auth)/admin/logs/page.tsx",
+   "frontend/app/(auth)/admin/page.tsx",
+   "frontend/app/(auth)/admin/prompts/[slug]/page.tsx",
+   "frontend/app/(auth)/admin/prompts/analytics/page.tsx",
+   "frontend/app/(auth)/admin/prompts/audit/page.tsx",
+   "frontend/app/(auth)/admin/prompts/page.tsx",
+   "frontend/app/(auth)/admin/roles/page.tsx",
+   "frontend/app/(auth)/admin/settings/page.tsx",
+   "frontend/app/(auth)/admin/users/page.tsx",
+   "frontend/app/(auth)/assistant/page.tsx",
+   "frontend/app/(auth)/categories/page.tsx",
+   "frontend/app/(auth)/dashboard/page.tsx",
+   "frontend/app/(auth)/layout.tsx",
+   "frontend/app/(auth)/notes/page.tsx",
+   "frontend/app/(auth)/questions/page.tsx",
+   "frontend/app/globals.css",
+   "frontend/app/layout.tsx",
+   "frontend/app/login/page.tsx",
+   "frontend/app/page.tsx",
+   "frontend/components/breadcrumbs.tsx",
+   "frontend/components/chat-input.tsx",
+   "frontend/components/chat-message.tsx",
+   "frontend/components/chat-panel.tsx",
+   "frontend/components/conversation-sidebar.tsx",
+   "frontend/components/data-table-column-header.tsx",
+   "frontend/components/data-table-pagination.tsx",
+   "frontend/components/data-table-toolbar.tsx",
+   "frontend/components/data-table.tsx",
+   "frontend/components/login-button.tsx",
+   "frontend/components/modal.tsx",
+   "frontend/components/mode-toggle.tsx",
+   "frontend/components/notification-bell.tsx",
+   "frontend/components/prompt-card.tsx",
+   "frontend/components/prompt-editor.tsx",
+   "frontend/components/quick-search.tsx",
+   "frontend/components/safety-indicator.tsx",
+   "frontend/components/sidebar.tsx",
+   "frontend/components/theme-provider.tsx",
+   "frontend/components/variable-pill.tsx",
+   "frontend/components/version-timeline.tsx",
+   "frontend/eslint.config.mjs",
+   "frontend/lib/ai/sse-config.ts",
+   "frontend/lib/ai/use-streaming.ts",
+   "frontend/lib/ai-accounting-types.ts",
+   "frontend/lib/api.ts",
+   "frontend/lib/auth.tsx",
+   "frontend/lib/types.ts",
+   "frontend/lib/use-async-effect.ts",
+   "frontend/lib/utils.ts",
+   "frontend/next-env.d.ts",
+   "frontend/next.config.ts",
+   "frontend/package-lock.json",
+   "frontend/package.json",
+   "frontend/postcss.config.mjs",
+   "frontend/public/.gitkeep",
+   "frontend/tailwind.config.ts",
+   "frontend/tsconfig.json",
+   "guardrails/README.md",
+   "guardrails/config.yml",
+   "guardrails/rails/factuality.co",
+   "guardrails/rails/input_safety.co",
+   "guardrails/rails/output_safety.co",
+   "guardrails/rails/pii_protection.co",
+   "guardrails/rails/topic_control.co",
+   "mock-services/mock-oidc/.dockerignore",
+   "mock-services/mock-oidc/Dockerfile",
+   "mock-services/mock-oidc/app.py",
+   "mock-services/mock-oidc/requirements.txt",
+   "pyproject.toml",
+   "scripts/seed-mock-services.sh",
+   "scripts/watermark-check.sh",
+   "scripts/worktree.sh",
+   "trivy.yaml"
+  ]
+ },
+ "results": [
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 18
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 20
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 62
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 75
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 77
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 112
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 122
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 126
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 131
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 165
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 184
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 198
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 221
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 260
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.run-shell-injection.run-shell-injection",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 265
+   }
+  },
+  {
+   "check_id": "yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag",
+   "path": ".github/workflows/quality-gate.yml",
+   "start": {
+    "line": 314
+   }
+  }
+ ],
+ "skipped_rules": [],
+ "version": "1.85.0"
+}

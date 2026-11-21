@@ -1,0 +1,95 @@
+{
+ "dependencies": [
+  {
+   "name": "fastapi",
+   "version": "0.141.1",
+   "vulns": []
+  },
+  {
+   "name": "uvicorn",
+   "version": "0.34.0",
+   "vulns": []
+  },
+  {
+   "name": "pyjwt",
+   "version": "2.15.0",
+   "vulns": []
+  },
+  {
+   "name": "cryptography",
+   "version": "50.0.1",
+   "vulns": []
+  },
+  {
+   "name": "python-multipart",
+   "version": "0.0.32",
+   "vulns": []
+  },
+  {
+   "name": "annotated-doc",
+   "version": "0.0.7",
+   "vulns": []
+  },
+  {
+   "name": "cffi",
+   "version": "2.1.1",
+   "vulns": []
+  },
+  {
+   "name": "click",
+   "version": "8.5.1",
+   "vulns": []
+  },
+  {
+   "name": "h11",
+   "version": "0.16.0",
+   "vulns": []
+  },
+  {
+   "name": "pydantic",
+   "version": "2.14.4",
+   "vulns": []
+  },
+  {
+   "name": "pydantic-core",
+   "version": "2.50.5",
+   "vulns": []
+  },
+  {
+   "name": "annotated-types",
+   "version": "0.8.0",
+   "vulns": []
+  },
+  {
+   "name": "starlette",
+   "version": "1.10.0",
+   "vulns": []
+  },
+  {
+   "name": "anyio",
+   "version": "4.16.0",
+   "vulns": []
+  },
+  {
+   "name": "idna",
+   "version": "3.20",
+   "vulns": []
+  },
+  {
+   "name": "typing-extensions",
+   "version": "4.16.0",
+   "vulns": []
+  },
+  {
+   "name": "typing-inspection",
+   "version": "0.4.5",
+   "vulns": []
+  },
+  {
+   "name": "pycparser",
+   "version": "3.12",
+   "vulns": []
+  }
+ ],
+ "fixes": []
+}

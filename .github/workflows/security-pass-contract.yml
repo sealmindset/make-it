@@ -1,0 +1,20 @@
+name: security-pass contract
+
+# Build-verify Part D runs its scanners and the audit's node checks through security-pass.py. The test
+# runs its file discovery, refusals, report folder and per-scanner decisions against fixtures (no Docker).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: security-pass contract test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I scripts/test-security-pass.py

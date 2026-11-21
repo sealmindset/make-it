@@ -1,0 +1,27 @@
+{
+ "ArtifactName": "/src",
+ "ArtifactType": "filesystem",
+ "Results": [
+  {
+   "Class": "lang-pkgs",
+   "Target": ".make-it/ui-review/package-lock.json",
+   "Type": "npm"
+  },
+  {
+   "Class": "lang-pkgs",
+   "Target": "backend/requirements.txt",
+   "Type": "pip"
+  },
+  {
+   "Class": "lang-pkgs",
+   "Target": "frontend/package-lock.json",
+   "Type": "npm"
+  },
+  {
+   "Class": "lang-pkgs",
+   "Target": "mock-services/mock-oidc/requirements.txt",
+   "Type": "pip"
+  }
+ ],
+ "SchemaVersion": 2
+}
