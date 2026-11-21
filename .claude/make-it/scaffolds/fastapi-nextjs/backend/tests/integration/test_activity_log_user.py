@@ -6,7 +6,7 @@ tests fail if the user resolved there never reaches RequestLoggingMiddleware.
 """
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -37,7 +37,7 @@ def _real_auth_and_empty_log():
 
 
 def _token(user, secret):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     claims = {**user.model_dump(), "iat": now, "exp": now + timedelta(hours=1)}
     return jwt.encode(claims, secret, algorithm="HS256")
 
@@ -114,7 +114,7 @@ async def test_token_with_a_wrong_signature_logs_no_user(jwt_secret):
 
 @pytest.mark.asyncio
 async def test_expired_token_logs_no_user(jwt_secret):
-    past = datetime.now(timezone.utc) - timedelta(hours=2)
+    past = datetime.now(UTC) - timedelta(hours=2)
     expired = jwt.encode(
         {**ADMIN_USER.model_dump(), "iat": past, "exp": past + timedelta(hours=1)},
         jwt_secret,

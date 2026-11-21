@@ -15,7 +15,7 @@ async def get_current_user(request: Request) -> UserInfo:
         )
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-        return UserInfo(**payload)
+        user = UserInfo(**payload)
     except jwt.ExpiredSignatureError:
         raise HTTPException(  # noqa: B904 -- kept as is: "from" would change the error chain (follow-up card)
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -26,3 +26,7 @@ async def get_current_user(request: Request) -> UserInfo:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )
+    # The activity log names the user from here: RequestLoggingMiddleware reads .sub and .email
+    # after the response. Only the verified claims are kept, never the token or the cookie.
+    request.state.user = user
+    return user

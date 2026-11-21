@@ -125,7 +125,7 @@ b79d1137aba1082652b664a42e0ee18318f4513801ffb42f750ab8bbbeedf325  make-it/scaffo
 e715a781b70639295e68098868bd393cf871ed2a38eb95ed14ea68eed62b3678  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/validate.py
 80a1e84c8dcb474a2d1d2f7e429aad30fccfeb854f94243995086457577a9bd1  make-it/scaffolds/fastapi-nextjs/backend/app/main.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/__init__.py
-af241f5e76109de2f9492f9866794ce3c996ec0125a24a5af33ee675765c6d84  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/auth.py
+b665bda56a43802414dce48f7789ed788f953ae870d31717707094041f829e3a  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/auth.py
 11ddd1049787a8bddfb685c8cf9aa90878e53af5834f95d557e37727a904f231  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/logging.py
 feaf00914fe2bb7a2c9c458d9b23bd0eb48e9c59e62b7356221ddf7141000866  make-it/scaffolds/fastapi-nextjs/backend/app/middleware/permissions.py
 10d4656eb3d83171ecbd8344baa85641467b9151502c7bb88d21fe55225ad3a2  make-it/scaffolds/fastapi-nextjs/backend/app/models/__init__.py
@@ -160,7 +160,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 33fe54218e349aed5fec8130b7e776ca669827b85b1a1c55124e64fa2a998e93  make-it/scaffolds/fastapi-nextjs/backend/tests/conftest.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/__init__.py
 9d91231686d9132c5d72faefc987f433e8d5a07f44fa1d5f54fa95e043906c5c  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_about.py
-5759ad11f1b7994def0b3e03faf496ee1b30b2722b9a7de7fba9a289c3b9a7ac  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_activity_log_user.py
+96c94a7fab2814b9e88356e3ee5f746920e1f5363ff1aabc1e9dcee20055a49c  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_activity_log_user.py
 4f4a54e6b1b85e166c2f036229b14db74a53962ad973c97d854ce45553f6e27b  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_health.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/unit/__init__.py
 0be1f4efc4de4c8aaaae39441cc4249adfbb8a289aa4bce6199c9516f8fffca6  make-it/scaffolds/fastapi-nextjs/backend/tests/unit/test_claude_agent_text_only.py
