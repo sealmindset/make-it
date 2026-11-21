@@ -98,9 +98,9 @@ if [ -z "${1:-}" ]; then
   check "(control) fails with the old rule back on existing code: the exception removed, and \"change nothing\" turned into an auto-fix" \
     'opp "$RF" "s/^\*\*A missing AI-safety control in code.*?(?=^Tell user: \"Your app is retrofitted)//ms" && opp "$RF" "s/Change\s+nothing in it for this finding[.]/Auto-fix it, as any \`[FIX]\` item./"'
   check "(control) fails with the TODO.md line dropped, and with it kept but made to follow an auto-fix" \
-    'opp "$RF" "s/Add one line to TODO.md under.*?reports it\"[.]\s*//s" && opp "$RF" "s/(it is code the app already had[.]) Change\s+nothing in it for this finding[.]/\$1 Add the control, then log it./"'
+    'opp "$RF" "s/Add\s+one\s+line\s+to\s+TODO.md\s+under.*?reports it\"[.]\s*//s" && opp "$RF" "s/(it is code the app already had[.]) Change\s+nothing in it for this finding[.]/\$1 Add the control, then log it./"'
   check "(control) fails with /fix-it not named in the TODO line, and in the why" \
-    'opp "$RF" "s/\"\/fix-it applies this fix, with an ask,/\"this needs a fix,/" && opp "$RF" "s/the user picks it in \/fix-it[.]/the user picks it later./"'
+    'opp "$RF" "s/\"\/fix-it applies this fix,\s+with an ask,/\"this needs a fix,/" && opp "$RF" "s/the user picks it in \/fix-it[.]/the user picks it later./"'
   check "(control) fails with AI29 in the logged set, and with a sentence logging AI29" \
     'opp "$RF" "s/When AI02, AI03, AI04 or AI10 finds/When AI02, AI03, AI04, AI10 or AI29 finds/" && opp "$RF" "s/^(- Every other check follows the rule above)/- AI29 is logged to TODO.md the same way.\n\$1/m"'
   check "(control) fails with AI29 dropped from the \"every other check\" line, and with AI29 no longer [BLOCK] [SECURITY FIX]" \
