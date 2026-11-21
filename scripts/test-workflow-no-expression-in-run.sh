@@ -15,7 +15,11 @@
 #     this") must be fenced as ```text, not ```yaml: there is no exemption.
 #     NOT covered (a tripwire, not a YAML parser): quoted keys (`"run":`), a space before the colon (`run :`),
 #     explicit `? run` keys, anchors and aliases, flow mappings (`{run: ...}`); composite actions
-#     (`.github/actions/*/action.yml`); GitLab, Jenkins and Azure DevOps pipelines.
+#     (`.github/actions/*/action.yml`); GitLab, Jenkins and Azure DevOps pipelines. Also missed: a double-quoted
+#     `run:` value that continues on a line indented less than `run` (`- run: "echo a` then `${{ github.head_ref }}"`
+#     one column left of `run`). Known false positives, all valid `defaults: run:` forms: a `#` comment as the first
+#     line under `run:`, a quoted key (`"working-directory": ${{ ... }}`), and the flow form
+#     (`run: {working-directory: "${{ matrix.app }}"}`). These are stated limits, not bugs to chase.
 #   - The attestation step still records the branch, through `env:` (BRANCH) and the quoted "$BRANCH".
 #   - build-standards check Q16 reads exactly as pinned here, the whole line: [Tier 0] [BLOCK], NOT [SECURITY FIX]
 #     (owner, 2026-11-21: the scaffold's workflow runs only on pull_request, where the PR's own code already runs with
@@ -119,7 +123,7 @@ check "the attestation step still records the branch, from env: through the quot
 
 # 2. the check: the whole Q16 line is pinned, so an added sentence (a reversal, a [SECURITY FIX] claim) fails here
 cat > "$TMPD/q16" <<'EOF'
-**Q16** [Tier 0] [BLOCK] **No `${{ }}` expression in a workflow step's script text** -- In every file under `.github/workflows/`, no `${{` appears in a step's script text: the value of `run:` (one line or a `|` or `>` block) or the `script:` input of `actions/github-script`. GitHub pastes an expression into the script before the shell runs it, so a value someone else chooses (a branch name, a pull request title, an issue or commit message) would run as code in the CI runner. In a workflow that runs only on `pull_request`, like the scaffold's, that gives an attacker nothing extra: the pull request's own code already runs there with the same read-only token. Under a `pull_request_target`, `issue_comment` or `workflow_run` trigger it is a real hole, so the pattern is kept out of every workflow. Expressions in `env:`, `with:`, `if:` and `uses:` are not script text and are fine. **Fix:** move each expression out of the script into the step's `env:` under an upper-case name and use the quoted variable instead (`BRANCH: ${{ github.head_ref }}` in `env:`, then `"$BRANCH"` in the script; in `script:`, `process.env.BRANCH`), the way the scaffold's `quality-gate.yml` does. The workflow's output stays the same. An app built before this check fails it (its `quality-gate.yml` puts the branch name into the attestation step's shell command), and /resume-it's catch-up fixes it with the other must-do updates. This check reads only `.github/workflows/`: composite actions (`.github/actions/`) and other CI systems' pipelines (GitLab, Jenkins, Azure DevOps) are not covered. N/A when the project has no `.github/workflows/`.
+**Q16** [Tier 0] [BLOCK] **No `${{ }}` expression in a workflow step's script text** -- In every file under `.github/workflows/`, no `${{` appears in a step's script text: the value of `run:` (one line or a `|` or `>` block) or the `script:` input of `actions/github-script`. GitHub pastes an expression into the script before the shell runs it, so a value someone else chooses (a branch name, a pull request title, an issue or commit message) would run as code in the CI runner. In a workflow that runs only on `pull_request`, like the scaffold's, that gives an attacker nothing extra: the pull request's own code already runs there with the same read-only token. Under a `pull_request_target`, `issue_comment` or `workflow_run` trigger it is a real hole, so the pattern is kept out of every workflow. Expressions in `env:`, `with:`, `if:` and `uses:` are not script text and are fine. **Fix:** move each expression out of the script into the step's `env:` under an upper-case name and use the quoted variable instead (`BRANCH: ${{ github.head_ref }}` in `env:`, then `"$BRANCH"` in the script; in `script:`, `process.env.BRANCH`), the way the scaffold's `quality-gate.yml` does. The workflow's output stays the same. An app built before this check fails it (its `quality-gate.yml` puts the branch name into the attestation step's shell command), and /resume-it's catch-up offers it with the other must-do updates and fixes it when the user picks that group ("Not now" puts it off). This check reads only `.github/workflows/`: composite actions (`.github/actions/`) and other CI systems' pipelines (GitLab, Jenkins, Azure DevOps) are not covered. N/A when the project has no `.github/workflows/`.
 EOF
 cat > "$TMPD/mk" <<'EOF'
 - **Q01-Q16**: Code quality & formatting (Ruff, ESLint, Prettier, mypy, pre-commit hooks, gitleaks, Trivy config, coverage, quality scripts, CI quality gate workflow, Q16 no `${{ }}` expression in a workflow step's script text, dead-code upkeep reminder -- N/A in this first build)
@@ -184,6 +188,8 @@ if [ -z "${1:-}" ]; then
     check "(control) fails with a reversal added, the allowed sentence kept: $REV" \
       'opp "$BS" "s/(are not script text and are fine[.])/\$1 \$ENV{REV}/"'
   done
+  check "(control) fails with Q16 saying catch-up fixes it unconditionally (the old wording)" \
+    'opp "$BS" "s/offers it with the other must-do updates and fixes it when the user picks that group \(\"Not now\" puts it off\)[.]/fixes it with the other must-do updates./"'
   check "(control) fails with the why dropped, and with the real-hole triggers dropped" \
     'opp "$BS" "s/GitHub pastes an expression into the script before the shell runs it, [^\n]*?CI runner[.] //" && opp "$BS" "s/Under a \`pull_request_target\`[^\n]*?every workflow[.] //"'
   check "(control) fails with resume-it naming Q16 a security fix, and with Q16 in the security-fixes group" \
