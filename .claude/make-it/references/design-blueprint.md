@@ -2039,6 +2039,8 @@ interface LogEvent {
 - Captures: method, path (originalUrl), statusCode, durationMs, userEmail, userRole, ip, userAgent
 - Skips noise: health checks (`/health`), static assets (`/_next`, `.js`, `.css`, `.ico`, `.png`, `.svg`)
 - Logs on response `finish` event (not on request entry) to capture the final status code
+- Records the visitor's address: from X-Forwarded-For only when a proxy named in `TRUSTED_PROXIES` sent it, right-most untrusted address first, with the frontend proxy appending the address that connected to it (build-standards L11)
+- The server's own console log prints paths without their query string, because the sign-in callback carries the one-time code in it (build-standards L10)
 - Extracts user info from the request object, where the auth code that verifies the JWT MUST put the verified user (FastAPI: `get_current_user` sets `request.state.user`; Express/NestJS: `req.user`). Without it every event's user is empty (build-standards L09). Never the token or cookie itself
 
 **Outbound HTTP interceptor rules:**

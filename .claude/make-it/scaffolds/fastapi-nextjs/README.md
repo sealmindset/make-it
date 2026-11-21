@@ -125,7 +125,8 @@ All health checks use `127.0.0.1` (not `localhost`) to avoid IPv6 resolution iss
 Every scaffolded app includes an in-memory activity log for observability:
 - **LogStore** -- circular buffer (configurable via `LOG_BUFFER_SIZE`, default 10000) with FIFO eviction
 - **LogEvent** -- captures timestamp, type, method, path, url, status, duration, service, user, ip, user_agent, error
-- **RequestLoggingMiddleware** -- captures inbound API requests (excludes health/static), including client IP, user-agent and the signed-in user, which `get_current_user` puts on `request.state.user` (tested in `tests/integration/test_activity_log_user.py`)
+- **RequestLoggingMiddleware** -- captures inbound API requests (excludes health/static), including user-agent, the signed-in user, which `get_current_user` puts on `request.state.user` (tested in `tests/integration/test_activity_log_user.py`), and the visitor's address: `X-Forwarded-For` is believed only from the proxies in `TRUSTED_PROXIES` (`middleware/trusted_proxies.py`; compose names the frontend, whose `forwarded-for.mjs` appends the connecting address)
+- **Console log** -- uvicorn's access lines print method, path and status, never the query string (`app/access_log.py`), so sign-in codes stay out of container logs
 - **attach_outbound_logging()** -- httpx event hooks that log outbound calls with URL sanitization and timing
 - **URL sanitization** -- strips sensitive query params (token, key, secret, password, auth, api_key) before logging
 - **REST API** -- `GET /api/admin/logs/events` (with offset, path, status_min/max, user_email, q filters), `GET /api/admin/logs/stats` (with type/service/status breakdowns), `DELETE /api/admin/logs/events`

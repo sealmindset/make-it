@@ -892,7 +892,14 @@ Create middleware that logs all inbound API requests:
      request.state.user; Express/NestJS: req.user), or every event's user is empty.
      Never put the token or cookie on the request. Test it through the real sign-in
      path, not an override of the auth dependency (build-standards L09)
-   - ip (req.ip or socket.remoteAddress), userAgent (truncated to 200 chars)
+   - ip: the visitor's address. Requests arrive through a proxy (the same-origin
+     frontend or an ingress), so take it from X-Forwarded-For only when the request
+     comes from a proxy named in TRUSTED_PROXIES, right-most untrusted address first
+     (Express: trust proxy set to those addresses, never true), and have the frontend
+     proxy append the address that connected to it (build-standards L11)
+   - userAgent (truncated to 200 chars)
+   - The server's own console log (uvicorn, gunicorn, morgan) prints the path without
+     its query string: the sign-in callback carries the one-time code in it (L10)
 3. Skip noise (do NOT log these paths):
    - /health, /health/*, /healthz
    - /_next/*, *.js, *.css, *.ico, *.png, *.svg, *.map

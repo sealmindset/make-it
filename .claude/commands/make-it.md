@@ -807,7 +807,9 @@ say); it works as both, instead of inferring a specialist of its own.
      b. **LogService** -- Injectable singleton wrapping LogStore
      c. **Inbound request middleware** -- Captures method, path, status, duration, user info.
         Excludes health checks and static assets. Registered globally. The user comes from the
-        auth code that verifies the token, which puts it on the request (L09).
+        auth code that verifies the token, which puts it on the request (L09). The address is the
+        visitor's, taken from X-Forwarded-For only from trusted proxies (L11). The server's own
+        console log prints no query string (L10).
      d. **Outbound HTTP interceptor** -- Axios/httpx interceptor factory attached to ALL
         service client creation points. Captures service name, method, URL, status, duration.
         URL sanitization strips sensitive query params (token, key, secret, password, auth).
@@ -1146,7 +1148,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **D01-D06**: Database & seed data (migrations, seed users, Alembic syntax, one migration head)
 - **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
 - **M01-M04**: Mock services (mock-oidc, seed script, contracts, env vars)
-- **L01-L09**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI, the signed-in user on each event)
+- **L01-L11**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI, the signed-in user and the visitor's address on each event, no query string in the console log)
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X09**: Security (secrets, validation, deps, headers, no Java, no module throws, X09 hostile code: `~/.claude/make-it/references/hostile-code.md`, a stop rather than a fix, run before Part B starts anything)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)

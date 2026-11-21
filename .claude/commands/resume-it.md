@@ -462,7 +462,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Database (D01-D06):** Check for migrations directory, seed data file, and one Alembic head with no duplicate or dangling revision (D06)
    - **Docker (I01-I07):** Check for docker-compose.yml, entrypoint.sh, 127.0.0.1 in health checks
    - **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh
-   - **Activity Logs (L01-L09):** Grep for LogStore/log_store, log middleware, /logs/events endpoint, and the sign-in code putting the user on the request for the log (L09: `request.state.user =` in `get_current_user`)
+   - **Activity Logs (L01-L11):** Grep for LogStore/log_store, log middleware, /logs/events endpoint, and the sign-in code putting the user on the request for the log (L09: `request.state.user =` in `get_current_user`), the query-string filter on uvicorn's loggers (L10: `drop_query_strings_from_server_log` in `main.py`), and the trusted-proxy wrap with `--no-proxy-headers` and the frontend's `forwarded-for.mjs` (L11)
    - **Notifications (N01-N08):** Check for notifications table in migrations/schema, /api/notifications route, notification-bell component, notification seed data
    - **File Upload (F01-F08):** Check for upload component, extract-text utility, Docker volume in docker-compose.yml. If pdf-parse is in package.json, verify import uses `pdf-parse/lib/pdf-parse` NOT default import (F03 -- crashes in production Docker)
    - **Settings (G01-G07):** Check for app_settings table in migrations, settings service, admin page

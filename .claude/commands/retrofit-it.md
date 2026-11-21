@@ -804,8 +804,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
        until python3 -c "import socket; s=socket.create_connection(('db',5432)); s.close()" 2>/dev/null; do sleep 1; done
        # Run migrations
        alembic upgrade head
-       # Start server
-       exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+       # Start server (the app reads X-Forwarded-For from trusted proxies itself: L11)
+       exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers
        ```
    - Generate docker-compose.yml with profiles (default + dev for mocks)
    - **Health checks:** ALL health checks MUST use `127.0.0.1` (not `localhost`) to avoid
@@ -922,6 +922,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - Add LogStore (circular buffer) and LogService (injectable singleton)
     - Add inbound request middleware (exclude health/static routes); the auth code that
       verifies the token puts the user on the request for it (L09)
+    - The server's console log prints no query string (L10), and the visitor's address is
+      taken from X-Forwarded-For only from the proxies in TRUSTED_PROXIES (L11)
     - Add outbound HTTP interceptor to ALL existing service client creation points
     - Add URL sanitization to strip sensitive query params before logging
     - Add REST API: GET /api/admin/logs/events, GET /api/admin/logs/stats,
@@ -1314,7 +1316,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **D01-D06**: Database & seed data
 - **I01-I07**: Docker & infrastructure
 - **M01-M04**: Mock services
-- **L01-L09**: Activity logs
+- **L01-L11**: Activity logs
 - **N01-N08**: Notifications
 - **F01-F08**: File upload & document processing (if app has Documents page or uploads)
 - **G01-G07**: Application settings

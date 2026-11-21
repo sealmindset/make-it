@@ -185,7 +185,7 @@ This matrix maps security control domains to specific /make-it implementations w
 | **Secret Management** | No secrets in code; env var based; ENFORCE_SECRETS | S05, S07, A10 | BLOCK | Grep scan + live validation |
 | **Input Validation** | System boundary validation; parameterized queries | X02, Strategy 4 | FIX | Static analysis + Semgrep rules |
 | **Output Encoding** | HTML escaping; no raw innerHTML; DOMPurify | AI07, Strategy 6 | FIX | Code pattern scan |
-| **Logging & Monitoring** | Activity logs (in-memory buffer); inbound + outbound tracking; each signed-in request names its user | L01-L09 | FIX | Endpoint verification + admin UI; a test signs in through the real path |
+| **Logging & Monitoring** | Activity logs (in-memory buffer); inbound + outbound tracking; each signed-in request names its user and the visitor's address (believed only from trusted proxies); no query string in the console log | L01-L11 | FIX | Endpoint verification + admin UI; tests sign in through the real path and run a real server |
 | **Audit Trail** | Settings audit log; prompt audit log with risk_flag | G01-G07, AI10 | FIX | Database table verification |
 | **Session Management** | Stateless JWT; httpOnly cookie; CSRF state parameter | A04, A06, A07 | BLOCK | Live auth flow test with state mismatch |
 | **Dependency Management** | Latest stable; CVE scanning; no auto-major upgrades | X03, Strategy 1 | FIX | npm audit + pip-audit + trivy |
@@ -512,7 +512,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Database & Seed Data | D01-D06 | 6 | 1 (Web App) |
 | Docker & Infrastructure | I01-I10 | 10 | 0-1 |
 | Mock Services | M01-M04 | 4 | 1 (Web App) |
-| Activity Logs | L01-L09 | 9 | 1 (Web App) |
+| Activity Logs | L01-L11 | 11 | 1 (Web App) |
 | Notifications | N01-N08 | 8 | 1 (Web App) |
 | File Upload | F01-F17 | 17 | 1 (Web App) |
 | Data Integration | DI01-DI08 | 8 | 1 (Web App) |
@@ -523,7 +523,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |
 | AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~199** | |
+| **Total** | | **~201** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)
