@@ -161,11 +161,14 @@ check "the scan read each scaffold's dependency files" \
   'for f in fastapi-nextjs/backend/requirements.txt fastapi-nextjs/frontend/package.json nextjs-fullstack/package.json; do git -C "$root" ls-files --error-unmatch ".claude/make-it/scaffolds/$f" >/dev/null 2>&1 || exit 1; done'
 
 # 4. no claim that CI enforces it, none that it protects against poisoning
-NEAR="$(cat $FILES | grep -E "AI30|Data Poisoning|RAG/vector DB guardrails" | perl -pe 's/\|/\n/g; s/([.!?]) (?=\S)/$1\n/g' || true)"
-check "every sentence near AI30 that names CI, a pipeline or make-it-verify says it is not built" \
-  '! printf "%s\n" "$NEAR" | grep -E "\bCI\b|pipeline|make-it-verify|EXCEPTIONS[.]md" | gq -v "not built"'
-check "no sentence near AI30 says it protects against, prevents or stops poisoning" \
-  '! printf "%s\n" "$NEAR" | gq -iE "(protect|prevent|stop|block|guard|defend)[a-z]* (the app |apps )?(against |from )?(data (and model )?|model )?poisoning|poisoning (is )?(prevented|covered|mitigated|blocked)"'
+# units: the lines that name AI30 or hold the rows it backs, cut at table cells, sentences, semicolons and " -- "
+NEAR="$(cat $FILES | grep -E "AI30|Data Poisoning|RAG/vector DB guardrails" | perl -pe 's/\|/\n/g; s/([.!?;]) (?=\S)/$1\n/g; s/ -- /\n/g' || true)"
+# "pipeline/" is agent composition (pipeline/delegation/fan-out), not CI
+check "every unit near AI30 that names CI, a pipeline or make-it-verify says it is not built" \
+  '! printf "%s\n" "$NEAR" | grep -E "\bCI\b|pipeline([^/]|\$)|make-it-verify|EXCEPTIONS[.]md" | gq -v "not built"'
+# "not protection against poisoning" is the true sentence; any other protect/prevent/stop/... poisoning claim fails
+check "no unit near AI30 says it protects against, prevents or stops poisoning" \
+  '! printf "%s\n" "$NEAR" | perl -ne "\$n++ if /(?<!not )\b(protect|prevent|stop|block|guard|defend)[a-z]* (the app |apps )?(against |from )?(data (and model )?|model )?poisoning|poisoning (is )?(prevented|covered|mitigated|blocked)/i; END {exit(\$n ? 0 : 1)}"'
 
 # 5. the governance document
 R_AI04='| **AI04: Data Poisoning** | Not applicable: data and model poisoning targets training data, fine-tuning data and embedding or retrieval data, and make-it apps train no model, fine-tune none and add no retrieval. Check AI30 enforces it: it fails the build when the code adds model training, fine-tuning or retrieval, until the user accepts it in the app'"'"'s left-out record. AI30 is a tripwire (static detection can be fooled both ways) and a boundary check, not protection against poisoning; its CI half is not built. The prompt-management controls this row used to list (prompt template blocklist validation, immutable safety preamble, draft/test/publish workflow, risk_flag audit logging) guard the app'"'"'s own prompts against injected edits (AI03 above, section 5.3), not training or retrieval data. The optional AI memory layer (BN checks) puts stored memories into prompts by database query, with no embeddings; AI30 does not cover it | AI30 | Not applicable, enforced by check AI30 |'
