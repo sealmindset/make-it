@@ -47,7 +47,7 @@ cf3c7e9a34e134cb5f865a39dc34ba16f53fc8413ff2d86672288e7e12b5dd6f  make-it/conflu
 c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/references/ai-accounting.md
 343605fc91c37aac81c95e69b51e16d10cd863c566be538036edfb0f447aa67e  make-it/references/approval-block.md
 3455fc5b80e6299e465856c6bcd2574269f98bd30e27432f2f540165cbe5da12  make-it/references/backlog-board.md
-86a80e13d447303f23a399bcddc2f4b091dda84ab210214551a7ed8aed098b9c  make-it/references/build-standards.md
+2cd6953ddbd8e7fdde910ff75ee5093ceb71ad09f5b2a14b9b91e42de3c25c24  make-it/references/build-standards.md
 7cce69cdd828f755b5bea30fed3a42666d5a0145df860286fefa5506dc41495a  make-it/references/build-verify-security.md
 4a3475ca558f075cd6da4b986279cf355075e413a0cfdc98cde029675ccd77d4  make-it/references/deadcode.md
 a285b7ce6162b806a612e5d3be76a0fde8addabd4b69fdd8f610bc095b3cf6eb  make-it/references/deployment-profile-architecture.md
@@ -113,7 +113,7 @@ d0ee829c8af000d1d84bc352ead4625a290d0af382d0ccdf63df008f68067ff7  make-it/scaffo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/__init__.py
 2d7a3e86d71adfc949116a83ae9ec405576a8036d29a5068d3d5d896987489ed  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/anthropic_direct.py
 e3963b1211cae6e2abcf9d38055efc7ad91129ea7cecea70627fe8d0828af25a  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/anthropic_foundry.py
-535b4598c2ddaa1f15eb119544cd48461506448dd046ec909337723da391e793  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/claude_agent.py
+1c94e4877839a2cccc4290d140caf3dfbeb9f965b7e27d90ab1e471df9eeb308  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/claude_agent.py
 b7ccd8608651261c14b34d61faa0cf5229ca363bf330073952dc5174fd5a5606  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/failover.py
 e43cbbe3bcc788e5943010466f29c774028654717d775b91587a8d5652d75d66  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/ollama.py
 cc5391ea7727afa367194f1faaa6c6bbae282476b83803765b02b400bfaee036  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/openai_provider.py

@@ -146,8 +146,8 @@ class ClaudeAgentProvider(AIProvider):
            as "Bash" removes the tool from Claude's context", and a deny rule holds in
            every permission mode. `allowed_tools` is left empty: it only pre-approves
            ("This does not restrict Claude to only these tools").
-        2. Never `bypassPermissions` ("`allowed_tools` doesn't constrain this mode, and
-           calls to tools you didn't list are approved too"). `dontAsk` turns every call
+        2. Never the bypass permission mode ("`allowed_tools` doesn't constrain this
+           mode, and calls to tools you didn't list are approved too"). `dontAsk` turns every call
            that would prompt into a denial. It does NOT stop calls that need no approval
            (a file read inside the working directory, a read-only shell command, the
            Agent tool), which is why layer 1 removes the tools and layer 5 gives the CLI
@@ -157,7 +157,7 @@ class ClaudeAgentProvider(AIProvider):
            errors refuses too.
         4. `--restricted` (extra_args): the CLI drops the tools that run commands or code,
            keeps file tools inside the working directory, ignores settings files, and
-           refuses to start in bypassPermissions.
+           refuses to start in the bypass mode.
         5. Nothing loaded from disk: `setting_sources=[]` (unset, query() loads user,
            project and local settings, CLAUDE.md and .claude/ skills, agents and
            commands), `skills=[]`, `--disable-slash-commands`, no MCP servers with
