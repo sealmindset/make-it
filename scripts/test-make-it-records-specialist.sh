@@ -172,7 +172,7 @@ if [ -z "${1:-}" ]; then
   check "(control) fails when a low-risk app gets no floor" \
     'opp "$MK" "s/4\. Without the payments, PII or PHI signal,[^\n]*\n[^\n]*/4. Below all thresholds nothing is forced and \`expert_persona\` stays empty./"'
   check "(control) fails with set_by and set_at dropped" 'opp "$MK" "s/6\. \`set_by\` is [^\n]*\n[^\n]*\n//"'
-  check "(control) fails with the signals dropped from the record" 'opp "$MK" "s/the added ones, the signals behind each, /the added ones, /"'
+  check "(control) fails with the signals dropped from the record" 'opp "$MK" "s/the added ones, the signals\s+behind each, /the added ones, /"'
   check "(control) fails when a sub-agent brief re-infers (Phase B)" \
     'opp "$MK" "s/it works as both, instead of inferring a specialist of its own\./each subagent infers its own persona./"'
   check "(control) fails when the step asks the user a question" \
