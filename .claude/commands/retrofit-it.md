@@ -36,7 +36,7 @@ This skill has 7 phases:
 3. **Clarification** -- Ask targeted questions about ambiguities (NOT a full interview)
 4. **Plan** -- Present the retrofit plan with risk assessment, get user approval
 5. **Retrofit** -- Execute changes (single-pass or phased based on risk score)
-6. **Verify** -- Build-verify identical to /make-it
+6. **Verify** -- Build-verify identical to /make-it, except that a missing AI-safety control in code the app already had is logged for /fix-it
 7. **Ship** -- Hand off to /ship-it
 
 **AI accounting only.** When `$ARGUMENTS` is `ai-accounting` (case-insensitive), or the user asks
@@ -1185,7 +1185,8 @@ run /retrofit-it, /resume-it, /try-it, /wrap-it and /ship-it there too.']
 
 <step name="verify">
 
-**Build-verify is a SILENT QUALITY GATE** identical to /make-it's. The user sees
+**Build-verify is a SILENT QUALITY GATE** identical to /make-it's, except one rule in Part A: a
+missing AI-safety control in code the app already had is logged for /fix-it, not added. The user sees
 "Making sure everything works..." but NOT the technical details.
 
 **Left-out items (the user's current record in `work`, as the read steps of `left-out-record.md` read it,
@@ -1223,6 +1224,20 @@ For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately
 - `[BLOCK]` items: must pass before proceeding to Part B
 - `[WARN]` items: note in TODO.md, continue
+
+**A missing AI-safety control in code the app already had is logged, not added.** The `[FIX]`
+rule above does not apply to it. When AI02, AI03, AI04 or AI10 finds one of these controls
+missing -- a sanitizePromptInput() or validateAgentOutput() call, delimiter tags around user input
+in a prompt, rate limiting middleware on an AI route, the safety preamble on a managed prompt --
+look at the file it is missing from:
+- **The snapshot has the file** (own repo: `git cat-file -e "<tag>:<file>"` succeeds, with the tag
+  `pre-retrofit-<app folder name>` the plan step made; nested app: `[BACKUP]/files/<file>`
+  exists): it is code the app already had. Change nothing in it for this finding. Add one line to
+  TODO.md under "## Security Improvements": the finding, the file, and "/fix-it applies this fix,
+  with an ask, after a /nemo-it scan reports it". The fix is SEMI-AUTO (fix-strategies.md,
+  Strategy 8): the user picks it in /fix-it.
+- **The snapshot does not have the file:** this retrofit added it. Auto-fix it, as any `[FIX]` item.
+- Every other check follows the rule above, AI29 included: it is a hole open now, not a missing control.
 
 Tell user: "Your app is retrofitted! Now making sure everything works perfectly..."
 

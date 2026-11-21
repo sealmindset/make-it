@@ -968,6 +968,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.10 -- /retrofit-it logs a missing AI-safety control in code you already had
+
+`/retrofit-it` checks an app against the same list a new build is checked against, and its rule
+for a failing check was "fix it at once". On a retrofit that rule landed on AI code you wrote:
+it was changed without a word, by a rule meant for code a build had generated minutes earlier.
+
+- **Logged, not added.** When the check finds a safety control missing in a file the app
+  already had (a sanitizer or output-validation call, delimiter tags, rate limiting on an AI
+  route, the safety preamble), `/retrofit-it` changes nothing in that file and writes one line
+  to `TODO.md`. `/fix-it` applies the fix, with an ask.
+- **How it tells.** By the snapshot `/retrofit-it` takes before it changes anything. A file in
+  the snapshot is yours. A file that is not was added by the retrofit, and is still completed.
+- **Still fixed at once on your code:** error sanitizing, the prompt size limit and unsafe HTML
+  rendering. They close leaks and do not change what the AI says.
+- **Security fixes still block.** The Claude-subscription provider check (AI29) is never turned
+  into a `TODO.md` line.
+- **`/make-it` is unchanged.**
+- **Checked:** `scripts/test-retrofit-ai-safety-logs.sh` (22 checks, 9 planted defects, each
+  caught). It pins the wording; no real retrofit was run, and this change had no independent
+  review.
+
 ### v1.71.9 -- Security fix: the Claude-subscription AI provider gives the model no tools
 
 The scaffold's Claude-subscription provider sends what an app's users type to the Claude Code
