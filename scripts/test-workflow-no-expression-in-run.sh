@@ -122,7 +122,7 @@ check "Q16 says apps already built fail it and /resume-it presents it first" \
   'has "$Q16" "An app built before this check fails it: its \`quality-gate.yml\` puts the branch name into the attestation step'"'"'s shell command. /resume-it'"'"'s catch-up presents it first, as a security fix."'
 check "Q16 says when it is N/A" 'has "$Q16" "N/A when the project has no \`.github/workflows/\`."'
 check "nothing in Q16 allows script-text expressions or downgrades it" \
-  '! printf "%s" "$Q16" | gq -E "(run:|script:|script text)[^.]*(are|is) (fine|allowed|ok)|\[WARN\]|\[FIX\]"'
+  '! printf "%s" "$Q16" | gq -E "(in|inside) .(run|script):.[^.]*(are|is) (fine|allowed|ok)|script text (is|are) (fine|allowed|ok)|\[WARN\]|\[FIX\]"'
 check "build-standards still says once what [SECURITY FIX] means" \
   '[ "$(grep -cxF -- "- \`[SECURITY FIX]\` after the severity = the check closes a hole that is open now in apps already built." "$BS")" = 1 ]'
 

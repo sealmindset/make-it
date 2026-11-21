@@ -134,7 +134,7 @@ check "the report says you're on the cleanup"  gq -F "You're on the cleanup now"
 check "Q14 runs no tools, Q15 is gone"         q14_no_tools "$BS"
 check "Q14 N/A in the first /make-it build"    gq -F "N/A in /make-it's first build-verify" "$BS"
 check "no Q15 left anywhere"                   none 'Q15' "$CMD" "$REF" "$BS" .claude/commands/make-it.md .claude/commands/resume-it.md .claude/commands/retrofit-it.md CLAUDE.md README.md
-check "make-it build-verify lists Q01-Q14"     gq -F "**Q01-Q14**" .claude/commands/make-it.md
+check "make-it build-verify lists Q01-Q16"     gq -F "**Q01-Q16**" .claude/commands/make-it.md
 check "retrofit runs no dead-code tools"       gq -F "not measured here (no tools run on an app" .claude/commands/retrofit-it.md
 check "resume-it reads only log dates for Q14" gq -F "it runs no tools and writes nothing, just reads the dates" .claude/commands/resume-it.md
 check "resume-it suggests /deadcode-it"        gq -F "(routes to /deadcode-it)" .claude/commands/resume-it.md
