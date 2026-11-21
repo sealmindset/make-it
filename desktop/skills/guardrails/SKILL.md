@@ -54,7 +54,7 @@ each rule comes up here.
 6. **Record deferred checks.** A check that needs Docker, a running app or its live endpoints,
    the user's git/GitHub (commits, hooks, CI), or deployment gets listed as **DEFERRED** with
    one line saying why. Never mark such a check as passed or imply it ran. This covers all of
-   `build-standards.md` Live Verification Checks, `build-verify-security.md` Phase 1b-1e (the
+   `build-standards.md` Live Verification Checks, `build-verify-security.md` Phase 1b (the
    scanners run only from Docker images), Phase 2b, Phase 3
    rebuilds and Phase 6 (the deep code audit and its fixes need Claude Code), and every Tier 1 container, auth-flow, and health-check item.
 

@@ -33,11 +33,14 @@ P6="$(sec "$B" '^## Phase 6: ')"; P7="$(sec "$B" '^## Phase 7: ')"
 has() { printf "%s\n" "$1" | flat | gq -F -- "$2" || { echo "  missing: $2"; false; }; }
 row() { printf "%s\n" "$1" | gq -xF -- "$2" || { echo "  no such line: $2"; false; }; }
 none() { local m; m="$(printf "%s\n" "$1" | { grep -niE -- "$2" || true; })"; [ -z "$m" ] || { printf "%s\n" "$m" | cut -c1-200 | sed 's/^/  found: /'; false; }; }
-# code: every line inside a fenced code block of the file; spans: every `inline code` span
-code() { awk '/^[[:space:]]*```/{c=!c; next} c' "$1"; }
-spans() { flat < "$1" | perl -ne 'print "$1\n" while /`([^`]+)`/g'; }
-# sentences: the file flattened, one sentence per line
-sentences() { flat < "$1" | perl -pe 's/([.!?]["\x27)]?) (?=\S)/$1\n/g'; }
+# code: every line of a ```bash block (the commands); prose: every line outside fenced blocks
+code() { awk '/^[[:space:]]*```bash/{c=1; next} /^[[:space:]]*```/{c=0; next} c' "$1"; }
+prose() { awk '/^[[:space:]]*```/{c=!c; next} !c' "$1"; }
+# spans: every `inline code` span in the prose; sentences: the prose flattened, one sentence per line
+spans() { prose "$1" | flat | perl -ne 'print "$1\n" while /`([^`]+)`/g'; }
+sentences() { prose "$1" | flat | perl -pe 's/([.!?]["\x27)]?) (?=\S)/$1\n/g'; }
+# a sentence that runs node or a scanner "on the computer" (a sentence saying "never" or "not needed" is exempt)
+ONCOMP='\b(use|using|run|with)\b[^.]{0,20}\b(node|semgrep|bandit|trivy|pip-audit|npm)\b[^.]{0,40}\bon the computer|installed one instead'
 TOOLS='(^|[^a-z_./-])(semgrep|bandit|trivy|pip-audit|pip install|npm (audit|ci|install)|npx|node|docker run)([^a-z_.-]|$)'
 
 check "the sections were found" '[ -n "$P0" ] && [ -n "$P1" ] && [ -n "$P4" ] && [ -n "$P6" ] && [ -n "$P7" ]'
@@ -53,15 +56,15 @@ check "no code line or inline command in Part D runs a scanner, node or docker e
 
 # 2. what the states mean, and what they may never be read as
 check "Phase 0: every scanner from a pinned image, even when installed; one script; python3 already used" \
-  'has "$P0" "Every scanner runs from a pinned container image on every build, whatever is installed on the computer -- even when the tool is installed, so every machine gives the same result." && has "$P0" "One script shipped with make-it does all of it, \`security-pass.py\`."'
+  'has "$P0" "Every scanner runs from a pinned container image on every build, whatever is installed on the computer -- even when the tool is installed, so every machine gives the same result." && has "$P0" "One script shipped with make-it does all of it, \`security-pass.py\` (Phase 1b)."'
 check "ran, NOT RUN and nothing to audit are each defined, and neither of the last two is ever clean" \
   'has "$P1" "**NOT RUN:** with the reason the tool gave" && has "$P1" "It is skipped, the build is not blocked, and the internal report lists it with that reason -- never as clean or as no findings." && has "$P1" "**nothing to audit:** with what it looked for (no Python code, no \`package-lock.json\`, no requirements file) -- never \"clean\"."'
 check "no sentence lets NOT RUN or nothing to audit read as clean, no findings or passed (unless it says never)" \
-  'none "$(sentences "$B" | grep -iE "NOT RUN|nothing to audit" | grep -iE "clean|no findings|passed|pass\b" | grep -viE "\bnever\b" || true)" "."'
+  'none "$(sentences "$B" | grep -iE "NOT RUN|nothing to audit" | grep -iE "clean|no findings|passed" | grep -viE "\bnever\b" || true)" "."'
 check "no report that lists errors is counted as ran; no exit code means ran" \
   'none "$(sentences "$B")" "still count(ed|s) as ran|errors[^.]*count(ed|s) as ran|exits? (with )?(code )?0[^.]*count(ed|s) as ran"'
 check "no node, and no scanner, 'on the computer' as a way to run them" \
-  'none "$(sentences "$B")" "(use|run|with)[^.]{0,40}\b(node|semgrep|bandit|trivy|pip-audit|npm)\b[^.]{0,40}on the computer|installed one instead"'
+  'none "$(sentences "$B" | grep -iE "$ONCOMP" | grep -viE "\bnever\b|not needed" || true)" "."'
 check "Phase 4 re-scans with the script again" \
   'has "$P4" "After fixes are applied and containers rebuilt, re-run the scans from Phase 1 (the same script, from its pinned images) and Phase 2 to verify fixes were effective." && none "$P4" "on the computer|installed"'
 check "the accepted gap is said once" \
@@ -85,13 +88,13 @@ review: a NOT RUN one recorded as no findings	B	**nothing to audit:**	A NOT RUN 
 review: nothing to audit recorded as clean	B	**nothing to audit:**	A scanner with nothing to audit is recorded as clean.\n- **nothing to audit:**
 review: use node on the computer	B	Node on the computer is never used for it.	Node on the computer is never used for it. If Docker cannot start, use node on the computer for these checks.
 review: a report that lists errors still counted as ran	B	**nothing to audit:**	A Bandit or Semgrep report that lists errors is still counted as ran.\n- **nothing to audit:**
-review: Phase 4 re-scan on the computer	B	re-run the scans from Phase 1 (the same script, from its pinned images)	re-run the scans from Phase 1 with semgrep and bandit on the computer
+review: Phase 4 re-scan on the computer	B	re-run the scans from Phase 1 (the same script,	re-run the scans from Phase 1 with semgrep and bandit on the computer (the same script,
 review: NOT RUN treated as passed	B	**nothing to audit:**	A scanner that is NOT RUN is treated as passed for the self-healing loop.\n- **nothing to audit:**
 the script call removed from 1b	B	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" scan .	echo scan
 a final checker back on host node	B	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" audit-check findings <run>/findings.json	node "$AUDIT_DIR/validate-findings.cjs" <run>/findings.json
 an inline docker command in prose	B	Node on the computer is never used for it.	Node on the computer is never used for it. Or run `docker run --rm node:22 node x.cjs`.
-the audit's own node steps left to node	B	run `python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" audit-check <kind> <output-dir>/<file>` instead	run them as written
-command -v back in Phase 0	B	One script shipped with make-it does all of it	Check `command -v semgrep` first. One script shipped with make-it does all of it
+the audit's own node steps left to node	B	`python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" audit-check <kind> <output-dir>/<file>`	them as written
+command -v back in Phase 0	B	Every scanner runs from a pinned container image on every build	Check `command -v semgrep` first. Every scanner runs from a pinned container image on every build
 the image only when not installed	B	even when the tool is installed, so every machine gives the same result	only when the tool is not installed
 6a: MISSING: node back	B	[ -f "$AUDIT_DIR/SKILL.md" ] || echo "MISSING: the security-audit files"	[ -f "$AUDIT_DIR/SKILL.md" ] || echo "MISSING: the security-audit files"\ncommand -v node || echo "MISSING: node"
 6a: missing audit files still run	B	If the security-audit files are missing, the deep code audit is NOT RUN.	If the security-audit files are missing, the deep code audit still runs.

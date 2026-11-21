@@ -39,6 +39,11 @@ BANDIT_MIXED = {"errors": [{"filename": "./backend/app/broken.py", "reason": "sy
                 "results": [{"filename": "./backend/app/main.py", "test_id": "B602", "line_number": 2, "issue_severity": "HIGH"}]}
 
 
+def load(name):
+    with open(os.path.join(HEALTHY, name)) as f:
+        return json.load(f)
+
+
 class Folder:
     """A copy of the healthy report folder to change for one case."""
 
@@ -100,13 +105,13 @@ class Decide(unittest.TestCase):
         self.assertEqual(f.lines()[0][0], "semgrep: NOT RUN -- Failed to download configuration from https://semgrep.dev/p/no-such-ruleset-xyz HTTP 404.")
 
     def test_semgrep_per_file_warnings_still_ran(self):
-        rep = json.load(open(os.path.join(HEALTHY, "semgrep.json")))
+        rep = load("semgrep.json")
         rep["errors"].append({"code": 3, "level": "warn", "message": "Timeout", "path": "frontend/app/page.tsx", "type": "Timeout"})
         f = Folder(self); f.put("semgrep", obj=rep)
         self.assertEqual(f.lines()[0][0], "semgrep: ran -- 16 findings, 216 files, 10 file warnings")
 
     def test_semgrep_skipped_rules_are_counted(self):
-        rep = json.load(open(os.path.join(HEALTHY, "semgrep.json")))
+        rep = load("semgrep.json")
         rep["skipped_rules"] = [{"rule_id": "x.y"}]
         f = Folder(self); f.put("semgrep", obj=rep)
         self.assertEqual(f.lines()[0][0], "semgrep: ran -- 16 findings, 216 files, 9 file warnings, 1 rules skipped")
@@ -193,14 +198,16 @@ class Discover(unittest.TestCase):
         d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d, True)
         for rel in files:
             p = os.path.join(d, rel); os.makedirs(os.path.dirname(p), exist_ok=True)
-            open(p, "w").write("x = 1\n")
+            with open(p, "w") as f:
+                f.write("x = 1\n")
         for rel, target in links:
             os.symlink(target, os.path.join(d, rel))
         return d
 
     def test_prunes_installed_and_built_folders_and_never_follows_links(self):
         out = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, out, True)
-        open(os.path.join(out, "outside.py"), "w").write("x = 1\n")
+        with open(os.path.join(out, "outside.py"), "w") as f:
+            f.write("x = 1\n")
         d = self.tree(["app/main.py", "backend/requirements.txt", "backend/requirements-dev.txt", "frontend/package-lock.json",
                        "frontend/node_modules/x/package-lock.json", "backend/env/pyvenv.cfg", "backend/env/lib/python3.12/site-packages/pip/x.py",
                        "backend/env/requirements.txt", ".git/hooks/x.py", ".tox/py/lib/x.py", "lib/site-packages/y.py", "frontend/.next/a/package-lock.json",
