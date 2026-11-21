@@ -131,7 +131,7 @@ const fs = require("fs"); const all = fs.readdirSync("/r");
 if (!all.includes("files.txt")) { console.log("NO FILE LIST in this folder: Phase 1 did not start here"); process.exit(1); }
 const len = (a) => (Array.isArray(a) ? a.length : -1);
 const tests = {
-  semgrep: (r) => len(r.paths.scanned) > 0 && r.errors.every((e) => String(e.type).startsWith("PartialParsing")) && `${r.results.length} findings, ${r.paths.scanned.length} files, ${r.errors.length} partly parsed`,
+  semgrep: (r) => len(r.paths.scanned) > 0 && r.errors.every((e) => e.level !== "error") && `${r.results.length} findings, ${r.paths.scanned.length} files, ${r.errors.length} file warnings`,
   bandit: (r) => len(r.errors) === 0 && r.metrics._totals.loc > 0 && `${r.results.length} findings, ${r.metrics._totals.loc} lines`,
   "npm-audit": (r) => !("error" in r) && `${r.metadata.vulnerabilities.total} vulnerabilities`,
   "pip-audit": (r) => len(r.dependencies) >= 0 && `${r.dependencies.length} packages, ${r.dependencies.filter((d) => len(d.vulns) > 0).length} vulnerable`,
@@ -179,7 +179,7 @@ check "Trivy never loads the project's trivy.yaml" 'none "$P1" "trivy[.]yaml[^#]
 
 # 5. what "ran" means, and what a scanner that cannot run leaves
 check "a scanner ran only if its report exists and passes its own test, never on its exit code alone" \
-  'has "$P0" "A scanner ran only if its report file exists and parses, never on its exit code alone: Bandit exits 1 when it has findings, and Semgrep with no network exits 2 with empty output." && has "$P0" "A report that parses can still be a failure, so each tool has its own test (1e):" && none "$(cat "$B")" "exits? (with )?(code )?0[^.]*counts? as ran|counts? as ran[^.]*exits? (with )?(code )?0"'
+  'has "$P0" "A scanner ran only if its report file exists and parses, never on its exit code alone: Bandit exits 1 when it has findings, and Semgrep with no network exits 2 with empty output." && has "$P0" "A report that parses can still be a failure, so each tool has its own test (1e): Semgrep scanned at least one file and reports no error of level \`error\` (a file it could only partly parse, a syntax error or a timeout in one file is a \`warn\`: counted, not a failure);" && none "$(cat "$B")" "exits? (with )?(code )?0[^.]*counts? as ran|counts? as ran[^.]*exits? (with )?(code )?0"'
 check "one that cannot run is skipped with its reason, the build not blocked, never clean" \
   'has "$P0" "A scanner whose report is missing or fails its test is NOT RUN: it is skipped, the build is not blocked, and the internal report lists it with the reason from its \`.err\` file (for example, the image could not be pulled, or no network) -- never as clean or as no findings."'
 check "nothing to scan is its own line, never clean" \
@@ -241,6 +241,7 @@ A: pip-audit sees the project again	B	-v "$PROJECT/$req":/req/requirements.txt:r
 B: Trivy run from the project folder (loads its trivy.yaml)	B	-w / -v make-it-trivy-cache	-w /src -v make-it-trivy-cache
 B: Semgrep that scanned nothing counts as ran	B	len(r.paths.scanned) > 0 && 	
 B: Bandit that read no code counts as ran	B	 && r.metrics._totals.loc > 0	
+2: a Semgrep run with a fatal error counted as ran	B	r.errors.every((e) => e.level !== "error") && 	
 B: the accepted config gap no longer said	B	an accepted gap, not checked	handled
 1: the file list from git again	B	(cd "$PROJECT" && find . \( -name node_modules -o -name .venv -o -name venv -o -name .git \) -prune -o -type f -print) | sed 's|^[.]/||' > "$REPORT_DIR/files.txt"	git -C "$PROJECT" ls-files > "$REPORT_DIR/files.txt"
 1: no lockfile leaves no line	B	 || echo "no package-lock.json found" > "$REPORT_DIR/npm-audit.none"	

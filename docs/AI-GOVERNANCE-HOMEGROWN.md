@@ -363,6 +363,8 @@ Phase 6: Report
 | **Build-verify E2E** | Live auth flow, API endpoint, page content, permission boundary testing | Build-verify Part B | Every web app |
 | **AuditGitHub** | Runtime security scanning + automated PR fixes | Post-deploy continuous monitoring | Companion tool |
 
+A scanner in Part D that cannot run on a build (its image cannot be pulled, or there is no network) is recorded as NOT RUN with its reason, never as clean.
+
 ### 7.2 Recommended Additions (Governance Enhancement)
 
 | Tool | Purpose | Gap Addressed | Priority | Integration Point |
@@ -488,7 +490,7 @@ None of these stages' own checks runs a NeMo suite. /nemo-it runs its own 60 or 
 
 | Phase | Timeline | Actions |
 |-------|----------|---------|
-| **Phase 1: Foundation** | Now | Adopt this governance document. Establish /make-it as the standard for homegrown apps. Ensure Semgrep + Bandit installed on all dev machines |
+| **Phase 1: Foundation** | Now | Adopt this governance document. Establish /make-it as the standard for homegrown apps. Ensure every dev machine runs Docker and can pull the pinned scanner images (Part D runs Semgrep, Bandit, Trivy, pip-audit and npm audit from them) |
 | **Phase 2: Secret Scanning** | 30 days | Add Gitleaks to CI/CD pipeline. Scan existing repos for historical secrets |
 | **Phase 3: DAST** | 60 days | Integrate OWASP ZAP into /nemo-it standalone, which runs before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") |
 | **Phase 4: Supply Chain** | 90 days | Add SBOM generation (Syft). Implement Dependabot/Renovate for automated dependency PRs |
