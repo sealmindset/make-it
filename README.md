@@ -968,6 +968,34 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.11 -- A build fails when an app adds model training, fine-tuning or retrieval
+
+The governance document said data poisoning was covered, and listed controls that guard the
+app's own prompts. Data poisoning is about training data, fine-tuning data and retrieval data.
+make-it apps have none of those, so the honest answer is "not applicable", and now a check
+holds that line.
+
+- **New build check AI30, on every app.** It reads the app's dependency files and code for
+  training libraries and loops, fine-tuning calls, embeddings calls and vector stores. A hit
+  blocks the handoff.
+- **Nothing is removed on its own.** You are told what was found and where. The code comes out
+  only at your word, or you accept it.
+- **Accepting it** is one line in the app's own record of things left out by your choice.
+  The check then reads "Left out (your choice)", never passed, and `/ship-it` names it before
+  production.
+- **A tripwire, not proof.** A library under another name gets past it, and an unrelated
+  `.fit(` trips it. It shows the app holds none of these; it does nothing to protect training
+  or retrieval data once you accept one.
+- **The governance row** for data poisoning now reads "Not applicable, enforced by check AI30".
+- **Checked:** `scripts/test-ai30-training-retrieval.sh` (52 checks, 17 planted defects, each
+  caught), both scaffolds, and one real generated app: no hit. No real build ran the check,
+  and this change had no independent review.
+- **Not built.** The same scan in an organization's pipeline, with its own exceptions list.
+  Only the build check exists.
+- **Known and filed.** A first `/make-it` build whose idea needs retrieval is blocked with no
+  way to accept it; `/resume-it` and `/retrofit-it` can record the choice, `/make-it` cannot
+  yet. The optional AI memory layer is not covered by this check.
+
 ### v1.71.10 -- /retrofit-it logs a missing AI-safety control in code you already had
 
 `/retrofit-it` checks an app against the same list a new build is checked against, and its rule

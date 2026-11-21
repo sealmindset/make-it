@@ -9,7 +9,9 @@
 #     NeMo Guardrails is "tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)". The rows
 #     carry their verdict words (the owner's, 2026-11-20: Harmful Content Generation GAP, Direct Prompt Injection
 #     PARTIAL, the competitor rows PARTIAL; /nemo-it's prevention table: toxicity and bias Not covered), so a verdict
-#     cannot change without this file changing.
+#     cannot change without this file changing. Since E02-S66 (the owner's call, 2026-11-21) the AI04 row names no NeMo
+#     control: it says data poisoning is not applicable, enforced by check AI30. It stays pinned here, verdict included,
+#     so the count of 25 still holds and that verdict cannot change silently either.
 #   - No build prompt tells an app to send requests through the rails, and Prompt #10d has each generated app's
 #     guardrails README open by saying the rails are loaded by the tests only.
 #   - Every sentence, list item or table cell in any tracked Markdown file that names NeMo next to an enforcing word
@@ -80,7 +82,7 @@ docs/AI-GOVERNANCE-HOMEGROWN.md	| AI-specific risks are mitigated | Input saniti
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **MAP 2.3** | Scientific integrity | AI outputs validated against schemas and value ranges (validateAgentOutput). The system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **A.5** | AI system impact assessment | Design phase classifies project type and activates appropriate guardrails. AI apps get mandatory additional controls (rate limiting, prompt management) and a NeMo Guardrails test suite, run when someone runs it (not a runtime filter) |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI01: Prompt Injection** | sanitizePromptInput() strips injection patterns; `<user_input>` delimiter tags; system prompt anti-injection instructions; jailbreak resistance instructions; NeMo Guardrails prompt injection tests (10 of /nemo-it's own cases; none run by build-verify's checks) | AI02, AI09 | Yes |
-docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI04: Data Poisoning** | Prompt template blocklist validation; immutable safety preamble; draft/test/publish workflow; risk_flag audit logging. Topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI10 | Yes |
+docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI04: Data Poisoning** | Not applicable: data and model poisoning targets training data, fine-tuning data and embedding or retrieval data, and make-it apps train no model, fine-tune none and add no retrieval. Check AI30 enforces it: it fails the build when the code adds model training, fine-tuning or retrieval, until the user accepts it in the app's left-out record. AI30 is a tripwire (static detection can be fooled both ways) and a boundary check, not protection against poisoning; its CI half is not built. The prompt-management controls this row used to list (prompt template blocklist validation, immutable safety preamble, draft/test/publish workflow, risk_flag audit logging) guard the app's own prompts against injected edits (AI03 above, section 5.3), not training or retrieval data. The optional AI memory layer (BN checks) puts stored memories into prompts by database query, with no embeddings; AI30 does not cover it | AI30 | Not applicable, enforced by check AI30 |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **AI09: Misinformation** | AI output validation rejects contradictory structured fields (e.g., riskTier=LOW with riskScore=5); the system prompt tells the model never to fabricate data. Hallucination (test category 6) is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI03, AI09 | Partial |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **NeMo Guardrails (a test suite, not a runtime filter)** | Prompt injection tests (10 of /nemo-it's own cases, when someone runs /nemo-it; none run by build-verify's checks) + jailbreak resistance tests | Automated test suite, run when someone runs it |
 docs/AI-GOVERNANCE-HOMEGROWN.md	| **NeMo Guardrails (a test suite, not a runtime filter)** | Tests for hallucination, toxicity/bias and PII leakage (10 of /nemo-it's own cases per category; none run by build-verify's checks) | Automated test suite, run when someone runs it |
@@ -104,8 +106,8 @@ docs/PENTEST-READINESS.md	| **GAP-26:** No filter for harmful AI output | NeMo A
 ROWS_EOF
 check "each rewritten row is exactly the reviewed line, verdict word included (25 rows: the governance doc, the pentest doc, /nemo-it's prevention table)" \
   '[ "$(grep -c . "$TMPD/rows")" = 25 ] && ( while IFS="	" read -r f l; do gq -xF -- "$l" "$f" || { echo "  no such line in $f: $(printf "%s" "$l" | cut -c1-160)"; exit 1; }; done < "$TMPD/rows" )'
-check "the one form is used, whole, in the governance doc (4 times) and the pentest doc (7 times)" \
-  '[ "$(grep -oF -- "$FORM" "$GOV" | grep -c .)" = 4 ] && [ "$(grep -oF -- "$FORM" "$PEN" | grep -c .)" = 7 ]'
+check "the one form is used, whole, in the governance doc (3 times) and the pentest doc (7 times)" \
+  '[ "$(grep -oF -- "$FORM" "$GOV" | grep -c .)" = 3 ] && [ "$(grep -oF -- "$FORM" "$PEN" | grep -c .)" = 7 ]'
 check "the governance doc says once, in section 5.5, that nothing generated loads the rails at run time" \
   'has "$GOV" "Nothing make-it generates loads the rails at run time. The rails and the tests are test-time files, used only when someone runs the app'"'"'s guardrail tests; the controls that act on live requests are in sections 5.1 to 5.4." && has "$GR" "- These are test-time files: nothing generated loads the rails at run time (not a runtime filter). They are there for the app'"'"'s guardrail tests" && has "$BP" "These are test-time files: nothing generated loads the rails at run time (not a runtime filter). The comments above say what each rail does when the app'"'"'s guardrail tests use it."'
 
@@ -137,7 +139,6 @@ Semgrep, Bandit, dependency scanners; AI behavior is tested by the NeMo Guardrai
 The system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 These are test-time files: nothing generated loads the rails at run time (not a runtime filter).
 - Open with this: these rails are loaded by the tests only; nothing in the app loads them at run time
-Topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 Toxicity and bias are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 Prompt injection is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
 sanitizePromptInput, delimiter tags, anti-injection system prompt instructions; tested by the NeMo Guardrails suite when someone runs it (not a runtime filter)
@@ -175,7 +176,7 @@ if [ -z "${1:-}" ]; then
   # add FILE AFTER LINE: the same, with LINE added after the first line that starts with AFTER
   add() { A="$2" L="$3" opp "$1" 's/^(\Q$ENV{A}\E[^\n]*\n)/$1$ENV{L}\n/m'; }
   check "(control) fails with \"NeMo Guardrails topic boundary enforcement\" back in the AI04 row" \
-    'opp "$GOV" "s/risk_flag audit logging[.] Topic boundaries are tested by the NeMo Guardrails suite when someone runs it [(]not a runtime filter[)]/risk_flag audit logging; NeMo Guardrails topic boundary enforcement/"'
+    'opp "$GOV" "s/risk_flag audit logging[)] guard the app/risk_flag audit logging; NeMo Guardrails topic boundary enforcement) guard the app/"'
   check "(control) fails when a pentest row's control text is put back and its verdict kept (Hallucination, PARTIAL)" \
     'opp "$PEN" "s/validateAgentOutput[(][)] checks structured output schema [+] value ranges; the system prompt tells the model never to fabricate data; hallucination is tested by the NeMo Guardrails suite when someone runs it [(]not a runtime filter[)] [|] [*][*]PARTIAL/NeMo Guardrails hallucination detection; validateAgentOutput() checks structured output schema + value ranges | **PARTIAL/"'
   check "(control) fails when the runtime control named in a row is swapped for NeMo (the competitor rows)" \

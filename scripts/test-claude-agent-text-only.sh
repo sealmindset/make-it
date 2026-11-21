@@ -205,8 +205,10 @@ verify() {
     'has29 "(a) data kept on disk -- without \`--no-session-persistence\` the CLI saves each call'"'"'s system prompt, user prompt and reply in plaintext under \`~/.claude/projects/\` in the backend container, for 30 days by default; the flag was confirmed to be accepted the way the SDK starts the CLI and to turn transcript writes off in the CLI'"'"'s own code, and was not observed during a live call;" && has29 "(b) the CLI process still inherits the backend'"'"'s environment" && has29 "(c) the SDK'"'"'s parser drops content blocks of a type it does not know before the provider sees them" && has29 "(d) no check here makes a model call"'
   check "AI29 says how an app built before it is fixed" \
     'has29 "An app built before this check fails it; /resume-it'"'"'s catch-up presents it first, as a security fix."'
-  check "AI29 is the last AI check, and every range reads AI01-AI29" \
-    '[ "$(grep -oE "^[*][*]AI[0-9]+[a-d]?[*][*]" "$BS" | tail -1)" = "**AI29**" ] && [ "$(grep -cE "^[*][*]AI[0-9]+[a-d]?[*][*]" "$BS")" = 33 ] && [ "$(cat "$MK" "$RS" "$RF" "$GV" | grep -cE "AI01-AI(1[0-9]|2[0-8])\b")" = 0 ] && [ "$(grep -c "^- [*][*]AI01-AI29[*][*]: " "$MK")" = 1 ] && [ "$(grep -c "^   - [*][*]AI (AI01-AI29):[*][*] " "$RS")" = 1 ] && lines "$RF" "- **AI01-AI29**: AI features (if ai_features.needed = true)" 1 && lines "$GV" "| AI Features | AI01-AI29 (incl. AI01a-AI01d) | 33 | AI (any type) |" 1'
+  # E02-S66 moved this pin: AI30 now follows AI29. It still proves AI29 is there, right before the last AI check, and
+  # that no range is stale (AI01-AI0x to AI01-AI29 included).
+  check "AI29 is followed only by AI30, the last AI check, and every range reads AI01-AI30" \
+    '[ "$(grep -oE "^[*][*]AI[0-9]+[a-d]?[*][*]" "$BS" | tail -2 | tr "\n" " ")" = "**AI29** **AI30** " ] && [ "$(grep -cE "^[*][*]AI[0-9]+[a-d]?[*][*]" "$BS")" = 34 ] && [ "$(cat "$MK" "$RS" "$RF" "$GV" | grep -cE "AI01-AI([0-9]|1[0-9]|2[0-9])\b")" = 0 ] && [ "$(grep -c "^- [*][*]AI01-AI30[*][*]: " "$MK")" = 1 ] && [ "$(grep -c "^   - [*][*]AI (AI01-AI30):[*][*] " "$RS")" = 1 ] && lines "$RF" "- **AI01-AI30**: AI features (if ai_features.needed = true; AI30 runs on every app)" 1 && lines "$GV" "| AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |" 1'
   check "resume-it's catch-up reads the provider for AI29" \
     'gq -F "a text-only Claude-subscription provider (AI29: read \`lib/ai/providers/claude_agent.py\`; an app built before the check fails it and is fixed from the scaffold'"'"'s copy)" "$RS"'
   # 8. /resume-it: a security fix is not an offer
@@ -260,7 +262,7 @@ plant "AI29 with condition 3 deleted" "$REL_BS" 's[:s.index("(3) the options do 
 plant "AI29 with condition 6 deleted" "$REL_BS" 's.replace("(6) `tests/unit/test_claude_agent_text_only.py` is missing or does not pass. ", "", 1)'
 plant "AI29 failing every app on the pin again" "$REL_BS" 's.replace("applies only when the provider is selected or its SDK is declared, which is any one of:", "applies to every app:", 1)'
 plant "Not now putting the security fix off" "$REL_RS" 's.replace("it is not written under `## Put off by your choice` or `## Left out by your choice` (the record", "it is written under `## Put off by your choice` (the record", 1)'
-plant "the stale AI range back in retrofit-it" "$REL_RF" 's.replace("- **AI01-AI29**: AI features", "- **AI01-AI10**: AI features", 1)'
+plant "the stale AI range back in retrofit-it" "$REL_RF" 's.replace("- **AI01-AI30**: AI features", "- **AI01-AI29**: AI features", 1)'
 
 fail=0
 [ "$real" = 0 ] || bad "the repository's own files pass every check above"

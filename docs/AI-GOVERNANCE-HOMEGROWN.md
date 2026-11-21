@@ -93,11 +93,11 @@ The NIST AI RMF organizes AI risk management into four functions: **Govern, Map,
 | **AI01: Prompt Injection** | sanitizePromptInput() strips injection patterns; `<user_input>` delimiter tags; system prompt anti-injection instructions; jailbreak resistance instructions; NeMo Guardrails prompt injection tests (10 of /nemo-it's own cases; none run by build-verify's checks) | AI02, AI09 | Yes |
 | **AI02: Sensitive Information Disclosure** | PII masking before AI submission; AI error sanitization (no provider/model/key details); URL sanitization in logs; sensitive settings masked in UI | AI06, L04, G02 | Yes |
 | **AI03: Supply Chain Vulnerabilities** | Dependency scanning (npm audit, pip-audit, trivy); latest stable dependencies enforced; no major version auto-upgrades; prompt template content validation prevents supply-chain injection via prompt editing | X03, AI10 | Yes |
-| **AI04: Data Poisoning** | Prompt template blocklist validation; immutable safety preamble; draft/test/publish workflow; risk_flag audit logging. Topic boundaries are tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI10 | Yes |
+| **AI04: Data Poisoning** | Not applicable: data and model poisoning targets training data, fine-tuning data and embedding or retrieval data, and make-it apps train no model, fine-tune none and add no retrieval. Check AI30 enforces it: it fails the build when the code adds model training, fine-tuning or retrieval, until the user accepts it in the app's left-out record. AI30 is a tripwire (static detection can be fooled both ways) and a boundary check, not protection against poisoning; its CI half is not built. The prompt-management controls this row used to list (prompt template blocklist validation, immutable safety preamble, draft/test/publish workflow, risk_flag audit logging) guard the app's own prompts against injected edits (AI03 above, section 5.3), not training or retrieval data. The optional AI memory layer (BN checks) puts stored memories into prompts by database query, with no embeddings; AI30 does not cover it | AI30 | Not applicable, enforced by check AI30 |
 | **AI05: Improper Output Handling** | validateAgentOutput() on every response; structured output schema validation; free-text XSS scanning; no dangerouslySetInnerHTML for AI content; HTML escaping in template variable interpolation | AI03, AI07 | Yes |
 | **AI06: Excessive Agency** | Rate limiting on AI endpoints (per-user token + request budgets); prompt size validation (AI_MAX_PROMPT_CHARS); conversation history depth limits; session isolation | AI04, AI05 | Yes |
 | **AI07: System Prompt Leakage** | validateAgentOutput() scans for system prompt fragments in responses; AI error sanitization returns generic messages; immutable safety preamble invisible in admin UI | AI03, AI06 | Yes |
-| **AI08: Vector and Embedding Weaknesses** | Not yet applicable -- /make-it does not currently generate RAG/vector search applications. **Recommended:** Add vector DB guardrails when RAG variant is introduced | -- | Future |
+| **AI08: Vector and Embedding Weaknesses** | Not yet applicable -- /make-it does not currently generate RAG/vector search applications, and check AI30 fails the build when the code adds embeddings or a vector store, until the user accepts it in the app's left-out record. **Recommended:** Add vector DB guardrails when RAG variant is introduced | AI30 | Future |
 | **AI09: Misinformation** | AI output validation rejects contradictory structured fields (e.g., riskTier=LOW with riskScore=5); the system prompt tells the model never to fabricate data. Hallucination (test category 6) is tested by the NeMo Guardrails suite when someone runs it (not a runtime filter) | AI03, AI09 | Partial |
 | **AI10: Unbounded Consumption** | AI rate limiting with 429 + Retry-After; prompt size enforcement; AI_MAX_DOCUMENT_CHARS for large documents; SSE streaming with heartbeats prevents timeout-based resource waste | AI04, AI05, AI11 | Yes |
 
@@ -478,7 +478,7 @@ None of these stages' own checks runs a NeMo suite. /nemo-it runs its own 60 or 
 | **No DAST scanning** | Medium | Static analysis + live E2E tests catch most issues | Add OWASP ZAP to /nemo-it or CI/CD pipeline |
 | **No git history secret scanning** | Medium | Current-state file scanning catches committed secrets | Add Gitleaks or TruffleHog to pre-commit or CI |
 | **No SBOM generation** | Low-Medium | Dependency scanning identifies components | Add Syft/CycloneDX to /ship-it pipeline |
-| **No RAG/vector DB guardrails** | Low (future) | Not applicable until RAG variant exists | Plan vector DB security variant for /make-it |
+| **No RAG/vector DB guardrails** | Low (future) | Not applicable: make-it apps add no retrieval, and check AI30 fails the build when the code adds it, until the user accepts it in the app's left-out record (a tripwire; its CI half is not built) | Plan vector DB security variant for /make-it |
 | **No formal IaC scanner** | Medium | Pattern-based Terraform fixes (Strategy 10) | Add Checkov or tfsec to /ship-it pre-deploy |
 | **No runtime protection (RASP)** | Low | Build-time hardening + activity logs | Evaluate RASP middleware for high-risk apps |
 | **Build-verify's checks run no NeMo Guardrails test** | Medium | Build checks the guardrail wiring in code (check AI09) and probes the AI endpoints with 3 payloads; /nemo-it runs its own 60 or more cases and, when picked, the app's generated suite, each in its own block, when someone runs /nemo-it with a live AI provider | Run /nemo-it with a live AI provider before each production deploy: recommended, and nothing in make-it enforces it |
@@ -518,10 +518,10 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | Security | X01-X06 | 6 | 0-1 |
 | Test Infrastructure | T01-T05 | 5 | 0-1 |
 | Live Verification | V01-V15 | 15 | 0-1 |
-| AI Features | AI01-AI29 (incl. AI01a-AI01d) | 33 | AI (any type) |
+| AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |
 | AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~196** | |
+| **Total** | | **~197** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)
