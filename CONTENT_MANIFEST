@@ -113,7 +113,7 @@ d0ee829c8af000d1d84bc352ead4625a290d0af382d0ccdf63df008f68067ff7  make-it/scaffo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/__init__.py
 2d7a3e86d71adfc949116a83ae9ec405576a8036d29a5068d3d5d896987489ed  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/anthropic_direct.py
 e3963b1211cae6e2abcf9d38055efc7ad91129ea7cecea70627fe8d0828af25a  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/anthropic_foundry.py
-7e7585e83cfb766ae2e3e0db07707fd43d1ab6df873a14bb72afd455c945848a  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/claude_agent.py
+be2c60d56ef4c4a6f5282a039cc72ee34065432486e023b15f55e1d8d1eac296  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/claude_agent.py
 b7ccd8608651261c14b34d61faa0cf5229ca363bf330073952dc5174fd5a5606  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/failover.py
 e43cbbe3bcc788e5943010466f29c774028654717d775b91587a8d5652d75d66  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/ollama.py
 cc5391ea7727afa367194f1faaa6c6bbae282476b83803765b02b400bfaee036  make-it/scaffolds/fastapi-nextjs/backend/app/lib/ai/providers/openai_provider.py
@@ -159,6 +159,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 9d91231686d9132c5d72faefc987f433e8d5a07f44fa1d5f54fa95e043906c5c  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_about.py
 4f4a54e6b1b85e166c2f036229b14db74a53962ad973c97d854ce45553f6e27b  make-it/scaffolds/fastapi-nextjs/backend/tests/integration/test_health.py
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/backend/tests/unit/__init__.py
+ce4721d3d54659756c432e87fc52405493fa40c2e76238cc133441ba7cc86aa6  make-it/scaffolds/fastapi-nextjs/backend/tests/unit/test_claude_agent_text_only.py
 ec8e5a948b942b967970a5dca52f0cec3dbb2ec587649392987ff9ba8af0a4f3  make-it/scaffolds/fastapi-nextjs/docker-compose.yml
 e8402a5c83595098fa8cf981dc4a07ab5918a54c1761a2088fe69ce2da0387fc  make-it/scaffolds/fastapi-nextjs/e2e/package.json
 d19069f76bb2c8e2287f61ace8b820eea1af30371d883b41d39ce3a05bd54e58  make-it/scaffolds/fastapi-nextjs/e2e/playwright.config.ts
