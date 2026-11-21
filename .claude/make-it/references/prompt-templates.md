@@ -1410,8 +1410,9 @@ lib/ai/
     │   - Default for single-user local apps; auth = CLAUDE_CODE_OAUTH_TOKEN
     │   - Drives the Claude Code CLI (claude-agent-sdk), single-shot and text-only: no tools
     │     in the model's context (tools=[] + every built-in tool disallowed), permission mode
-    │     dontAsk (never bypassPermissions), nothing loaded from disk, and the call stops on
-    │     any sign of a tool in the reply (build-standards AI29)
+    │     dontAsk (never bypassPermissions), nothing loaded from disk or saved to it. The CLI's
+    │     session report is checked before the model's reply is read; a reply that shows a tool
+    │     ends the call, which detects but does not prevent (build-standards AI29)
     │   - When selected: add claude-agent-sdk>=0.2.186,<0.3 to requirements, install the Claude Code
     │     CLI in the backend Dockerfile, wire CLAUDE_CODE_OAUTH_TOKEN through env
     ├── openai_provider.py           # OpenAI API (GPT-4o, GPT-5, o-series)

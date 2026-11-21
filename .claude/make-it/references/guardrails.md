@@ -318,8 +318,10 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   - Auth via `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) -- NO `ANTHROPIC_API_KEY`.
   - Uses `claude-agent-sdk` (Python) driving the Claude Code CLI subprocess single-shot and
     text-only: no tools in the model's context, permission mode `dontAsk` (never
-    `bypassPermissions`), nothing loaded from disk, and the call stops on any sign of a tool
-    (build-standards AI29). An empty `allowed_tools` list is not a restriction.
+    `bypassPermissions`), nothing loaded from disk or saved to it. The CLI's session report is
+    checked before the model's reply is read; a reply that shows a tool ends the call, which
+    detects but does not prevent (build-standards AI29). An empty `allowed_tools` list is not a
+    restriction.
   - When selected, the build MUST: add `claude-agent-sdk>=0.2.186,<0.3` to requirements, install the
     Claude Code CLI in the backend Dockerfile (`curl -fsSL https://claude.ai/install.sh | bash`),
     and wire `CLAUDE_CODE_OAUTH_TOKEN` through .env / .env.example / docker-compose.
