@@ -24,7 +24,7 @@ a832b1ff3ce7dd62d7e9f6743bb68d8e5ecc9d21290730a3ba584cdcfd2e2cbf  commands/try-i
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
 c93e808d1672faee9baf2b8228ceaac7aab1963397179b16f2214cc7a46bd45b  make-it/backlog/bin/status.py
 a7daa6fe8f53a303677d5b6ed982fa25145281e61a9db799535b856d118fbdeb  make-it/backlog/bin/sync-prs.py
-4e1ce68399f878ca5a864f71d4e34bda4213784655020cc79b1ee0c232addcd9  make-it/confluence-docs/00-make-it-framework-overview.md
+c6f0d3ad0d382e0879a9297063a767e605326a1a03de4494d34c001beef77341  make-it/confluence-docs/00-make-it-framework-overview.md
 ba3f1de30deec2e28513b46a7a80a2e39fbf33ff412a0831a90e45b295bbfc92  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md
 2801a0d1290c161d69e160e3f432c847137ecd10489f3b730d3e4558db3c16d1  make-it/confluence-docs/03-retrofit-it.md
@@ -53,7 +53,7 @@ c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/refere
 a285b7ce6162b806a612e5d3be76a0fde8addabd4b69fdd8f610bc095b3cf6eb  make-it/references/deployment-profile-architecture.md
 b5f8ca6d2ab4168a6d3600d73a1140e611592555da164fd8471ed796a2832b0d  make-it/references/deployment-profiles.md
 ca710bfe581c0fac885c12aa8eccf817528d314556cd16c0823e942130549c2d  make-it/references/design-blueprint.md
-156de4c9a2f8b8d7068dee2e65908bb9f4059d7feb783252fd74e88058c6a327  make-it/references/expert-personas.md
+3cca80f057563047f3ead66acb78e2ccab13a29eb3ff8cf0c4cbd4dcd917757d  make-it/references/expert-personas.md
 ace641c3d11f9fb41edc1674f82fe784f89b9c5aedd86fccc5a4318783779528  make-it/references/fix-strategies.md
 01ecff1cf31206cb7045e5bcf8658861db07c6322bcd021536a3ebe89109727d  make-it/references/git-operations.md
 3e47477a6bc05b3bc3d8fea11a713d1a489d607dce48ba9b35e3eda95ccd6002  make-it/references/guardrails.md
@@ -330,7 +330,7 @@ b892470cb89bb31f33403e050d4bdfbe2cdaef940ade1496fa65e32b2e129449  make-it/securi
 cfb9df26b03469a4279a70e7664a2a5434dd6f8c2c204e91f9b0aeb9dd71e648  make-it/security-audit/validate-coverage-ledger.test.cjs
 e85f232e36bfac0f866f244da50376692d6b45c690beadcb00608b0e6c8b5283  make-it/security-audit/validate-findings.cjs
 b92001117a92c4161d43777a0ba2fa182a8a4d97f2304cc8c0cee5331497b73b  make-it/security-audit/validate-findings.test.cjs
-01c19e3737fa9dd81f3c95fe368e909280d52cb0331a43bc1e6e7b92a60f5e57  make-it/templates/app-context.md
+356c35978d7f74f0d9a784b3211d6f8c4799e2c5fadeb2916ba3e610683ace52  make-it/templates/app-context.md
 74cefc003fb79857efeee7582108bc637071bf45470d5d61f1fe6b5266147867  make-it/templates/nemo-it-attestation.md
 501987d405e6fe226eb268d3ec97dbedf2d8ee5b83d24db86c5027840c212fde  make-it/threats-it/references/ai-systems.md
 8cf26cfe3c50bc2e2940ef334cc24752a7d8eb6c85fac57ca90555a4d3ad56cb  make-it/threats-it/references/attack-chains.md
