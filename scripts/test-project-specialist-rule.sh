@@ -208,7 +208,7 @@ if [ -z "${1:-}" ]; then
   # same FILE PERL: the copy with one edit must still pass
   same() { local d; d="$(copy)"; perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && bash "$SELF" "$d" >/dev/null 2>&1; }
   # swap FILE OLD NEW: OLD (whitespace-tolerant, literal) replaced by NEW must fail; add FILE AFTER TEXT: TEXT after AFTER
-  swap() { local d; d="$(copy)"; O="$2" N="$3" perl -0pi -e 'my $o = quotemeta($ENV{O}); $o =~ s/\\ /\\s+/g; s/$o/$ENV{N}/' "$d/$1"
+  swap() { local d; d="$(copy)"; O="$2" N="$3" perl -0pi -e 'my $o = quotemeta($ENV{O}); $o =~ s/\\ /\\s+/g; (my $n = $ENV{N}) =~ s/\\n/\n/g; s/$o/$n/' "$d/$1"
            ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1; }
   add() { swap "$1" "$2" "$2$3"; }
   DBG=.claude/commands/debug-it.md

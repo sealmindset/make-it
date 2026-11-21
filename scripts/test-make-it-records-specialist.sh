@@ -204,7 +204,7 @@ if [ -z "${1:-}" ]; then
   # opp FILE PERL: the copy with one edit must fail this script
   opp() { local d; d="$(copy)"; perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1; }
   # swap FILE OLD NEW: OLD (whitespace-tolerant, literal) replaced by NEW must fail
-  swap() { local d; d="$(copy)"; O="$2" N="$3" perl -0pi -e 'my $o = quotemeta($ENV{O}); $o =~ s/\\ /\\s+/g; s/$o/$ENV{N}/' "$d/$1"
+  swap() { local d; d="$(copy)"; O="$2" N="$3" perl -0pi -e 'my $o = quotemeta($ENV{O}); $o =~ s/\\ /\\s+/g; (my $n = $ENV{N}) =~ s/\\n/\n/g; s/$o/$n/' "$d/$1"
            ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1; }
   check "(control) the unchanged copy passes" 'd="$(copy)"; bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control) fails when the step writes a plain string again" \
@@ -230,7 +230,7 @@ if [ -z "${1:-}" ]; then
   check "(control) the paper check fails when step 2 names another security specialist" \
     'swap "$MK" "-> Application security engineer;" "-> Security reviewer;"'
   check "(control) the paper check fails when data and reliability swap places in step 2" \
-    'opp "$MK" "s/(\`multi_tenancy\.needed\` is true, or the answers describe data at scale -> )Data engineer \/ DBA(;.*?-> )SRE;/\$1SRE\$2Data engineer \/ DBA;/s"'
+    'opp "$MK" "s/-> Data engineer \/ DBA;/-> TMPNAME;/; s/-> SRE;/-> Data engineer \/ DBA;/; s/-> TMPNAME;/-> SRE;/"'
   check "(control) F6 fails: a returning run replaces the record quietly" \
     'swap "$MK" "Otherwise write the new one and say so the way every writer does:" "Otherwise write the new one quietly, as it would anyway:"'
   check "(control) F6 fails: a returning run always replaces the record" \
