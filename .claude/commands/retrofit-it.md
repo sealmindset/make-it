@@ -1218,7 +1218,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **AI01-AI30**: AI features (if ai_features.needed = true; AI30 runs on every app)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
 - **WM01-WM07**: Build record and seal (`~/.claude/make-it/references/watermark.md`), written after Part D
-- **Q01-Q14**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)
+- **Q01-Q16**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)
 
 For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately

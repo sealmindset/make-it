@@ -49,13 +49,18 @@ jobs:
 
       - name: Write results
         if: always()
+        env:
+          RUFF_LINT: ${{ steps.ruff_lint.outcome }}
+          RUFF_FORMAT: ${{ steps.ruff_format.outcome }}
+          MYPY: ${{ steps.mypy.outcome }}
+          PYTEST: ${{ steps.pytest.outcome }}
         run: |
           cat <<EOF > /tmp/python-results.json
           {
-            "ruff_lint": "${{ steps.ruff_lint.outcome }}",
-            "ruff_format": "${{ steps.ruff_format.outcome }}",
-            "mypy": "${{ steps.mypy.outcome }}",
-            "pytest": "${{ steps.pytest.outcome }}"
+            "ruff_lint": "$RUFF_LINT",
+            "ruff_format": "$RUFF_FORMAT",
+            "mypy": "$MYPY",
+            "pytest": "$PYTEST"
           }
           EOF
 
@@ -100,12 +105,16 @@ jobs:
 
       - name: Write results
         if: always()
+        env:
+          ESLINT: ${{ steps.eslint.outcome }}
+          PRETTIER: ${{ steps.prettier.outcome }}
+          TSC: ${{ steps.tsc.outcome }}
         run: |
           cat <<EOF > /tmp/frontend-results.json
           {
-            "eslint": "${{ steps.eslint.outcome }}",
-            "prettier": "${{ steps.prettier.outcome }}",
-            "tsc": "${{ steps.tsc.outcome }}"
+            "eslint": "$ESLINT",
+            "prettier": "$PRETTIER",
+            "tsc": "$TSC"
           }
           EOF
 
@@ -171,13 +180,18 @@ jobs:
 
       - name: Write results
         if: always()
+        env:
+          GITLEAKS: ${{ steps.gitleaks.outcome }}
+          PIP_AUDIT: ${{ steps.pip_audit.outcome }}
+          NPM_AUDIT: ${{ steps.npm_audit.outcome }}
+          TRIVY: ${{ steps.trivy.outcome }}
         run: |
           cat <<EOF > /tmp/security-results.json
           {
-            "gitleaks": "${{ steps.gitleaks.outcome }}",
-            "pip_audit": "${{ steps.pip_audit.outcome }}",
-            "npm_audit": "${{ steps.npm_audit.outcome }}",
-            "trivy": "${{ steps.trivy.outcome }}"
+            "gitleaks": "$GITLEAKS",
+            "pip_audit": "$PIP_AUDIT",
+            "npm_audit": "$NPM_AUDIT",
+            "trivy": "$TRIVY"
           }
           EOF
 
@@ -262,6 +276,9 @@ jobs:
           path: /tmp/results
 
       - name: Generate attestation
+        env:
+          COMMIT: ${{ github.sha }}
+          BRANCH: ${{ github.head_ref }}
         run: |
           PYTHON=$(cat /tmp/results/python-results/python-results.json)
           FRONTEND=$(cat /tmp/results/frontend-results/frontend-results.json)
@@ -278,8 +295,8 @@ jobs:
           jq -n \
             --arg app "[APP_SLUG]" \
             --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg commit "${{ github.sha }}" \
-            --arg branch "${{ github.head_ref }}" \
+            --arg commit "$COMMIT" \
+            --arg branch "$BRANCH" \
             --arg overall "$ALL_PASS" \
             --argjson python "$PYTHON" \
             --argjson frontend "$FRONTEND" \
