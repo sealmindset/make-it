@@ -968,6 +968,35 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.12 -- The scaffold's quality-gate workflow keeps the branch name out of its shell commands
+
+The workflow every web app gets put the pull request's branch name straight into a shell
+command. GitHub pastes that value into the script before the shell runs, so a branch named
+with shell code would run it.
+
+- **The scaffold is fixed.** The branch name, the commit and the step results now reach the
+  script through `env:` and are used as quoted variables. The attestation it writes is the
+  same for an ordinary branch.
+- **How serious it was here: not very.** This workflow runs only on pull requests, where the
+  pull request's own code already runs in the same runner with the same read-only token. The
+  branch name gave an attacker nothing extra. In a workflow with a `pull_request_target`,
+  `issue_comment` or `workflow_run` trigger the same pattern is a real hole, which is why it
+  is kept out of every workflow.
+- **New build check Q16, blocking.** No `${{ }}` expression in a workflow step's script text
+  under `.github/workflows/`. It is not marked as a security fix: an alarm for something that
+  cannot be exploited here would teach people to ignore the next one.
+- **Apps already built** fail Q16 until they are updated. `/resume-it` offers it with the other
+  must-do updates and fixes it when you pick that group.
+- **Not covered, and the check says so.** Composite actions, and GitLab, Jenkins and Azure
+  DevOps pipelines. The workflow file is also not one of the files an app's seal compares
+  with the release.
+- **Checked:** `scripts/test-workflow-no-expression-in-run.sh` (22 planted opposites, each
+  caught), Semgrep before and after, and the step run on this computer with hostile branch
+  names: the old script ran one, the new one treats it as text. Two independent review rounds.
+  Nothing hostile was pushed, and no pipeline run on GitHub exercised the fixed workflow.
+- **A tripwire, not proof.** The test reads lines, not YAML: quoted keys, anchors and flow
+  mappings get past it, and its header lists them.
+
 ### v1.71.11 -- A build fails when an app adds model training, fine-tuning or retrieval
 
 The governance document said data poisoning was covered, and listed controls that guard the
