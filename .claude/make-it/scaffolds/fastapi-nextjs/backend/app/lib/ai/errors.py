@@ -51,6 +51,20 @@ class AIServiceUnavailableError(AIProviderError):
         )
 
 
+class AIToolActivityError(AIProviderError):
+    """A text-only provider stopped a call because the reply showed a sign of a tool.
+
+    A security event, not an outage: the failover provider re-raises it and never
+    retries the same prompt elsewhere. The user gets the generic message.
+    """
+
+    def __init__(self, internal_message: str | None = None):
+        super().__init__(
+            client_message="An unexpected AI error occurred. Please try again.",
+            internal_message=internal_message,
+        )
+
+
 def sanitize_ai_error(exc: Exception) -> AIProviderError:
     """Convert a raw provider exception into a client-safe AIProviderError."""
     exc_type = type(exc).__name__

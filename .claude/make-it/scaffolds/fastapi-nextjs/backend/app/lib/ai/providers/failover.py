@@ -8,6 +8,7 @@ provider is reinstantiated.
 import logging
 from typing import AsyncIterator
 
+from app.lib.ai.errors import AIToolActivityError
 from app.lib.ai.provider import AIProvider
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,8 @@ class FailoverProvider(AIProvider):
                 return await self.primary.complete(
                     system_prompt, user_prompt, model, max_tokens
                 )
+            except AIToolActivityError:
+                raise  # a security stop, not an outage: no second provider, primary stays in use
             except Exception as exc:
                 logger.warning(
                     "Failover: %s failed (%s), switching to %s",
@@ -63,6 +66,8 @@ class FailoverProvider(AIProvider):
                 ):
                     yield chunk
                 return
+            except AIToolActivityError:
+                raise  # a security stop, not an outage: no second provider, primary stays in use
             except Exception as exc:
                 logger.warning(
                     "Failover: %s stream failed (%s), switching to %s",
