@@ -806,7 +806,8 @@ say); it works as both, instead of inferring a specialist of its own.
         default 10000). FIFO eviction. Methods: add(), query(), stats(), clear()
      b. **LogService** -- Injectable singleton wrapping LogStore
      c. **Inbound request middleware** -- Captures method, path, status, duration, user info.
-        Excludes health checks and static assets. Registered globally.
+        Excludes health checks and static assets. Registered globally. The user comes from the
+        auth code that verifies the token, which puts it on the request (L09).
      d. **Outbound HTTP interceptor** -- Axios/httpx interceptor factory attached to ALL
         service client creation points. Captures service name, method, URL, status, duration.
         URL sanitization strips sensitive query params (token, key, secret, password, auth).
@@ -1145,7 +1146,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **D01-D06**: Database & seed data (migrations, seed users, Alembic syntax, one migration head)
 - **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
 - **M01-M04**: Mock services (mock-oidc, seed script, contracts, env vars)
-- **L01-L08**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI)
+- **L01-L09**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI, the signed-in user on each event)
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X09**: Security (secrets, validation, deps, headers, no Java, no module throws, X09 hostile code: `~/.claude/make-it/references/hostile-code.md`, a stop rather than a fix, run before Part B starts anything)
 - **T01-T05**: Test infrastructure (pytest, conftest, health tests, Playwright)
@@ -1323,7 +1324,8 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
-    b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests)
+    b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests),
+       and that a signed-in request's event names that user in `user_email` (L09)
     c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
     d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 

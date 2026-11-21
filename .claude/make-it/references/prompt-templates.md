@@ -887,7 +887,11 @@ Create middleware that logs all inbound API requests:
 1. Record start time on request entry
 2. On response 'finish' event, capture:
    - method, path (originalUrl), statusCode, durationMs
-   - userEmail and userRole from JWT on request object (if populated by auth middleware)
+   - userEmail and userRole from the verified user on the request object. The auth code
+     that verifies the JWT MUST put it there (FastAPI: get_current_user sets
+     request.state.user; Express/NestJS: req.user), or every event's user is empty.
+     Never put the token or cookie on the request. Test it through the real sign-in
+     path, not an override of the auth dependency (build-standards L09)
    - ip (req.ip or socket.remoteAddress), userAgent (truncated to 200 chars)
 3. Skip noise (do NOT log these paths):
    - /health, /health/*, /healthz

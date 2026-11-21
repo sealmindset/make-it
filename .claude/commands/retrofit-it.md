@@ -920,7 +920,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
 
 5b. **Activity Logs (Prompt #9c adapted -- always for web-app and api-service):**
     - Add LogStore (circular buffer) and LogService (injectable singleton)
-    - Add inbound request middleware (exclude health/static routes)
+    - Add inbound request middleware (exclude health/static routes); the auth code that
+      verifies the token puts the user on the request for it (L09)
     - Add outbound HTTP interceptor to ALL existing service client creation points
     - Add URL sanitization to strip sensitive query params before logging
     - Add REST API: GET /api/admin/logs/events, GET /api/admin/logs/stats,
@@ -1313,7 +1314,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **D01-D06**: Database & seed data
 - **I01-I07**: Docker & infrastructure
 - **M01-M04**: Mock services
-- **L01-L08**: Activity logs
+- **L01-L09**: Activity logs
 - **N01-N08**: Notifications
 - **F01-F08**: File upload & document processing (if app has Documents page or uploads)
 - **G01-G07**: Application settings
