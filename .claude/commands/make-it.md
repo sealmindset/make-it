@@ -453,27 +453,36 @@ chosen, in this order:
 
 1. The floor is the row for the `project_type` in the reference's floor table, filled in from
    `stack` (a web app's backend + frontend, e.g. "Senior full-stack engineer of FastAPI +
-   Next.js"; otherwise its language or editor). Its signal is `project_type: <value> (the floor)`.
-2. Payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or `features`
-   make "Application security engineer" the primary specialist, and the floor becomes the first
-   added specialist.
-3. Each other signal that fires adds its specialist, in this order: `users.internal_or_external`
-   is `external`, or `users.estimated_count` is in the thousands or more -> SRE;
-   `multi_tenancy.needed` is true, or the answers describe data at scale -> Data engineer / DBA;
-   `ai_features.usage_level` is `heavy`, or `ai_features.who_edits_prompts` is not `developers`
-   -> AI / prompt engineer; the app goes to production with an uptime promise (an SLA) the user
-   named -> Platform / SRE. A variant's own signals, named in its definition file under "Project
-   specialist signals", come after these and are recorded the same way.
-4. Without the payments, PII or PHI signal, the floor stays the primary specialist; with no
-   signal at all, `added` is empty.
+   Next.js"; otherwise its language, or the editor or browser an extension runs in). Its signal is
+   `project_type: <value> (the floor)`.
+2. Check the signals in the reference's order and note the specialist each calls for: payments,
+   personal data (PII) or health data (PHI) in `compliance`, `purpose` or `features` ->
+   Application security engineer; `multi_tenancy.needed` is true, or the answers describe data at
+   scale -> Data engineer / DBA; `users.internal_or_external` is `external`,
+   `users.estimated_count` is in the thousands or more, or the user named an uptime promise (an
+   SLA) for production -> SRE; `ai_features.usage_level` is `heavy`, or
+   `ai_features.who_edits_prompts` is not `developers` -> AI / prompt engineer. A variant's own
+   signals, named in its definition file under "Project specialist signals", come after these and
+   before the floor, and are recorded the same way.
+3. The first specialist in that order that applies is the primary; every other one that applies
+   is added, in that order, and the floor is always in the record: the primary when nothing
+   outranks it, otherwise added last.
+4. With no signal at all, the floor is the primary and `added` is empty.
 5. A specialist two signals call for appears once, with both signals. Each signal is written
    `<field>: <value>`, and one the user did not state (a guess or a smart default, such as a rough
    user count) is marked `"unconfirmed": true`.
 6. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
+7. If `app-context.json` already holds a record (a returning run), keep it, dates included, when
+   the new one has the same specialists and signals. Otherwise write the new one and say so the way
+   every writer does: one plain line to the user (e.g. "Your app now gets a security specialist
+   because it takes card payments.") and the same line in `CHANGELOG.md`. A value the reference
+   reads as no record (its "Reading an older value") is not a record: write the new one and say
+   nothing.
 
 The record is never a plain text value and never a generalist. /make-it builds and reviews in this
 specialist's role, and hands the record to every sub-agent it briefs. This is a build-quality
-lever, not a staffing recommendation. Nothing here is shown to the user or asked of them.
+lever, not a staffing recommendation. Apart from the line in step 7, nothing here is shown to the
+user, and nothing is asked of them.
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 

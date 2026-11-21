@@ -242,7 +242,7 @@ When `scaffold` is set, the Build phase skips generating auth, RBAC, Docker, moc
 | deployment.target | Design | Populated from cloud.provider during Design |
 | security_scanner.type | Design / Enterprise config | Auto-detected from environment or asked in enterprise contexts -- values: "auditgithub" \| "github-advanced-security" \| "snyk" \| "sonarqube" \| "none" \| "" |
 | pages | Design | Derived from features |
-| expert_persona | /make-it (Design), /retrofit-it, /resume-it (on a scope change) | The project specialist record (see `references/expert-personas.md`): `primary` and `added` specialists, each with the `signals` that led to it (a signal can be `"unconfirmed": true`), and `set_by` / `set_at`. No other skill writes it. An older plain text value is read as the primary; an empty one means no record. |
+| expert_persona | /make-it (Design), /retrofit-it, /resume-it (on a scope change) | The project specialist record (see `references/expert-personas.md`): `primary` and `added` specialists, each with the `signals` that led to it (a signal can be `"unconfirmed": true`), and `set_by` / `set_at`. No other skill writes it. An older plain text value that names a specialist is read as the primary; a text value naming none ("generalist", "none" or empty) or a record with an empty `primary.specialist` means no record. |
 | skipped_guardrails | Design | Documents why non-active-tier guardrails were skipped |
 
 ## Skipped Guardrails Documentation
