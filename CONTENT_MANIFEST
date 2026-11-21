@@ -11,7 +11,7 @@ c36efffe1c7c7eb1bc8e6f0410b348e2415e883ac08cca4f0f6ecd9198a77efc  commands/make-
 62c232731307d13240c0616edfb91cac3e842b54f42374c960317115cd903e94  commands/nemo-it.md
 b72b9598170486a496a772d6cbe53f1f7cc74b5e79084ebea51366cadb11060b  commands/resolve-it.md
 15e4df146fa035ec57acd493d0e16e03b28b85cc9dc4e80e65aefc85b248722a  commands/resume-it.md
-97edbc22e22b8d999fa621fea1e039f0897f3274874a3d0ecad5d416647a83fa  commands/retrofit-it.md
+93481e62a5afb9c9112984c73c632621be2f4bde8955e6658201a3219a2a496d  commands/retrofit-it.md
 51f4e21c0e0c16d5d3842145eb85c71f5b801d6b2a0c8e6bbea4517d2b17b2d3  commands/subagent-it.md
 a11b2e86b897ffb8cb3342c6c1e67c3281d2f414d3ddd8ee3f23a2af126f1ae7  commands/threats-it.md
 a832b1ff3ce7dd62d7e9f6743bb68d8e5ecc9d21290730a3ba584cdcfd2e2cbf  commands/try-it.md
@@ -27,7 +27,7 @@ a7daa6fe8f53a303677d5b6ed982fa25145281e61a9db799535b856d118fbdeb  make-it/backlo
 c6f0d3ad0d382e0879a9297063a767e605326a1a03de4494d34c001beef77341  make-it/confluence-docs/00-make-it-framework-overview.md
 6b2080dd7d1f428c767e9b77dbf53b5ba6d679ca9f9936b3ef28ded6efe75a15  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md
-2801a0d1290c161d69e160e3f432c847137ecd10489f3b730d3e4558db3c16d1  make-it/confluence-docs/03-retrofit-it.md
+293c79b32d0d9c76b6fd32473b909d5e884871fff78a982f6cdcc57ceb3150c5  make-it/confluence-docs/03-retrofit-it.md
 78e4c0517484655f6e9aad625236a404bf5e08ae0234ad92e0d8e4631826c114  make-it/confluence-docs/04-try-it.md
 127f86a007da54c955f8e9089c822da03ee8de11dc650596855bf5b398a7d96e  make-it/confluence-docs/05-demo-it.md
 f5a3a1ae0c1f460d78340bd328a5c90b4e9fc8a7aa6ba963756857769b52c789  make-it/confluence-docs/06-ship-it.md

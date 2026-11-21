@@ -21,11 +21,15 @@ Take an existing, working application -- built by Claude, a developer, or any to
 
 The skill reverse-engineers the application FIRST (no interview questions upfront), then asks targeted clarifying questions only when the code is ambiguous. The user's application intent, design, and workflow are preserved -- nothing breaks.
 
-**Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Default here:
-**software architect** — preserve original intent, phased change, risk register; don't break
-behavior while bolting on foundations. Signals may layer in AppSec / data-engineer checks.
-Auto-selected from `app-context.json` + this skill; no user prompt. See
-`~/.claude/make-it/references/expert-personas.md` (imported below).
+**Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Its task
+specialist is the **software architect** — preserve original intent, phased change, risk register;
+don't break behavior while bolting on foundations. /retrofit-it is also one of the three writers
+of the project specialist: Discovery step 7 records it in `expert_persona` from the code, by the
+reference's rule. The two stay apart: the architect is the role this skill works in, and the
+record is the project's. Once the record is worked out (Discovery step 7), it works as the
+architect, held to the project specialist's checks and output standard as well. Selected
+automatically; no user prompt. See `~/.claude/make-it/references/expert-personas.md` (imported
+below).
 
 @~/.claude/make-it/references/expert-personas.md
 
@@ -211,6 +215,50 @@ Evaluate whether the existing stack can support /make-it standards:
 If stack is fundamentally incompatible (rare), recommend migration and explain why.
 If stack has issues but is workable, note concerns but proceed.
 
+**7. Project specialist (SILENT -- no user question):**
+
+Set `project_type` from the code, by the Project Type Classification table in
+`templates/app-context.md` (a browser UI with its own backend is `web-app`, a backend with no UI
+that serves other systems is `api-service`, and so on). If the code fits no row, `project_type`
+stays empty, no record is written (the reference's rule), and TODO.md gets one line saying why.
+
+Then record the project specialist in `expert_persona` by the reference's rule (its floor table
+and rule 2's order), as /make-it's Design step does, with `set_by` `"/retrofit-it"` and `set_at`
+the date of this run (YYYY-MM-DD). Every retrofitted app gets a record, a low-risk one its floor.
+The record is never a plain text value and never a generalist. What differs from /make-it is where
+the signals come from: the code, not an interview.
+
+| Signal (rule 2) | Fires when the code shows |
+|---|---|
+| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data of the people the app serves (a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records) |
+| Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
+| Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
+| AI | an AI SDK behind more than 10 distinct prompts or agents, or prompts stored where non-developers edit them |
+
+Each signal is written `code: <what was found, and where>`; the floor's is
+`project_type: <value> (the floor)`. Where the code cannot tell whether a signal fires (for
+example, a table whose fields may or may not hold personal data), it fires: record the stricter
+specialist and mark that signal `"unconfirmed": true`. This is never a clarifying question and
+does not count against Phase 3's 3-5 questions.
+
+The retrofit's own role (the software architect, its task specialist) is never written into
+`expert_persona`: the record comes from the signals and the floor only.
+
+If `app-context.json` already holds a record (a second retrofit, or an app /make-it built), keep
+it, dates included, when the new one has the same specialists and signals. Otherwise write the new
+one and say so the way every writer does: one plain line to the user (e.g. "Your app now gets a
+security specialist because its code takes card payments.") and the same line in `CHANGELOG.md`. A
+value the reference reads as no record (its "Reading an older value") is not a record: write the
+new one and say nothing.
+
+**When it is written.** Nothing is written before the plan is approved. The record goes into the
+run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and in a
+phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
+Discovery found it, not the foundations the retrofit adds, so a phased retrofit stopped after any
+step already has its full record. Part E's final write of `app-context.json` keeps it as it is.
+
+Apart from the line for a replaced record, nothing here is shown to the user or asked of them.
+
 </step>
 
 <!-- ============================================================ -->
@@ -367,7 +415,8 @@ Potential clarification questions (ask only if needed):
 5. **If there's partial /make-it state** (a `.make-it-state.md` holding only
    `## Left out by your choice`, the record in `left-out-record.md`, is not partial state: don't ask): "I found a .make-it-state.md file. It looks like this was started with /make-it but may not have completed. Should I pick up from that state, or start the retrofit fresh?"
 
-**Maximum 3-5 questions. Never more.**
+**Maximum 3-5 questions. Never more.** The project specialist is never one of them (Discovery
+step 7).
 
 </step>
 
@@ -672,7 +721,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
 1. **Foundation (Prompt #1 adapted):**
    - Add missing: .gitignore entries, .env.example, CHANGELOG.md, TODO.md, README.md
    - README.md: project name/description, features, tech stack, quick start, project structure, test users/roles, deployment notes. Do NOT mention /make-it, /retrofit-it, /resume-it, or Claude Code.
-   - Generate app-context.json from discovered profile
+   - Generate app-context.json from discovered profile, with `project_type` and the project
+     specialist record from Discovery step 7
    - Do NOT recreate project structure -- work within existing structure
 
 2. **Docker (Prompt #6 adapted):**
@@ -1314,7 +1364,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
   check-in is not left out: read step 4 already took its line out.
 - Any remaining TODOs
 
-**Generate app-context.json** -- So /resume-it and /ship-it work going forward.
+**Generate app-context.json** -- So /resume-it and /ship-it work going forward. Keep the
+`expert_persona` record as Discovery step 7 set it.
 
 **Automatically invoke /try-it** in `work` -- Same as /make-it, seamless handoff.
 
