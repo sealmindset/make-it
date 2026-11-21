@@ -28,7 +28,19 @@ jobs:
           git config --global user.name "contract tests"
           git config --global user.email "contract-tests@example.invalid"
           git config --global init.defaultBranch main
+      # test-claude-agent-text-only.sh also runs the fastapi-nextjs scaffold's own provider tests. They import the
+      # scaffold's packages, and the one test that reads the real SDK's command line needs claude-agent-sdk.
+      # No sign-in token is present and no model call is made: the tests use a scripted stream.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the scaffold backend's packages and the pinned Agent SDK
+        run: |
+          python -m pip install --quiet -r .claude/make-it/scaffolds/fastapi-nextjs/backend/requirements.txt
+          python -m pip install --quiet "claude-agent-sdk==0.2.186"
       - name: Run every scripts/test-*.sh
+        env:
+          REQUIRE_SCAFFOLD_PYTEST: "1"
         run: |
           failed=""
           count=0
