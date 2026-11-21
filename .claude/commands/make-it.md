@@ -397,15 +397,6 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
    - Real users -> Full production setup
    - Testing -> Prototype mode (simpler infra, can upgrade later)
 
-**Expert persona (SILENT -- no user question):**
-
-Reference `references/expert-personas.md`. From the app-context signals just gathered
-(sensitive data, scale, deployment target, AI depth, integrations), infer the **dominant expert
-persona** this build's sub-agents should adopt instead of a generalist, and record it in
-`expert_persona`. This is a build-quality lever, not a staffing recommendation -- the AI *becomes*
-the specialist for the risky work. No question to the user; it shapes how code is generated,
-reviewed, and hardened behind the scenes.
-
 **For everything else, use smart defaults from the design-blueprint.md:**
 - Stack selection: Use the decision tree based on app_type and features
 - Security: Always Tier 1, Tier 2 if going to production
@@ -452,6 +443,37 @@ reviewed, and hardened behind the scenes.
   - Structured logging -> mock-cribl (port 3005)
   - Other external integrations -> one custom mock per integration
   - Pre-seed mock-oidc test users to match the app's defined roles
+
+**Project specialist (SILENT -- no user question):**
+
+Reference `references/expert-personas.md`. Every project records its project specialist in
+`expert_persona`, a low-risk one included: the primary specialist, the added ones, the signals
+behind each, `set_by` and `set_at`. Work it out from the app-context answers once the stack is
+chosen, in this order:
+
+1. The floor is the row for the `project_type` in the reference's floor table, filled in from
+   `stack` (a web app's backend + frontend, e.g. "Senior full-stack engineer of FastAPI +
+   Next.js"; otherwise its language or editor). Its signal is `project_type: <value> (the floor)`.
+2. Payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or `features`
+   make "Application security engineer" the primary specialist, and the floor becomes the first
+   added specialist.
+3. Each other signal that fires adds its specialist, in this order: `users.internal_or_external`
+   is `external`, or `users.estimated_count` is in the thousands or more -> SRE;
+   `multi_tenancy.needed` is true, or the answers describe data at scale -> Data engineer / DBA;
+   `ai_features.usage_level` is `heavy`, or `ai_features.who_edits_prompts` is not `developers`
+   -> AI / prompt engineer; the app goes to production with an uptime promise (an SLA) the user
+   named -> Platform / SRE. A variant's own signals, named in its definition file under "Project
+   specialist signals", come after these and are recorded the same way.
+4. Without the payments, PII or PHI signal, the floor stays the primary specialist; with no
+   signal at all, `added` is empty.
+5. A specialist two signals call for appears once, with both signals. Each signal is written
+   `<field>: <value>`, and one the user did not state (a guess or a smart default, such as a rough
+   user count) is marked `"unconfirmed": true`.
+6. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
+
+The record is never a plain text value and never a generalist. /make-it builds and reviews in this
+specialist's role, and hands the record to every sub-agent it briefs. This is a build-quality
+lever, not a staffing recommendation. Nothing here is shown to the user or asked of them.
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
@@ -636,6 +658,9 @@ When the app-specific work is sizable (several independent domains/features), ex
 Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): treat these
 steps as the plan, dispatch a fresh implementer subagent per step + per-step review + a final
 whole-branch review, keeping your own context for coordination. Stay sequential on shared files.
+Brief each implementer and reviewer subagent with the project specialist recorded in
+`expert_persona` at Design plus the specialist its step needs (a data engineer for the migration,
+say); it works as both, instead of inferring a specialist of its own.
 
 1. **Domain Models + Migration**
    - Tell user: "Creating your data models..."
@@ -1350,7 +1375,9 @@ If ANY test fails in Part B:
 If several failures are INDEPENDENT (different files/subsystems/root causes), fix them in
 parallel instead of sequentially: dispatch one agent per domain (`/dispatch-it`, see
 `parallel-dispatch.md`), isolate writers in their own worktrees, then re-run the FULL suite
-once and integrate. Keep related failures together (find the shared cause first).
+once and integrate. Keep related failures together (find the shared cause first). Brief each
+agent with the project specialist recorded in `expert_persona` plus the specialist its failure
+needs; it works as both, instead of inferring a specialist of its own.
 
 Common issues and fixes:
 - Auth callback returns wrong role -> fix to query database by oidc_subject
