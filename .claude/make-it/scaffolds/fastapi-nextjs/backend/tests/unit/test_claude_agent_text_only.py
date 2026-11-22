@@ -37,7 +37,8 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 EXTRA_ARGS = {"restricted": None, "disable-slash-commands": None, "no-session-persistence": None}
 # The fields ClaudeAgentOptions has in claude-agent-sdk 0.2.186. The fake refuses any other keyword, so a
 # misspelled option fails here instead of being swallowed; a test below checks this list against the real class.
-OPTION_FIELDS = frozenset("""
+OPTION_FIELDS = frozenset(
+    """
 tools allowed_tools system_prompt mcp_servers strict_mcp_config permission_mode continue_conversation resume
 session_id max_turns max_budget_usd disallowed_tools model fallback_model betas permission_prompt_tool_name cwd
 cli_path settings add_dirs env extra_args max_buffer_size debug_stderr stderr can_use_tool hooks user
@@ -45,7 +46,8 @@ include_partial_messages include_hook_events forward_subagent_text verbatim_prom
 resume_session_at resume_drops_turn agents setting_sources skills sandbox plugins max_thinking_tokens thinking
 effort output_format enable_file_checkpointing session_store session_store_flush load_timeout_ms task_budget
 client_app
-""".split())
+""".split()
+)
 # What the CLI's `init` message reports for a text-only session (SDK types.py, SystemInitData).
 INIT_OK = {"tools": [], "mcp_servers": [], "permissionMode": "dontAsk"}
 
@@ -153,9 +155,22 @@ def sdk(monkeypatch):
     """A fake claude_agent_sdk: `script` is the stream to replay, `calls` records what each query() was given."""
     fake = types.ModuleType("claude_agent_sdk")
     for cls in (
-        TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock, ServerToolUseBlock, ServerToolResultBlock,
-        AssistantMessage, UserMessage, SystemMessage, TaskStartedMessage, TaskProgressMessage,
-        TaskNotificationMessage, TaskUpdatedMessage, ResultMessage, HookMatcher, ClaudeAgentOptions,
+        TextBlock,
+        ThinkingBlock,
+        ToolUseBlock,
+        ToolResultBlock,
+        ServerToolUseBlock,
+        ServerToolResultBlock,
+        AssistantMessage,
+        UserMessage,
+        SystemMessage,
+        TaskStartedMessage,
+        TaskProgressMessage,
+        TaskNotificationMessage,
+        TaskUpdatedMessage,
+        ResultMessage,
+        HookMatcher,
+        ClaudeAgentOptions,
     ):
         setattr(fake, cls.__name__, cls)
     fake.script, fake.calls, fake.closed, fake.handed_on = [], [], 0, 0
@@ -186,9 +201,11 @@ def sdk(monkeypatch):
 
 
 def _text(*chunks, result=None):
-    return [SystemMessage()] + [AssistantMessage([TextBlock(c)]) for c in chunks] + [
-        ResultMessage(result=result, usage={"input_tokens": 3, "output_tokens": 5}, total_cost_usd=0.0)
-    ]
+    return (
+        [SystemMessage()]
+        + [AssistantMessage([TextBlock(c)]) for c in chunks]
+        + [ResultMessage(result=result, usage={"input_tokens": 3, "output_tokens": 5}, total_cost_usd=0.0)]
+    )
 
 
 async def _drain(provider, out):
@@ -197,6 +214,7 @@ async def _drain(provider, out):
 
 
 # (a) what the provider asks the SDK for ---------------------------------------------------------------------
+
 
 async def test_the_options_turn_every_tool_off_and_load_nothing_from_disk(sdk):
     sdk.script = _text("hi", result="hi")
@@ -317,7 +335,9 @@ TOOL_ACTIVITY = {
     "a background task": TaskStartedMessage(subtype="task_started"),
     "a task notification": TaskNotificationMessage(subtype="task_notification"),
     "a refused tool call": ResultMessage(result="LEAK", permission_denials=[{"tool_name": "Bash"}]),
-    "a deferred tool call": ResultMessage(result="LEAK", deferred_tool_use={"id": "tool-1", "name": "Bash", "input": {}}),
+    "a deferred tool call": ResultMessage(
+        result="LEAK", deferred_tool_use={"id": "tool-1", "name": "Bash", "input": {}}
+    ),
 }
 
 
@@ -412,6 +432,7 @@ async def test_a_working_directory_that_is_no_longer_empty_stops_the_call_before
 
 # (d) a normal text answer is unchanged ----------------------------------------------------------------------
 
+
 async def test_complete_returns_the_result_text_unchanged(sdk):
     sdk.script = _text("Hel", "lo", result="Hello")
     provider = ClaudeAgentProvider()
@@ -434,6 +455,7 @@ async def test_stream_yields_each_text_block_unchanged(sdk):
 
 
 # with the real package: the command line the SDK itself builds ----------------------------------------------
+
 
 def test_the_real_sdk_turns_these_options_into_tool_free_cli_flags():
     pytest.importorskip("claude_agent_sdk")
@@ -473,18 +495,39 @@ def _parsed(raw):
     return parse_message(raw)
 
 
-_RESULT = {"type": "result", "subtype": "success", "duration_ms": 1, "duration_api_ms": 1, "is_error": False,
-           "num_turns": 1, "session_id": "s", "result": "hi"}
+_RESULT = {
+    "type": "result",
+    "subtype": "success",
+    "duration_ms": 1,
+    "duration_api_ms": 1,
+    "is_error": False,
+    "num_turns": 1,
+    "session_id": "s",
+    "result": "hi",
+}
 _TOOL_USE = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "id"}}
 RAW_TOOL_ACTIVITY = {
     "a tool call": {"type": "assistant", "message": {"model": "m", "content": [_TOOL_USE]}},
-    "a server tool call": {"type": "assistant", "message": {"model": "m", "content": [
-        {"type": "server_tool_use", "id": "s1", "name": "web_search", "input": {}}]}},
-    "a tool result": {"type": "user", "message": {"content": [
-        {"type": "tool_result", "tool_use_id": "t1", "content": "uid=1000"}]}},
+    "a server tool call": {
+        "type": "assistant",
+        "message": {
+            "model": "m",
+            "content": [{"type": "server_tool_use", "id": "s1", "name": "web_search", "input": {}}],
+        },
+    },
+    "a tool result": {
+        "type": "user",
+        "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "uid=1000"}]},
+    },
     "a tool result summary": {"type": "user", "message": {"content": "x"}, "tool_use_result": {"stdout": "uid=1000"}},
-    "a background task": {"type": "system", "subtype": "task_started", "task_id": "k", "description": "d",
-                          "uuid": "u", "session_id": "s"},
+    "a background task": {
+        "type": "system",
+        "subtype": "task_started",
+        "task_id": "k",
+        "description": "d",
+        "uuid": "u",
+        "session_id": "s",
+    },
     "a refused tool call": {**_RESULT, "permission_denials": [{"tool_name": "Bash"}]},
     "a deferred tool call": {**_RESULT, "deferred_tool_use": _TOOL_USE},
 }
@@ -505,8 +548,19 @@ def test_through_the_real_parser_plain_text_and_a_clean_result_pass():
 
 def test_through_the_real_parser_the_session_report_is_read():
     real = pytest.importorskip("claude_agent_sdk")
-    init = {"type": "system", "subtype": "init", "uuid": "u", "session_id": "s", "cwd": "/tmp/x", "model": "m",
-            "tools": [], "mcp_servers": [], "permissionMode": "dontAsk", "slash_commands": [], "skills": []}
+    init = {
+        "type": "system",
+        "subtype": "init",
+        "uuid": "u",
+        "session_id": "s",
+        "cwd": "/tmp/x",  # noqa: S108 -- test data: a path string in a fake message, no file is made
+        "model": "m",
+        "tools": [],
+        "mcp_servers": [],
+        "permissionMode": "dontAsk",
+        "slash_commands": [],
+        "skills": [],
+    }
     ok = _parsed(init)
     assert isinstance(ok, real.SystemMessage) and ok.subtype == "init"
     assert claude_agent._session_problem(ok.data) is None
@@ -519,6 +573,15 @@ def test_a_block_type_the_real_parser_does_not_know_is_dropped_before_the_tripwi
     # A known limit, kept visible: the parser has no catch-all, so `mcp_tool_use` never reaches the provider.
     # If a later SDK hands the block on, the tripwire must then fire on it.
     pytest.importorskip("claude_agent_sdk")
-    message = _parsed({"type": "assistant", "message": {"model": "m", "content": [
-        {"type": "mcp_tool_use", "id": "m1", "name": "files__read", "server_name": "files", "input": {}}]}})
+    message = _parsed(
+        {
+            "type": "assistant",
+            "message": {
+                "model": "m",
+                "content": [
+                    {"type": "mcp_tool_use", "id": "m1", "name": "files__read", "server_name": "files", "input": {}}
+                ],
+            },
+        }
+    )
     assert message.content == [] or claude_agent._tool_activity(message)

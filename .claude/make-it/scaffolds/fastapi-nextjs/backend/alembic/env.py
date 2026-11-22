@@ -1,9 +1,10 @@
 import asyncio
 import os
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # Import all models so metadata is populated
 from app.models import Base  # noqa: F401
@@ -13,9 +14,7 @@ config = context.config
 
 # Override sqlalchemy.url with DATABASE_URL from environment
 # Strip +asyncpg for sync fallback, but we use async below
-database_url = os.environ.get(
-    "DATABASE_URL", "postgresql+asyncpg://[APP_SLUG]@db:5432/[APP_SLUG]"
-)
+database_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://[APP_SLUG]@db:5432/[APP_SLUG]")
 config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata

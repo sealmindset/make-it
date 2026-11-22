@@ -32,12 +32,29 @@ select = [
 # pre-commit hook runs -- cannot tell. Remove them by hand, or with /deadcode-it.
 unfixable = ["F401", "F841"]
 
+# FastAPI's dependency markers are meant to be called in a default argument: that is how FastAPI
+# declares them, so B008 doesn't apply to them (ruff's lint.flake8-bugbear.extend-immutable-calls).
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header",
+    "fastapi.Cookie", "fastapi.File", "fastapi.Form", "fastapi.Security",
+    # the scaffold's own permission check: it builds the dependency once, when the route is declared
+    "app.middleware.permissions.require_permission",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "backend/tests/*" = ["S101"]   # allow assert in tests
 "backend/alembic/*" = ["E501"] # migrations can have long lines
+# Alembic writes migrations in its own shape (Union/Optional annotations, its import order); they
+# are kept as generated
+"backend/alembic/versions/*" = ["E501", "I001", "UP007", "UP035"]
+# mock-oidc is copied into every app as-is and never regenerated: it is not linted
+"mock-services/mock-oidc/*" = ["ALL"]
 
 [tool.ruff.format]
 quote-style = "double"
+# the same two, kept as they are: migrations as Alembic wrote them, mock-oidc as copied
+exclude = ["backend/alembic/versions/*", "mock-services/mock-oidc/*"]
 
 [tool.mypy]
 python_version = "3.12"

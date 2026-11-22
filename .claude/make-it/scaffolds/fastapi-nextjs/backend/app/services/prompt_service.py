@@ -19,7 +19,6 @@ from app.models.managed_prompt import (
 )
 from app.schemas.prompt import PromptTestRunOut, PromptVersionDiffOut
 
-
 # ---------------------------------------------------------------------------
 # Audit logging
 # ---------------------------------------------------------------------------
@@ -128,12 +127,16 @@ async def diff_versions(
         )
 
     content_diff = _text_diff(
-        va.content or "", vb.content or "",
-        f"v{version_a}", f"v{version_b}",
+        va.content or "",
+        vb.content or "",
+        f"v{version_a}",
+        f"v{version_b}",
     )
     system_diff = _text_diff(
-        va.system_message or "", vb.system_message or "",
-        f"v{version_a}", f"v{version_b}",
+        va.system_message or "",
+        vb.system_message or "",
+        f"v{version_a}",
+        f"v{version_b}",
     )
 
     return PromptVersionDiffOut(
@@ -261,10 +264,7 @@ async def record_call(
     error: bool = False,
 ) -> None:
     """Record a runtime call to a prompt. Updates running averages."""
-    stmt = (
-        select(ManagedPrompt)
-        .where(ManagedPrompt.slug == prompt_slug)
-    )
+    stmt = select(ManagedPrompt).where(ManagedPrompt.slug == prompt_slug)
     prompt = (await db.execute(stmt)).scalar_one_or_none()
     if not prompt:
         return
@@ -315,16 +315,10 @@ async def get_stats(db: AsyncSession) -> dict:
     """Aggregate stats for the prompt management dashboard."""
     total = (await db.execute(select(func.count(ManagedPrompt.id)))).scalar() or 0
     active = (
-        await db.execute(
-            select(func.count(ManagedPrompt.id)).where(ManagedPrompt.is_active.is_(True))
-        )
+        await db.execute(select(func.count(ManagedPrompt.id)).where(ManagedPrompt.is_active.is_(True)))
     ).scalar() or 0
-    versions_count = (
-        await db.execute(select(func.count(PromptVersion.id)))
-    ).scalar() or 0
-    categories_count = (
-        await db.execute(select(func.count(func.distinct(ManagedPrompt.category))))
-    ).scalar() or 0
+    versions_count = (await db.execute(select(func.count(PromptVersion.id)))).scalar() or 0
+    categories_count = (await db.execute(select(func.count(func.distinct(ManagedPrompt.category))))).scalar() or 0
 
     return {
         "total": total,

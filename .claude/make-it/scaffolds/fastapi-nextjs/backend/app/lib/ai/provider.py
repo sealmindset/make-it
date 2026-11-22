@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import AsyncIterator
 
 
 @dataclass
@@ -40,8 +40,7 @@ class AIProvider(ABC):
         user_prompt: str,
         model: str | None = None,
         max_tokens: int = 4096,
-    ) -> str:
-        ...
+    ) -> str: ...
 
     @abstractmethod
     async def stream(
@@ -50,8 +49,7 @@ class AIProvider(ABC):
         user_prompt: str,
         model: str | None = None,
         max_tokens: int = 4096,
-    ) -> AsyncIterator[str]:
-        ...
+    ) -> AsyncIterator[str]: ...
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Return estimated cost in USD.  Default 0 (local/free providers)."""

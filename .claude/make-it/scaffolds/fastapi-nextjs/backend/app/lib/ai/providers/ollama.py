@@ -5,7 +5,7 @@ and streaming responses. Cost tracking returns 0 (local/free).
 """
 
 import json
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 

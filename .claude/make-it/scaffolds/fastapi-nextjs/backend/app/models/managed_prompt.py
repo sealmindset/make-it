@@ -23,32 +23,22 @@ class ManagedPrompt(Base):
 
     __tablename__ = "managed_prompts"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    slug: Mapped[str] = mapped_column(
-        String(100), unique=True, index=True, nullable=False
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    category: Mapped[str] = mapped_column(
-        String(100), index=True, nullable=False, default="general"
-    )
+    category: Mapped[str] = mapped_column(String(100), index=True, nullable=False, default="general")
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, default=True, index=True, nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True, nullable=False)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     locked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     locked_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     source_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     updated_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -84,13 +74,9 @@ class PromptVersion(Base):
     """Immutable version history for prompt content changes."""
 
     __tablename__ = "prompt_versions"
-    __table_args__ = (
-        UniqueConstraint("prompt_id", "version", name="uq_prompt_version"),
-    )
+    __table_args__ = (UniqueConstraint("prompt_id", "version", name="uq_prompt_version"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prompt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("managed_prompts.id", ondelete="CASCADE"),
@@ -104,14 +90,10 @@ class PromptVersion(Base):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     change_summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
-    prompt: Mapped["ManagedPrompt"] = relationship(
-        back_populates="versions", lazy="selectin"
-    )
+    prompt: Mapped["ManagedPrompt"] = relationship(back_populates="versions", lazy="selectin")
 
 
 class PromptUsage(Base):
@@ -119,18 +101,14 @@ class PromptUsage(Base):
 
     __tablename__ = "prompt_usages"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prompt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("managed_prompts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    usage_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="page"
-    )
+    usage_type: Mapped[str] = mapped_column(String(50), nullable=False, default="page")
     location: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -139,9 +117,7 @@ class PromptUsage(Base):
     avg_tokens_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
     avg_tokens_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -150,22 +126,16 @@ class PromptUsage(Base):
     )
 
     # Relationships
-    prompt: Mapped["ManagedPrompt"] = relationship(
-        back_populates="usages", lazy="selectin"
-    )
+    prompt: Mapped["ManagedPrompt"] = relationship(back_populates="usages", lazy="selectin")
 
 
 class PromptTag(Base):
     """Flexible tagging for prompt categorization."""
 
     __tablename__ = "prompt_tags"
-    __table_args__ = (
-        UniqueConstraint("prompt_id", "tag", name="uq_prompt_tag"),
-    )
+    __table_args__ = (UniqueConstraint("prompt_id", "tag", name="uq_prompt_tag"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prompt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("managed_prompts.id", ondelete="CASCADE"),
@@ -173,14 +143,10 @@ class PromptTag(Base):
         index=True,
     )
     tag: Mapped[str] = mapped_column(String(100), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
-    prompt: Mapped["ManagedPrompt"] = relationship(
-        back_populates="tags", lazy="selectin"
-    )
+    prompt: Mapped["ManagedPrompt"] = relationship(back_populates="tags", lazy="selectin")
 
 
 class PromptTestCase(Base):
@@ -188,9 +154,7 @@ class PromptTestCase(Base):
 
     __tablename__ = "prompt_test_cases"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prompt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("managed_prompts.id", ondelete="CASCADE"),
@@ -202,9 +166,7 @@ class PromptTestCase(Base):
     expected_output: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -213,9 +175,7 @@ class PromptTestCase(Base):
     )
 
     # Relationships
-    prompt: Mapped["ManagedPrompt"] = relationship(
-        back_populates="test_cases", lazy="selectin"
-    )
+    prompt: Mapped["ManagedPrompt"] = relationship(back_populates="test_cases", lazy="selectin")
 
 
 class PromptAuditLog(Base):
@@ -226,15 +186,9 @@ class PromptAuditLog(Base):
 
     __tablename__ = "prompt_audit_log"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    action: Mapped[str] = mapped_column(
-        String(50), index=True, nullable=False
-    )
-    prompt_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    prompt_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     prompt_slug: Mapped[str | None] = mapped_column(String(100), nullable=True)
     version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

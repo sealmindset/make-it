@@ -55,8 +55,8 @@ these options unnoticed.
 import logging
 import os
 import tempfile
+from collections.abc import AsyncIterator
 from contextlib import aclosing
-from typing import AsyncIterator
 
 from app.lib.ai.errors import AIToolActivityError, sanitize_ai_error
 from app.lib.ai.model_tier import get_model
@@ -83,15 +83,60 @@ def _to_alias(model: str | None) -> str | None:
 # name). `*` and `mcp__*` are the documented deny globs for "every tool" and "every MCP
 # tool"; the names stay listed so the denial does not rest on glob support alone.
 BUILTIN_TOOLS = (
-    "Agent", "Artifact", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList",
-    "Edit", "EndConversation", "EnterPlanMode", "EnterWorktree", "ExitPlanMode", "ExitWorktree",
-    "Glob", "Grep", "ListAgents", "ListMcpResourcesTool", "ListPlugins", "ListSkills", "LSP",
-    "Monitor", "NotebookEdit", "PowerShell", "propose_skills", "PushNotification", "Read",
-    "ReadMcpResourceTool", "RemoteTrigger", "ReportFindings", "ScheduleWakeup", "SearchPlugins",
-    "SearchSkills", "SendFeedback", "SendMessage", "SendUserFile", "ShareOnboardingGuide", "Skill",
-    "SubagentHandback", "SuggestPluginInstall", "SuggestSkills", "Task", "TaskCreate", "TaskGet",
-    "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch",
-    "WaitForMcpServers", "WebFetch", "WebSearch", "Workflow", "Write",
+    "Agent",
+    "Artifact",
+    "AskUserQuestion",
+    "Bash",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "Edit",
+    "EndConversation",
+    "EnterPlanMode",
+    "EnterWorktree",
+    "ExitPlanMode",
+    "ExitWorktree",
+    "Glob",
+    "Grep",
+    "ListAgents",
+    "ListMcpResourcesTool",
+    "ListPlugins",
+    "ListSkills",
+    "LSP",
+    "Monitor",
+    "NotebookEdit",
+    "PowerShell",
+    "propose_skills",
+    "PushNotification",
+    "Read",
+    "ReadMcpResourceTool",
+    "RemoteTrigger",
+    "ReportFindings",
+    "ScheduleWakeup",
+    "SearchPlugins",
+    "SearchSkills",
+    "SendFeedback",
+    "SendMessage",
+    "SendUserFile",
+    "ShareOnboardingGuide",
+    "Skill",
+    "SubagentHandback",
+    "SuggestPluginInstall",
+    "SuggestSkills",
+    "Task",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskOutput",
+    "TaskStop",
+    "TaskUpdate",
+    "TodoWrite",
+    "ToolSearch",
+    "WaitForMcpServers",
+    "WebFetch",
+    "WebSearch",
+    "Workflow",
+    "Write",
 )
 DISALLOWED_TOOLS = [*BUILTIN_TOOLS, "*", "mcp__*"]
 
@@ -154,10 +199,10 @@ def _tool_activity(message) -> str | None:
     """
     import claude_agent_sdk as sdk
 
-    if isinstance(message, (sdk.AssistantMessage, sdk.UserMessage)):
+    if isinstance(message, (sdk.AssistantMessage, sdk.UserMessage)):  # noqa: UP038 -- AI29's provider, left as written (follow-up card)
         if not isinstance(message.content, str):
             for block in message.content:
-                if not isinstance(block, (sdk.TextBlock, sdk.ThinkingBlock)):
+                if not isinstance(block, (sdk.TextBlock, sdk.ThinkingBlock)):  # noqa: UP038 -- AI29's provider, left as written (follow-up card)
                     return f"{type(block).__name__} {getattr(block, 'name', '')!r:.80}"
         if getattr(message, "tool_use_result", None) is not None:
             return "tool result"
@@ -166,7 +211,7 @@ def _tool_activity(message) -> str | None:
             return "refused tool call"
         if getattr(message, "deferred_tool_use", None) is not None:
             return "deferred tool call"
-    elif isinstance(
+    elif isinstance(  # noqa: UP038 -- AI29's provider, left as written (follow-up card)
         message,
         (sdk.TaskStartedMessage, sdk.TaskProgressMessage, sdk.TaskNotificationMessage, sdk.TaskUpdatedMessage),
     ):
@@ -262,7 +307,7 @@ class ClaudeAgentProvider(AIProvider):
                 if isinstance(message, SystemMessage) and message.subtype == "init":
                     session_checked = True
                     sign = _session_problem(message.data)
-                elif not session_checked and isinstance(message, (AssistantMessage, UserMessage)):
+                elif not session_checked and isinstance(message, (AssistantMessage, UserMessage)):  # noqa: UP038 -- AI29's provider, left as written (follow-up card)
                     sign = "a reply before the CLI reported its session"
                 else:
                     sign = _tool_activity(message)

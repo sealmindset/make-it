@@ -32,9 +32,7 @@ async def list_settings(
     db: AsyncSession = Depends(get_db),
 ):
     """List all settings, grouped by group_name. Sensitive values are masked."""
-    result = await db.execute(
-        select(AppSetting).order_by(AppSetting.group_name, AppSetting.key)
-    )
+    result = await db.execute(select(AppSetting).order_by(AppSetting.group_name, AppSetting.key))
     rows = result.scalars().all()
     return [
         AppSettingRead(
@@ -94,9 +92,7 @@ async def bulk_update_settings(
     """Bulk update multiple settings at once."""
     updated = []
     for item in body.settings:
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == item.key)
-        )
+        result = await db.execute(select(AppSetting).where(AppSetting.key == item.key))
         setting = result.scalar_one_or_none()
         if not setting:
             continue
@@ -149,9 +145,5 @@ async def list_audit_logs(
     limit: int = 100,
 ):
     """List recent setting change audit logs."""
-    result = await db.execute(
-        select(AppSettingAuditLog)
-        .order_by(AppSettingAuditLog.created_at.desc())
-        .limit(limit)
-    )
+    result = await db.execute(select(AppSettingAuditLog).order_by(AppSettingAuditLog.created_at.desc()).limit(limit))
     return result.scalars().all()

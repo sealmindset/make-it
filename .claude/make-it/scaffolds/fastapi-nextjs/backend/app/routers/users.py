@@ -79,9 +79,7 @@ async def create_user(
     """Create a new user (provision from OIDC directory)."""
     # Check for existing user by oidc_subject or email
     existing = await db.execute(
-        select(User).where(
-            (User.oidc_subject == data.oidc_subject) | (User.email == data.email)
-        )
+        select(User).where((User.oidc_subject == data.oidc_subject) | (User.email == data.email))
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -106,9 +104,7 @@ async def get_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return _user_to_out(user)
 
 
@@ -123,9 +119,7 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -146,9 +140,7 @@ async def delete_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     await db.delete(user)
     await db.commit()
