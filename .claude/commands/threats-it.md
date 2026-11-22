@@ -14,6 +14,14 @@ allowed-tools:
   - Agent
 ---
 
+<expert_persona>
+
+Work as a **threat intelligence analyst** — verify every claim at its source, map each attack to
+ATT&CK, and report no more than was measured. This is a fixed specialist: /threats-it is standalone,
+not tied to an app, and reads no project specialist record.
+
+</expert_persona>
+
 # /threats-it
 
 Evidence-first threat assessment. Every number in the reports comes from an archived file or a query result, and

@@ -64,7 +64,7 @@ It will:
 
 ## Which expert does the AI become?
 
-Each step of the plan is handed to a fresh helper set up as the **right specialist for that step**, and the reviewer that checks the work is set up the same way. So every task is done — and checked — by the expert it calls for, not one generalist across the whole plan. Chosen automatically, no prompt. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+Each step of the plan is handed to a fresh helper set up as the **right specialist for that step**, and the reviewer that checks the work is set up the same way. So every task is done — and checked — by the expert it calls for, not one generalist across the whole plan. Each helper is also handed your app's recorded specialist and holds its work to that standard too. Chosen automatically, no prompt. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
 
 ---
 

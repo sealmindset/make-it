@@ -86,7 +86,7 @@ Then just **talk to it.** It asks one easy question at a time, celebrates your a
 
 ## Which expert does the AI become?
 
-While building, the AI quietly figures out what kind of specialist your app needs most — based on what you described (payments? personal data? lots of users? heavy AI?) — and **builds and reviews the risky parts in that expert's role**, not as a generalist. You won't be asked anything; it just raises the quality bar where it matters. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job) for how this works across every skill.)
+While planning your app, the AI quietly picks the specialist it needs — based on what you described (payments? personal data? lots of users? heavy AI?) — writes it down with the reasons, and **builds and reviews your app in that expert's role**, not as a generalist. Every app gets one, even a low-risk one: at the least, a senior engineer of the kind of app it is. You won't be asked anything; it just raises the quality bar where it matters. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job) for how this works across every skill.)
 
 ---
 

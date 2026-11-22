@@ -74,7 +74,7 @@ Optional output formats: add `--format json` or `--format junit`. A Markdown rep
 
 ## Which expert does the AI become?
 
-For a security scan, the AI works as a **security engineer**, not a generalist — automatically, no prompt. It thinks like an attacker (where could someone break in?) and holds the report to a professional standard, rather than skimming a checklist. If your app handles sensitive data like payments or personal information, this mindset kicks in even harder. (Set behind the scenes from your app's details — see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+For a security scan, the AI works as a **security engineer**, not a generalist — automatically, no prompt. It thinks like an attacker (where could someone break in?) and holds the report to a professional standard, rather than skimming a checklist. If your app handles sensitive data like payments or personal information, this mindset kicks in even harder. It also reads the specialist your app's record names and holds the work to that standard too (see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job)).
 
 ---
 

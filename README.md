@@ -968,6 +968,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.14 -- One project specialist per app, recorded once and read by every skill that touches code
+
+Each skill used to pick its own expert from whatever it noticed, so the same app could be
+built by one specialist and checked by another, and nothing recorded who.
+
+- **One record.** `app-context.json` holds the project specialist: who leads, who else is
+  added, the reasons, and which skill set it. Security leads, then data, reliability and AI.
+- **Three writers.** /make-it and /retrofit-it write it; /resume-it re-checks it when planned
+  work changes a reason. A later writer starts from what is recorded and changes only what
+  its own evidence shows. A change in who is named is said in one plain line.
+- **Older apps catch up.** New check S15 brings an older value up to date once.
+- **Every reader adds its own.** /debug-it, /nemo-it, /fix-it, /argo-it, /try-it,
+  /deadcode-it and /resolve-it work as their task specialist, held to the recorded
+  specialists' checks. /subagent-it and /dispatch-it hand the record to every agent.
+- **Not yet proven by a real run.** The rule is pinned by contract tests and paper checks.
+
 ### v1.71.13 -- The build's security pass runs from pinned Docker images, through one tested script
 
 The build ran its security scanners from whatever happened to be installed on the computer,

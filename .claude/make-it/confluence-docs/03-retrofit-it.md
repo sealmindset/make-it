@@ -69,7 +69,7 @@ From inside your existing project, type:
 
 ## Which expert does the AI become?
 
-For retrofitting an existing app, the AI works as a **software architect**, not a generalist — automatically, no prompt. Its priority is upgrading your app *without breaking what already works*: it plans the change in safe stages and keeps a record of the risks. (Set behind the scenes from your app's details — see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+For retrofitting an existing app, the AI works as a **software architect**, not a generalist — automatically, no prompt. Its priority is upgrading your app *without breaking what already works*: it plans the change in safe stages and keeps a record of the risks. It also writes down the specialist your app itself needs, from what it finds in your code (payments? personal data? outside users?), with the reasons. Where the code can't tell, it picks the more careful one and notes that it guessed, without asking you. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
 
 ---
 

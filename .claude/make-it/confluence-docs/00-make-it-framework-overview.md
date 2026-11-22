@@ -103,7 +103,7 @@ You don't need to memorize this. Each skill tells you the natural next step when
 
 Here's something the framework does quietly in the background that makes a real difference to quality.
 
-A general-purpose assistant is a jack-of-all-trades. But the *best* work on a risky task comes from a **specialist** — a security expert thinks differently than a database expert, who thinks differently than someone who keeps live systems running. So before the framework tackles high-stakes work, **it has the AI step into the role of the right specialist** for that exact job, instead of staying a generalist.
+A general-purpose assistant is a jack-of-all-trades. But the *best* work on a risky task comes from a **specialist** — a security expert thinks differently than a database expert, who thinks differently than someone who keeps live systems running. So before the framework changes or judges your app's code, **it has the AI step into the role of the right specialist** for that exact job, instead of staying a generalist.
 
 You don't ask for this and you won't see a prompt — it happens automatically, chosen from what your app actually involves (does it handle payments? personal data? thousands of users?). It simply means the AI brings the mindset — and produces the deliverables — of the specialist the work deserves.
 
@@ -111,12 +111,12 @@ A few examples:
 
 | When you run… | The AI works as a… | So it catches / delivers… |
 |---|---|---|
-| [`/debug-it`](10-debug-it.md) on a slow or flaky bug | reliability & performance engineer | the *real* root cause (not a band-aid), plus a test so it never comes back |
+| [`/debug-it`](10-debug-it.md) on any bug | senior maintainer of your app's stack | the *real* root cause (not a band-aid), plus a test so it never comes back |
 | [`/nemo-it`](08-nemo-it.md) / [`/fix-it`](09-fix-it.md) | security engineer | thinks like an attacker, fixes the cause, documents why it's safe |
 | [`/argo-it`](07-argo-it.md) | platform/operations engineer | a plan for what happens if something breaks, not just "make it live" |
 | [`/retrofit-it`](03-retrofit-it.md) | software architect | upgrades without breaking what already works |
 
-If a task *isn't* risky, the AI stays a fast generalist on purpose — no ceremony where it isn't needed. This is the "team of specialists on call" idea made literal: the same assistant, wearing the right hat for each job.
+Every app gets a named specialist, even a low-risk one: at the least, a senior engineer of the kind of app it is (web app, API, command-line tool, library, or editor or browser extension). This is the "team of specialists on call" idea made literal: the same assistant, wearing the right hat for each job.
 
 ---
 

@@ -70,7 +70,7 @@ It will ask **how you want your work saved** (a new branch, or the current branc
 
 ## Which expert does the AI become?
 
-When fixing security findings, the AI works as a **security engineer**, not a generalist — automatically, no prompt. It fixes the *underlying cause* and can explain why the fix is sound, instead of a surface patch that looks fine but leaves the door open. (Set behind the scenes from your app's details — see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+When fixing security findings, the AI works as a **security engineer**, not a generalist — automatically, no prompt. It fixes the *underlying cause* and can explain why the fix is sound, instead of a surface patch that looks fine but leaves the door open. It also reads the specialist your app's record names and holds the work to that standard too (see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job)).
 
 ---
 

@@ -32,11 +32,16 @@ Full doctrine: `~/.claude/make-it/references/subagent-driven-development.md`.
 
 <expert_persona>
 
-When constructing each task's implementer brief (and its reviewer brief), assign the **specialist
-persona matching that task's domain** — do NOT dispatch generalists. Infer per task from the task
-text + `app-context.json` signals, and inject the persona directive (identity + mental model +
-output standard) into that subagent's context so it implements/reviews to the expert's standard.
-No user prompt. See the reference below.
+/subagent-it adopts no specialist itself. Every subagent it launches on app code is handed two
+things in its brief: the project specialist, the specialists the `expert_persona` field in the
+app's `app-context.json` names (the template's `[PROJECT_SPECIALISTS]` slot), and the task
+specialist that task's domain calls for (`[TASK_SPECIALIST]`). The implementer and the test-writer
+work as the task specialist, held to the checks and output standard of every specialist recorded
+in `expert_persona`; the task reviewer, the adversarial reviewer and the final `/code-review`
+review against those checks too. With no `expert_persona` set, an older value the reference does not count (its "Reading an older value"), or a run outside an
+app, the slot is left empty and each agent works as its task specialist alone and says nothing. Choose the task
+specialist per task from the task's text; never work a project specialist out from signals, and
+never change the specialist record. No user prompt. See the reference below.
 
 @~/.claude/make-it/references/expert-personas.md
 

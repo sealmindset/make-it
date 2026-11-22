@@ -45,6 +45,8 @@ This skill has 5 phases:
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/operator-safety.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/expert-personas.md
+
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
@@ -397,15 +399,6 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
    - Real users -> Full production setup
    - Testing -> Prototype mode (simpler infra, can upgrade later)
 
-**Expert persona (SILENT -- no user question):**
-
-Reference `references/expert-personas.md`. From the app-context signals just gathered
-(sensitive data, scale, deployment target, AI depth, integrations), infer the **dominant expert
-persona** this build's sub-agents should adopt instead of a generalist, and record it in
-`expert_persona`. This is a build-quality lever, not a staffing recommendation -- the AI *becomes*
-the specialist for the risky work. No question to the user; it shapes how code is generated,
-reviewed, and hardened behind the scenes.
-
 **For everything else, use smart defaults from the design-blueprint.md:**
 - Stack selection: Use the decision tree based on app_type and features
 - Security: Always Tier 1, Tier 2 if going to production
@@ -452,6 +445,41 @@ reviewed, and hardened behind the scenes.
   - Structured logging -> mock-cribl (port 3005)
   - Other external integrations -> one custom mock per integration
   - Pre-seed mock-oidc test users to match the app's defined roles
+
+**Project specialist (SILENT -- no user question):**
+
+Reference `references/expert-personas.md`. Every project records its project specialist in
+`expert_persona`, a low-risk one included: the primary specialist, the added ones, the signals
+behind each, `set_by` and `set_at`. Work it out from the app-context answers once the stack is
+chosen:
+
+1. The floor is the reference's floor row for the `project_type`, filled in from `stack` as the
+   reference says. Its signal is `project_type: <value> (the floor)`.
+2. Check the signals of the reference's rule 2, in its order, and build the record by its "The
+   order decides the primary" paragraph. In app-context they are carried by: security --
+   `compliance`, `purpose`, `features` (personal data as rule 2 defines it, not the sign-in
+   accounts every app has); data -- `multi_tenancy.needed` and the answers; reliability --
+   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts` (the app's own AI use, never
+   the scaffold's AI Instructions screens); a variant -- the
+   `variant_config` fields its definition file names, at the rank it declares.
+3. Each signal is written `<field>: <value>`. Only what the person said counts: a smart default
+   /make-it filled in is not a signal, and one the person gave only as a guess ("maybe a few
+   thousand") is marked `"unconfirmed": true`.
+4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
+5. If `app-context.json` already holds a record (a returning run), update it as the reference's
+   "The record is the starting point" says (keep each signal the answers do not disprove), then
+   compare as its "Same record or a different one" says: with the same specialists only the
+   signals are brought up to date, silently; different specialists write the new one. When the new
+   one is written over a record, the one plain line (e.g. "Your app now gets a security specialist
+   because it takes card payments.") goes in the plain-English summary's sentence on what departs
+   from the standard setup, and into `CHANGELOG.md`: now if the file exists, otherwise in the
+   initial entry Build step g writes. An older value (the reference's "Reading an older value") is not compared: replace it and say
+   S15's line the same way.
+
+The record is never a plain text value and never a generalist. /make-it builds and reviews in the
+role of every specialist in the record, the primary leading, and hands the record to every
+sub-agent it briefs. This is a build-quality lever, not a staffing recommendation. Apart from the
+line in step 5, nothing here is shown to the user, and nothing is asked of them.
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
@@ -562,7 +590,7 @@ The user sees progress updates, NOT the technical details.
       ```
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
-   g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
+   g. **Create CHANGELOG.md** with initial entry (carrying the specialist line from Design step 5 when Design wrote a new record over an older one), **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
 
    h. **Create `CLAUDE.md` with the instruction-drift canary** (Tier 0 guardrail). This file is
       the operating contract for any AI assistant working in the generated project. Write it with
@@ -636,6 +664,9 @@ When the app-specific work is sizable (several independent domains/features), ex
 Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): treat these
 steps as the plan, dispatch a fresh implementer subagent per step + per-step review + a final
 whole-branch review, keeping your own context for coordination. Stay sequential on shared files.
+Brief each implementer and reviewer subagent with the project specialist recorded in
+`expert_persona` at Design plus the specialist its step needs (a data engineer for the migration,
+say); it works as both, instead of inferring a specialist of its own.
 
 1. **Domain Models + Migration**
    - Tell user: "Creating your data models..."
@@ -1105,7 +1136,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S14**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
+- **S01-S15**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
@@ -1350,7 +1381,9 @@ If ANY test fails in Part B:
 If several failures are INDEPENDENT (different files/subsystems/root causes), fix them in
 parallel instead of sequentially: dispatch one agent per domain (`/dispatch-it`, see
 `parallel-dispatch.md`), isolate writers in their own worktrees, then re-run the FULL suite
-once and integrate. Keep related failures together (find the shared cause first).
+once and integrate. Keep related failures together (find the shared cause first). Brief each
+agent with the project specialist recorded in `expert_persona` plus the specialist its failure
+needs; it works as both, instead of inferring a specialist of its own.
 
 Common issues and fixes:
 - Auth callback returns wrong role -> fix to query database by oidc_subject

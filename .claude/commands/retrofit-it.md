@@ -21,10 +21,14 @@ Take an existing, working application -- built by Claude, a developer, or any to
 
 The skill reverse-engineers the application FIRST (no interview questions upfront), then asks targeted clarifying questions only when the code is ambiguous. The user's application intent, design, and workflow are preserved -- nothing breaks.
 
-**Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Default here:
-**software architect** — preserve original intent, phased change, risk register; don't break
-behavior while bolting on foundations. Signals may layer in AppSec / data-engineer checks.
-Auto-selected from `app-context.json` + this skill; no user prompt. See
+**Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Its task
+specialist is the **software architect** — preserve original intent, phased change, risk register;
+don't break behavior while bolting on foundations. /retrofit-it is also one of the three writers
+of the project specialist: Discovery step 7 records it in `expert_persona` from the code, by the
+reference's rule. The two stay apart: the architect is the role this skill works in, and the
+specialist record is the project's. Once the specialist record is worked out (Discovery step 7), it
+works as the architect, held to the checks and output standard of every specialist in the record
+as well. Selected automatically; no user prompt. See
 `~/.claude/make-it/references/expert-personas.md` (imported below).
 
 @~/.claude/make-it/references/expert-personas.md
@@ -211,6 +215,59 @@ Evaluate whether the existing stack can support /make-it standards:
 If stack is fundamentally incompatible (rare), recommend migration and explain why.
 If stack has issues but is workable, note concerns but proceed.
 
+**7. Project specialist (SILENT -- no user question):**
+
+Set `project_type` from the code, by the Project Type Classification table in
+`templates/app-context.md` (a browser UI with its own backend is `web-app`, a backend with no UI
+that serves other systems is `api-service`, and so on). If the code fits no row, `project_type`
+stays empty and no specialist record is written (the reference's rule); the run's first write of
+`app-context.json` adds one TODO.md line saying why.
+
+Then record the project specialist in `expert_persona` by the reference's rule (its floor row,
+filled in from `stack` as the reference says, and rule 2 in its order), as /make-it's Design step
+does, with `set_by` `"/retrofit-it"` and `set_at` the date of this run (YYYY-MM-DD). Every
+retrofitted app gets a specialist record, a low-risk one its floor. The specialist record is never a
+plain text value and never a generalist. What differs from /make-it is where the signals come
+from: the code, not an interview.
+
+| Signal (rule 2) | Fires when the code shows |
+|---|---|
+| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data the app holds about people beyond its own sign-in accounts (customers, patients, contacts: a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records). A users table that only holds the app's own sign-in accounts does not fire it. |
+| Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
+| Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
+| AI | an AI SDK behind 10 or more distinct prompts or agents of the app's own, or the app's own prompts stored where non-developers edit them; the AI Instructions admin screens every web app gets from the scaffold do not fire it |
+| Variant | what its definition file declares under "Project specialist signals", at the rank it declares, when `app-context.json` already names the variant |
+
+Each signal is written `code: <what was found, and where>`; the floor's is
+`project_type: <value> (the floor)`. A signal is recorded only where the code shows it (the reference's "The record is the starting
+point"): where the code shows nothing, there is no signal, so an internal app whose user count the
+code cannot show gets no reliability signal. Evidence that is present but indirect (a table whose
+fields may or may not hold customers' personal data) is recorded and marked `"unconfirmed": true`.
+The specialist is never a clarifying question and does not count against Phase 3's 3-5 questions.
+
+The retrofit's own role (the software architect, its task specialist) is never written into
+`expert_persona`: the specialist record comes from the signals and the floor only.
+
+If `app-context.json` already holds a specialist record (a second retrofit, or an app /make-it
+built), update it as the reference's "The record is the starting point" says: keep each signal the code
+cannot disprove (one from the answers that the code says nothing about stays), add what the code
+shows, then compare as its "Same record or a different one" says: with the same specialists only
+the signals are brought up to date, silently; different specialists write the new one. When the new one is written over
+a specialist record, the one plain line (e.g. "Your app now gets a security specialist because its
+code takes card payments.") goes in the report of the step that writes it, and into
+`CHANGELOG.md`, which that step adds if the app has none. An older value (the reference's "Reading an older value") is not compared: replace it and say
+S15's line the same way.
+
+**When it is written.** Nothing is written before the plan is approved. The specialist record goes
+into the run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and
+in a phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
+Discovery found it, not the foundations the retrofit adds, so a phased retrofit stopped after any
+step already has its full specialist record. Part E's final write of `app-context.json` keeps it as
+it is.
+
+Apart from the line for a replaced specialist record, nothing here is shown to the user or asked of
+them.
+
 </step>
 
 <!-- ============================================================ -->
@@ -367,7 +424,8 @@ Potential clarification questions (ask only if needed):
 5. **If there's partial /make-it state** (a `.make-it-state.md` holding only
    `## Left out by your choice`, the record in `left-out-record.md`, is not partial state: don't ask): "I found a .make-it-state.md file. It looks like this was started with /make-it but may not have completed. Should I pick up from that state, or start the retrofit fresh?"
 
-**Maximum 3-5 questions. Never more.**
+**Maximum 3-5 questions. Never more.** The project specialist is never one of them (Discovery
+step 7).
 
 </step>
 
@@ -672,7 +730,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
 1. **Foundation (Prompt #1 adapted):**
    - Add missing: .gitignore entries, .env.example, CHANGELOG.md, TODO.md, README.md
    - README.md: project name/description, features, tech stack, quick start, project structure, test users/roles, deployment notes. Do NOT mention /make-it, /retrofit-it, /resume-it, or Claude Code.
-   - Generate app-context.json from discovered profile
+   - Generate app-context.json from discovered profile, with `project_type` and the project
+     specialist record from Discovery step 7
    - Do NOT recreate project structure -- work within existing structure
 
 2. **Docker (Prompt #6 adapted):**
@@ -1202,7 +1261,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S14**: Structure & configuration (incl. the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections in CLAUDE.md)
+- **S01-S15**: Structure & configuration (incl. the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections in CLAUDE.md, and the project specialist record)
 - **A01-A10**: Authentication & OIDC
 - **R01-R07**: RBAC & permissions
 - **U01-U07**: UI & frontend
@@ -1314,7 +1373,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
   check-in is not left out: read step 4 already took its line out.
 - Any remaining TODOs
 
-**Generate app-context.json** -- So /resume-it and /ship-it work going forward.
+**Generate app-context.json** -- So /resume-it and /ship-it work going forward. Discovery
+step 7's `expert_persona` stays as it is.
 
 **Automatically invoke /try-it** in `work` -- Same as /make-it, seamless handoff.
 

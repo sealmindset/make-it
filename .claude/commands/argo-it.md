@@ -29,10 +29,14 @@ for orgs that want fully automated deployment setup for new repos.
 
 <expert_persona>
 
-Before generating manifests or pipelines, adopt the specialist persona — do NOT work as a
-generalist. Default here: **Platform / DevOps + SRE** — think blast radius, SLOs, rollback, failure
-modes, not just "make it deploy." Auto-selected from `app-context.json` + this skill; no user
-prompt; work in character to that persona's output standard. See the reference below.
+Before generating manifests or pipelines, adopt the specialist persona — do NOT work as a generalist. Its task specialist is the **Platform / Kubernetes engineer** — blast radius, SLOs, rollback and failure modes, not just "make it deploy". Read the project specialist: the
+specialists the `expert_persona` field in the app's `app-context.json` names, the primary and the others. Work
+as that task specialist, held to the checks and output standard of every specialist recorded in
+`expert_persona` (the reference's "Each project specialist's checks" table). With no
+`expert_persona` set, an older value the reference does not count (its "Reading an older value"), or
+a run outside an app, work as the task specialist alone and say nothing. Never work a project
+specialist out from signals, and never change the specialist record. Selected automatically; no
+user prompt. See `~/.claude/make-it/references/expert-personas.md`.
 
 @~/.claude/make-it/references/expert-personas.md
 
