@@ -1,5 +1,5 @@
-from app.models.base import Base
 from app.models.app_setting import AppSetting, AppSettingAuditLog
+from app.models.base import Base
 from app.models.managed_prompt import (
     ManagedPrompt,
     PromptAuditLog,

@@ -17,9 +17,7 @@ async def list_permissions(
     db: AsyncSession = Depends(get_db),
 ):
     """List all available permissions (used by role permission matrix UI)."""
-    result = await db.execute(
-        select(Permission).order_by(Permission.resource, Permission.action)
-    )
+    result = await db.execute(select(Permission).order_by(Permission.resource, Permission.action))
     permissions = result.scalars().all()
     return [
         PermissionOut(

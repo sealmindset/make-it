@@ -59,9 +59,7 @@ def _slugify(name: str) -> str:
 def _prompt_to_out(prompt: ManagedPrompt) -> ManagedPromptOut:
     """Convert ManagedPrompt model to full output schema."""
     tags = [t.tag for t in prompt.tags] if prompt.tags else []
-    primary_usage = next(
-        (u.location for u in (prompt.usages or []) if u.is_primary), None
-    )
+    primary_usage = next((u.location for u in (prompt.usages or []) if u.is_primary), None)
     version_count = len(prompt.versions) if prompt.versions else 0
     usage_count = sum(u.call_count for u in (prompt.usages or []))
 
@@ -93,9 +91,7 @@ def _prompt_to_out(prompt: ManagedPrompt) -> ManagedPromptOut:
 def _prompt_to_list_out(prompt: ManagedPrompt) -> ManagedPromptListOut:
     """Convert ManagedPrompt model to lighter list output."""
     tags = [t.tag for t in prompt.tags] if prompt.tags else []
-    primary_usage = next(
-        (u.location for u in (prompt.usages or []) if u.is_primary), None
-    )
+    primary_usage = next((u.location for u in (prompt.usages or []) if u.is_primary), None)
     return ManagedPromptListOut(
         id=prompt.id,
         slug=prompt.slug,
@@ -122,9 +118,7 @@ def _check_not_locked(prompt: ManagedPrompt) -> None:
         )
 
 
-async def _get_prompt_or_404(
-    slug: str, db: AsyncSession
-) -> ManagedPrompt:
+async def _get_prompt_or_404(slug: str, db: AsyncSession) -> ManagedPrompt:
     """Fetch a prompt by slug or raise 404."""
     stmt = select(ManagedPrompt).where(ManagedPrompt.slug == slug)
     prompt = (await db.execute(stmt)).scalar_one_or_none()
@@ -246,9 +240,7 @@ async def create_prompt(
     slug = body.slug or _slugify(body.name)
 
     # Check for slug collision
-    existing = (
-        await db.execute(select(ManagedPrompt).where(ManagedPrompt.slug == slug))
-    ).scalar_one_or_none()
+    existing = (await db.execute(select(ManagedPrompt).where(ManagedPrompt.slug == slug))).scalar_one_or_none()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -348,8 +340,7 @@ async def update_prompt(
         # Get current version for defaults
         current = (
             await db.execute(
-                select(PromptVersion)
-                .where(
+                select(PromptVersion).where(
                     PromptVersion.prompt_id == prompt.id,
                     PromptVersion.version == prompt.current_version,
                 )
@@ -493,11 +484,7 @@ async def list_versions(
 ):
     """List all versions of an AI instruction (newest first)."""
     prompt = await _get_prompt_or_404(slug, db)
-    stmt = (
-        select(PromptVersion)
-        .where(PromptVersion.prompt_id == prompt.id)
-        .order_by(PromptVersion.version.desc())
-    )
+    stmt = select(PromptVersion).where(PromptVersion.prompt_id == prompt.id).order_by(PromptVersion.version.desc())
     versions = (await db.execute(stmt)).scalars().all()
     return [PromptVersionOut.model_validate(v) for v in versions]
 
@@ -558,7 +545,7 @@ async def restore_version(
             change_summary=change_summary,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))  # noqa: B904 -- kept as is: "from" would change the error chain (follow-up card)
 
     await db.commit()
     await db.refresh(prompt)
@@ -655,9 +642,7 @@ async def list_test_cases(
     """List saved test cases for an AI instruction."""
     prompt = await _get_prompt_or_404(slug, db)
     stmt = (
-        select(PromptTestCase)
-        .where(PromptTestCase.prompt_id == prompt.id)
-        .order_by(PromptTestCase.created_at.desc())
+        select(PromptTestCase).where(PromptTestCase.prompt_id == prompt.id).order_by(PromptTestCase.created_at.desc())
     )
     cases = (await db.execute(stmt)).scalars().all()
     return [PromptTestCaseOut.model_validate(c) for c in cases]

@@ -3015,16 +3015,16 @@ Every scaffolded app ships with linting, formatting, type checking, secret detec
 | prettier | local | TS/JS format violations |
 | gitleaks | gitleaks | Leaked secrets, tokens, passwords |
 
-**Graceful degradation:** If `pre-commit` is not installed on the user's machine, hooks don't run. Noted in TODO.md as a setup step. CI catches issues regardless.
+**Required, not optional:** `pre-commit` is a preflight tool, and /make-it switches the hooks on right after the build's first save (check Q12 [BLOCK]). The skills that save for the user save nothing while they are off (`git-operations.md`, Before any save). CI runs its own checks regardless.
 
 ### 15d. Secret Detection (gitleaks)
 
 `.gitleaks.toml` configures secret detection with allowlists for known-safe patterns:
 - `.env.example` (placeholder values, not real secrets)
-- `mock-services/` (mock OIDC tokens are not real)
 - `scripts/seed-mock-services.sh` (mock data)
-- Test fixtures
 - Specific mock token patterns (`mock-oidc-secret`, `mock-oidc-client`, etc.)
+
+It extends gitleaks' default rules, and it never allowlists a whole folder (`tests/`, `mock-services/`): a real key put there would go unseen.
 
 Runs as a pre-commit hook (fast, local) and can also run in CI pipelines.
 

@@ -5,7 +5,7 @@ handling (max_completion_tokens vs max_tokens, system role restrictions).
 """
 
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from app.config import settings
 from app.lib.ai.errors import sanitize_ai_error
@@ -35,18 +35,14 @@ class OpenAIProvider(AIProvider):
         try:
             from openai import AsyncOpenAI
         except ImportError as exc:
-            raise ImportError(
-                "openai package not installed. Install with: pip install openai"
-            ) from exc
+            raise ImportError("openai package not installed. Install with: pip install openai") from exc
 
         self._client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         model = get_model("standard")
         pricing = PRICING_PER_K.get(model, PRICING_PER_K["gpt-4o"])
-        return (input_tokens / 1_000) * pricing["input"] + (
-            output_tokens / 1_000
-        ) * pricing["output"]
+        return (input_tokens / 1_000) * pricing["input"] + (output_tokens / 1_000) * pricing["output"]
 
     def _build_params(
         self,

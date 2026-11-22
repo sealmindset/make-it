@@ -6,7 +6,7 @@ provider is reinstantiated.
 """
 
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from app.lib.ai.errors import AIToolActivityError
 from app.lib.ai.provider import AIProvider
@@ -34,9 +34,7 @@ class FailoverProvider(AIProvider):
     ) -> str:
         if not self._primary_failed:
             try:
-                return await self.primary.complete(
-                    system_prompt, user_prompt, model, max_tokens
-                )
+                return await self.primary.complete(system_prompt, user_prompt, model, max_tokens)
             except AIToolActivityError:
                 raise  # a security stop, not an outage: no second provider, primary stays in use
             except Exception as exc:
@@ -48,9 +46,7 @@ class FailoverProvider(AIProvider):
                 )
                 self._primary_failed = True
 
-        return await self.secondary.complete(
-            system_prompt, user_prompt, model, max_tokens
-        )
+        return await self.secondary.complete(system_prompt, user_prompt, model, max_tokens)
 
     async def stream(
         self,
@@ -61,9 +57,7 @@ class FailoverProvider(AIProvider):
     ) -> AsyncIterator[str]:
         if not self._primary_failed:
             try:
-                async for chunk in self.primary.stream(
-                    system_prompt, user_prompt, model, max_tokens
-                ):
+                async for chunk in self.primary.stream(system_prompt, user_prompt, model, max_tokens):
                     yield chunk
                 return
             except AIToolActivityError:
@@ -77,7 +71,5 @@ class FailoverProvider(AIProvider):
                 )
                 self._primary_failed = True
 
-        async for chunk in self.secondary.stream(
-            system_prompt, user_prompt, model, max_tokens
-        ):
+        async for chunk in self.secondary.stream(system_prompt, user_prompt, model, max_tokens):
             yield chunk

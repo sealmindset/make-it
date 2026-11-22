@@ -1,6 +1,6 @@
 import secrets
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
@@ -43,9 +43,7 @@ def _is_trusted_url(url: str) -> bool:
 async def _get_oidc_discovery() -> dict:
     """Fetch OIDC discovery document from issuer."""
     async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{settings.OIDC_ISSUER_URL}/.well-known/openid-configuration"
-        )
+        resp = await client.get(f"{settings.OIDC_ISSUER_URL}/.well-known/openid-configuration")
         resp.raise_for_status()
         return resp.json()
 
@@ -138,11 +136,7 @@ async def callback(
 
     # Look up user by oidc_subject (NOT email)
     oidc_subject = userinfo.get("sub")
-    stmt = (
-        select(User)
-        .where(User.oidc_subject == oidc_subject)
-        .options(selectinload(User.role))
-    )
+    stmt = select(User).where(User.oidc_subject == oidc_subject).options(selectinload(User.role))
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
@@ -161,15 +155,11 @@ async def callback(
     # Load role permissions from database
     role = user.role
     perm_stmt = (
-        select(RolePermission)
-        .where(RolePermission.role_id == role.id)
-        .options(selectinload(RolePermission.permission))
+        select(RolePermission).where(RolePermission.role_id == role.id).options(selectinload(RolePermission.permission))
     )
     perm_result = await db.execute(perm_stmt)
     role_perms = perm_result.scalars().all()
-    permissions = [
-        f"{rp.permission.resource}.{rp.permission.action}" for rp in role_perms
-    ]
+    permissions = [f"{rp.permission.resource}.{rp.permission.action}" for rp in role_perms]
 
     # Sign JWT
     payload = {
@@ -179,8 +169,8 @@ async def callback(
         "role_id": str(user.role_id),
         "role_name": role.name,
         "permissions": permissions,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=8),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(hours=8),
+        "iat": datetime.now(UTC),
     }
     token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 

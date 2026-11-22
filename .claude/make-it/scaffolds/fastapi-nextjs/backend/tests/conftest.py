@@ -9,12 +9,9 @@ import uuid
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-from app.database import get_db
-from app.middleware.auth import get_current_user
-from app.models.base import Base
-from app.schemas.auth import UserInfo
+from sqlalchemy.dialects import (
+    sqlite as sqlite_dialect,  # noqa: F401 -- kept: loads the SQLite dialect the shims below compile for
+)
 
 # ---------------------------------------------------------------------------
 # SQLite compatibility for PostgreSQL column types
@@ -27,10 +24,14 @@ from app.schemas.auth import UserInfo
 #
 # Any new PostgreSQL-specific type added to a model needs a shim here, or every
 # test errors at table-creation time with "can't render element of type X".
-
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.dialects import sqlite as sqlite_dialect  # noqa: F401 -- kept: loads the SQLite dialect the shims below compile for
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.database import get_db
+from app.middleware.auth import get_current_user
+from app.models.base import Base
+from app.schemas.auth import UserInfo
 
 
 @pytest.fixture(autouse=True)
@@ -70,11 +71,22 @@ ADMIN_USER = UserInfo(
     role_id="00000000-0000-0000-0000-000000000010",
     role_name="Super Admin",
     permissions=[
-        "users.create", "users.read", "users.update", "users.delete",
-        "roles.create", "roles.read", "roles.update", "roles.delete",
-        "admin.logs.read", "admin.logs.delete",
-        "admin.settings.read", "admin.settings.update",
-        "admin.prompts.create", "admin.prompts.read", "admin.prompts.update", "admin.prompts.delete",
+        "users.create",
+        "users.read",
+        "users.update",
+        "users.delete",
+        "roles.create",
+        "roles.read",
+        "roles.update",
+        "roles.delete",
+        "admin.logs.read",
+        "admin.logs.delete",
+        "admin.settings.read",
+        "admin.settings.update",
+        "admin.prompts.create",
+        "admin.prompts.read",
+        "admin.prompts.update",
+        "admin.prompts.delete",
         # [ADMIN_PERMISSIONS] -- add app-specific permissions here
     ],
 )
@@ -140,6 +152,7 @@ async def db_session(db_engine):
 # Seed helpers
 # ---------------------------------------------------------------------------
 
+
 async def seed_user(db: AsyncSession, user_info: UserInfo) -> None:
     """Insert a Role + User matching a UserInfo fixture into the test DB."""
     from app.models.role import Role
@@ -149,20 +162,23 @@ async def seed_user(db: AsyncSession, user_info: UserInfo) -> None:
     user_id = uuid.UUID(SEED_USER_IDS[user_info.sub])
 
     from sqlalchemy import select
+
     existing_role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()
     if not existing_role:
         db.add(Role(id=role_id, name=user_info.role_name, description=f"{user_info.role_name} role", is_system=True))
 
     existing_user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not existing_user:
-        db.add(User(
-            id=user_id,
-            oidc_subject=user_info.sub,
-            email=user_info.email,
-            display_name=user_info.name,
-            is_active=True,
-            role_id=role_id,
-        ))
+        db.add(
+            User(
+                id=user_id,
+                oidc_subject=user_info.sub,
+                email=user_info.email,
+                display_name=user_info.name,
+                is_active=True,
+                role_id=role_id,
+            )
+        )
 
     await db.commit()
 
@@ -170,6 +186,7 @@ async def seed_user(db: AsyncSession, user_info: UserInfo) -> None:
 # ---------------------------------------------------------------------------
 # HTTP client fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_client(db_session: AsyncSession, user: UserInfo):
     """Build an httpx AsyncClient with auth and DB overrides."""
@@ -194,6 +211,7 @@ async def admin_client(db_session):
     async with _make_client(db_session, ADMIN_USER) as client:
         yield client
     from app.main import _fastapi_app as app
+
     app.dependency_overrides.clear()
 
 
@@ -205,6 +223,7 @@ async def user_client(db_session):
     async with _make_client(db_session, REGULAR_USER) as client:
         yield client
     from app.main import _fastapi_app as app
+
     app.dependency_overrides.clear()
 
 
@@ -216,4 +235,5 @@ async def viewer_client(db_session):
     async with _make_client(db_session, VIEWER_USER) as client:
         yield client
     from app.main import _fastapi_app as app
+
     app.dependency_overrides.clear()

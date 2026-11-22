@@ -63,9 +63,7 @@ async def list_roles(
     """List all roles, optionally including their permissions."""
     stmt = select(Role).order_by(Role.name)
     if include_permissions:
-        stmt = stmt.options(
-            selectinload(Role.permissions).selectinload(RolePermission.permission)
-        )
+        stmt = stmt.options(selectinload(Role.permissions).selectinload(RolePermission.permission))
     result = await db.execute(stmt)
     roles = result.scalars().all()
     return [_role_to_out(r, include_permissions) for r in roles]
@@ -103,9 +101,7 @@ async def update_role(
     result = await db.execute(select(Role).where(Role.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -126,9 +122,7 @@ async def delete_role(
     result = await db.execute(select(Role).where(Role.id == role_id))
     role = result.scalar_one_or_none()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     if role.is_system:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -150,16 +144,12 @@ async def update_role_permissions(
     stmt = (
         select(Role)
         .where(Role.id == role_id)
-        .options(
-            selectinload(Role.permissions).selectinload(RolePermission.permission)
-        )
+        .options(selectinload(Role.permissions).selectinload(RolePermission.permission))
     )
     result = await db.execute(stmt)
     role = result.scalar_one_or_none()
     if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
     # Remove existing permissions
     for rp in list(role.permissions):
@@ -167,9 +157,7 @@ async def update_role_permissions(
 
     # Add new permissions
     for perm_id in data.permission_ids:
-        perm = await db.execute(
-            select(Permission).where(Permission.id == perm_id)
-        )
+        perm = await db.execute(select(Permission).where(Permission.id == perm_id))
         if not perm.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

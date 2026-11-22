@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings
 
-
 _WEAK_SECRETS = {"change-me-in-production", "secret", "changeme", ""}
 
 
@@ -9,9 +8,9 @@ class Settings(BaseSettings):
     OIDC_ISSUER_URL: str = "http://mock-oidc:10090"
     OIDC_EXTERNAL_URL: str = "http://localhost:[MOCK_OIDC_PORT]"
     OIDC_CLIENT_ID: str = "mock-oidc-client"
-    OIDC_CLIENT_SECRET: str = "mock-oidc-secret"
+    OIDC_CLIENT_SECRET: str = "mock-oidc-secret"  # noqa: S105 -- the local mock-oidc value; real ones come from the environment
     # JWT
-    JWT_SECRET: str = "change-me-in-production"
+    JWT_SECRET: str = "change-me-in-production"  # noqa: S105 -- a placeholder the environment replaces (follow-up: refuse it outside dev)
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://[APP_SLUG]@db:5432/[APP_SLUG]"
     # URLs
@@ -77,6 +76,5 @@ def enforce_secrets() -> None:
 
     if errors:
         raise RuntimeError(
-            "ENFORCE_SECRETS is enabled but secrets are not production-ready:\n"
-            + "\n".join(f"  - {e}" for e in errors)
+            "ENFORCE_SECRETS is enabled but secrets are not production-ready:\n" + "\n".join(f"  - {e}" for e in errors)
         )

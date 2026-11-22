@@ -218,7 +218,8 @@ install_skills() {
   NEW_DIR="$MAKEIT_DIR.new.$$"
   rm -rf "$NEW_DIR"
   cp -r "$REPO_DIR/.claude/make-it" "$NEW_DIR"
-  for kept in "$MAKEIT_DIR"/hostile-code-*.json; do
+  # (and whether the user removed the force-push guard: force-push-guard.state)
+  for kept in "$MAKEIT_DIR"/hostile-code-*.json "$MAKEIT_DIR"/force-push-guard.state; do
     # an ordinary file only: a link is not followed, and its answers are asked again
     if [ -f "$kept" ] && [ ! -L "$kept" ]; then
       cp -p "$kept" "$NEW_DIR"/ || { rm -rf "$NEW_DIR"; fail "Could not keep $(basename "$kept"). Nothing was changed."; }
@@ -259,6 +260,56 @@ install_skills() {
   else
     warn "No CONTENT_MANIFEST in source -- update checks will be version-only."
   fi
+}
+
+# ---------------------------------------------------------------------------
+# The guard that refuses Claude's `git push --force` (a Claude Code hook)
+# ---------------------------------------------------------------------------
+
+# Adds ~/.claude/make-it/hooks/no-force-push.sh to ~/.claude/settings.json as a PreToolUse hook. The
+# helper merges: everything already in the file stays, a copy is kept before the first change, a
+# second install adds nothing, an older make-it entry is replaced. A file it can't read is left
+# alone, and the install says so. Once the user removes the guard (--remove-force-push-guard, or by
+# deleting it from settings.json), later installs leave it out until --add-force-push-guard.
+GUARD_FLAG="${MAKEIT_FORCE_PUSH_GUARD:-}"
+GUARD_NOTE=""
+REMOVE_HOW="curl -fsSL ${GITHUB_RAW}/install.sh | bash -s -- --remove-force-push-guard"
+
+# python3 that really runs. On a Mac without the developer tools, /usr/bin/python3 is a stand-in
+# that opens an install dialog instead of running, so it is not even started there.
+python_works() {
+  command -v python3 >/dev/null 2>&1 || return 1
+  if [ "$(uname -s)" = Darwin ] && [ "$(command -v python3)" = /usr/bin/python3 ] \
+    && ! xcode-select -p >/dev/null 2>&1; then
+    return 1
+  fi
+  python3 -c '' >/dev/null 2>&1
+}
+
+install_force_push_guard() {
+  local hook="$MAKEIT_DIR/hooks/no-force-push.sh" q out mode=auto
+  case "$GUARD_FLAG" in add) mode=add ;; remove) mode=remove ;; esac
+  [ -f "$hook" ] || fail "The guard that stops git push --force is missing from this download ($hook)."
+  if ! python_works; then
+    GUARD_NOTE="1 step not done: the guard that stops Claude from running git push --force was not added, because Python 3 isn't working on this computer. Install Python 3 (on a Mac: xcode-select --install), then run this installer again."
+    warn "$GUARD_NOTE"
+    return 0
+  fi
+  q="'$(printf '%s' "$hook" | sed "s/'/'\\\\''/g")'"
+  # Runs the hook only while its file is there: removing make-it turns the guard off instead of
+  # blocking every command; any other failure of the hook still blocks (onFailure: block).
+  out="$(python3 -I "$MAKEIT_DIR/scripts/add-no-force-push-hook.py" "$CLAUDE_DIR/settings.json" \
+    "bash -c '[ -f \"\$0\" ] || exit 0; exec \"\$BASH\" \"\$0\"' $q" \
+    "$hook" "$MAKEIT_DIR/force-push-guard.state" "$mode")" \
+    || fail "The skills are installed, but the guard that stops git push --force is not changed (see the line above)."
+  ok "$out"
+  case "$out" in
+    Added*|Updated*)
+      info "It stops Claude from running git push --force (or -f, --mirror, or a +branch push) in every project on this computer; git push --force-with-lease still works."
+      info "To remove it: $REMOVE_HOW" ;;
+    *"stays off"*)
+      info "To add it back: curl -fsSL ${GITHUB_RAW}/install.sh | bash -s -- --add-force-push-guard" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -307,6 +358,10 @@ report() {
   echo "  Files copied to:"
   echo "    $COMMANDS_DIR/*.md"
   echo "    $MAKEIT_DIR/ (references, templates, scaffolds)"
+  if [ -n "$GUARD_NOTE" ]; then
+    echo ""
+    echo "  $GUARD_NOTE"
+  fi
   echo ""
   echo "  IMPORTANT: Restart Claude Code for changes to take effect."
   echo ""
@@ -411,10 +466,17 @@ main() {
 
   # Install
   install_skills
+  install_force_push_guard
 
   # Report
   report
 }
+
+# --add-force-push-guard / --remove-force-push-guard (or MAKEIT_FORCE_PUSH_GUARD=add|remove)
+case "${1:-}" in
+  --add-force-push-guard) GUARD_FLAG=add ;;
+  --remove-force-push-guard) GUARD_FLAG=remove ;;
+esac
 
 # Support being called with "check" argument (used by /make-it update)
 if [ "${1:-}" = "check" ]; then

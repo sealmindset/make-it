@@ -84,11 +84,12 @@ copy `.env` (or `.env.example`) → compute a branch-stable port offset → writ
 ## How the skills use this
 
 - **/make-it** — scaffolds `scripts/worktree.sh`, the `no-commit-to-branch` hook, and the
-  parameterized compose into every project; after the initial commit on the default branch,
-  feature work moves to a branch/worktree.
+  parameterized compose into every project; step 41c switches the hooks on, makes the first save
+  on the default branch, and moves the project to its working branch, `work`. Feature work goes
+  on `work` or a worktree branched from it; `main` stays as the build left it until /ship-it.
 - **/resume-it** — before starting a new line of work, create (or reuse) a worktree for it;
   never build on top of unfinished work in the main checkout.
-- **/ship-it** — ships the current worktree's branch; the default branch stays clean.
+- **/ship-it** — ships the current worktree's branch (`work` after a build); the default branch stays clean.
 - **/wrap-it** — offer to `rm` finished worktrees and prune.
 
 When working as an agent: if you need to switch tasks, **make a worktree** — do not stash or

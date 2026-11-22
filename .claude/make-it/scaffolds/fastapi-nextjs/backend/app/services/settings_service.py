@@ -45,9 +45,7 @@ async def get_setting(db: AsyncSession, key: str, default: Any = None) -> Any:
     if key in _cache:
         cached_value, value_type, ts = _cache[key]
         if now - ts < _CACHE_TTL:
-            return _coerce(cached_value, value_type) if cached_value is not None else (
-                os.getenv(key, default)
-            )
+            return _coerce(cached_value, value_type) if cached_value is not None else (os.getenv(key, default))
 
     # Query DB
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))

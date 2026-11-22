@@ -9,13 +9,16 @@
 
 title = "[APP_NAME] gitleaks config"
 
+# Keep gitleaks' own rules. Without this, a config that only lists allowlists has no rules at all,
+# and gitleaks (the pre-commit hook and the quality-gate scan) finds nothing.
+[extend]
+useDefault = true
+
 [allowlist]
   description = "Known-safe patterns for local development"
   paths = [
-    '''\.env\.example$''',
-    '''mock-services/''',
-    '''scripts/seed-mock-services\.sh$''',
-    '''tests/''',
+    '''(^|/)\.env\.example$''',
+    '''^scripts/seed-mock-services\.sh$''',
   ]
   regexes = [
     '''mock-oidc-secret''',

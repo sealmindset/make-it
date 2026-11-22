@@ -6,7 +6,7 @@ Buffer size configurable via LOG_BUFFER_SIZE env var (default 10000).
 
 import time
 from collections import Counter, deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -16,9 +16,19 @@ from app.config import settings
 
 class LogEvent:
     __slots__ = (
-        "timestamp", "event_type", "method", "path", "url", "status",
-        "duration_ms", "service", "user_sub", "user_email",
-        "ip", "user_agent", "error",
+        "timestamp",
+        "event_type",
+        "method",
+        "path",
+        "url",
+        "status",
+        "duration_ms",
+        "service",
+        "user_sub",
+        "user_email",
+        "ip",
+        "user_agent",
+        "error",
     )
 
     def __init__(
@@ -37,7 +47,7 @@ class LogEvent:
         user_agent: str | None = None,
         error: str | None = None,
     ):
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
         self.event_type = event_type
         self.method = method
         self.path = path
@@ -109,7 +119,11 @@ class LogStore:
                 continue
             if since and event.timestamp < since:
                 continue
-            if path and path.lower() not in (event.path or "").lower() and path.lower() not in (event.url or "").lower():
+            if (
+                path
+                and path.lower() not in (event.path or "").lower()
+                and path.lower() not in (event.url or "").lower()
+            ):
                 continue
             if status_min is not None and (event.status is None or event.status < status_min):
                 continue
@@ -202,6 +216,7 @@ def sanitize_url(url: str) -> str:
 # Outbound HTTP logging -- httpx event hooks
 # ---------------------------------------------------------------------------
 
+
 def attach_outbound_logging(client: httpx.AsyncClient, service_name: str) -> httpx.AsyncClient:
     """Attach logging hooks to an httpx.AsyncClient for outbound call tracking.
 
@@ -209,6 +224,7 @@ def attach_outbound_logging(client: httpx.AsyncClient, service_name: str) -> htt
         client = httpx.AsyncClient(base_url=settings.JIRA_BASE_URL)
         attach_outbound_logging(client, "jira")
     """
+
     async def _on_request(request: httpx.Request) -> None:
         request.extensions["log_start"] = time.time()
 

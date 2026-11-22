@@ -6,7 +6,7 @@ Includes self-annealing for model errors and cost tracking.
 """
 
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import anthropic
 
@@ -35,9 +35,7 @@ class AnthropicDirectProvider(AIProvider):
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         model = get_model("standard")
         pricing = PRICING_PER_M.get(model, {"input": 3.00, "output": 15.00})
-        return (input_tokens / 1_000_000) * pricing["input"] + (
-            output_tokens / 1_000_000
-        ) * pricing["output"]
+        return (input_tokens / 1_000_000) * pricing["input"] + (output_tokens / 1_000_000) * pricing["output"]
 
     async def complete(
         self,
@@ -54,12 +52,8 @@ class AnthropicDirectProvider(AIProvider):
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-            cost = self.estimate_cost(
-                message.usage.input_tokens, message.usage.output_tokens
-            )
-            self.usage.record(
-                message.usage.input_tokens, message.usage.output_tokens, cost
-            )
+            cost = self.estimate_cost(message.usage.input_tokens, message.usage.output_tokens)
+            self.usage.record(message.usage.input_tokens, message.usage.output_tokens, cost)
             return message.content[0].text
         except Exception as exc:
             if detect_model_error(str(exc)):
@@ -70,12 +64,8 @@ class AnthropicDirectProvider(AIProvider):
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_prompt}],
                 )
-                cost = self.estimate_cost(
-                    message.usage.input_tokens, message.usage.output_tokens
-                )
-                self.usage.record(
-                    message.usage.input_tokens, message.usage.output_tokens, cost
-                )
+                cost = self.estimate_cost(message.usage.input_tokens, message.usage.output_tokens)
+                self.usage.record(message.usage.input_tokens, message.usage.output_tokens, cost)
                 return message.content[0].text
             raise sanitize_ai_error(exc) from exc
 
@@ -97,11 +87,7 @@ class AnthropicDirectProvider(AIProvider):
                 async for text in resp.text_stream:
                     yield text
                 final = await resp.get_final_message()
-                cost = self.estimate_cost(
-                    final.usage.input_tokens, final.usage.output_tokens
-                )
-                self.usage.record(
-                    final.usage.input_tokens, final.usage.output_tokens, cost
-                )
+                cost = self.estimate_cost(final.usage.input_tokens, final.usage.output_tokens)
+                self.usage.record(final.usage.input_tokens, final.usage.output_tokens, cost)
         except Exception as exc:
             raise sanitize_ai_error(exc) from exc

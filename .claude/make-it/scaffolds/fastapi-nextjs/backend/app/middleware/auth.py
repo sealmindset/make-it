@@ -17,12 +17,12 @@ async def get_current_user(request: Request) -> UserInfo:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
         return UserInfo(**payload)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
+        raise HTTPException(  # noqa: B904 -- kept as is: "from" would change the error chain (follow-up card)
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired",
         )
     except (jwt.InvalidTokenError, Exception):
-        raise HTTPException(
+        raise HTTPException(  # noqa: B904 -- kept as is: "from" would change the error chain (follow-up card)
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         )

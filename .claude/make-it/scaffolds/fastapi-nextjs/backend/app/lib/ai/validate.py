@@ -4,7 +4,6 @@ import json
 import re
 from typing import Any
 
-
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -29,10 +28,7 @@ def validate_json_schema(text: str, schema: dict[str, Any]) -> dict[str, Any]:
 
     for key, expected_type in schema.items():
         if not isinstance(data[key], expected_type):
-            raise ValueError(
-                f"Key '{key}' expected type {expected_type.__name__}, "
-                f"got {type(data[key]).__name__}"
-            )
+            raise ValueError(f"Key '{key}' expected type {expected_type.__name__}, " f"got {type(data[key]).__name__}")
 
     return data
 

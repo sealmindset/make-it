@@ -136,10 +136,11 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
 - a. Code bundle, not a git repo (`git rev-parse --git-dir` fails): `git init`; add to
   `.gitignore` each pattern from operator-safety.md §1 "Ignore patterns" that isn't already
   excluded (`.npmrc`/`.pypirc` only as that section says); run `git status` and check nothing secret-looking is about to be
-  committed (never commit one; tell the user in plain words if you find one); `git add` the
-  bundle and make the initial commit on the default branch; only then `pre-commit install` if
-  the project uses pre-commit. All further
-  work goes on a feature branch (WORKTREE FIRST, below). Plan-only bundle: skip this step --
+  committed (never commit one; tell the user in plain words if you find one); then save the
+  bundle as /make-it's step 41c does: with a `.pre-commit-config.yaml`, run that step's block as
+  written (hooks on, the first save on the default branch, then `work`); without one,
+  `git add -A && git commit -m "Initial build" && git switch -c work`. Either way it ends on
+  `work`, and all further work goes there (WORKTREE FIRST, below). Plan-only bundle: skip this step --
   step c makes the initial commit after the build.
 - b. Code bundle: if `.env` is missing and `.env.example` exists, create `.env` from it the way
   the project's setup does (`cp .env.example .env`, then fill local dev values).
@@ -155,10 +156,8 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   PROJECT_DIR = this folder (build in place, no subfolder; `git init` here is harmless). Run
   `preflight`'s machine checks (Desktop skipped them), then `build-project` and `build-verify`.
   Do NOT re-run the name question, `welcome`, `ideation-deep-dive`, or `design-decisions`.
-  After `build-verify`, do step a's `.gitignore` and `git status` secret check, then `git add`
-  the project and make the initial commit on the default branch
-  (make-it itself only commits at ship time) BEFORE any `pre-commit install`; feature work then
-  goes on a branch. If they decline the build, stop here and leave `handoff.md` in place.
+  Before `build-verify`'s step 41c (hooks on, the first save on the default branch, then `work`),
+  do step a's `.gitignore` and `git status` secret check; feature work then goes on `work`. If they decline the build, stop here and leave `handoff.md` in place.
 - d. Tell the user in one plain line you'll first run the checks that couldn't run in Desktop
   (routine -- no ask, just the line). Then run every item in its `## Deferred Checks` section as the
   FIRST work item, before suggesting anything else. Report each as PASSED or FAILED from what
@@ -167,6 +166,11 @@ Claude Desktop/Cowork, where nothing live could run. Before anything else:
   rule, then remove it (its Next Steps stay this session's starting point). Add every FAILED
   or not-yet-run check to TODO.md (create it if missing), so nothing is lost and later runs don't repeat them.
   Then continue normally.
+
+**0a2. Bring `work` level (fixed check, every session):** run "Bring `work` level after a ship"
+(`git-operations.md`, The branch) and say its line, if it gives one. When the user asks to move
+their work to a working copy (in those words or any that mean it), run "Move to `work`" from the
+same section.
 
 **0b. Look for a project board (`/backlog-it`):**
 
@@ -472,6 +476,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
      Install `pip-audit` if not available: `pip install pip-audit`
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **Code Quality (Q01-Q16):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs; Q14 is the dead-code upkeep reminder: it runs no tools and writes nothing, just reads the dates in `docs/DELETION_LOG.md` (`deadcode.md` §8); Q16 (a [BLOCK] check, so a must-do update): no `${{ }}` expression in a step's `run:` or `script:` text in `.github/workflows/`
+   - **Hooks on (Q12):** when `.pre-commit-config.yaml` exists and the hook check (`git-operations.md`, Before any save) prints `HOOKS OFF`: if `pre-commit` is installed, run `pre-commit install` now -- routine, no ask -- and say one line: "I switched on the checks your project runs before every save: a scan for passwords and keys, and a stop on saving straight to the main copy." If `pre-commit` isn't installed, ask preflight's install pick for it (`make-it.md` preflight, the one ask for missing tools), then switch the hooks on the same way. If `pre-commit install` fails, say why in plain words (another tool already manages this project's git hooks, for example) and that the checks stay off. Once they are on, if the project is on its default branch, run "Move to `work`" (`git-operations.md`, The branch) and say its line. Q12 never goes in the gaps list or its ask.
    - **AI (AI01-AI30):** Only if AI features detected, except AI30, which runs on every app -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), a text-only Claude-subscription provider (AI29: read `lib/ai/providers/claude_agent.py`; an app built before the check fails it and is fixed from the scaffold's copy), no model training, fine-tuning or retrieval unless the app's left-out record names AI30 (AI30: run its two scans), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Build record and seal (WM01-WM07):** Check the project is sealed and the seal matches the code (an app built before the seal existed gets its first one at the end of this session), that the app reports its stamp to admins, and that its quality-gate workflow has the `watermark` job. Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).
@@ -555,6 +560,7 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 | Tests don't exist yet | "Your app doesn't have automated tests yet -- want me to set that up?" |
 | Tests exist but some fail | "Some tests are failing -- want me to look into that?" |
 | Uncommitted changes | "You have some unsaved changes -- want to review and commit them?" |
+| On the default branch with the save checks on | "Your saves go to the main copy, which refuses them. Move your work to a working copy called 'work'?" (picked: "Move to `work`", `git-operations.md`) |
 | .make-it-state.md shows skipped steps | "During the initial build, [X] was deferred -- want to finish that?" |
 | No deployment yet | "Ready to deploy? I can hand you off to /ship-it" |
 | Recent git activity on features | "Looks like you were working on [feature] -- want to continue?" |
@@ -576,6 +582,15 @@ Analyze the context and present up to 4 relevant suggestions. Pick from these ca
 
 On a yes to Uncommitted changes, never stage `.ship-it-go-live.json`: commit the rest, and if that
 file has changes, say in one line: "I left your go-live record for /ship-it, which owns it."
+
+Before that commit, run the hook check (`git-operations.md`, Before any save):
+`hk="$(git rev-parse --git-path hooks/pre-commit)"; [ ! -f "$(git rev-parse --show-toplevel)/.pre-commit-config.yaml" ] || { [ -x "$hk" ] && grep -qs 'File generated by pre-commit' "$hk"; } || echo "HOOKS OFF"`.
+If it prints `HOOKS OFF` (the catch-up couldn't switch the hooks on, or the user turned down
+installing pre-commit), commit nothing and say: "I haven't saved anything: the checks this project
+runs before every save (a scan for passwords and keys, and a stop on saving straight to the main
+copy) are switched off on this computer. Say 'switch on the save checks' and I'll set them up." After
+the commit, read its exit code: anything but 0 means nothing was saved -- never say it was; say the
+"couldn't save" line (`git-operations.md`, After the save).
 
 **A security fix comes first, on its own.** A gap on a check marked `[SECURITY FIX]` in
 build-standards.md is a security finding, not an offer: something in the app is open now. It is
@@ -709,7 +724,8 @@ directly to the `prompt-management-upgrade` step below. Skip normal work routing
 **WORKTREE FIRST (commit discipline -- applies to ALL routes below):** Before starting a new
 line of work, don't build on the default branch. Every /make-it project ships
 `scripts/worktree.sh`; create or reuse an isolated worktree for this task:
-`scripts/worktree.sh new <branch>`. It seeds an isolated `.env` (unique COMPOSE_PROJECT_NAME +
+`scripts/worktree.sh new <branch>` (it branches from where you are: `work` in a project /make-it
+built, so `main` stays as the build left it until /ship-it). It seeds an isolated `.env` (unique COMPOSE_PROJECT_NAME +
 offset ports) so the app runs without colliding with other worktrees/sessions. Never commit to
 `main`/`master` (a `no-commit-to-branch` hook enforces it), and never stash/commit unfinished
 work just to switch tasks -- switch worktrees instead. Keep this invisible to the vibe-coder

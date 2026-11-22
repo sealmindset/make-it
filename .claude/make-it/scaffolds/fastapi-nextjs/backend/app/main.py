@@ -21,6 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Health check endpoints
 @app.get("/health")
 async def health():
@@ -55,7 +56,6 @@ app.include_router(prompts.router)
 # --------------------------------------------------------------------------
 from starlette.routing import Match  # noqa: E402
 from starlette.types import ASGIApp, Receive, Scope, Send  # noqa: E402
-
 
 _fastapi_app = app  # Save reference before wrapping
 
