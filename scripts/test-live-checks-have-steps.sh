@@ -24,8 +24,8 @@ check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
 # the whole run's stderr is caught; the last check fails on any of it (a Python error reads as a pass otherwise)
 ERRF="$(mktemp)"; TMPD="$(mktemp -d)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&4; rm -rf "$ERRF" "$TMPD"' EXIT
 
-BS=.claude/make-it/references/build-standards.md; MK=.claude/commands/make-it.md
-FILES="$BS $MK"
+BS=.claude/make-it/references/build-standards.md; MK=.claude/commands/make-it.md; RS=.claude/commands/resume-it.md
+FILES="$BS $MK $RS"
 
 # The rows whose method is checking the running app on 2026-11-22 (E12-S6 step 0). A floor, not the mapping: a row
 # may gain [LIVE]; none of these may lose it.
@@ -249,10 +249,73 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
     - **P03** -- No sign-in: `curl -sI http://localhost:[FRONTEND_PORT]/sw.js`. Expect: 200 with a
       JavaScript content type. Fail: any other status, or an HTML page.
 PIN
+cat > "$TMPD/rs.pin" <<'PIN'
+<step name="live-pass">
 
-python3 -I - "$BS" "$MK" "$TMPD/bs.pin" "$TMPD/mk.pin" "$FLOOR" <<'PY' || fail=1
+**The live pass: rows checked on the running app, after a relevant change.** A catch-up group or
+a piece of work is a relevant change when it touches an area in this table; with no area touched
+there is no live pass. The area comes from the table, never a judgement: an applied catch-up gap
+whose ID prefix (the letters before its number: `A` for A03, `AI` for AI12) is in "Catch-up
+checks", or a changed file whose path contains a word in "Files".
+
+| Area | Catch-up checks | Files (path contains) | Rows run live |
+|------|-----------------|-----------------------|---------------|
+| Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 |
+| Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06 |
+| Activity logs | L | `log_store`, `logs` | V08 |
+| Notifications | N | `notification` | V10 |
+| Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 |
+| File upload | F | `upload`, `document`, `import` | V11, F09, F10, F14 |
+| AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | F11, AI01a, AI01b, AI01d, AI11, AI12, AI13, AI14, AI20, AI21, AI22, AI25, AI26, AI27, V14, V16 |
+| AI memory | BN | `brain`, `memor` | BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13, BNV01, BNV02, BNV03 |
+| AI accounting | AC | `usage`, `ledger`, `spend`, `budget`, `price`, `statement`, `ai-control` | AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15, ACV01, ACV02, ACV03 |
+| The mobile variant | P | `sw.ts`, `manifest.json` | P03 |
+| Every live pass (starting the app) | -- | -- | V02, V03 |
+
+1. **Where.** In the folder the change was made in (its worktree, with its own `.env` and ports).
+2. **Only when the settings point at this machine.** Read the database, queue and cache URLs in
+   `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
+   does. One whose host isn't a compose service name, `localhost` or `127.0.0.1` → start nothing:
+   every row of the pass is NOT RUN, with the reason "your settings point at <host>".
+3. **Start it.** `docker compose --profile dev up -d --build --wait` (it rebuilds what changed; a
+   TLS or certificate error gets /try-it step 1's security-tool ask, as there), then `bash
+   scripts/seed-mock-services.sh`. No other ask: starting the app is routine here.
+4. **Run each row** of every touched area, plus V02 and V03, with the step that names it in
+   /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is written: the
+   same requests, roles, expected results and fail rules, and N/A for a feature the app doesn't
+   have.
+5. **Each row's result is PASS, FAIL or NOT RUN with its reason.** A check that could not run --
+   the app didn't start, the step needs something this app lacks, a request couldn't be made --
+   is NOT RUN, never passed. A FAIL is fixed like any test failure in this session (diagnose,
+   fix, re-run that row, up to 3 rounds); one still failing after that goes in TODO.md.
+6. **Record it** under `## Test Status` in `.make-it-state.md`: "Live pass [date] ([areas]):
+   [n] passed, [n] failed, [n] not run ([row]: [reason], ...)". Each NOT RUN row also gets a
+   TODO.md line with its reason.
+7. **Tell the user one plain line**, filled from the results: "I started your app and checked
+   [the areas, in plain words] on it: [everything passed / N things failed and I'm fixing them /
+   N checks couldn't run because [reason]]."
+
+Leave the app running afterwards, as /try-it does; /wrap-it shuts it down.
+
+</step>
+
+   A row marked `[LIVE]` is read here from its files only; its live part runs in the live pass
+   (step `live-pass`) after a change that touches its area.
+
+4b. Then run the live pass (step `live-pass`) for the areas the applied gaps touch.
+
+1b. Then the live pass (step `live-pass`), when the work changed a file in one of its areas.
+
+Then run the live pass (step `live-pass`) for AI memory: it starts the app if needed and runs that
+area's rows, BNV01-BNV03 included.
+
+**Phase 4: Verify and report.** AC01-AC16 from the files, then the live pass (step `live-pass`)
+for AI accounting, which runs ACV01-ACV03 and the AC rows marked `[LIVE]` on the running app.
+PIN
+
+python3 -I - "$BS" "$MK" "$TMPD/bs.pin" "$TMPD/mk.pin" "$FLOOR" "$RS" "$TMPD/rs.pin" <<'PY' || fail=1
 import re, sys
-bs_path, mk_path, bs_pin, mk_pin, floor = sys.argv[1:6]
+bs_path, mk_path, bs_pin, mk_pin, floor, rs_path, rs_pin = sys.argv[1:8]
 failed = False
 def check(name, cond, why=""):
     global failed
@@ -367,6 +430,27 @@ fb = flat("\n".join(partb))
 missing = [u for u in units(mk_pin) if u not in fb]
 check("the text E12-S6 added to Part B is there, whole, unit by unit", not missing,
       "missing: " + " | ".join(x[:80] for x in missing[:5]))
+
+# 5. /resume-it's live pass: a fixed area table that covers every [LIVE] row once, and the steps it reuses
+rs = open(rs_path, encoding="utf-8").read()
+check("resume-it.md has the live-pass step once", rs.count('<step name="live-pass">') == 1)
+m = re.search(r'<step name="live-pass">(.*?)</step>', rs, re.S)
+lp = m.group(1) if m else ""
+tab = []
+for l in lp.splitlines():
+    if l.startswith("|") and not re.match(r"\|\s*(Area|-)", l):
+        e = expand(l.strip().strip("|").split("|")[-1])
+        tab += e if e else ["?bad-cell:" + l[:40]]
+tab_missing = sorted(i for i in live | set(fl) if i not in tab)
+check("every [LIVE] row is in the live pass's area table", not tab_missing, "not in the table: " + " ".join(tab_missing))
+tab_dup = sorted({i for i in tab if tab.count(i) > 1})
+tab_stray = sorted(i for i in tab if i not in live)
+check("the area table names each row once, and only [LIVE] rows", not tab_dup and not tab_stray,
+      "twice: " + " ".join(tab_dup) + "; not [LIVE]: " + " ".join(tab_stray))
+frs = flat(rs)
+rs_missing = [u for u in units(rs_pin) if u not in frs]
+check("the live pass and its hooks are in resume-it.md, whole, unit by unit", not rs_missing,
+      "missing: " + " | ".join(x[:80] for x in rs_missing[:5]))
 sys.exit(1 if failed else 0)
 PY
 
@@ -396,6 +480,14 @@ if [ -z "${1:-}" ]; then
     'opp "$MK" "s/Test brain layer \(BNV01-BNV03\)/Test brain layer (BNV01-BNV03, BN05)/" "no row is named by two Part B steps"'
   check "(control) a multi-row step missing a row's unit: the BN05 unit removed" \
     'opp "$MK" "s/^    - \*\*BN05\*\* --.*?(?=^    - \*\*BN06)//ms" "a step that names several rows has a unit for each"'
+  check "(control) a [LIVE] row missing from the live pass's table: AC12 dropped" \
+    'opp "$RS" "s/AC11, AC12, AC13, AC14, AC15, ACV01/AC11, AC13, AC14, AC15, ACV01/" "every [LIVE] row is in the live pass"'
+  check "(control) a row in two areas of the table: V04 added to the AI area" \
+    'opp "$RS" "s/\| F11, AI01a,/| V04, F11, AI01a,/" "the area table names each row once"'
+  check "(control) a check that could not run counted as passed" \
+    'opp "$RS" "s/is NOT RUN, never passed\./is counted as passed./" "the live pass and its hooks are in resume-it.md"'
+  check "(control) the catch-up hook removed" \
+    'opp "$RS" "s/^4b\. Then run the live pass.*\n//m" "the live pass and its hooks are in resume-it.md"'
   check "(control) the [LIVE] definition removed" \
     'opp "$BS" "s/^- \`\[LIVE\]\` after the severity = .*?(?=^- )//ms" "build-standards.md says once what [LIVE] means"'
 fi
