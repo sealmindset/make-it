@@ -98,6 +98,11 @@ WORDS = re.compile(r'[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+')
 LAST = {'password', 'passwd', 'pwd', 'secret', 'token', 'credentials', 'apikey'}
 KEY_KINDS = {'api', 'private', 'access', 'secret', 'signing', 'encryption', 'client', 'master', 'ssh'}
 UNQUOTED = re.compile(r'[^ \t\r\n]*')
+# A Python string prefix right before a value's opening quote (`r'...'`, `b"..."`, `f"..."`, `rb'...'`)
+PREFIX = re.compile(r'(?:[rR][bBfF]?|[bBfF][rR]?|[uU])(?=["\'])')
+# Kubernetes / Compose env lists: `- name: X` with its `value: ...` on the next line (argo-it's own manifest shape)
+ENV_NAME = re.compile(r'[ \t]*(?:-[ \t]+)?name[ \t]*:[ \t]*(["\']?)(%s)\1[ \t]*\r?' % NAME)
+ENV_VALUE = re.compile(r'([ \t]*)value[ \t]*:(?=[ \t]|$)')
 # [^}] inside {{ }}: a lazy .*? here backtracks exponentially on a crafted value.
 REFERENCE = re.compile(r'(?:\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}\})+')
 PLACEHOLDER = re.compile(r'example|todo|placeholder|changeme|change-me|mock|xxxx|\*\*\*\*')
@@ -278,6 +283,9 @@ def values(s, config, start=True, token=TOKEN):
             name, i = body, sep.end()
         else:
             name = m.group(1)
+        pre = PREFIX.match(s, i)
+        if pre and literal_at(s, pre.end()):
+            i = pre.end()
         lit = literal_at(s, i)
         if lit:
             v, i = lit
@@ -353,6 +361,10 @@ def hit(text, path, prev=None, more=None):
     # its length isn't on this line: no floor.
     # configparser lowercases .pypirc option names, so twine reads `PassWord =` as `password`.
     fold = base == b'.pypirc'
+    if config and prev is not None and ENV_VALUE.match(s):
+        named = ENV_NAME.fullmatch(prev.decode('utf-8', 'surrogateescape'))
+        if named:  # `- name: DB_PASSWORD` then `  value: ...`: read as `DB_PASSWORD: ...`
+            passes.append((named.group(2) + ':' + s[ENV_VALUE.match(s).end():], config, LINE_TOKEN))
     sk = base.endswith((b'.yaml', b'.yml')) and SK_LINE.fullmatch(s)
     sk = sk and more is not None and not more(len(sk.group(1)))
     return any((len(v) >= 8 or v and short and ENV_WORDS.search(name)
@@ -395,7 +407,8 @@ def shown(path):
     as a space), invisible and format characters (Cf: U+200B, U+FEFF), private use (Co: U+F8FF, macOS SMB's
     U+F001-U+F029) and code points this Python's Unicode data doesn't know (Cn), so newer ones escape on 3.9."""
     s = path.decode('utf-8', 'surrogateescape')
-    s = re.sub(r'[\x00-\x1f\x7f]', lambda m: '\\x%02x' % ord(m.group()), s)
+    # A real backslash is escaped too (\x5c), so a shown `\xNN` or `\uXXXX` is always the scanner's escape
+    s = re.sub(r'[\x00-\x1f\x7f\\]', lambda m: '\\x%02x' % ord(m.group()), s)
     # A byte that isn't UTF-8 decodes to a lone surrogate (U+DC80-U+DCFF). Print the byte itself as \xNN: raw, no
     # one can type it, and \xNN names the byte that is actually in the name (\u-and-4-hex would name a code point
     # that isn't).
@@ -440,7 +453,15 @@ def collect(rows, blob, lfs):
         if sha not in split:
             split[sha] = blob(sha).split(b'\n')
         return split[sha]
+    utf16 = {}
     for path, n, text, sha, prev in continued(rows):
+        if b'\0' in text and (path, sha) not in utf16:  # a UTF-16 file: its diff lines are full of zero bytes
+            data = blob(sha)
+            utf16[path, sha] = data[:2] in (b'\xff\xfe', b'\xfe\xff')
+            if utf16[path, sha]:  # every line of it counts, as for an LFS object (it isn't diffed as text)
+                hits |= {(path, k) for k in utf16_hits(data, path)}
+        if utf16.get((path, sha)):
+            continue
         oid = LFS_OID.fullmatch(text)
         if oid:
             pointers[path, sha] = oid.group(1)
@@ -473,6 +494,17 @@ def collect(rows, blob, lfs):
                 if line.strip():
                     prev = line
     return hits
+
+
+def utf16_hits(data, path):
+    """Line numbers of a UTF-16 file (it opens with a byte-order mark) holding a hit: PowerShell 5.1 writes these."""
+    prev = None
+    for n, line in enumerate(data.decode('utf-16', 'replace').split('\n'), 1):
+        b = line.rstrip('\r').encode('utf-8', 'surrogateescape')
+        if hit(b, path, prev):
+            yield n
+        if b.strip():
+            prev = b
 
 
 def nul_in_head(data, path):
