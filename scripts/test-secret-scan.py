@@ -9692,7 +9692,7 @@ class ArgoItRedeployCallACases(_FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _
             if step in ('3a', '3b', '3c', '3d'):
                 continue
             cp = sh(f[2])
-            if any('secret-scan.py' in l for l in f[2].splitlines() if not l.lstrip().startswith('#')):
+            if step == '3e':  # coordinator, 2026-11-21 (review finding 2): only 3e's block is 3e; step 4 checks its save too
                 res = st['res'] = Result(cp, 0)
                 st['mine'] = self._mine(r)
                 labels = [L_UNSAVED, L_NEW, L_SAVED]
@@ -10075,7 +10075,7 @@ class ArgoItSealGitattributesCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _
 
     def test_2_the_seal_did_not_change_it_so_it_is_not_listed_or_sent(self):
         for shell in ('bash', 'zsh'):
-            for edit in (None, '*.png binary\n*.jpg binary\n'):  # clean, or the user's own unsaved change only
+            for edit in (None,):  # clean (the user's own unsaved change only is unsaved code now: finding 5)
                 with self.subTest(shell=shell, user_edit=bool(edit)):
                     r = self.fresh()
                     self._project(r)
@@ -10094,7 +10094,9 @@ class ArgoItSealGitattributesCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _
                     r = self.fresh()
                     self._project(r, tracked)
                     before = self._sent_refs(r)
-                    cp = self._step1(r, shell, True, '*.jpg binary\n')
+                    # the seal's lines from an earlier run, then the user's own line (finding 5: a user line with no
+                    # seal line beside it is unsaved code, and stops before the seal)
+                    cp = self._step1(r, shell, True, (self.ATTRS if tracked else '') + self.SEAL_LINES + '*.jpg binary\n')
                     lines = cp.stdout.decode().splitlines()
                     marks = [l for l in lines if re.fullmatch(self.MARK_LINE, l)]
                     self.assertNotEqual(cp.returncode, 0, 'the seal list went on: %r' % lines)
@@ -10312,8 +10314,7 @@ class ArgoItUnsavedCodeCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _FirstS
                  'an ignored file': lambda r: (r.write('.gitignore', 'build/\n'), r.commit('ignore build'), r.push(),
                                                r.write('build/out.js', 'x\n')),
                  'a Markdown file': lambda r: r.append('README.md', 'more\n'),
-                 "the seal's own files": lambda r: [r.write(f, t) for f, t in self.SEAL.items()],
-                 "the user's own line in .gitattributes": lambda r: r.append('.gitattributes', '*.jpg binary\n')}
+                 "the seal's own files": lambda r: [r.write(f, t) for f, t in self.SEAL.items()]}
         for shell in ('bash', 'zsh'):
             for what, do in cases.items():
                 with self.subTest(shell=shell, what=what):
@@ -10940,6 +10941,67 @@ class ReviewTextCases(ArgoItWiringCases):
                          ('the undo', r'(?i)put the file back'), ('the one thing to check', r'(?i)the one thing to check'),
                          ('a select', r'(?i)plain yes isn.t an answer'), ('nothing sent', r'(?i)not saved or sent')):
             self.assertRegex(flat, rx, 'the crash-looping ask lacks %s' % what)
+
+
+
+class ReviewRound2Cases(ArgoItUnsavedCodeCases):
+    """The coordinator's calls on the review's blocked parts (2026-11-21): finding 5 (a user's own .gitattributes edit
+    with no seal line is unsaved code), finding 1 (git's binary rule kept, and written down), and the SSH-port form."""
+
+    test_1_unsaved_code_stops_before_the_seal_naming_how_many_and_the_first_two = None
+    test_2_untracked_look_alikes_are_unsaved_code_and_stop_the_send = None
+    test_3_what_is_not_unsaved_code_goes_on = None
+    test_4_not_a_make_it_project_no_check = None
+    test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line = None
+    SEAL_LINES = '# make-it seal\n* -text\n'
+
+    def test_f5_a_users_own_gitattributes_edit_is_unsaved_code(self):
+        for shell in ('bash', 'zsh'):
+            for how in ('a line added', 'a line removed', 'a new file'):
+                with self.subTest(shell=shell, how=how):
+                    r = self.fresh()
+                    self._project(r)
+                    if how == 'a line added':
+                        r.append('.gitattributes', '*.jpg binary\n')
+                    elif how == 'a line removed':
+                        r.write('.gitattributes', '')
+                    else:
+                        r.git('rm', '-q', '--cached', '.gitattributes')
+                        r.git('commit', '-q', '-m', 'unsave it')
+                        r.write('.gitattributes', '*.jpg binary\n')
+                    code, out = self._check(r, shell)
+                    self.assertNotEqual(code, 0, how)
+                    self.assertEqual(out[:3], ['UNSAVED CODE', '1', '.gitattributes'], out)
+
+    def test_f5_seal_lines_or_seal_lines_mixed_pass_the_check(self):
+        for shell in ('bash', 'zsh'):
+            for extra in ('', '*.jpg binary\n'):  # seal lines only: sent later; mixed: GITATTRIBUTES MIXED later
+                with self.subTest(shell=shell, mixed=bool(extra)):
+                    r = self.fresh()
+                    self._project(r)
+                    r.append('.gitattributes', self.SEAL_LINES + extra)
+                    self.assertEqual(self._check(r, shell), (0, []))
+
+    def test_f5_one_classifier_for_both_blocks(self):
+        def awk(code):
+            m = re.search(r"awk -v f=\"\$o\" '(.*?)' \"\$o\" \.gitattributes", code, re.S)
+            self.assertTrue(m, 'no .gitattributes classifier in %r' % code[:200])
+            return m.group(1)
+        self.assertEqual(awk(self._unsaved_block()[2]), awk(self._seal_list()[2]),
+                         'the unsaved-code check and the seal list classify .gitattributes differently')
+
+    def test_f1_the_rules_say_a_file_with_a_zero_byte_is_not_checked(self):
+        doc = ArgoItWiringCases('test_old_inline_scan_is_gone')._doc()
+        rules = doc[doc.index('**Pre-push self-review rules'):]
+        rules = re.sub(r'\s+', ' ', rules[:rules.index('</guardrails>')])
+        self.assertRegex(rules, r'(?i)zero byte in its first 8,000 bytes[^.]{0,200}never checked')
+
+    def test_ssh_port_is_not_a_split_another_host_still_is(self):
+        o = ReviewOriginCases('test_f6_the_same_repository_by_another_address_is_not_split')
+        self.assertEqual(o._split([('remote', 'set-url', '--push', 'origin', 'ssh://git@github.com:22/acme/app.git')]),
+                         [False, False])
+        self.assertEqual(o._split([('remote', 'set-url', '--push', 'origin', 'ssh://git@gitlab.com:22/acme/app.git')]),
+                         [True, True])
 
 
 if __name__ == '__main__':
