@@ -151,7 +151,8 @@ so save without asking:
   say "Saved your changes". Say instead: "I couldn't save your changes: [what stopped it, in plain
   words, from what the hook printed -- the scan for passwords and keys found one in [file], line
   [N] / it would have saved straight to the main copy / a check of the code failed in [file]].
-  They're still on this computer, unsaved, so nothing is lost. [what to do next, in plain words]"
+  They're still on this computer, unsaved, so nothing is lost. [what to do next, in plain words --
+  for the main copy: "Say 'move my work to a working copy' and I'll do it."]"
   The rest of the wrap-up goes on.
 - Do NOT push to remote -- just commit locally.
 - Tell the user in one line: "Saved your changes on this computer: [list them in plain language,

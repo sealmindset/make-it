@@ -66,12 +66,64 @@ own secret scan before anything is sent.
 hook printed: "I couldn't save your changes: [what stopped it, in plain words -- the scan for
 passwords and keys found one in [file], line [N] / it would have saved straight to the main copy /
 a check of the code failed in [file]]. They're still in your files, unsaved. [what to do next, in
-plain words]" -- never the value itself.
+plain words -- for the main copy: "Say 'move my work to a working copy' and I'll do it."]" -- never
+the value itself.
 
 **The branch.** A /make-it project works on `work`: step 41c moves it there after the first save,
 so every save a skill makes lands on `work` (or a worktree branched from it), and `main` holds the
 first build until /ship-it sends `work` in for review. A project /make-it didn't build (one
 /retrofit-it upgrades, say) keeps its own branches.
+
+**Move to `work`.** An app built before step 41c existed still works on the default branch, where
+`no-commit-to-branch` refuses every save once its hooks are on. Any skill moves it, in the project,
+when /resume-it's catch-up has just switched the hooks on on the default branch, or when the user
+asks to move their work to a working copy (in those words or any that mean it, or by picking it):
+
+```bash
+b=$(git branch --show-current)
+case $b in
+  main|master)
+    if git show-ref -q --verify refs/heads/work; then
+      git merge-base --is-ancestor "$b" work || { echo "WORK DIFFERS"; exit 0; }
+      git switch -q work || { echo "SWITCH FAILED"; exit 0; }
+    else
+      git switch -q -c work || { echo "SWITCH FAILED"; exit 0; }
+    fi
+    echo "MOVED" ;;
+esac
+```
+
+Unsaved changes travel with the switch. On `MOVED`, say the line step 41c says: "Your project's
+saves go on a working copy called 'work'; the main copy stays clean until you ship." On `WORK
+DIFFERS`: "Your project already has a working copy called 'work' with saves that aren't in the main
+copy, so I've left you on the main copy. A developer can bring the two together." On `SWITCH
+FAILED`: "I couldn't move your work to the working copy 'work': [git's reason, in plain words]. I
+haven't changed anything." It prints nothing when the project isn't on the default branch.
+
+**Bring `work` level after a ship.** Once a pull request from `work` is merged (squash-merged, and
+the branch deleted on GitHub, as usual), the next session brings the local `work` level with the
+default branch, at /resume-it's session start, every time:
+
+```bash
+[ "$(git branch --show-current)" = work ] && git fetch -q origin 2>/dev/null || exit 0
+d=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null); d=${d:-origin/main}
+git rev-parse -q --verify "$d" >/dev/null || exit 0
+if git merge-base --is-ancestor work "$d"; then
+  [ "$(git rev-parse work)" = "$(git rev-parse "$d")" ] || { git merge -q --ff-only "$d" && echo "BROUGHT LEVEL" || echo "NOT LEVELLED"; }
+elif [ "$(git merge-tree --write-tree "$d" work 2>/dev/null | head -1)" = "$(git rev-parse "$d^{tree}")" ]; then
+  git reset -q --keep "$d" && echo "BROUGHT LEVEL" || echo "NOT LEVELLED"
+else
+  echo "UNSHIPPED SAVES"
+fi
+```
+
+`work` restarts from the default branch's head only when everything it holds is already there (a
+merged pull request); unsaved changes are kept (`--ff-only` and `--keep` refuse rather than
+overwrite them). On `BROUGHT LEVEL`, say: "Your shipped changes are in the main copy now, so your
+working copy is up to date with it." On `UNSHIPPED SAVES`, say nothing unless the user is about to
+ship: `work` holds saves that aren't in the main copy yet, and it is left as it is. On `NOT
+LEVELLED`: "Your working copy couldn't be brought up to date with the main copy, because your
+unsaved changes touch the same files. Nothing was changed."
 
 ---
 

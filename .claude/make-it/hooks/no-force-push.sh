@@ -14,7 +14,12 @@
 #
 # A guard against mistakes, not against hiding a push. It does NOT see: bash -c / sh -c / eval
 # strings, xargs, git aliases, a force refspec set in git config (remote.*.push, remote.*.mirror),
-# $(...) or backticks inside double quotes, or quote-splitting such as pu''sh.
+# $(...) or backticks inside double quotes, a command whose name is made by $(...) or backticks
+# (quoted or not, as in $(echo git) push -f), or quote-splitting such as pu''sh.
+#
+# Known over-blocking, only when the command can't be read and the raw-text rule decides: a
+# here-doc with an apostrophe in it plus a push and some -<letters>f flag (rm -rf) anywhere, or a
+# command over 64 KB with a + anywhere plus a push. The way out: run the push as its own command.
 #
 # Failure mode: fails OPEN on its own errors only for a command that is not a force push. When it
 # can't read the command (no "command" field, an unterminated string or quote, awk missing or

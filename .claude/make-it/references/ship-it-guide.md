@@ -115,10 +115,21 @@ text, while the app uses claude_agent.
 made the first save on `main` and moved every later save to `work`. So /ship-it sends `work` (or
 the branch of the worktree it runs in) as the pull request's branch, into `main`; it never commits
 to `main` (the project's `no-commit-to-branch` hook refuses that) and never pushes `main` past the
-first build. On the first ship, GitHub has no `main` yet: /ship-it pushes `main` as the build left
-it, then opens the pull request from `work`. /ship-it is a separate plugin: until its SKILL.md says
-this, the person running it should expect it to send `work`, and say so if it offers to commit on
-`main`.
+first build. On the first ship, GitHub has no `main` yet: /ship-it has to push `main` as the build
+left it, then open the pull request from `work`.
+
+What the /ship-it plugin does today (it is a separate plugin, not changed with make-it; read from
+its SKILL.md): in ship mode it stays on a branch that isn't `main` ("If already on a feature
+branch: stay on it"), commits there and runs `git push -u origin {branch}`, so it sends `work`. It
+does not push `main` first, so on a repository whose GitHub copy has no `main` yet, the pull
+request has no `main` to go into: until the plugin does that step, push `main` once by hand
+(`git push origin main`) before the first ship. Its save mode makes a `wip/...` branch from
+`work`. Its docai/VLF production mode requires `main` and pushes to it; it is not for /make-it
+apps.
+
+After the pull request from `work` is merged (squash-merged, and the branch deleted on GitHub, as
+usual), the next session brings the local `work` level with the default branch: /resume-it runs
+"Bring `work` level after a ship" (`git-operations.md`, The branch) at its start.
 
 **Two modes:**
 | Command | What it does |

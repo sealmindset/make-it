@@ -637,12 +637,14 @@ else
       ':(top,glob)**/*credentials*.json' \
       ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
       ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
-    # The app as it is: only the project's secret checks run on this one save, never its lint or format hooks
-    sk=$(sed -n 's/^ *- id: *//p' .pre-commit-config.yaml 2>/dev/null | grep -vxE 'gitleaks|detect-private-key|detect-secrets|detect-aws-credentials' | paste -sd, -)
+    # The app as it is: its lint, format and type hooks are skipped on this one save; every other hook runs
+    sk=ruff,ruff-format,black,isort,flake8,pylint,mypy,eslint,prettier,stylelint,tsc
+    sk=$sk,trailing-whitespace,end-of-file-fixer,mixed-line-ending,no-commit-to-branch
     git diff --cached --quiet || SKIP="$sk" git commit -q -m "Save pre-retrofit state" >"$bak/save.log" 2>&1 || {
-      grep -qE -- '- hook id: (gitleaks|detect-private-key|detect-secrets|detect-aws-credentials)$' "$bak/save.log" &&
-        { rm -f "$bak/save.log"; fail "what looks like a password or key is in your unsaved changes"; }
-      rm -f "$bak/save.log"; fail "could not save the unsaved changes"; }
+      h=$(sed -n 's/^- hook id: //p' "$bak/save.log" | head -1); rm -f "$bak/save.log"
+      case $h in *leak*|*hog*|*secret*|*private-key*|*credential*) fail "what looks like a password or key is in your unsaved changes" ;;
+        ?*) fail "the check '$h' your project runs before every save stopped it" ;; esac
+      fail "could not save the unsaved changes"; }
     rm -f "$bak/save.log"
   fi
   tag="pre-retrofit-$(basename "$app" | tr -cs 'A-Za-z0-9_-' '-')"; tag=${tag%-}   # one per app folder
@@ -663,7 +665,9 @@ files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git d
 name and email yet; run `git config --global user.name "Your Name"` and `git config --global
 user.email "you@example.com"`, then run /retrofit-it again.' / for a password or key: 'Something
 in your unsaved changes looks like a password or key, so I didn't save it. Move it into your .env
-file, then run /retrofit-it again.']" Never go on as if a snapshot
+file, then run /retrofit-it again.' / for another check: 'The check [its name] that your project runs
+before every save stopped the snapshot, so nothing was changed. Fix what it found, or ask a
+developer, then run /retrofit-it again.']" Never go on as if a snapshot
 exists when it does not.
 
 **Then write the record** (`left-out-record.md`) in the folder the work runs in (`work`: the app
