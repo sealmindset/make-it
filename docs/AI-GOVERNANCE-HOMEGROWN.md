@@ -505,7 +505,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 
 | Category | Check ID Range | Count | Tier |
 |----------|---------------|-------|------|
-| Structure & Configuration | S01-S14 | 14 | 0 (Universal) |
+| Structure & Configuration | S01-S15 | 15 | 0 (Universal) |
 | Authentication & OIDC | A01-A10 | 10 | 1 (Web App) |
 | RBAC & Permissions | R01-R07 (incl. R01a, R04a) | 9 | 1 (Web App) |
 | UI & Frontend | U01-U09 | 9 | 1 (Web App) |
@@ -523,7 +523,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |
 | AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~197** | |
+| **Total** | | **~198** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)

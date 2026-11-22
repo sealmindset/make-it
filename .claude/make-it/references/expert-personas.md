@@ -10,7 +10,7 @@ This is **not** a staffing recommendation (it never suggests hiring a human). It
 Selection is **automatic and silent**: no user question. The only thing a skill says about it is
 the one line a writer says when it replaces a record.
 
-Imported by `make-it`, `retrofit-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `resolve-it`,
+Imported by `make-it`, `retrofit-it`, `resume-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `resolve-it`,
 `dispatch-it` and `subagent-it`.
 
 ---

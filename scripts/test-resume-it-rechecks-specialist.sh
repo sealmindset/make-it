@@ -116,7 +116,7 @@ check "the block sits after WORKTREE FIRST and before route A" \
 check "build-standards.md holds S15 exactly, once, in Structure & Configuration" \
   '[ "$(grep -cxF -- "$S15" "$BS")" = 1 ] && s="$(line "^## Structure & Configuration" "$BS")" && e="$(line "^## Version Control" "$BS")" && n="$(grep -nxF -- "$S15" "$BS" | cut -d: -f1)" && [ "$s" -lt "$n" ] && [ "$n" -lt "$e" ]'
 check "the catch-up scan names S01-S15 and S15's gap" \
-  'flat < "$RS" | gq -F "**Structure (S01-S15):**" && flat < "$RS" | gq -F "S15: an \`expert_persona\` that is not yet the record (a plain text value, an empty one, or no field), brought up to it once."'
+  'flat < "$RS" | gq -F "**Structure (S01-S15):**" && flat < "$RS" | gq -F "S15: an \`expert_persona\` still in an older form (a plain text value, an empty one, or no field), brought up to date once."'
 check "/retrofit-it's Verify names S01-S15; the governance doc counts Structure as S01-S15 (15)" \
   'gq -F "S01-S15" "$RF" && gq -xF "| Structure & Configuration | S01-S15 | 15 | 0 (Universal) |" "$GV"'
 

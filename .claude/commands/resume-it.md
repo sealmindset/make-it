@@ -28,6 +28,7 @@ This skill discovers project context automatically, presents actionable next ste
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/operator-safety.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/expert-personas.md
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
@@ -450,7 +451,7 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    build-verify -- it's a lightweight file-existence and pattern check:
 
    For each check category, do a targeted scan:
-   - **Structure (S01-S14):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11, S12 and S14 all write the same file, `CLAUDE.md`: apply them together, S13 first and S14 last, as one change -- never as separate `/dispatch-it` lanes.
+   - **Structure (S01-S15):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11, S12 and S14 all write the same file, `CLAUDE.md`: apply them together, S13 first and S14 last, as one change -- never as separate `/dispatch-it` lanes. S15: an `expert_persona` still in an older form (a plain text value, an empty one, or no field), brought up to date once.
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
    - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
@@ -713,6 +714,35 @@ offset ports) so the app runs without colliding with other worktrees/sessions. N
 `main`/`master` (a `no-commit-to-branch` hook enforces it), and never stash/commit unfinished
 work just to switch tasks -- switch worktrees instead. Keep this invisible to the vibe-coder
 unless they ask. Full spec: `worktree-workflow.md`.
+
+**Project specialist re-check (SILENT -- no user question):** /resume-it is one of the three
+writers of the project specialist (`references/expert-personas.md`). It re-checks `expert_persona`
+when work is planned, before anything is built: once the plan or the agreed change is settled, in
+every route below that changes the app.
+
+1. The triggers are the reference's "What changes it" list, not a judgement: the planned work adds
+   or removes a signal of rule 2 (payments; personal or health data beyond the app's own sign-in
+   accounts; external users or thousands of them; separate tenants or data at scale; heavy AI use
+   or prompts that non-developers edit; a signal its variant declares), the user's words or the
+   planned work confirm or disprove an unconfirmed signal, or `project_type` becomes set.
+2. With no trigger, nothing is written: the record stays byte for byte as it is. An unconfirmed
+   signal that nobody confirms or disproves stays unconfirmed; with no new work there is no
+   re-check.
+3. With a trigger, work the record out again by the reference's rule from `app-context.json` and
+   the planned work, with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
+   the work adds is written `<field>: <value>` from the app-context field the work changes, and
+   one the user did not state is marked `"unconfirmed": true`.
+4. Compare it as the reference's "Same record or a different one" says. With the same
+   specialists, keep their names, `set_by` and `set_at`, and bring only the signals up to date,
+   silently. With different specialists, higher or lower but never below the floor, write the new
+   record, say one plain line before building (what the app now handles, and what that changes
+   about how it is checked, e.g. "Your app now takes card payments, so a security specialist leads
+   how it's built and checked."), and add the same line to `CHANGELOG.md`. Nothing is asked.
+5. An older value (plain text, empty, or no field) is not re-checked here: catch-up check S15
+   brings it up to the record's shape once.
+
+Working as the project specialist while building is card S5; this block only keeps the record
+current.
 
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)
