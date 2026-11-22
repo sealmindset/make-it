@@ -27,9 +27,9 @@ don't break behavior while bolting on foundations. /retrofit-it is also one of t
 of the project specialist: Discovery step 7 records it in `expert_persona` from the code, by the
 reference's rule. The two stay apart: the architect is the role this skill works in, and the
 record is the project's. Once the record is worked out (Discovery step 7), it works as the
-architect, held to the project specialist's checks and output standard as well. Selected
-automatically; no user prompt. See `~/.claude/make-it/references/expert-personas.md` (imported
-below).
+architect, held to the checks and output standard of every specialist in the record as well.
+Selected automatically; no user prompt. See `~/.claude/make-it/references/expert-personas.md`
+(imported below).
 
 @~/.claude/make-it/references/expert-personas.md
 
@@ -222,11 +222,12 @@ Set `project_type` from the code, by the Project Type Classification table in
 that serves other systems is `api-service`, and so on). If the code fits no row, `project_type`
 stays empty, no record is written (the reference's rule), and TODO.md gets one line saying why.
 
-Then record the project specialist in `expert_persona` by the reference's rule (its floor table
-and rule 2's order), as /make-it's Design step does, with `set_by` `"/retrofit-it"` and `set_at`
-the date of this run (YYYY-MM-DD). Every retrofitted app gets a record, a low-risk one its floor.
-The record is never a plain text value and never a generalist. What differs from /make-it is where
-the signals come from: the code, not an interview.
+Then record the project specialist in `expert_persona` by the reference's rule (its floor row,
+filled in from `stack` as the reference says, and rule 2 in its order), as /make-it's Design step
+does, with `set_by` `"/retrofit-it"` and `set_at` the date of this run (YYYY-MM-DD). Every
+retrofitted app gets a record, a low-risk one its floor. The record is never a plain text value and
+never a generalist. What differs from /make-it is where the signals come from: the code, not an
+interview.
 
 | Signal (rule 2) | Fires when the code shows |
 |---|---|
@@ -234,6 +235,7 @@ the signals come from: the code, not an interview.
 | Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
 | Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
 | AI | an AI SDK behind more than 10 distinct prompts or agents, or prompts stored where non-developers edit them |
+| Variant | what its definition file names under "Project specialist signals", when `app-context.json` already names the variant |
 
 Each signal is written `code: <what was found, and where>`; the floor's is
 `project_type: <value> (the floor)`. Where the code cannot tell whether a signal fires (for
@@ -244,12 +246,14 @@ does not count against Phase 3's 3-5 questions.
 The retrofit's own role (the software architect, its task specialist) is never written into
 `expert_persona`: the record comes from the signals and the floor only.
 
-If `app-context.json` already holds a record (a second retrofit, or an app /make-it built), keep
-it, dates included, when the new one has the same specialists and signals. Otherwise write the new
-one and say so the way every writer does: one plain line to the user (e.g. "Your app now gets a
-security specialist because its code takes card payments.") and the same line in `CHANGELOG.md`. A
-value the reference reads as no record (its "Reading an older value") is not a record: write the
-new one and say nothing.
+If `app-context.json` already holds a record (a second retrofit, or an app /make-it built),
+compare it with the new one as the reference's "Same record or a different one" says: the same
+specialists keep it as it is, even when its signals are worded from an interview; different
+specialists write the new one. When the new one is written over a record, the one plain line (e.g.
+"Your app now gets a security specialist because its code takes card payments.") goes in the
+report of the step that writes it, and into `CHANGELOG.md`, which that step adds if the app has
+none. A value the reference reads as no record (its "Reading an older value") is not a record:
+write the new one and say nothing.
 
 **When it is written.** Nothing is written before the plan is approved. The record goes into the
 run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and in a
@@ -1364,8 +1368,8 @@ Tell user (during verification): "Almost done -- just making sure everything sti
   check-in is not left out: read step 4 already took its line out.
 - Any remaining TODOs
 
-**Generate app-context.json** -- So /resume-it and /ship-it work going forward. Keep the
-`expert_persona` record as Discovery step 7 set it.
+**Generate app-context.json** -- So /resume-it and /ship-it work going forward. Discovery
+step 7's `expert_persona` stays as it is.
 
 **Automatically invoke /try-it** in `work` -- Same as /make-it, seamless handoff.
 

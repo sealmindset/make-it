@@ -125,7 +125,7 @@ check "Clarification says the specialist is never one of its questions" \
 check "Foundation's write carries project_type and the record" \
   'has "$RF" "- Generate app-context.json from discovered profile, with \`project_type\` and the project specialist record from Discovery step 7"'
 check "Part E keeps the record" \
-  'has "$RF" "**Generate app-context.json** -- So /resume-it and /ship-it work going forward. The \`expert_persona\` record stays as Discovery step 7 left it."'
+  'has "$RF" "**Generate app-context.json** -- So /resume-it and /ship-it work going forward. Discovery step 7'"'"'s \`expert_persona\` stays as it is."'
 check "(ban outside the pinned blocks) no Clarification question asks about the specialist or its signals" \
   '! section "$RF" "^<step name=\"clarification\">" "^</step>" | flat | gq -iE "\"[^\"]*(personal data|payment|specialist|sign-up|tenant|health)[^\"]*[?]\""'
 check "(ban outside the pinned blocks) the doc page no longer says the specialist is set from the app's details" \

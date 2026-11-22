@@ -449,40 +449,32 @@ Record `project_type`, `active_tiers`, and `scaffold` in app-context.json. Apply
 Reference `references/expert-personas.md`. Every project records its project specialist in
 `expert_persona`, a low-risk one included: the primary specialist, the added ones, the signals
 behind each, `set_by` and `set_at`. Work it out from the app-context answers once the stack is
-chosen, in this order:
+chosen:
 
-1. The floor is the row for the `project_type` in the reference's floor table, filled in from
-   `stack` (a web app's backend + frontend, e.g. "Senior full-stack engineer of FastAPI +
-   Next.js"; otherwise its language, or the editor or browser an extension runs in). Its signal is
-   `project_type: <value> (the floor)`.
-2. Check the signals in the reference's order and note the specialist each calls for: payments,
-   personal data (PII) or health data (PHI) in `compliance`, `purpose` or `features` ->
-   Application security engineer; `multi_tenancy.needed` is true, or the answers describe data at
-   scale -> Data engineer / DBA; `users.internal_or_external` is `external`,
-   `users.estimated_count` is in the thousands or more, or the user named an uptime promise (an
-   SLA) for production -> SRE; `ai_features.usage_level` is `heavy`, or
-   `ai_features.who_edits_prompts` is not `developers` -> AI / prompt engineer. A variant's own
-   signals, named in its definition file under "Project specialist signals", come after these and
-   before the floor, and are recorded the same way.
-3. The first specialist in that order that applies is the primary; every other one that applies
-   is added, in that order, and the floor is always in the record: the primary when nothing
-   outranks it, otherwise added last.
-4. With no signal at all, the floor is the primary and `added` is empty.
-5. A specialist two signals call for appears once, with both signals. Each signal is written
-   `<field>: <value>`, and one the user did not state (a guess or a smart default, such as a rough
-   user count) is marked `"unconfirmed": true`.
-6. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
-7. If `app-context.json` already holds a record (a returning run), keep it, dates included, when
-   the new one has the same specialists and signals. Otherwise write the new one and say so the way
-   every writer does: one plain line to the user (e.g. "Your app now gets a security specialist
-   because it takes card payments.") and the same line in `CHANGELOG.md`. A value the reference
-   reads as no record (its "Reading an older value") is not a record: write the new one and say
-   nothing.
+1. The floor is the reference's floor row for the `project_type`, filled in from `stack` as the
+   reference says. Its signal is `project_type: <value> (the floor)`.
+2. Check the signals of the reference's rule 2, in its order, and build the record by its "The
+   order decides the primary" paragraph. In app-context they are carried by: security --
+   `compliance`, `purpose`, `features`; data -- `multi_tenancy.needed` and the answers; reliability
+   -- `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named;
+   AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
+   `variant_config` fields its definition file names.
+3. Each signal is written `<field>: <value>`, and one the user did not state (a guess or a smart
+   default, such as a rough user count) is marked `"unconfirmed": true`.
+4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
+5. If `app-context.json` already holds a record (a returning run), compare it with the new one as
+   the reference's "Same record or a different one" says: the same specialists keep it as it is;
+   different specialists write the new one. When the new one is written over a record, the one plain
+   line (e.g. "Your app now gets a security specialist because it takes card payments.") goes in
+   the plain-English summary's sentence on what departs from the standard setup, and into
+   `CHANGELOG.md`: now if the file exists, otherwise in the initial entry Build step g writes. A
+   value the reference reads as no record (its "Reading an older value") is not a record: write the
+   new one and say nothing.
 
-The record is never a plain text value and never a generalist. /make-it builds and reviews in this
-specialist's role, and hands the record to every sub-agent it briefs. This is a build-quality
-lever, not a staffing recommendation. Apart from the line in step 7, nothing here is shown to the
-user, and nothing is asked of them.
+The record is never a plain text value and never a generalist. /make-it builds and reviews in the
+role of every specialist in the record, and hands the record to every sub-agent it briefs. This is
+a build-quality lever, not a staffing recommendation. Apart from the line in step 5, nothing here
+is shown to the user, and nothing is asked of them.
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 

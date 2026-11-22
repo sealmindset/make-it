@@ -116,7 +116,7 @@ A few examples:
 | [`/argo-it`](07-argo-it.md) | platform/operations engineer | a plan for what happens if something breaks, not just "make it live" |
 | [`/retrofit-it`](03-retrofit-it.md) | software architect | upgrades without breaking what already works |
 
-Every app gets a named specialist, even a low-risk one: at the least, a senior engineer of the kind of app it is (web app, API, command-line tool, library or editor extension). This is the "team of specialists on call" idea made literal: the same assistant, wearing the right hat for each job.
+Every app gets a named specialist, even a low-risk one: at the least, a senior engineer of the kind of app it is (web app, API, command-line tool, library, or editor or browser extension). This is the "team of specialists on call" idea made literal: the same assistant, wearing the right hat for each job.
 
 ---
 

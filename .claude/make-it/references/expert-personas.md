@@ -21,23 +21,31 @@ Using a specialist and recording one are two separate jobs.
 
 - **One project specialist.** Each project has one project specialist, recorded in the `expert_persona`
   field of `app-context.json`. It is a fact about the project, like its stack: recorded once, and
-  updated only when its scope changes (below).
+  updated only when its scope changes (below). The project specialist means the whole record: the
+  primary and every added specialist.
 - **Who records it.** Only three skills write `expert_persona`: `/make-it` records it at Design,
   `/retrofit-it` records it when it builds `app-context.json` from an existing app, and `/resume-it`
-  re-checks it when new work changes the project's scope. No other skill writes it.
-- **No overwrite without saying so.** No skill overwrites the project specialist without saying so.
-  Every writer that replaces an existing record with a different one says so the same way: one plain
-  line to the user and the same line in `CHANGELOG.md`; it asks nothing. A re-check that gives the
-  same specialists and signals writes nothing.
+  re-checks it when the project's scope changes (below). No other skill writes it.
 - **What changes it.** The project's scope changes when its signals change: a signal added, a signal
   removed, or an unconfirmed signal confirmed or disproved. The writer then works the record out
-  again by the same rule, so it can go up or down, never below the floor. On every change it rewrites
-  `set_by` and `set_at`, and the `CHANGELOG.md` line is the history.
-- **Who reads it.** Every skill that changes or judges code reads the project specialist, then adds
-  the specialist its own task needs, the way `/resolve-it` does. For a run, the task specialist leads
-  the work and is held to the project specialist's checks and output standard as well: that is what
-  working as both means. A run never changes the record. With no record, a skill works as its task
-  specialist alone and says nothing.
+  again by the same rule, so it can go up or down, never below the floor.
+- **Same record or a different one.** Two records are the same when they name the same specialists:
+  the same primary and the same added ones, in the same order. The signals' wording does not count.
+  A writer that finds the same specialists keeps the existing record exactly as it is, signals and
+  dates included, and says nothing. The one edit it makes there is to an unconfirmed signal the new
+  evidence settles: a confirmed one loses its `"unconfirmed": true`, and a disproved one is removed.
+- **No overwrite without saying so.** No skill overwrites the project specialist without saying so.
+  A writer that finds different specialists writes the new record, with its own `set_by` and
+  `set_at`, and says so the same way every writer does: one plain line to the user and the same line
+  in `CHANGELOG.md`; it asks nothing. The `CHANGELOG.md` line is the history. Each writer's step
+  says when its line is said and written.
+- **Builders.** `/make-it` and `/resume-it` build the app: they work as the project specialist, the
+  whole record, and add no task specialist of their own.
+- **Who reads it.** Every other skill that changes or judges code reads the project specialist, then
+  adds the specialist its own task needs, the way `/resolve-it` does. For a run, the task specialist
+  leads the work and is held to the checks and output standard of every specialist in the record as
+  well: that is what working as both means. A run never changes the record. With no record, a skill
+  works as its task specialist alone and says nothing.
 - **Coordinators.** `/dispatch-it` and `/subagent-it` adopt no specialist themselves; every agent they
   launch on app code is handed the project specialist plus the one its task needs.
 - **No app code, no project specialist.** Skills that do not work on an app's code get no project
@@ -56,12 +64,30 @@ set by `project_type`:
 | `library` | Senior library maintainer (public API and compatibility) |
 | `extension` | Senior extension engineer for its host (the editor or the browser) |
 
+A writer fills in the floor from `stack`: "its stack" is the backend + frontend of a web app (e.g.
+"FastAPI + Next.js") and the backend of an API service; "its language" is `stack.language`; "its
+host" is the editor or browser the extension runs in.
+
 The floor specialist is always in the record: primary when nothing outranks it, otherwise in `added`
 (rule 2 below). Nothing lowers a project below its floor.
 
 A writer sets `project_type` before it records `expert_persona`. With an empty or unknown
 `project_type` there is no floor, and no other type's floor is assumed (not the web-app one either):
 the writer records nothing until the type is set.
+
+### Each project specialist's checks
+
+This table is the one place each project specialist's checks and output standard live. A skill is
+held to the row of every specialist in the record.
+
+| Project specialist | Checks it brings | Output standard |
+|---|---|---|
+| Application security engineer | attacker mindset: threat model first, then data exposure, authorization and input handling | threat model, fix with a compensating control, rationale an auditor accepts |
+| Data engineer / DBA | tenant isolation, indexing, partitioning, migration safety | data model review, safe migration with rollback, load check |
+| SRE | SLOs, failure modes, rollback, alerts, behaviour under real traffic | runbook, SLOs, alert rules, tested rollback |
+| AI / prompt engineer | evals, prompt drift, red-teaming, model routing | eval suite, prompt governance, red-team set |
+| A variant's specialist | the checks its definition file names | the output standard its definition file names |
+| Every floor specialist | the conventions, idioms and tests of its stack, language or host; the public API and compatibility for a library | code a senior engineer of that stack would merge: tested, idiomatic, no regressions |
 
 ---
 
@@ -139,25 +165,29 @@ The project specialist comes from the `app-context.json` signals, applied by the
 task specialist comes from the active skill.
 
 1. **Skill sets the task specialist.** `debug-it` → SRE; `nemo-it`/`fix-it` → AppSec;
-   `argo-it` → Platform; `retrofit-it` → architect.
+   `argo-it` → Platform; `retrofit-it` → architect. The builders add none ("Builders" above).
 2. **Signals set the project specialist.** Only the three writers apply these, when they record or
    re-check `expert_persona`; every other skill reads the record instead. In order:
    1. Security: payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or
       `features` → **Application security engineer**.
    2. Data: `multi_tenancy.needed == true`, or the answers describe data at scale → **Data engineer /
-      DBA** (isolation, indexing, partitioning, safe migration and rollback).
+      DBA**.
    3. Reliability / platform: `users.internal_or_external == "external"`, `users.estimated_count` in
       the thousands or more, or an uptime promise (an SLA) for production that the user named →
-      **SRE** (SLOs, failure modes, rollback, alerts). `deployment.target` holds the cloud provider,
-      not that promise, so the promise is read from the answers.
+      **SRE**. `deployment.target` holds the cloud provider, not that promise, so the promise is read
+      from the answers.
    4. AI: `ai_features.usage_level == "heavy"`, or `ai_features.who_edits_prompts` is not
-      `developers` → **AI / prompt engineer** (evals, prompt drift, red-team set).
-   5. The floor for the `project_type`.
+      `developers` → **AI / prompt engineer**.
+   5. Variant: a signal the app's variant names in its definition file under "Project specialist
+      signals" → **the specialist it names**. A variant signal that is really a security, data,
+      reliability or AI signal takes that signal's rank instead.
+   6. The floor for the `project_type`.
 
    **The order decides the primary.** The highest specialist in this order that applies is primary;
    every other one that applies is added, in this order; the floor specialist is always in the
-   record: primary when nothing outranks it, otherwise in `added`. A fixed order does not weigh how
-   strong each signal is; that is accepted.
+   record: primary when nothing outranks it, otherwise in `added`. A specialist two signals call for
+   appears once, with both signals. A fixed order does not weigh how strong each signal is; that is
+   accepted.
 3. **Never below the floor.** With no signal firing, the project specialist is the floor for its
    `project_type` (above). There is no generalist fallback.
 4. **Record once, read every run.** The three writers record the primary, the added ones and their
@@ -172,10 +202,14 @@ Near the top of its work, the skill:
 
 1. Reads the project specialist from `expert_persona` in `app-context.json` (no file, or a value
    that reads as no record under "Reading an older value": no record).
-2. Adds its task specialist (rule 1) and works as both, as "Who reads it" says.
-3. States the persona to itself in one line and proceeds *in character* — no user prompt:
-   > "Approaching this as an application security engineer: threat-model first, then fix."
-4. Holds all output to that persona's **output standard** column, not a generalist's.
+2. Adds its task specialist (rule 1) and works as both, as "Who reads it" says. A builder adds none.
+3. States both to itself in one line, the task specialist and the specialists in the record, and
+   proceeds *in character*, with no user prompt:
+   > "Approaching this as an application security engineer on a project whose record names a data
+   > engineer and a senior full-stack engineer: threat-model first, then fix."
+4. Holds all output to the task specialist's **output standard** (the catalog) and to the output
+   standard of every specialist in the record ("Each project specialist's checks"), not a
+   generalist's.
 5. Writes nothing to `expert_persona` unless it is `/make-it`, `/retrofit-it` or `/resume-it`, and
    then only as the rule above says.
 
