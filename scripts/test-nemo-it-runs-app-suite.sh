@@ -50,7 +50,7 @@ no7() { ! printf "%s" "$S7" | gq -iE -- "$1" || { echo "  must not be in step 7b
 
 # 1. the step exists, where it belongs, and is the reviewed text
 S7RAW="$(awk '/^\*\*7b[.] Run the app.s own generated guardrail suite/{on=1} on && /^\*\*8[.] Compile AI safety results/{on=0} on' "$NM")"
-S7HASH=0262c2f36ad614ea066fac4eef420ecedb7dc1b8
+S7HASH=fc93e06ea4412a25711326a9b2d8607bd63892e1
 check "nemo-it.md has step 7b, after its own six categories and before the results are compiled" \
   '[ -n "$S7" ] && [ "$(grep -cE "^\*\*7b[.] Run the app.s own generated guardrail suite" "$NM")" = 1 ] && [ "$(grep -nE "^\*\*7[.] Test Category 6" "$NM" | cut -d: -f1)" -lt "$(grep -nE "^\*\*7b[.] " "$NM" | cut -d: -f1)" ]'
 check "step 7b is the reviewed text, word for word (changed on purpose? read the change, then put the new hash in S7HASH)" \
@@ -74,7 +74,7 @@ check "step 7b: condition 2 claims no more than step 0 found, and a run with no 
 check "step 7b: nothing is installed there, and never from the project's requirements files" \
   'sen "Nothing is installed in this step: the only installs are the ones picked in preflight step 7'"'"'s ask (guardrail 9), and nothing is ever installed from the project'"'"'s own requirements files." && no7 "(pip3?|pipx|uv|conda|poetry|npm|brew) (install|add)|-r [^ ]*requirements"'
 check "nemo-it.md: one pytest run, with flags that keep its files out of the project, and one broken file does not stop the rest" \
-  'L="$(grep -F "python -m pytest guardrails/tests/" "$NM" | grep -vF "\`")" && [ "$(printf "%s\n" "$L" | grep -c .)" = 1 ] && printf "%s\n" "$L" | gq -xF "  PYTHONDONTWRITEBYTECODE=1 python -m pytest guardrails/tests/ -v -p no:cacheprovider --continue-on-collection-errors \\" && gq -F -- "--junitxml=/tmp/nemo-it-app-suite/results.xml" "$NM"'
+  'L="$(grep -F "python -m pytest guardrails/tests/" "$NM" | grep -vF "\`")" && [ "$(printf "%s\n" "$L" | grep -c .)" = 1 ] && printf "%s\n" "$L" | gq -xF "  PYTHONDONTWRITEBYTECODE=1 python -m pytest guardrails/tests/ -v -p no:cacheprovider --continue-on-collection-errors \\" && gq -F -- "--junitxml=\$NEMO_TMP/app-suite/results.xml" "$NM"'
 
 # 3. the preflight ask (step 7): the pick, each run
 P7="$(awk '/^\*\*7[.] Install required tools and start the app/{on=1} on && /^\*\*8[.] Create scan workspace/{on=0} on' "$NM" | flat)"
@@ -99,7 +99,7 @@ check "preflight step 7's ask is the reviewed text, word for word (changed on pu
 check "step 7b: what ran comes from the test runner's own result file, the exit code decides nothing, and no result file counts as 0" \
   'sen "What ran is read from the test runner'"'"'s own result file, never from the command having been issued (guardrail 11). \`APP_SUITE_EXIT\` decides nothing: every outcome is read from the result file." && sen "\`APP_SUITE_RAN=0\`: the whole block is NOT TESTED"'
 check "step 7b: the readers run outside the project and load nothing from it" \
-  'gq -xF "P=\"\$(pwd -P)\"; cd /tmp/nemo-it-app-suite" "$NM" && gq -xF "python3 -I - results.xml <<'"'"'PY'"'"' 2>/dev/null || echo \"APP_SUITE_RAN=0\"" "$NM" && gq -xF "python3 -I manifest.py \"\$P\" after.txt && python3 -I - before.txt after.txt <<'"'"'PY'"'"' || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && gq -xF "P=\"\$(pwd -P)\"; (cd /tmp/nemo-it-app-suite && python3 -I manifest.py \"\$P\" before.txt) || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && [ "$(printf "%s\n" "$S7RAW" | grep -E "^[^#]*python3 " | grep -vcF "python3 -I ")" = 0 ]'
+  'gq -xF "P=\"\$(pwd -P)\"; cd \$NEMO_TMP/app-suite" "$NM" && gq -xF "python3 -I - results.xml <<'"'"'PY'"'"' 2>/dev/null || echo \"APP_SUITE_RAN=0\"" "$NM" && gq -xF "python3 -I manifest.py \"\$P\" after.txt && python3 -I - before.txt after.txt <<'"'"'PY'"'"' || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && gq -xF "P=\"\$(pwd -P)\"; (cd \$NEMO_TMP/app-suite && python3 -I manifest.py \"\$P\" before.txt) || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && [ "$(printf "%s\n" "$S7RAW" | grep -E "^[^#]*python3 " | grep -vcF "python3 -I ")" = 0 ]'
 # the reader itself, run on a small result file: one case of each kind, and a second file with a failure
 printf '%s\n' '<testsuites><testsuite>' '<testcase classname="guardrails.tests.test_jailbreak" name="test_a"/>' '<testcase classname="guardrails.tests.test_jailbreak.TestK" name="test_b"><failure message="AssertionError: not blocked">x</failure></testcase>' '<testcase classname="" name="guardrails.tests.test_jailbreak"><error message="collection failure">x</error></testcase>' '<testcase classname="guardrails.tests.test_jailbreak" name="test_d"><skipped message="no key sk-abcdefghijklmnopqrstuvwxyz0123">x</skipped></testcase>' '<testcase classname="guardrails.tests.test_extra" name="test_x"><failure message="AssertionError: leaked">x</failure></testcase>' '</testsuite></testsuites>' > "$TMPD/results.xml"
 printf "%s\n" "$S7RAW" | awk '/^python3 -I - results[.]xml <<.PY. /{on=1; next} on && /^PY$/{on=0} on' > "$TMPD/reader.py"
@@ -218,7 +218,7 @@ if [ -z "${1:-}" ]; then
   check "(control) fails when a yes is kept for the next run, and when the pick is no longer offered through the ask" \
     'swap "$NM" "A yes here is never kept: it is not written to any file, and the next run asks again." "A yes here is kept for the next run." && swap "$NM" "It never runs without a pick made here, in this run." "It runs without a pick when the hostile-code check is clean."'
   check "(control) fails with a reader run without -I, or from inside the project" \
-    'swap "$NM" "python3 -I - results.xml" "python3 - results.xml" && swap "$NM" "python3 -I manifest.py \"\$P\" after.txt" "python3 manifest.py \"\$P\" after.txt" && swap "$NM" "P=\"\$(pwd -P)\"; cd /tmp/nemo-it-app-suite" "P=\"\$(pwd -P)\""'
+    'swap "$NM" "python3 -I - results.xml" "python3 - results.xml" && swap "$NM" "python3 -I manifest.py \"\$P\" after.txt" "python3 manifest.py \"\$P\" after.txt" && swap "$NM" "P=\"\$(pwd -P)\"; cd \$NEMO_TMP/app-suite" "P=\"\$(pwd -P)\""'
   check "(control) fails when a failure in an extra test file does not affect the block" \
     'swap "$NM" "and it counts toward the block exactly as the six do." "and it does not affect the block." && swap "$NM" "over every test file that was collected, the six and any other" "over its six categories" && swap "$AT" "Every row counts toward the block status." "Extra rows do not count toward the block status."'
   check "(control) fails when ignored files are left out of the before-and-after list, when the no-key reason goes generic, and when a no-suite project gets a NOT TESTED block" \
