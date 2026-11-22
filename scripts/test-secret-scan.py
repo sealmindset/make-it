@@ -10435,5 +10435,108 @@ class ArgoItGitattributesContentCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7
             self.assertIn(line, block, 'the seal list does not know the seal line %r' % line)
 
 
+
+class ArgoItTroubleshootSendsThroughRedeployCases(Base):
+    """Plan Task 4: 5c troubleshooting never pushes around the gate. Every 5c row that ends in a send goes through PHASE
+    5b from its step 1 (its checks, its read of GitHub, its "Update {hostname}" pick, 3a-3e, then step 4's save and
+    send); no line in 5c runs or tells the agent to run a push or a commit itself. `kubectl rollout restart` is Task 5:
+    this test leaves it alone."""
+
+    OLD = ('Let me push from the right one...', 'Fix locally, push (same as pre-push self-review)',
+           'Read logs, fix code if clear, push again')
+    TOLD = (r'(?i)\bgit\s+(?:-c\s+\S+\s+)*(?:push|commit)\b|\blet me push\b|\bfix[^|.\n]{0,40}\bpush\b'
+            r"|(?<!never )(?<!don't )(?<!not )\bpush(?:es|ing)?\s+(?:again|from|it|them|the fix|your|now)\b"
+            r'|\bcommit and push\b|,\s*push\b')
+
+    def _doc(self):
+        return ArgoItWiringCases('test_old_inline_scan_is_gone')._doc()
+
+    def _section(self, doc=None):
+        doc = doc or self._doc()
+        i = doc.index('<step name="post-deploy-troubleshoot">')
+        return doc[i:doc.index('</step>', i)]
+
+    def _pushes(self, sec):
+        return [l for l in sec.splitlines() if re.search(self.TOLD, l)]
+
+    def _row(self, sec, first):
+        rows = [l for l in sec.splitlines() if l.startswith('| ' + first)]
+        self.assertTrue(rows, 'no 5c row starts %r' % first)
+        return rows
+
+    def test_1_no_line_in_5c_pushes_or_commits(self):
+        self.assertEqual(self._pushes(self._section()), [], '5c tells the agent to push or commit itself')
+
+    def test_2_each_row_that_sends_names_the_redeploy_path(self):
+        sec = self._section()
+        for first in ('Run exists but wrong branch', 'CI failed (lint/build)', 'Pod crash-looping'):
+            for row in self._row(sec, first):
+                self.assertRegex(row, r'PHASE 5b[^|]{0,40}step 1', '%r does not go through PHASE 5b from its step 1' % first)
+                self.assertRegex(row, r'Update \{hostname\}', "%r doesn't say the send waits for the pick" % first)
+        for first in ('CI failed (lint/build)', 'Pod crash-looping'):
+            row = self._row(sec, first)[0]
+            self.assertRegex(row, r'(?i)\bunsaved\b', "%r doesn't leave the fix unsaved for step 4" % first)
+            self.assertRegex(row, r'"I [^"]*\bnothing is sent\b[^"]*"', "%r doesn't tell the user nothing is sent yet" % first)
+
+    def test_3_the_rules_line_agrees(self):
+        doc = self._doc()
+        rules = doc[doc.index('**Pre-push self-review rules'):]
+        rules = rules[:rules.index('</guardrails>')]
+        self.assertRegex(re.sub(r'\s+', ' ', rules), r'(?i)troubleshoot[^.\n]{0,80}never (?:commits?|pushes|sends)'
+                         r'[^\n]{0,200}PHASE 5b[^\n]{0,40}step 1', "the rules don't say 5c sends only through PHASE 5b")
+
+    def test_4_controls_each_old_push_fails_and_a_restart_row_does_not(self):
+        sec = self._section()
+        rows = ['| Run exists but wrong branch | CI ran on a different branch. | "Your build ran on a different branch. '
+                'Let me push from the right one..." |',
+                '| CI failed (lint/build) | Yes | Fix locally, push (same as pre-push self-review) |',
+                '| Pod crash-looping | Maybe | Read logs, fix code if clear, push again |',
+                'Then `git push origin {current_branch}`.',
+                '```bash\ngit commit -m "fix" && git push\n```']
+        for old in rows:
+            with self.subTest(old=old[:40]):
+                self.assertTrue(self._pushes(sec + '\n' + old), 'the check misses %r' % old)
+        self.assertEqual(self._pushes('| Pod running old image | Yes (if kubectl) | '
+                                      '`kubectl rollout restart deployment/{service} -n {namespace}` |'), [])
+        self.assertEqual(self._pushes('| No recent run | CI never triggered. Push may not have reached GitHub. | '
+                                      '"x" Then go to PHASE 5b (redeploy) from its step 1 -- never push from here '
+                                      'without them. |'), [])
+
+
+class ArgoItSmallConcernsCases(ArgoItUnsavedCodeCases):
+    """The last step's two small concerns: a path git would quote is shown as it is, and a blank line beside the seal's
+    lines in .gitattributes is a change of its own."""
+
+    def test_1_a_path_git_would_quote_is_shown_as_it_is(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._project(r)
+                name = 'lib/my "q" file.py'
+                r.write(name, 'x = 1\n')
+                code, out = self._check(r, shell)
+                self.assertEqual(out, ['UNSAVED CODE', '1', name], out)
+
+    def test_2_a_blank_line_beside_the_seal_lines_is_a_change(self):
+        g = ArgoItGitattributesContentCases('test_1_seal_lines_left_from_an_earlier_run_are_listed_and_sent')
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = g.fresh()
+                r.write('.make-it/app-context.json', '{}\n')
+                r.write('.gitattributes', g.ATTRS + '\n')  # the saved file already has a blank line
+                r.commit('a make-it project')
+                r.push()
+                r.append('.gitattributes', '\n' + g.SEAL_LINES)
+                code, out = g._list(r, shell)
+                self.assertIn('GITATTRIBUTES MIXED', out, 'a second blank line next to the seal lines went unseen')
+
+    # the class it borrows from runs its own tests once already
+    test_1_unsaved_code_stops_before_the_seal_naming_how_many_and_the_first_two = None
+    test_2_untracked_look_alikes_are_unsaved_code_and_stop_the_send = None
+    test_3_what_is_not_unsaved_code_goes_on = None
+    test_4_not_a_make_it_project_no_check = None
+    test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line = None
+
+
 if __name__ == '__main__':
     unittest.main()
