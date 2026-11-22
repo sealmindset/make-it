@@ -185,10 +185,20 @@ python3 -I "$PY" "$d/settings.json" "$CMD" >/dev/null 2>&1
 # --- Part 3: install.ps1's helper -----------------------------------------------------------------
 if command -v pwsh >/dev/null 2>&1; then
   merge_cases "install.ps1 helper" pwsh -NoProfile -NonInteractive -File "$PS"
+  errs=$(pwsh -NoProfile -NonInteractive -c '$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "install.ps1"), [ref]$null, [ref]$e); $e.Count')
+  [ "$errs" = 0 ] && ok "install.ps1 parses" || bad "install.ps1 has $errs parse errors"
 else
   echo "SKIPPED  Part 3 (install.ps1's settings merge): pwsh is not installed here -- NOT PROVEN on this machine"
   [ -z "${CI:-}" ] || bad "pwsh missing in CI: install.ps1's settings merge went untested"
 fi
+
+# install.ps1 adds the guard on every install and update (Install-MakeItSkills runs on both paths), with
+# git-bash running it, and stops when the helper refuses
+fn=$(awk '/^function Install-MakeItSkills/,/^}/' install.ps1)
+for want in 'add-no-force-push-hook.ps1' 'no-force-push.sh' 'CLAUDE_CODE_GIT_BASH_PATH' 'if ($LASTEXITCODE -ne 0) {'; do
+  case $fn in *"$want"*) ok "install.ps1's Install-MakeItSkills has: $want" ;; *) bad "install.ps1's Install-MakeItSkills lacks: $want" ;; esac
+done
+grep -q 'Install-MakeItSkills \$tempState' install.ps1 && ok "install.ps1's update path runs Install-MakeItSkills" || bad "install.ps1's update path skips Install-MakeItSkills"
 
 # --- Part 4: install.sh against a temp HOME, twice -------------------------------------------------
 H="$T/home"; mkdir -p "$H/.claude"
