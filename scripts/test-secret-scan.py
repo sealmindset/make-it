@@ -11007,18 +11007,25 @@ class ReviewRound2Cases(ArgoItUnsavedCodeCases):
 
 # Task 5: the troubleshooting blocks and asks, pinned whole
 T5_CTX = '''c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
-v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)'''
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+# A server address, compared without a trailing / and with its scheme and host in small letters
+low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }'''
 
-T5_SAME = '''[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ]'''
+T5_NAMES = '''# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
+ns='{namespace}'; svc='{service}'
+printf '%s\n' "$ns" "$svc" | grep -vqxE '[a-z0-9]([-a-z0-9]*[a-z0-9])?' && { echo "BAD NAME"; exit 1; }'''
+
+T5_SAME = '''[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ]'''
 
 T5_READ = '''# The app's own cluster, as setup recorded it (deployment.k8s_context, and its server address deployment.k8s_server)
+''' + T5_NAMES + '''
 ''' + T5_CTX + '''
 [ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
 # Read only, and only while this computer points at that cluster, by its name and its server address
 ''' + T5_SAME + ''' || { echo "NOT ITS CLUSTER"; exit 1; }
-kubectl --context "$c" get pods -n "{namespace}" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
-grep 'image:' "env/dev/{service}.yaml"
+kubectl --context "$c" get pods -n "$ns" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
+grep 'image:' "env/dev/$svc.yaml"
 '''
 
 T5_CHECK = '''# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it, by name and address
@@ -11028,9 +11035,10 @@ T5_CHECK = '''# Before the ask: a restart may only reach the app's own cluster, 
 '''
 
 T5_RESTART = '''# Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
+''' + T5_NAMES + '''
 ''' + T5_CTX + '''
 [ -n "$c" ] && [ -n "$v" ] && ''' + T5_SAME + ''' || { echo "OTHER CLUSTER"; exit 1; }
-kubectl --context "$c" rollout restart "deployment/{service}" -n "{namespace}"
+kubectl --context "$c" rollout restart "deployment/$svc" -n "$ns"
 '''
 
 T5_RERUN = '''# Only after the user picked "Rebuild {hostname}": the last build of this project, run again
@@ -11038,10 +11046,11 @@ gh run rerun {run_id}
 '''
 
 T5_LOGS = '''# Read only, on the app's own cluster by name and address: what the running version printed last
+''' + T5_NAMES + '''
 ''' + T5_CTX + '''
 [ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
 ''' + T5_SAME + ''' || { echo "NOT ITS CLUSTER"; exit 1; }
-kubectl --context "$c" logs -n "{namespace}" "deploy/{service}" --tail=100 || { echo "READ FAILED"; exit 1; }
+kubectl --context "$c" logs -n "$ns" "deploy/$svc" --tail=100 || { echo "READ FAILED"; exit 1; }
 '''
 
 T5_RESTART_ASK = '''"Your app at {hostname} is still running an older version than the last one built and sent: [the
@@ -11414,7 +11423,7 @@ class ReReviewMiscCases(ArgoItRestartAsksCases):
             for l in f.splitlines():
                 if l.lstrip().startswith('#'):
                     continue
-                spans = [(m.start(), m.end()) for m in re.finditer(r'"[^"]*"', l)]
+                spans = [(m.start(), m.end()) for m in re.finditer(r"'[^']*'", l)]  # single quotes: nothing runs
                 for m in re.finditer(r'\{(?:namespace|service)\}', l):
                     self.assertTrue(any(a < m.start() < b for a, b in spans), 'unquoted in %r' % l)
 
@@ -11471,6 +11480,107 @@ class ReReviewKeepOutCases(ArgoItUnsavedCodeCases):
         flat = re.sub(r'\s+', ' ', self._phase())
         i = flat.index('`UNSAVED CODE`')
         self.assertRegex(flat[i:i + 1600], r'(?i)each path after a `keep-out:` line')
+
+
+
+class ConfirmRedeployCases(ReReviewRedeployCases):
+    """PR #134 confirmation pass, items 1 and 5: a commit a post-commit hook adds after argo-it's save is never sent;
+    argo-it's own files and .gitignore count as touched by name, so the pin needn't list them."""
+
+    for _t in [k for k in list(vars(ReReviewRedeployCases)) if k.startswith('test')]:
+        locals()[_t] = None
+    del _t
+
+    def test_1_a_post_commit_hooks_own_save_is_never_sent(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                hooks = os.path.join(r.root, 'hooks')
+                os.makedirs(hooks)
+                with open(os.path.join(hooks, 'post-commit'), 'w') as f:
+                    f.write('#!/bin/sh\n[ -n "$IN_HOOK" ] && exit 0\necho "hk = 1" > hk.py\ngit add hk.py\n'
+                            'IN_HOOK=1 git commit -q -m "added by a hook"\n')
+                os.chmod(os.path.join(hooks, 'post-commit'), 0o755)
+                r.append('app.py', 'x = 1\n')
+                self._prep(r, hooks)
+                before = self._sent_refs(r)
+                out, mark = self._run5b2(r, shell)
+                self.assertEqual(self._sent_refs(r), before, "the hook's save reached the online copy")
+                self.assertFalse(b'hk = 1' in self._sent_objects(r))
+                self.assertEqual(mark, 'SAVE ADDED MORE')
+                qs = self._told(self._phase5b(), 'SAVE ADDED MORE')
+                self.assertTrue(any(re.search(r'(?i)\bsaved\b[^.]{0,40}\bon this computer\b', q)
+                                    and re.search(r"(?i)didn't send", q) and re.search(r'(?i)only send what I named', q)
+                                    for q in qs), qs)
+
+    def test_5_argo_its_own_files_and_gitignore_count_as_touched(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                r.write('env/dev/kustomization.yaml', 'resources:\n  - backend.yaml\n')
+                r.write('env/dev/backend.yaml', 'kind: Deployment\n')
+                r.write('.gitignore', 'node_modules/\n')
+                r.commit('argo-it set up')
+                r.push()
+                r.append('app.py', 'x = 1\n')
+                self._prep(r)
+
+                def between():  # 3b adds a setting to a manifest, and a 3e move edits .gitignore: neither recorded
+                    r.append('env/dev/backend.yaml', 'metadata: {}\n')
+                    r.append('.gitignore', '.env*\n')
+                out, mark = self._run5b2(r, shell, between)
+                self.assertIsNone(mark, [(s_, c.stdout[-200:]) for s_, c in out])
+                self.assertEqual(self._ref(r, 'main'), self._head(r))
+                r.write('late.py', 'late = 1\n')  # control: someone else's new file still stops a second send
+                r.append('app.py', 'y = 2\n')
+                out, mark = self._run5b2(r, shell, lambda: r.write('later.py', 'z = 1\n'))
+                self.assertEqual(mark, 'CHANGED SINCE THE ASK')
+
+
+class ConfirmClusterCases(ArgoItRestartAsksCases):
+    """PR #134 confirmation pass, items 2, 3 and 4."""
+
+    for _t in [k for k in list(vars(ArgoItRestartAsksCases)) if k.startswith('test')]:
+        locals()[_t] = None
+    del _t
+
+    def test_2_a_name_that_would_run_something_is_refused(self):
+        for shell in ('bash', 'zsh'):
+            for bad in ('$(touch pwned)', '`touch pwned`', 'Acme_App', ''):
+                with self.subTest(shell=shell, bad=bad):
+                    need_shell(shell)
+                    with tempfile.TemporaryDirectory() as td:
+                        self._project(td, True)
+                        log, env = self._env(td, 'acme-prod-eu')
+                        for block in (self.READ, self.RESTART, self.LOGS):
+                            cp = self._run(block.replace('{namespace}', bad), td, env, shell)
+                            self.assertIn(b'BAD NAME', cp.stdout)
+                        self.assertFalse(os.path.exists(os.path.join(td, 'pwned')), 'a name ran a command')
+                        self.assertFalse([c for c in self._calls(log) if ' get pods' in c or 'rollout restart' in c
+                                          or ' logs ' in c])
+        flat = re.sub(r'\s+', ' ', self._section())
+        i = flat.index('If it prints `BAD NAME`')
+        self.assertRegex(flat[i:i + 600], r'"I[^"]{20,}"')
+
+    def test_3_a_trailing_slash_or_capitals_in_scheme_and_host_is_the_same_server(self):
+        for shell in ('bash', 'zsh'):
+            for now, ok in (('HTTPS://K8S.Acme.example:6443/', True), ('https://k8s.acme.example:6443///', True),
+                            ('https://k8s.acme.example:6443/Other', False), ('https://other.example:6443', False)):
+                with self.subTest(shell=shell, now=now):
+                    need_shell(shell)
+                    with tempfile.TemporaryDirectory() as td:
+                        self._project(td, True)
+                        log, env = self._env(td, 'acme-prod-eu', now)
+                        self.assertEqual(self._run(self.CHECK, td, env, shell).returncode == 0, ok)
+
+    def test_4_no_record_is_true_when_only_local_clusters_are_known(self):
+        flat = re.sub(r'\s+', ' ', self._section())
+        for mark in ('NO CLUSTER RECORD', 'CLUSTER UNKNOWN'):
+            i = flat.index('If it prints `%s`' % mark)
+            self.assertRegex(flat[i:i + 1200], r"(?i)only knows local clusters, so there's none to record yet", mark)
+        self.assertRegex(flat, r"(?i)If the user asks to record the app's cluster[^.]{0,200}only local clusters")
 
 
 if __name__ == '__main__':
