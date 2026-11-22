@@ -110,26 +110,28 @@ from: the code, not an interview.
 | Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data the app holds about people beyond its own sign-in accounts (customers, patients, contacts: a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records). A users table that only holds the app's own sign-in accounts does not fire it. |
 | Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
 | Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
-| AI | an AI SDK behind more than 10 distinct prompts or agents, or prompts stored where non-developers edit them |
+| AI | an AI SDK behind 10 or more distinct prompts or agents of the app's own, or the app's own prompts stored where non-developers edit them; the AI Instructions admin screens every web app gets from the scaffold do not fire it |
 | Variant | what its definition file declares under "Project specialist signals", at the rank it declares, when `app-context.json` already names the variant |
 
 Each signal is written `code: <what was found, and where>`; the floor's is
-`project_type: <value> (the floor)`. Where the code cannot tell whether a signal fires (for
-example, a table whose fields may or may not hold personal data), it fires: record the stricter
-specialist and mark that signal `"unconfirmed": true`. This is never a clarifying question and
-does not count against Phase 3's 3-5 questions.
+`project_type: <value> (the floor)`. A signal is recorded only where the code shows it (the reference's "The record is the starting
+point"): where the code shows nothing, there is no signal, so an internal app whose user count the
+code cannot show gets no reliability signal. Evidence that is present but indirect (a table whose
+fields may or may not hold customers' personal data) is recorded and marked `"unconfirmed": true`.
+The specialist is never a clarifying question and does not count against Phase 3's 3-5 questions.
 
 The retrofit's own role (the software architect, its task specialist) is never written into
 `expert_persona`: the specialist record comes from the signals and the floor only.
 
 If `app-context.json` already holds a specialist record (a second retrofit, or an app /make-it
-built), compare it with the new one as the reference's "Same record or a different one" says: with
-the same specialists only the signals are brought up to date, silently, even when the old ones were
-worded from an interview; different specialists write the new one. When the new one is written over
+built), update it as the reference's "The record is the starting point" says: keep each signal the code
+cannot disprove (one from the answers that the code says nothing about stays), add what the code
+shows, then compare as its "Same record or a different one" says: with the same specialists only
+the signals are brought up to date, silently; different specialists write the new one. When the new one is written over
 a specialist record, the one plain line (e.g. "Your app now gets a security specialist because its
 code takes card payments.") goes in the report of the step that writes it, and into
-`CHANGELOG.md`, which that step adds if the app has none. A value the reference reads as no record
-(its "Reading an older value") is not a specialist record: write the new one and say nothing.
+`CHANGELOG.md`, which that step adds if the app has none. An older value (the reference's "Reading an older value") is not compared: replace it and say
+S15's line the same way.
 
 **When it is written.** Nothing is written before the plan is approved. The specialist record goes
 into the run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and
@@ -198,8 +200,9 @@ def retrofit(existing, profile, today):  # the reference's "Same record or a dif
     new = derive(profile, today)
     if not reads_as_record(existing): return new, False
     if specialists(as_record(existing)) != specialists(new): return new, True
-    kept = copy.deepcopy(existing)  # names, set_by and set_at kept; the signal lists brought up to date, silently
-    for old, cur in zip([kept["primary"]] + kept["added"], [new["primary"]] + new["added"]): old["signals"] = cur["signals"]
+    kept = copy.deepcopy(existing)  # D10: names, set_by, set_at kept; signals the code cannot disprove kept, the code's added
+    for old, cur in zip([kept["primary"]] + kept["added"], [new["primary"]] + new["added"]):
+        old["signals"] = old["signals"] + [g for g in cur["signals"] if g not in old["signals"]]
     return kept, False
 FLOOR = {"specialist": "Senior full-stack engineer of Flask + React",
          "signals": [{"signal": "project_type: web-app (the floor)", "unconfirmed": False}]}
@@ -228,8 +231,8 @@ made = {"primary": {"specialist": "Application security engineer", "signals": [{
         "added": [{"specialist": "SRE", "signals": [{"signal": "users.internal_or_external: external", "unconfirmed": False}]},
                   {"specialist": "Senior full-stack engineer of FastAPI + Next.js", "signals": [{"signal": "project_type: web-app (the floor)", "unconfirmed": False}]}],
         "set_by": "/make-it", "set_at": "2026-10-01"}
-made_now = copy.deepcopy(made)
-for old, cur in zip([made_now["primary"]] + made_now["added"], [PAY[1]["primary"]] + PAY[1]["added"]): old["signals"] = cur["signals"]
+made_now = copy.deepcopy(made)  # D10: the interview's signals stay (the code shows payments and public sign-up), the code's are added
+for old, cur in zip([made_now["primary"]] + made_now["added"], [PAY[1]["primary"]] + PAY[1]["added"]): old["signals"] = old["signals"] + [g for g in cur["signals"] if g not in old["signals"]]
 for name, existing, want, said in (("an app /make-it built, the same specialists (floor spelled for another stack), signals from an interview", made, made_now, False),
                                    ("a different record (the low-risk one)", LOW[1], PAY[1], True),
                                    ("the template's empty record", {"primary": {"specialist": "", "signals": []}, "added": [], "set_by": "", "set_at": ""}, PAY[1], False)):
@@ -255,7 +258,7 @@ if [ -z "${1:-}" ]; then
   check "(control, D5) a harmless sentence added outside the pinned blocks passes" 'passes "$RF" "If stack has issues but is workable, note concerns but proceed." "If stack has issues but is workable, note concerns but proceed. (Tidy.)"'
   check "(control) fails when the record is written as a plain string" 'fails "$RF" "The specialist record is never a plain text value and never a generalist." "Record the specialist as a plain text value."'
   check "(control) fails with set_by wrong (/make-it)" 'fails "$RF" "with \`set_by\` \`\"/retrofit-it\"\`" "with \`set_by\` \`\"/make-it\"\`"'
-  check "(control) fails when an unclear signal is recorded as confirmed" 'fails "$RF" "mark that signal \`\"unconfirmed\": true\`." "record it as confirmed."'
+  check "(control) fails when an unclear signal is recorded as confirmed" 'fails "$RF" "is recorded and marked \`\"unconfirmed\": true\`." "is recorded as confirmed."'
   check "(control) fails when a clarifying question is added for the specialist" 'fails "$RF" "**Maximum 3-5 questions. Never more.**" "6. **If personal data is unclear:** \"Does your app store personal data about your users?\"\n\n**Maximum 3-5 questions. Never more.**"'
   check "(control) fails when the architect is recorded as the project specialist" 'fails "$RF" "is never written into \`expert_persona\`: the specialist record comes from the signals and the floor only." "is recorded as the primary, the project specialist."'
   check "(control) fails when the opening block re-infers again" 'fails "$RF" "Selected automatically; no user prompt." "Auto-selected from \`app-context.json\` + this skill; no user prompt."'

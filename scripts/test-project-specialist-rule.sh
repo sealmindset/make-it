@@ -22,7 +22,9 @@
 #   "no `expert_persona` set", "if `expert_persona` changed", "the specialist(s) recorded in `expert_persona`", and
 #   provenance naming one of the three writers ("set by /make-it"). Known gaps, on purpose: a write with a word not
 #   in the list ("becomes the new `expert_persona`", "Swap the primary in `expert_persona`"); a write split across
-#   two sentences; a write in a file outside the scanned set.
+#   two sentences; a write in a file outside the scanned set; a write that names "the specialist record" without
+#   the field's name; and the honest-read pattern swallowing the verb in "`expert_persona` records your role as its
+#   new primary".
 # Usage: test-project-specialist-rule.sh [ROOT]. With no ROOT it checks this repo, then runs the controls below on
 # edited copies (each with its expected result).
 set -euo pipefail
@@ -97,8 +99,8 @@ expert's mental model, spots what a generalist skips, and produces output to the
 This is **not** a staffing recommendation (it never suggests hiring a human). It changes how the AI
 *thinks and works* on the task at hand.
 
-Selection is **automatic and silent**: no user question. The only thing a skill says about it is
-the one line a writer says when it replaces a record.
+Selection is **automatic and silent**: no user question. The only thing a skill says about it is one plain line when it replaces what was there: a record with different
+specialists, or an older value ("Reading an older value").
 
 Imported by `make-it`, `retrofit-it`, `resume-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `try-it`, `deadcode-it`, `resolve-it`,
 `dispatch-it` and `subagent-it`.
@@ -117,8 +119,21 @@ Using a specialist and recording one are two separate jobs.
   `/retrofit-it` records it when it builds `app-context.json` from an existing app, and `/resume-it`
   re-checks it when the project's scope changes (below). No other skill writes it.
 - **What changes it.** The project's scope changes when its signals change: a signal added, a signal
-  removed, an unconfirmed signal confirmed or disproved, or `project_type` becomes set. The writer
-  then works the record out again by the same rule, so it can go up or down, never below the floor.
+  removed, an unconfirmed signal confirmed or disproved, or `project_type` becomes set. A writer notices these only when it runs, from its own
+  evidence (below); nothing re-checks the record between runs. The writer then updates the record by
+  the same rule, starting from it, so it can go up or down, never below the floor.
+- **The record is the starting point.** A writer that finds a record starts from its signals: it
+  keeps each one unless its own evidence disproves it, adds what its own evidence shows, and never
+  rebuilds the record from one kind of evidence. A signal is recorded only on evidence (the code,
+  `app-context.json`, or what the person said); a writer does not record a signal its evidence
+  cannot show. What disproves a signal, per writer:
+  - `/make-it`: the person's answers, only when they state the opposite ("no payments"); they cannot
+    disprove a `code:` signal they say nothing about.
+  - `/retrofit-it`: the code, only when the thing is absent from it (`features: card payments` with
+    no payment path in the code); it cannot disprove a signal from the answers or `app-context.json`
+    that the code says nothing about (a user count, an uptime promise).
+  - `/resume-it`: the planned work, only when it takes the thing out (the work removes payments);
+    work that does not touch a signal leaves it as it is.
 - **Same record or a different one.** Two records name the same specialists when they have the same
   ranks (security, data, reliability, AI, a variant's, the floor) in the same order, with the floor
   for the same `project_type`. How a specialist's name is spelled out does not count. With the same
@@ -194,8 +209,9 @@ held to the row of every specialist in the record.
 ## The record
 
 `expert_persona` holds a record, not a text value: the primary specialist, any added ones (security,
-reliability, data, ...), the signals that led to each, and which skill set it and when. A signal the
-code or the answers could not confirm is marked `"unconfirmed": true`.
+reliability, data, ...), the signals that led to each, and which skill set it and when. A signal recorded on
+indirect or hedged evidence (an estimate the person gave as a guess, or code that may or may not hold
+customers' data) is marked `"unconfirmed": true`.
 
 Example: a FastAPI + Next.js web app that takes card payments from external customers, recorded by
 `/make-it` at Design. Security comes first in the order, so the application security engineer is
@@ -229,7 +245,9 @@ primary; external users add SRE; the floor is added last; the expected user coun
 shape) is read as the primary specialist, with no added specialists and no recorded signals. A text
 value that names no specialist ("generalist", "none" or empty), a record whose `primary.specialist`
 is empty, and no field at all are each read as no record. A reader never rewrites any of them;
-`/resume-it` brings the app up to this shape.
+`/resume-it` brings the app up to this shape. An older value has no rank to compare by, so it is never
+compared: check S15 replaces it with a record and says its one line, and `/make-it` or `/retrofit-it`,
+when they meet an older value first, replace it the same way and say the same line.
 
 ---
 
@@ -283,8 +301,10 @@ task specialist comes from the active skill.
       the thousands or more, or an uptime promise (an SLA) for production that the user named →
       **SRE**. `deployment.target` holds the cloud provider, not that promise, so the promise is read
       from the answers.
-   4. AI: `ai_features.usage_level == "heavy"`, or `ai_features.who_edits_prompts` is not
-      `developers` → **AI / prompt engineer**.
+   4. AI: `ai_features.usage_level == "heavy"` (10 or more prompts or agents of the app's own), or
+      `ai_features.who_edits_prompts` is not `developers` → **AI / prompt engineer**. The AI
+      Instructions admin screens every web app gets from the scaffold never count: only the app's
+      own AI use does.
    5. Variant: a signal the app's variant declares in its definition file under "Project specialist
       signals" → **the specialist it names**, at the rank the file declares next to it (security,
       data, reliability, AI, or after AI and before the floor). Writers copy the declared rank; they
@@ -339,8 +359,8 @@ check "the template's expert_persona object is exactly the pinned text" \
 check "the template's field row is exactly the pinned text, once" '[ "$(grep -cxF -- "$TROW" "$TPL")" = 1 ]'
 
 # 2. structure
-check "the import list names exactly the command files that import the reference" \
-  '( want="$(for f in $CMDS; do gq -F "references/expert-personas.md" "$f" && basename "$f" .md; done | sort | tr "\n" " ")";
+check "the import list names exactly the command files that import the reference (an @~/ line)" \
+  '( want="$(for f in $CMDS; do gq -xF "@~/.claude/make-it/references/expert-personas.md" "$f" && basename "$f" .md; done | sort | tr "\n" " ")";
      got="$(flat < "$REF" | perl -ne "print \$1 if /Imported by (.*?)\./" | grep -oE "\`[a-z-]+\`" | tr -d "\`" | sort | tr "\n" " ")";
      [ "$want" = "$got" ] || { echo "  imports: $want / named: $got"; exit 1; } )'
 # types: the project_type values of the reference's floor table, and of the template's classification table

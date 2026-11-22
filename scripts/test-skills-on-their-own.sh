@@ -8,7 +8,7 @@
 #     the "Never start these on your own" paragraph, and that paragraph keeps "only when the person asks" and the skill's
 #     own asks.
 #   - Build step h writes the block into a new project's CLAUDE.md after the Learnings import, and build-standards S14
-#     back-fills it the same way; the skills that run every check say S01-S14 (S01-S15 in /retrofit-it and /resume-it).
+#     back-fills it the same way; the skills that run every check say S01-S15.
 #   - Every command's description says when to use it ("Use when", "Use for", "Use to" or "Use mid-session"), and the
 #     never-start skills in this repo say "Only when the user asks".
 # A tripwire for the wording, not a proof of behavior: whether Claude really starts the skills is the card's live check.
@@ -73,11 +73,9 @@ check "Build step h puts [SKILLS_SECTION] after the Learnings import, and says w
 S14="$(grep -E '^\*\*S14\*\* ' "$BS" || true)"
 check "build-standards S14 back-fills the section: after the Learnings section, once, word for word from skill-triggers.md" \
   'printf "%s" "$S14" | gq -F "$HEAD" && printf "%s" "$S14" | gq -F "skill-triggers.md" && printf "%s" "$S14" | gq -F "word for word" && printf "%s" "$S14" | gq -F "appears once" && printf "%s" "$S14" | gq -F "after the \`## Learnings\` section"'
-# E11-S4 added S15 (the project specialist record). /retrofit-it and /resume-it name S01-S15; make-it.md's
-# build-verify list still says S01-S14 because that line was off-limits on the E11 branch (a fresh build writes
-# the record at Design, so S15 holds there); none says S01-S13.
-check "/retrofit-it and /resume-it say S01-S15, make-it.md says S01-S14 (S15 is written at Design), and none still says S01-S13" \
-  'gq -F "S01-S14" "$MK" && gq -F "S01-S15" .claude/commands/retrofit-it.md && gq -F "S01-S15" .claude/commands/resume-it.md && ! cat "$MK" .claude/commands/retrofit-it.md .claude/commands/resume-it.md | gq -F "S01-S13"'
+# E11 added S15 (the project specialist record); all three skills that run every check name S01-S15.
+check "the skills that run every check say S01-S15, and none still says S01-S14 or S01-S13" \
+  'gq -F "S01-S15" "$MK" && gq -F "S01-S15" .claude/commands/retrofit-it.md && gq -F "S01-S15" .claude/commands/resume-it.md && ! cat "$MK" .claude/commands/retrofit-it.md .claude/commands/resume-it.md | gq -E "S01-S1[34]"'
 
 # descriptions
 desc() { awk '/^---/{c++; next} c==1 && /^description:/{sub(/^description: */,""); print; exit}' "$1"; }

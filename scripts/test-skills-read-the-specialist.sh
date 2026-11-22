@@ -185,7 +185,7 @@ not tied to an app, and reads no project specialist record.
 
 </expert_persona>
 BLOCK
-WANT_INV='Work as the specialist this investigation calls for, held to the checks and output standard of every specialist recorded in `expert_persona` in the app'"'"'s `app-context.json`; with no `expert_persona` set, work as that specialist alone.'
+WANT_INV='Work as the specialist this investigation calls for, held to the checks and output standard of every specialist recorded in `expert_persona` in the app'"'"'s `app-context.json`; with no `expert_persona` set, or an older value the reference does not count (its "Reading an older value"), work as that specialist alone.'
 READERS="debug-it nemo-it fix-it argo-it try-it deadcode-it resolve-it"
 for s in $READERS threats-it; do
   v="WANT_${s//-/_}"

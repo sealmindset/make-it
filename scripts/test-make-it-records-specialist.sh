@@ -92,20 +92,22 @@ chosen:
    order decides the primary" paragraph. In app-context they are carried by: security --
    `compliance`, `purpose`, `features` (personal data as rule 2 defines it, not the sign-in
    accounts every app has); data -- `multi_tenancy.needed` and the answers; reliability --
-   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI
-   -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
+   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts` (the app's own AI use, never
+   the scaffold's AI Instructions screens); a variant -- the
    `variant_config` fields its definition file names, at the rank it declares.
-3. Each signal is written `<field>: <value>`, and one the user did not state (a guess or a smart
-   default, such as a rough user count) is marked `"unconfirmed": true`.
+3. Each signal is written `<field>: <value>`. Only what the person said counts: a smart default
+   /make-it filled in is not a signal, and one the person gave only as a guess ("maybe a few
+   thousand") is marked `"unconfirmed": true`.
 4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
-5. If `app-context.json` already holds a record (a returning run), compare it with the new one as
-   the reference's "Same record or a different one" says: with the same specialists only the
+5. If `app-context.json` already holds a record (a returning run), update it as the reference's
+   "The record is the starting point" says (keep each signal the answers do not disprove), then
+   compare as its "Same record or a different one" says: with the same specialists only the
    signals are brought up to date, silently; different specialists write the new one. When the new
    one is written over a record, the one plain line (e.g. "Your app now gets a security specialist
    because it takes card payments.") goes in the plain-English summary's sentence on what departs
    from the standard setup, and into `CHANGELOG.md`: now if the file exists, otherwise in the
-   initial entry Build step g writes. A value the reference reads as no record (its "Reading an
-   older value") is not a record: write the new one and say nothing.
+   initial entry Build step g writes. An older value (the reference's "Reading an older value") is not compared: replace it and say
+   S15's line the same way.
 
 The record is never a plain text value and never a generalist. /make-it builds and reviews in the
 role of every specialist in the record, the primary leading, and hands the record to every
@@ -187,7 +189,7 @@ def rank(entry):  # by rank (D7, G): the floor by its project_type, a rule 2 spe
 def specialists(r): return [rank(e) for e in [r["primary"]] + r["added"]]
 def design(existing, ctx, guessed, today):  # step 5 and the reference's "Same record or a different one" (D7, D9)
     new = derive(ctx, guessed, today)
-    if not reads_as_record(existing): return new, False
+    if not isinstance(existing, dict) or not reads_as_record(existing): return new, True  # an older value: replaced, S15's line
     if specialists(as_record(existing)) != specialists(new): return new, True
     kept = copy.deepcopy(existing)  # names, set_by and set_at kept; the signal lists brought up to date, silently
     for old, cur in zip([kept["primary"]] + kept["added"], [new["primary"]] + new["added"]): old["signals"] = cur["signals"]
@@ -236,9 +238,9 @@ CASES = [  # (name, existing, guessed now, want record, want a line said)
   ("the same specialists, a signal that is gone (B)", extra, ["users.estimated_count"], older, False),
   ("the same specialists, the floor spelled \"Next.js 15\" (G)", spelled, ["users.estimated_count"], spelled, False),
   ("different specialists (the low-risk record)", LOW[2], ["users.estimated_count"], PAY[2], True),
-  ("an empty string", "", ["users.estimated_count"], PAY[2], False),
-  ("the template's empty record", {"primary": {"specialist": "", "signals": []}, "added": [], "set_by": "", "set_at": ""}, ["users.estimated_count"], PAY[2], False),
-  ('the text "generalist"', "generalist", ["users.estimated_count"], PAY[2], False),
+  ("an empty string (an older value: S15's line)", "", ["users.estimated_count"], PAY[2], True),
+  ("the template's empty record (an older value: S15's line)", {"primary": {"specialist": "", "signals": []}, "added": [], "set_by": "", "set_at": ""}, ["users.estimated_count"], PAY[2], True),
+  ('the text "generalist" (an older value: S15\'s line)', "generalist", ["users.estimated_count"], PAY[2], True),
   ("an older text value naming a specialist", "Senior full-stack engineer", ["users.estimated_count"], PAY[2], True)]
 for name, existing, guessed, want, said in CASES:
     rec, line = design(existing, PAY[0], guessed, "2026-11-21")
@@ -257,7 +259,7 @@ if [ -z "${1:-}" ]; then
   fails()  { local d; d="$(edit "$@")" || return 1; ! bash "$SELF" "$d" >/dev/null 2>&1; }
   passes() { local d; d="$(edit "$@")" || return 1; bash "$SELF" "$d" >/dev/null 2>&1 || { bash "$SELF" "$d" | grep -A3 "^FAIL" | head -8 | sed "s|^|    inner: |"; false; }; }
   add() { fails "$1" "$2" "$2$3"; }
-  STEP5='A value the reference reads as no record (its "Reading an older value") is not a record: write the new one and say nothing.'
+  STEP5='S15'"'"'s line the same way.'
   check "(control) the unchanged copy passes" 'd="$(copy)"; bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control, D5) a harmless sentence added inside the Design block fails" 'add "$MK" "$STEP5" " This keeps things tidy."'
   check "(control, D5) a harmless sentence added inside the Phase B brief fails" 'add "$MK" "Stay sequential on shared files." " This keeps things tidy."'

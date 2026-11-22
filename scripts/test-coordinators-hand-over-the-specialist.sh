@@ -75,8 +75,8 @@ app's `app-context.json` names (the template's `[PROJECT_SPECIALISTS]` slot), an
 specialist that task's domain calls for (`[TASK_SPECIALIST]`). The implementer and the test-writer
 work as the task specialist, held to the checks and output standard of every specialist recorded
 in `expert_persona`; the task reviewer, the adversarial reviewer and the final `/code-review`
-review against those checks too. With no `expert_persona` set, or a run outside an app, the slot is
-left empty and each agent works as its task specialist alone and says nothing. Choose the task
+review against those checks too. With no `expert_persona` set, an older value the reference does not count (its "Reading an older value"), or a run outside an
+app, the slot is left empty and each agent works as its task specialist alone and says nothing. Choose the task
 specialist per task from the task's text; never work a project specialist out from signals, and
 never change the specialist record. No user prompt. See the reference below.
 
@@ -90,9 +90,9 @@ IFS= read -r -d '' WANT_dispatch_it <<'BLOCK' || true
 /dispatch-it adopts no specialist itself. Every agent it launches on app code is handed, in its
 prompt, the project specialist (the specialists the `expert_persona` field in the app's
 `app-context.json` names) and the task specialist its own problem calls for: a security problem →
-application security engineer; a slow or flaky bug → SRE / performance engineer; a data problem →
+application security engineer; a slow or flaky bug → senior maintainer of that stack; a data problem →
 data engineer. The agent works as its task specialist, held to the checks and output standard of
-every specialist recorded in `expert_persona`. With no `expert_persona` set, or a run outside an
+every specialist recorded in `expert_persona`. With no `expert_persona` set, an older value the reference does not count (its "Reading an older value"), or a run outside an
 app, the agent works as its task specialist alone and says nothing. Choose the task specialist per
 agent from its problem; never work a project specialist out from signals, and never change the
 specialist record. No user prompt. See the reference below.
@@ -103,17 +103,18 @@ specialist record. No user prompt. See the reference below.
 BLOCK
 IFS= read -r -d '' WANT_work <<'BLOCK' || true
 ## Your specialist
-Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none].
+Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none or the field holds an older value the reference does not count (its "Reading an older value")].
 Work as the task specialist, held to the checks and output standard of every specialist listed as the project specialist (`expert-personas.md`, "Each project specialist's checks"). If none is listed, work as the task specialist alone and say nothing about it.
 BLOCK
 IFS= read -r -d '' WANT_review <<'BLOCK' || true
 ## Your specialist
-Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none].
+Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none or the field holds an older value the reference does not count (its "Reading an older value")].
 Review as the task specialist, against the checks and output standard of every specialist listed as the project specialist as well as your own (`expert-personas.md`, "Each project specialist's checks"). If none is listed, review as the task specialist alone and say nothing about it.
 BLOCK
 IFS= read -r -d '' WANT_item <<'BLOCK' || true
 4. **Specialist** — name the agent's task specialist and, under "Project specialist:", the
-   specialists the app's `expert_persona` field names (leave it empty when there are none). The
+   specialists the app's `expert_persona` field names (leave it empty when there are none or the field holds an older value the reference does not
+   count). The
    agent works as its task specialist, held to the checks and output standard of every specialist
    listed; with none listed, as its task specialist alone, saying nothing about it.
 BLOCK
