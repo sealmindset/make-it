@@ -260,15 +260,11 @@ Informational or accepted risk.
 **Git strategy:**
 How would you like me to handle git?
 1. Create a new `fix-it/[date]` branch
-2. Work on the current branch (`[current branch]`), one commit for everything
-3. Work on the current branch (`[current branch]`), one commit per fix category
+2. Work on the current branch, one commit for everything
+3. Work on the current branch, one commit per fix category
 4. Not now -- nothing is changed
 
 Pick one."
-
-`[current branch]` is `git branch --show-current` (`work` after a /make-it build). When it is
-`main` or `master` and the project's `.pre-commit-config.yaml` has `no-commit-to-branch`, leave
-options 2 and 3 out: that hook refuses every save there.
 
 **Wait for user approval before making any changes.**
 
