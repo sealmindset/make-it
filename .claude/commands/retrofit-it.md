@@ -584,8 +584,9 @@ anything: the checks this project runs before every save (a scan for passwords a
 on saving straight to the main copy) are switched off on this computer. [when `pre-commit install`
 failed: the reason, in plain words / otherwise: Run /retrofit-it again and pick Install when I ask
 about pre-commit.]" A folder that wasn't under git yet gets the same step right after the
-snapshot, before Phase 5: its snapshot is its first save, the one `pre-commit install` follows (as
-in /make-it step 41c).
+snapshot, before Phase 5: its snapshot is its first save, the one `pre-commit install` follows.
+Unlike /make-it's step 41c, nothing here moves the app to a `work` branch: an existing repo keeps
+its own branches, and Phase 5 makes the retrofit's own branch as it always has.
 
 **After they pick, make the snapshot if there is none yet** (a re-run keeps the earlier one, as
 the ask said). **Own repo** (the app folder is the top of its repo): first save their unsaved

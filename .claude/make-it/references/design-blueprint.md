@@ -3021,10 +3021,10 @@ Every scaffolded app ships with linting, formatting, type checking, secret detec
 
 `.gitleaks.toml` configures secret detection with allowlists for known-safe patterns:
 - `.env.example` (placeholder values, not real secrets)
-- `mock-services/` (mock OIDC tokens are not real)
 - `scripts/seed-mock-services.sh` (mock data)
-- Test fixtures
 - Specific mock token patterns (`mock-oidc-secret`, `mock-oidc-client`, etc.)
+
+It extends gitleaks' default rules, and it never allowlists a whole folder (`tests/`, `mock-services/`): a real key put there would go unseen.
 
 Runs as a pre-commit hook (fast, local) and can also run in CI pipelines.
 

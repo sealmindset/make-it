@@ -111,6 +111,15 @@ text, while the app uses claude_agent.
 8. Reports back: "Done! Your code is on its way." with the PR link, and "The team will review
    it and let you know when it's live."
 
+**The branch it sends.** A /make-it project is on `work` when /ship-it runs: the build's step 41c
+made the first save on `main` and moved every later save to `work`. So /ship-it sends `work` (or
+the branch of the worktree it runs in) as the pull request's branch, into `main`; it never commits
+to `main` (the project's `no-commit-to-branch` hook refuses that) and never pushes `main` past the
+first build. On the first ship, GitHub has no `main` yet: /ship-it pushes `main` as the build left
+it, then opens the pull request from `work`. /ship-it is a separate plugin: until its SKILL.md says
+this, the person running it should expect it to send `work`, and say so if it offers to commit on
+`main`.
+
 **Two modes:**
 | Command | What it does |
 |---------|-------------|
