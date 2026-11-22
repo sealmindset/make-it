@@ -89,8 +89,8 @@ every route below that changes the app.
    signal that nobody confirms or disproves stays unconfirmed; with no new work there is no
    re-check.
 3. With a trigger, start from the record's signals, `code:` ones included, and apply only the
-   planned work's changes, as the reference's "The record is the starting point" says: the work
-   adds a signal it brings and removes one only when it takes the thing out, with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
+   planned work's changes, as the reference's "The record is the starting point" says: the work adds a signal it brings and removes one only when it takes the thing out or the person
+   says the opposite in the session (never a `code:` signal on words alone), with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
    the work adds is written `<field>: <value>` from the app-context field the work changes, and one the person gave only as a guess is marked `"unconfirmed": true`.
 4. Compare it as the reference's "Same record or a different one" says. With the same
    specialists, keep their names, `set_by` and `set_at`, and bring only the signals up to date,
@@ -108,7 +108,7 @@ Development or /dispatch-it, is handed the same project specialist plus the spec
 needs; it works as both, instead of inferring a specialist of its own.
 BLOCK
 IFS= read -r -d '' S15 <<'BLOCK' || true
-**S15** [Tier 0] [FIX] **Project specialist record** -- `.make-it/app-context.json` holds `expert_persona` as the record `references/expert-personas.md` describes (`primary`, `added`, `set_by`, `set_at`). An older value -- a plain text value, an empty one, a record with an empty `primary.specialist`, or no field -- fails. While `project_type` is unset the check is skipped with no line: it runs once `project_type` becomes set. Fix, once (at /resume-it's catch-up, or in /make-it's or /retrofit-it's build-verify): work the record out by the reference's rule from `app-context.json`, with `set_by` `"/resume-it"` and `set_at` today's date, write it in place of the older value, and say one plain line to the user with the same line in `CHANGELOG.md` (for a plain text value that named a specialist, the line says what it was).  The fix runs once: after it the check passes.
+**S15** [Tier 0] [FIX] **Project specialist record** -- `.make-it/app-context.json` holds `expert_persona` as the record `references/expert-personas.md` describes (`primary`, `added`, `set_by`, `set_at`). An older value -- a plain text value, an empty one, a record with an empty `primary.specialist`, or no field -- fails. While `project_type` is unset the check is skipped with no line: it runs once `project_type` becomes set. Fix, once (at /resume-it's catch-up, or in /make-it's or /retrofit-it's build-verify): work the record out by the reference's rule from `app-context.json`, with `set_by` the skill running the check (`"/resume-it"`, `"/make-it"` or `"/retrofit-it"`) and `set_at` today's date, write it in place of the older value, and say one plain line to the user with the same line in `CHANGELOG.md` (for a plain text value that named a specialist, the line says what it was). The fix runs once: after it the check passes.
 BLOCK
 S15="${S15%$'\n'}"
 line() { grep -n -E "$1" "$2" | head -1 | cut -d: -f1; }
@@ -169,7 +169,7 @@ def migrate(value, ctx):  # S15: an older value (or no field) becomes the record
     if isinstance(value, dict) and set(value) == {"primary", "added", "set_by", "set_at"} and value["primary"].get("specialist"):
         return value, False
     if not ctx.get("project_type"): return value, False  # skipped with no line while project_type is unset
-    return derive(ctx, []), True
+    return derive(ctx, []), True  # set_by: the skill running the check (here /resume-it)
 base = lambda **kw: {**{"project_type": "web-app", "stack": "FastAPI + Next.js", "features": ["equipment list"],
     "users": {"internal_or_external": "internal", "estimated_count": "15"}, "multi_tenancy": {"needed": False},
     "ai_features": {"usage_level": "none"}}, **kw}
@@ -220,7 +220,9 @@ def fail(m): print("  cross-writer paper check: " + m); sys.exit(1)
 for src, s in ((ref, "never rebuilds the record from one kind of evidence"), (ref, "a writer does not record a signal its evidence cannot show"),
                (ref, "The AI Instructions admin screens every web app gets from the scaffold never count"),
                (ref, "it cannot disprove a signal from the answers or `app-context.json` that the code says nothing about"),
-               (rf, "where the code shows nothing, there is no signal"), (rs, "start from the record's signals, `code:` ones included")):
+               (rf, "where the code shows nothing, there is no signal"), (rs, "start from the record's signals, `code:` ones included"),
+               (ref, "the person's words alone never remove it"), (ref, "and what the person says in the session, only when it states the opposite"),
+               (rs, "or the person says the opposite in the session (never a `code:` signal on words alone)")):
     if s not in src: fail("the wording lacks: " + s)
 RANKS = ["security", "data", "reliability", "ai"]
 def specialists(rec): return [k for k in RANKS if rec.get(k)] + ["floor"]
@@ -278,9 +280,26 @@ m = make_it({"features": ["card payments"], "count": "thousands"})
 r, line = retrofit(m, {"payment_path": False})
 if r["security"] or "users.estimated_count: thousands" not in r["reliability"] or not line: fail("(e) removal not by own evidence")
 print("  (e) the code disproves the payments answer (removed, line said); the user count it cannot see stays")
+def says(existing, opposite):  # the person's words remove an answer-based signal, never a code: one
+    rec = {k: [g for g in v if g.startswith("code: ") or g not in opposite] for k, v in existing.items()}
+    return rec, specialists(rec) != specialists(existing)
+# (f) an unconfirmed "thousands of users" signal; the person says "20 internal users": it goes; a line only if the specialists changed
+m = make_it({"features": ["card payments"], "count": "thousands"})
+r, line = says(m, ["users.estimated_count: thousands"])
+if r["reliability"] or not line: fail("(f) the count stayed, or the specialists changed without a line")
+m2 = make_it({"features": ["card payments"], "count": "thousands", "external": True})
+r2, line2 = says(m2, ["users.estimated_count: thousands"])
+if "users.estimated_count: thousands" in r2["reliability"] or line2: fail("(f) the count stayed, or a line with the same specialists")
+print("  (f) the person says 20 internal users: the count goes; a line only when the specialists change")
+# (g) make-it -> retrofit-it no longer flips: the person's "no payments" does not remove the code's payment path
+r, _ = retrofit(make_it({"features": ["card payments"]}), {"payment_path": True})
+m, l1 = says(r, ["features: card payments"])
+r, l2 = retrofit(m, {"payment_path": True})
+if not r["security"] or l1 or l2: fail("(g) the record flipped")
+print("  (g) /make-it's \"no payments\" over a code: payment path, then /retrofit-it: no flip, no line")
 PY
 }
-check "cross-writer paper checks (a)-(e) (the test's own derivation, gated on the wording)" 'cross'
+check "cross-writer paper checks (a)-(g) (the test's own derivation, gated on the wording)" 'cross'
 
 # 3. controls (this repo only), each with its expected result
 if [ -z "${1:-}" ]; then
@@ -305,6 +324,9 @@ if [ -z "${1:-}" ]; then
   check "(control) fails: the block migrates older values every session" 'fails "$RS" "catch-up check S15 brings it up to the record'"'"'s shape once." "it is migrated again in every session."'
   check "(control) fails: S15 runs every session instead of once" 'fails "$BS" "The fix runs once: after it the check passes." "The fix runs every session."'
   check "(control) fails: S15 migrates silently" 'fails "$BS" "and say one plain line to the user with the same line in \`CHANGELOG.md\`" "silently"'
+  check "(control) fails: S15 writes set_by /resume-it whoever runs it" 'fails "$BS" "with \`set_by\` the skill running the check (\`\"/resume-it\"\`, \`\"/make-it\"\` or \`\"/retrofit-it\"\`)" "with \`set_by\` \`\"/resume-it\"\`"'
+  check "(control) fails: /resume-it may not remove a signal on the person's words" 'fails "$RS" " or the person
+   says the opposite in the session (never a \`code:\` signal on words alone)" ""'
   check "(control) fails: S15 runs while project_type is unset" 'fails "$BS" " While \`project_type\` is unset the check is skipped with no line: it runs once \`project_type\` becomes set." ""'
   check "(control) fails: S15 passes a record with an empty primary" 'fails "$BS" " a record with an empty \`primary.specialist\`," ""'
   check "(control) fails: the re-check rebuilds the record from app-context.json (cross-writer check)" 'fails "$RS" "start from the record'"'"'s signals, \`code:\` ones included, and apply only the planned work'"'"'s changes" "work the record out again from app-context.json"'
