@@ -1524,9 +1524,8 @@ permissions, pages, API, seed data, mock services, and logout all verified.
 
 41c. **Switch on the checks before every save, save the build, and move to `work` (silent -- checks
 Q12, VC02).** The hooks go on first, so the first save is checked too: gitleaks scans everything
-it saves. That one save skips `no-commit-to-branch` (it is the save that belongs on the default
-branch), the two frontend checks that run in Docker, and ruff (the scaffold's own Python doesn't
-pass it yet). Then the project moves to a working branch, `work`, so every later save goes there
+it saves. That one save skips only `no-commit-to-branch` (it is the save that belongs on the default
+branch) and the two frontend checks that run in Docker. Then the project moves to a working branch, `work`, so every later save goes there
 and the default branch stays as the build left it until /ship-it. Before it, run `git status --short` and check that
 nothing secret-looking is about to be saved (never save a `.env` or key file; the scaffold's
 `.gitignore` leaves them out). Then, in the project (safe to run again):
@@ -1539,7 +1538,7 @@ hk="$(git rev-parse --git-path hooks/pre-commit)"
 git rev-parse -q --verify HEAD >/dev/null ||
   SKIP=no-commit-to-branch git commit -q --allow-empty -m "Start" || { echo "FIRST SAVE REFUSED"; exit 1; }
 if [ "$(git rev-list --count HEAD)" = 1 ]; then
-  git add -A && SKIP=no-commit-to-branch,eslint,prettier,ruff,ruff-format git commit -q -m "Initial build" ||
+  git add -A && SKIP=no-commit-to-branch,eslint,prettier git commit -q -m "Initial build" ||
     { echo "FIRST SAVE REFUSED"; exit 1; }
 fi
 [ "$(git branch --show-current)" = work ] || git switch -q work 2>/dev/null || git switch -q -c work || { echo "NO WORK BRANCH"; exit 1; }
@@ -1552,8 +1551,8 @@ It must print `HOOKS ON` (Q12 is [BLOCK]). Otherwise fix the cause and run it ag
   set): stop before /try-it and tell the user: "I couldn't switch on the checks your project runs
   before every save (a scan for passwords and keys, and a stop on saving straight to the main
   copy), so I've stopped before showing you the app. [the reason, in plain words]"
-- `FIRST SAVE REFUSED`: a hook that tidies files (trailing spaces, line endings) changed some --
-  run it again and they are saved; gitleaks found a value that looks like a password or key --
+- `FIRST SAVE REFUSED`: a hook that tidies files (trailing spaces, line endings, ruff's fixes)
+  changed some -- run it again and they are saved; gitleaks found a value that looks like a password or key --
   move it into `.env` (as the security step does), then run it again; git doesn't know the user's
   name and email -- ask for them.
 

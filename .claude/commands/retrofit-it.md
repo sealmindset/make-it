@@ -637,7 +637,13 @@ else
       ':(top,glob)**/*credentials*.json' \
       ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' ':(top,glob)**/*.db' \
       ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not save the unsaved changes"
-    git diff --cached --quiet || git commit -q -m "Save pre-retrofit state" || fail "could not save the unsaved changes"
+    # The app as it is: only the project's secret checks run on this one save, never its lint or format hooks
+    sk=$(sed -n 's/^ *- id: *//p' .pre-commit-config.yaml 2>/dev/null | grep -vxE 'gitleaks|detect-private-key|detect-secrets|detect-aws-credentials' | paste -sd, -)
+    git diff --cached --quiet || SKIP="$sk" git commit -q -m "Save pre-retrofit state" >"$bak/save.log" 2>&1 || {
+      grep -qE -- '- hook id: (gitleaks|detect-private-key|detect-secrets|detect-aws-credentials)$' "$bak/save.log" &&
+        { rm -f "$bak/save.log"; fail "what looks like a password or key is in your unsaved changes"; }
+      rm -f "$bak/save.log"; fail "could not save the unsaved changes"; }
+    rm -f "$bak/save.log"
   fi
   tag="pre-retrofit-$(basename "$app" | tr -cs 'A-Za-z0-9_-' '-')"; tag=${tag%-}   # one per app folder
   if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
@@ -655,7 +661,9 @@ fi
 here, before any retrofit change.** Tell the user plainly: "I couldn't make the snapshot of your
 files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git doesn't know your
 name and email yet; run `git config --global user.name "Your Name"` and `git config --global
-user.email "you@example.com"`, then run /retrofit-it again.']" Never go on as if a snapshot
+user.email "you@example.com"`, then run /retrofit-it again.' / for a password or key: 'Something
+in your unsaved changes looks like a password or key, so I didn't save it. Move it into your .env
+file, then run /retrofit-it again.']" Never go on as if a snapshot
 exists when it does not.
 
 **Then write the record** (`left-out-record.md`) in the folder the work runs in (`work`: the app
