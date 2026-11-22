@@ -176,6 +176,25 @@ git pull
 bash install.sh
 ```
 
+### The guard against `git push --force`
+
+The installer adds one hook to your Claude settings (`~/.claude/settings.json`). It stops Claude
+from running `git push --force` (or `-f`, `--mirror`, or a `+branch` push) in **every project on
+this computer**, because those can overwrite work on GitHub that nobody has seen. `git push
+--force-with-lease` still works. Everything else in your settings stays as it was, and a copy of
+the old file is kept beside it (`settings.json.bak-<date>`).
+
+To remove it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh | bash -s -- --remove-force-push-guard
+```
+
+On Windows (PowerShell): `$env:MAKEIT_FORCE_PUSH_GUARD = "remove"; irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex`
+
+Once removed (that way, or by deleting it from `settings.json` yourself), later updates leave it
+out. To add it back, run the same command with `--add-force-push-guard` (on Windows, `"add"`).
+
 ---
 
 ## Skills Overview

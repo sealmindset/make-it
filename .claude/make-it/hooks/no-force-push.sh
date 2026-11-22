@@ -6,17 +6,23 @@
 # inside a cluster such as -uf), --mirror, and a +refspec (+main, +HEAD:main). Lets through
 # --force-with-lease and --force-if-includes, which refuse when the online copy changed.
 # Finds the push wherever git starts a command: after ; && || | ( ) ` or a new line, after
-# VAR=value, behind env / command / sudo / nohup / time / exec, as /usr/bin/git or git.exe, with
-# git's own options first (git -C dir push, git -c k=v push), and with the flags before or after
-# the remote. Words inside quotes are one word, so a commit message that mentions a force push is
-# not refused. A tripwire for mistakes, not proof against someone hiding a push (an alias, a
-# config refspec, bash -c "..."), which it does not look for.
+# VAR=value, behind env / command / sudo / doas / nice / nohup / time / exec / builtin (with any
+# options they take, such as sudo -u root or nice -n 5, and as /usr/bin/env), as /usr/bin/git or
+# git.exe, with git's own options first (git -C dir push, git -c k=v push), and with the flags
+# before or after the remote. Words inside quotes are one word, so a commit message that mentions a
+# force push is not refused.
+#
+# A guard against mistakes, not against hiding a push. It does NOT see: bash -c / sh -c / eval
+# strings, xargs, git aliases, a force refspec set in git config (remote.*.push, remote.*.mirror),
+# $(...) or backticks inside double quotes, or quote-splitting such as pu''sh.
 #
 # Failure mode: fails OPEN on its own errors only for a command that is not a force push. When it
 # can't read the command (no "command" field, an unterminated string or quote, awk missing or
-# failing), it reads the raw text instead: a push with any force sign in it is refused; anything
-# else is let through. If bash cannot run this file at all, Claude Code reports a hook error and
-# does not block; nothing in this file can change that.
+# failing), or the input is longer than 64 KB, it reads the command's raw text instead (from its
+# "command" key on, or the whole input when there is none): a push with any force sign in it is
+# refused; anything else is let through. The installers also set "onFailure": "block" (Claude Code
+# 2.1.295 and later), so a hook that can't start or crashes blocks the call instead of letting it
+# through.
 #
 # Exit 0 = allowed. Exit 2 = refused (Claude Code gives Claude the message and doesn't run it).
 # The reading is done in awk: bash's own string loops slow down with the square of a long command.
@@ -31,7 +37,8 @@ refuse() {
 input=$(cat) || input=""
 case $input in *push*) ;; *) exit 0 ;; esac
 
-out=$(printf '%s' "$input" | awk '
+out=""
+[ "${#input}" -le 65536 ] && out=$(printf '%s' "$input" | awk '
 function ws(c) { return c == " " || c == "\t" || c == "\n" || c == "\r" }
 function word() { if (have) toks[++nt] = tok; tok = ""; have = 0 }
 function op() { word(); toks[++nt] = "\003" }
@@ -95,9 +102,14 @@ END {
     if (skip) { skip = 0; continue }
     if (state == "start") {
       if (t ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || t ~ /^-/) continue
-      if (t ~ /^(env|command|sudo|nohup|time|exec|builtin|nice|then|do|else|if|elif|while|until|!|\{)$/) continue
+      if (t ~ /^(then|do|else|if|elif|while|until|!|\{)$/) continue
       b = t; sub(/.*\//, "", b); sub(/\.(exe|EXE)$/, "", b)
+      if (b ~ /^(env|command|sudo|doas|nohup|time|exec|builtin|nice)$/) { state = "wrap"; continue }
       state = (b == "git") ? "git" : "other"
+    } else if (state == "wrap") {
+      # the wrapper options and their values: every word up to the git it runs
+      b = t; sub(/.*\//, "", b); sub(/\.(exe|EXE)$/, "", b)
+      if (b == "git") state = "git"
     } else if (state == "git") {
       if (t ~ /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--super-prefix)$/) skip = 1
       else if (t ~ /^-/) ;
@@ -128,7 +140,24 @@ case $out in
   REFUSE:*) refuse "${out#REFUSE:}" ;;
 esac
 
-# The command could not be read: decide from the raw text, refusing any push with a force sign.
+# The command could not be read (or is too long to read quickly): decide from its raw text -- from
+# its "command" key to the next key Claude Code sends, or the whole input -- refusing any push with
+# a force sign. awk does it (bash's own replace is slow on megabytes); bash does it if awk can't.
+v=$(printf '%s' "$input" | awk 'BEGIN { RS = "\001" } { s = s $0 } END {
+  p = index(s, "\"command\"")
+  if (p) {
+    s = substr(s, p + 9); q = 0; split("\"description\" \"timeout\" \"run_in_background\"", ks, " ")
+    for (k in ks) { x = index(s, ks[k]); if (x && (!q || x < q)) q = x }
+    if (q) s = substr(s, 1, q - 1)
+  }
+  if (!index(s, "push")) { print "OK"; exit }
+  gsub(/--force-with-lease|--force-if-includes/, "", s)
+  if (index(s, "--force") || index(s, "--mirror") || index(s, "+") || s ~ /(^|[^[:alnum:]-])-[[:alpha:]]*f/) print "FORCE"
+  else print "OK" }' 2>/dev/null)
+case $v in
+  OK) exit 0 ;;
+  FORCE) refuse "a git push I couldn't fully read, with a force sign in it," ;;
+esac
 t=${input//--force-with-lease/}; t=${t//--force-if-includes/}
 case $t in *--force*|*--mirror*|*+*) refuse "a git push I couldn't fully read, with a force sign in it," ;; esac
 [[ $t =~ (^|[^[:alnum:]-])-[[:alpha:]]*f ]] && refuse "a git push I couldn't fully read, with a force sign in it,"

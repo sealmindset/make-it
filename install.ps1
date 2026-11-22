@@ -993,7 +993,9 @@ function Install-MakeItSkills($state) {
     Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $newDir -Recurse -Force
     if (Test-Path $MAKEIT_DIR) {
         # an ordinary file only: a link is not followed, and its answers are asked again
-        Get-ChildItem -Path $MAKEIT_DIR -Filter "hostile-code-*.json" -File -ErrorAction SilentlyContinue |
+        # (and whether the user removed the force-push guard: force-push-guard.state)
+        @(Get-ChildItem -Path $MAKEIT_DIR -Filter "hostile-code-*.json" -File -ErrorAction SilentlyContinue) +
+        @(Get-ChildItem -Path $MAKEIT_DIR -Filter "force-push-guard.state" -File -ErrorAction SilentlyContinue) |
             Where-Object { -not $_.LinkType } |
             ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $newDir -Force -ErrorAction Stop }
         Remove-Item -Path $MAKEIT_DIR -Recurse -Force
@@ -1040,7 +1042,9 @@ function Install-MakeItSkills($state) {
 
     # The guard that refuses Claude's `git push --force`: a Claude Code hook in settings.json. The
     # helper merges (everything in the file stays, a copy is kept before the first change, a second
-    # install adds nothing) and leaves a file it can't read alone. Claude Code runs it with git-bash.
+    # install adds nothing, an older make-it entry is replaced) and leaves a file it can't read
+    # alone. Claude Code runs it with git-bash. Once the user removes it ($env:MAKEIT_FORCE_PUSH_GUARD
+    # = "remove", or by deleting it from settings.json), later installs leave it out until "add".
     $guard = (Join-Path (Join-Path $MAKEIT_DIR "hooks") "no-force-push.sh") -replace '\\', '/'
     $bashExe = $env:CLAUDE_CODE_GIT_BASH_PATH
     if (-not $bashExe) { $bashExe = [System.Environment]::GetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "User") }
@@ -1048,9 +1052,19 @@ function Install-MakeItSkills($state) {
         Fail "Could not find git-bash (bash.exe), so the guard that stops git push --force is not added. Make sure Git for Windows is installed, then run this installer again."
     }
     $guardCmd = "`"$($bashExe -replace '\\', '/')`" `"$guard`""
-    & (Join-Path (Join-Path $MAKEIT_DIR "scripts") "add-no-force-push-hook.ps1") -Path (Join-Path $CLAUDE_DIR "settings.json") -Command $guardCmd
+    $guardMode = if ($env:MAKEIT_FORCE_PUSH_GUARD -in @("add", "remove")) { $env:MAKEIT_FORCE_PUSH_GUARD } else { "auto" }
+    $guardOut = & (Join-Path (Join-Path $MAKEIT_DIR "scripts") "add-no-force-push-hook.ps1") -Path (Join-Path $CLAUDE_DIR "settings.json") `
+        -Command $guardCmd -HookFile (Join-Path (Join-Path $MAKEIT_DIR "hooks") "no-force-push.sh") `
+        -StateFile (Join-Path $MAKEIT_DIR "force-push-guard.state") -Mode $guardMode 6>&1
     if ($LASTEXITCODE -ne 0) {
-        Fail "The skills are installed, but the guard that stops git push --force is not (see the line above)."
+        Fail "The skills are installed, but the guard that stops git push --force is not changed (see the line above)."
+    }
+    Ok "$guardOut"
+    if ("$guardOut" -match '^(Added|Updated)') {
+        Info "It stops Claude from running git push --force (or -f, --mirror, or a +branch push) in every project on this computer; git push --force-with-lease still works."
+        Info "To remove it: `$env:MAKEIT_FORCE_PUSH_GUARD = `"remove`"; irm $GITHUB_RAW/install.ps1 | iex"
+    } elseif ("$guardOut" -match 'stays off') {
+        Info "To add it back: `$env:MAKEIT_FORCE_PUSH_GUARD = `"add`"; irm $GITHUB_RAW/install.ps1 | iex"
     }
 
     # Clean up temp directory
