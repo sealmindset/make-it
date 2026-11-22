@@ -1214,6 +1214,12 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 **PART B: Live verification (start the app and test it)**
 
+**Rows checked on the running app.** Each step in Part B names, in its title, the rulebook rows
+it checks, and every row marked `[LIVE]` in `build-standards.md` is named by one of them. A row
+whose feature the app doesn't have is N/A. A check that could not run goes in TODO.md as NOT RUN
+with its reason, never as passed. "As User" means signed in as that role's test user, the way
+step 25 signs in.
+
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
     the stop message):
@@ -1283,17 +1289,17 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
 
-23. **Wait for all services to be healthy** -- poll health endpoints for each service
+23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
 
-24. **Run the mock service seed script:**
+24. **Run the mock service seed script (V03):**
     ```bash
     bash scripts/seed-mock-services.sh
     ```
     If the script fails, diagnose and fix. The mock services must have the correct users
     and data before any testing begins.
 
-25. **Test the auth flow end-to-end for EACH role:**
+25. **Test the auth flow end-to-end for EACH role (V04):**
     For each role defined in app-context.json:
     a. Navigate to the app URL
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
@@ -1305,7 +1311,7 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
 
-26. **Test every API endpoint:**
+26. **Test every API endpoint (V05):**
     For each API route in the app (with a valid JWT):
     a. Call the endpoint
     b. Verify 2xx response
@@ -1313,25 +1319,25 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     d. Verify list endpoints return NON-EMPTY arrays (seed data must exist)
     e. Verify permission-protected endpoints return 403 for unauthorized roles
 
-27. **Test every page:**
+27. **Test every page (V06):**
     For each page defined in app-context.json (with a valid JWT):
     a. Request the page URL
     b. Verify it loads (200)
     c. Verify it has meaningful content (not empty tables, not "no data found")
 
-28. **Test permission boundaries:**
-    For each role, verify:
+28. **Test permission boundaries (V07):**
+    For each role, signed in as in step 25, verify:
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
 
-29. **Test Activity Logs (web-app and api-service only):**
+29. **Test Activity Logs (V08) (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
     b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests),
        and that a signed-in request's event names that user in `user_email` (L09)
     c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
     d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 
-30. **Test Notifications (web-app and api-service only):**
+30. **Test Notifications (V10) (web-app and api-service only):**
     a. Verify GET /api/notifications/count returns valid { unreadCount } for authenticated user
     b. Verify GET /api/notifications returns notifications scoped to the logged-in user
     c. Verify PATCH /api/notifications with { ids: [...] } marks a notification as read
@@ -1362,8 +1368,12 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
          Tailwind semantic classes so they respond to the theme toggle)
        - Fix by replacing with `var(--*)` CSS variables or Tailwind classes
     f. Verify the ModeToggle component uses the `mounted` state pattern (prevents hydration errors)
+    g. In a browser, as User: open the dashboard and click the mode toggle twice. Expect: the
+       `<html>` class switches between `light` and `dark`, localStorage `theme` holds the choice,
+       and the choice stays after a reload. Fail: the class doesn't change, or a page keeps one
+       theme.
 
-33. **Test File Upload (if app has Documents page or upload feature):**
+33. **Test File Upload (V11) (if app has Documents page or upload feature):**
     a. Upload a valid PDF via the upload API endpoint -- verify 200 with extracted text
     b. Upload an image -- verify 200 with base64 content
     c. Upload an oversized file (> MAX_FILE_SIZE) -- verify 413 rejection
@@ -1372,6 +1382,207 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
        this is F03 violation. Must use `require('pdf-parse/lib/pdf-parse')` instead.
        The default import crashes in production Docker with ENOENT on test data file.
     f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
+
+33a. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
+    a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
+       and seed memories in place, send a chat message to an AI agent. Verify the response
+       reflects memory context (e.g., if seed memory says "prefers bullet points", response
+       should use bullet format). Disable brain features, send same message, verify response
+       format differs.
+    b. **BNV02: Curation produces memories** -- Trigger MemoryCuratorAgent via admin API
+       (POST /api/admin/brain/curation/run). Verify job record created in DI03 table.
+       Verify job completes. If unprocessed conversations with memory signals exist,
+       verify at least one new memory created in brain_memories.
+    c. **BNV03: Memory isolation** -- Login as user A, GET /api/brain/memories, note
+       user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
+       user-type memories are NOT returned. Confirm org-type memories with scope 'all'
+       ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
+
+33b. **Test AI accounting (ACV01-ACV03)** -- Skip if ai_features.needed != true
+    a. **ACV01: One call, one priced row** -- trigger one agent; exactly one new ledger row
+       with agent, feature, tier, model, tokens and a cost that matches the price row.
+    b. **ACV02: A cap refuses before spending** -- set the agent's day cap to $0.000001 on the
+       Control Plane, trigger it: no provider call, one refused_budget row, the fallback shown
+       in plain words. Put the cap back.
+    c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
+       today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
+
+**The changed-setting run** (steps 33c, 33d, 33f and 33g use it): stop the backend (`docker
+compose stop backend`; `backend` is the scaffold's service name), start it with one setting
+changed -- `docker compose run -d --rm --service-ports --name live-check -e <SETTING>=<value>
+backend` -- run the check, then put it back: `docker rm -f live-check && docker compose
+--profile dev up -d backend`, and wait for its health check. Never edit `.env` for it. "The AI
+address unreachable" means `http://127.0.0.1:9` in the variable the AI provider reads
+(`config.py` names it).
+
+33c. **Test upload failures, AI analysis and file layouts (F09, F10, F14)** -- Skip a row whose
+    feature the app doesn't have (F10 needs file upload and AI features).
+    - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF (`head -c 2048 /dev/urandom >
+      bad.pdf`), to the upload endpoint. Expect: 400 for the empty file and 422 for the corrupt
+      one, each with a plain message. Fail: any 500, or a body naming a library, a stack trace
+      or a file path.
+    - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect: the stored document has its
+      extracted text and, kept apart from it, an AI analysis. Then, in the changed-setting run
+      with the AI address unreachable, upload it again. Expect: the upload succeeds and the
+      document is saved with its text and no analysis. Fail: no analysis while the AI is up, the
+      text overwritten by the analysis, or the upload refused while the AI is down.
+    - **F14** -- As the lowest role allowed to import: import the same CSV three times, with 0, 3 and 7 lines above its header
+      row. Expect: all three succeed with the same row count. Fail: any of them fails or counts a
+      different number of rows.
+
+33d. **Test the AI with a changed setting (F11, AI01a, AI01b, AI01d, AI21)** -- Skip unless
+    ai_features.needed = true.
+    - **F11** -- No sign-in: start the backend in the foreground with the AI address unreachable
+      and pre-flight on (`docker compose stop backend`, then `docker compose run --rm
+      --service-ports -e <AI address>=http://127.0.0.1:9 backend`). Expect: within 10 seconds it
+      logs which pre-flight check failed and exits non-zero, and the port never answers. Fail:
+      `/health` answers, or it exits 0. Put the backend back as the changed-setting run does.
+    - **AI01a** -- As User, in the changed-setting run with `AI_MODEL_STANDARD=llama3`: send one
+      chat message. Expect: a reply, and a correction warning in the backend log (`docker logs
+      live-check`) naming the model used instead. Fail: an error to the user, no warning, or
+      `llama3` sent to the provider.
+    - **AI01b** -- Only when `AI_FAILOVER_PROVIDER` is set. As User, in the changed-setting run
+      with the primary provider's address unreachable: send one chat message. Expect: a reply
+      from the failover provider, and the log shows the switch. Fail: an error to the user.
+    - **AI01d** -- Only when `ai_providers.primary` is `claude_agent`. No sign-in: run `docker
+      compose exec backend claude --version` and `docker compose exec backend python -c "import
+      claude_agent_sdk"`. Then as User, in the changed-setting run with
+      `CLAUDE_CODE_OAUTH_TOKEN=` (empty): send one chat message. Expect: a version line, a clean
+      import, and the friendly "run `claude setup-token`" message (available: false). Fail:
+      either command fails, or a 500 or a crash without the token.
+    - **AI21** -- As User, in the changed-setting run with the AI address unreachable: trigger an
+      agent with `rule_based_fallback: true`, then one without it. Expect: the first gives a
+      useful answer ("AI is temporarily unavailable. Please try again shortly." from a
+      conversational agent, a job that ends `completed_without_ai` from a batch one); the second
+      gives a plain error. Fail: the first one errors, or either shows a stack trace.
+
+33e. **Test chat: streaming, history, privacy and the chat screen (V14, AI11, AI12, AI13, AI14)**
+    -- Skip unless the app has conversational AI.
+    - **AI11** -- As User: POST a message to `/api/ai/conversations/{id}/messages` with `Accept:
+      text/event-stream` (`curl -N`). Expect: 200, `Content-Type: text/event-stream`, `data:`
+      token events arriving over time, and a last event with `"done": true`. Fail: another
+      content type, the whole reply in one burst, or no done event.
+    - **AI12** -- As User: create a conversation, send two messages, then GET
+      `/api/ai/conversations/{id}`. Expect: both messages and both replies. Then as Manager (a
+      different person): GET the same id. Expect: 404, and the conversation isn't in that
+      person's list. Fail: missing history, or the second person gets it.
+    - **AI13** -- In a browser, as User: open the chat page and send a message. Expect: the reply
+      appears as it is written, the conversation shows in the sidebar at once, and it is still
+      there after a reload. Fail: the reply appears only when finished, or the sidebar misses it.
+    - **AI14** -- As User: POST the same message with `Accept: application/json`. Expect: 200 and
+      the whole reply as one JSON object. Then in a browser, start a streamed reply and cut it
+      (DevTools: Offline for 3 seconds, then back). Expect: it retries and the full reply
+      appears. Fail: an error on the JSON request, or a lost reply after the cut.
+    - **V14** -- As User: ask for a long answer and watch the stream (`curl -N`). Expect:
+      `{"heartbeat": true}` events while it runs; V14's other items are AI11-AI14 above. Fail: no
+      heartbeat in a reply that runs longer than `AI_SSE_HEARTBEAT_INTERVAL_SECONDS`.
+
+33f. **Test agent routing and the agent patterns (V16, AI20, AI22, AI25, AI26, AI27)** -- Skip
+    unless the app has more than one agent; AI25-AI27 only for an agent that uses that pattern.
+    - **V16** -- As User: for each conversational agent, create a conversation with its
+      `agent_slug` and send a message. As Admin: POST `/api/ai/agents/{slug}/run` for each batch
+      agent. Expect: each reply comes from that agent (its prompt and its data), and each run
+      creates a job with that agent's `task_type`. Fail: a reply from another agent, or a run
+      with no job.
+    - **AI20** -- As Admin: POST `/api/ai/agents/no-such-agent/run`; as User, create a
+      conversation with `agent_slug` `no-such-agent`. Expect: 404 both times. Fail: any other
+      status.
+    - **AI22** -- As Admin: run one batch agent and poll its job. Expect: a `task_type` starting
+      `ai_agent:`, progress that moves, and tokens and cost in the finished job's `result_data`.
+      Fail: no job, progress that stays at 0 until the end, or no tokens or cost.
+    - **AI25** -- As Admin: run the pipeline agent. Expect: its steps run in order (the job's
+      progress or the log). Then run it again in the changed-setting run with the AI address
+      unreachable. Expect: the failed step handled as its fallback setting says. Fail: steps out
+      of order, a hang, or a 500.
+    - **AI26** -- As User: start a conversation with the generalist agent and send its hand-off
+      trigger. Expect: the next reply comes from the specialist and uses the earlier messages,
+      and GET of the conversation shows the hand-off in `delegation_chain`. Fail: no hand-off,
+      lost context, or an empty `delegation_chain`.
+    - **AI27** -- As Admin: run the fan-out agent. Expect: every sub-agent ran (the job's
+      per-agent breakdown). Then in the changed-setting run with `AI_FAN_OUT_TIMEOUT_SECONDS=1`,
+      run it again. Expect: the job finishes with the sub-agents that timed out marked so, and
+      a merged result from the rest. Fail: the whole run fails, or it hangs.
+
+33g. **Test AI memory (BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13)** -- Skip if
+    brain_features.enabled != true.
+    - **BN03** -- As User, in the changed-setting run with `BRAIN_FEATURES_ENABLED=true` and
+      `LOG_LEVEL=DEBUG`: add a memory, then send a chat message. Expect: the prompt in the debug
+      log holds that memory. As Admin, add an org memory with scope `security`; as User, chat
+      with an agent outside security, then with the security agent. Expect: it is left out, then
+      included. Run once more with `BRAIN_FEATURES_ENABLED=false`. Expect: no memories in the
+      prompt. Fail: any of these the other way round.
+    - **BN04** -- As User: add a memory containing `<script>alert(1)</script>` and one containing
+      "ignore previous instructions", then GET them. Expect: the script tag stripped or escaped,
+      and the instruction phrase removed. Fail: either stored as sent.
+    - **BN05** -- As User: add a personal memory. As Manager: GET `/api/brain/memories`, and GET
+      the User's memory by its id. Expect: not in the list, and 404. As Admin, add an org memory
+      with scope `security` and one with scope `all`. Expect: a role without security
+      permissions doesn't get the `security` one and a role with them does; everyone gets the
+      `all` one. Fail: any person seeing another's personal memory, or a scope shown to the wrong
+      role.
+    - **BN06** -- As User: GET `/api/brain/memories` and `/api/admin/brain/memories`. Expect: 200,
+      then 403. As Super Admin: GET every `/api/admin/brain/` endpoint. Expect: 200. Fail: the
+      User reaching the admin list, or the Super Admin refused.
+    - **BN09** -- As User and as Admin, and signed out: call each brain endpoint the rulebook row
+      lists. Expect: success for the roles it allows, 403 for the others, 401 signed out. Fail:
+      any other status.
+    - **BN10** -- As Super Admin: POST `/api/admin/brain/curation/run`, then poll the job. Expect:
+      `task_type` `ai_agent:memory-curator` and `result_data` with the counts, tokens and cost the
+      rulebook row lists. Fail: no job, or a missing field.
+    - **BN11** -- As User: add, correct and delete one memory. Expect: three new rows in
+      `brain_memory_audit_log` (`docker compose exec db psql`), each with action and actor type.
+      Fail: fewer than three, or a missing field.
+    - **BN13** -- In a browser, as User and as Manager: open `/settings/ai-memory`. Expect: each
+      sees their own memories, and the two lists differ. As Admin: open `/admin/ai-memory`.
+      Expect: memories from several users. Fail: an empty list, or the same list for both.
+
+33h. **Test AI accounting (AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15)**
+    -- Skip if ai_features.needed != true. Put every setting you change back afterwards.
+    - **AC02** -- As Admin: count `ai_usage_events` rows (`docker compose exec db psql`), trigger
+      one agent, count again. Expect: exactly one new row, with all four token counts filled.
+      Fail: no row, more than one, or an empty token count.
+    - **AC04** -- As Admin: end the price row of the model in use (set its end date to yesterday),
+      trigger one agent. Expect: the new row has `priced = false` and no cost, and AI Spend's
+      unpriced count went up by one. Add the price back. Expect: the row is priced. Fail: a cost
+      of 0, or `priced = true` with no price.
+    - **AC05** -- As Admin: change the light tier's model on the Control Plane, then trigger a
+      light agent. Expect: its new ledger row has the new model, with no restart. Fail: the old
+      model.
+    - **AC07** -- Only when escalation is on for a light agent. As Admin: trigger it with an input
+      whose answer can't meet its schema. Expect: one standard call follows, with
+      `escalated_from = light`, and no third call. Fail: no step up, or a second one.
+    - **AC08** -- As Admin: lower an agent's tier with no replay. Expect: refused with a plain
+      message. Run the replay on seed tasks, then lower it again. Expect: the replay's result
+      and cost in `control_audit_log`, then the change allowed. Fail: lowered with no replay.
+    - **AC09** -- As Manager (or a role that acts on AI results): approve one seeded AI result
+      unchanged and edit another. Expect: an `accepted` and a `corrected` row in `ai_outcomes`.
+      Fail: either missing.
+    - **AC10** -- In a browser, as Admin: open the page that shows ROI. Expect: it equals the
+      formula worked by hand from the seed rows (`docker compose exec db psql`). Fail: any
+      difference over 1 cent.
+    - **AC11** -- As User: GET and PATCH the Control Plane API. Expect: 403 both times. As Admin:
+      make one change. Expect: exactly one new `control_audit_log` row with before and after.
+      Set an agent `off` and trigger it. Expect: no provider call and no `ok` ledger row. Fail:
+      the User gets in, no audit row, or the agent still calls the AI.
+    - **AC12** -- As Admin: set that agent's day cap below today's seed spend, then trigger it.
+      Expect: a `refused_budget` row with cost 0, no provider call, the agent's fallback answer,
+      and the admins' 100% notice. Fail: an `ok` row, a provider call, or no fallback.
+    - **AC13** -- As Admin, with `INFRA_COST_SOURCE=mock`: run the infra collector twice for the
+      same days. Expect: one row per day, source, service and cost center. On Infra Spend, a
+      source that isn't connected says "not connected". Fail: duplicate rows, or $0 for a
+      source that isn't connected.
+    - **AC14** -- As Admin: issue two statements at once (two POSTs in parallel). Expect:
+      consecutive numbers, both saved. Change a seed price. Expect: an issued statement's total
+      doesn't change. Fail: a gap or a repeat, or a changed total.
+    - **AC15** -- In a browser, as Admin: open the seven AI and spend pages. Expect: each renders
+      with seed data. As User: open them. Expect: refused. As Admin: edit a published prompt
+      without publishing, trigger its agent. Expect: the call still uses the published text.
+      Fail: an empty or broken page, the User let in, or the draft used.
+
+33i. **Run the variant's live checks (P03)** -- Only when ACTIVE_VARIANT is set: run every item
+    under `### Live checks (Part B)` in the variant's definition file.
+    - **P03** -- No sign-in: `curl -sI http://localhost:[FRONTEND_PORT]/sw.js`. Expect: 200 with a
+      JavaScript content type. Fail: any other status, or an HTML page.
 
 **PART C: Fix cycle (silent, automatic)**
 
@@ -1419,30 +1630,6 @@ Common issues and fixes:
 - Hydration mismatch on theme -> add suppressHydrationWarning to <html> and <body>, use mounted pattern in ModeToggle
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
-
-33. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
-    a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
-       and seed memories in place, send a chat message to an AI agent. Verify the response
-       reflects memory context (e.g., if seed memory says "prefers bullet points", response
-       should use bullet format). Disable brain features, send same message, verify response
-       format differs.
-    b. **BNV02: Curation produces memories** -- Trigger MemoryCuratorAgent via admin API
-       (POST /api/admin/brain/curation/run). Verify job record created in DI03 table.
-       Verify job completes. If unprocessed conversations with memory signals exist,
-       verify at least one new memory created in brain_memories.
-    c. **BNV03: Memory isolation** -- Login as user A, GET /api/brain/memories, note
-       user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
-       user-type memories are NOT returned. Confirm org-type memories with scope 'all'
-       ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
-
-33b. **Test AI accounting (ACV01-ACV03)** -- Skip if ai_features.needed != true
-    a. **ACV01: One call, one priced row** -- trigger one agent; exactly one new ledger row
-       with agent, feature, tier, model, tokens and a cost that matches the price row.
-    b. **ACV02: A cap refuses before spending** -- set the agent's day cap to $0.000001 on the
-       Control Plane, trigger it: no provider call, one refused_budget row, the fallback shown
-       in plain words. Put the cap back.
-    c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
-       today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
 
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.

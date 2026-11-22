@@ -168,8 +168,8 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
       run it again. Expect: the job finishes with the sub-agents that timed out marked so, and
       a merged result from the rest. Fail: the whole run fails, or it hangs.
 
-33g. **Test AI memory: by topic, cleaned, private, permissions, endpoints, jobs, audit, samples
-    (BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13)** -- Skip if brain_features.enabled != true.
+33g. **Test AI memory (BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13)** -- Skip if
+    brain_features.enabled != true.
     - **BN03** -- As User, in the changed-setting run with `BRAIN_FEATURES_ENABLED=true` and
       `LOG_LEVEL=DEBUG`: add a memory, then send a chat message. Expect: the prompt in the debug
       log holds that memory. As Admin, add an org memory with scope `security`; as User, chat
@@ -201,9 +201,8 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
       sees their own memories, and the two lists differ. As Admin: open `/admin/ai-memory`.
       Expect: memories from several users. Fail: an empty list, or the same list for both.
 
-33h. **Test AI accounting: metering, prices, controls, caps and the pages (AC02, AC04, AC05,
-    AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15)** -- Skip if ai_features.needed !=
-    true. Put every setting you change back afterwards.
+33h. **Test AI accounting (AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15)**
+    -- Skip if ai_features.needed != true. Put every setting you change back afterwards.
     - **AC02** -- As Admin: count `ai_usage_events` rows (`docker compose exec db psql`), trigger
       one agent, count again. Expect: exactly one new row, with all four token counts filled.
       Fail: no row, more than one, or an empty token count.
