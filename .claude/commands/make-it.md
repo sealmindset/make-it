@@ -1365,9 +1365,9 @@ the item is NOT RUN with the reason "no browser here".
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
        browser) a page that shows a refusal and none of its data or working controls. A page
-       that renders its normal shell with an empty table is a FAIL. On apps built before card
-       E02-S102 that FAIL is expected: report it as "the page isn't guarded, only its data (card
-       E02-S102)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
+       that renders its normal shell with an empty table is a FAIL. On apps built from today's
+       scaffold that FAIL is expected: report it as "the page isn't guarded, only its data (a
+       known scaffold gap)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
        (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
        signed-out person to the sign-in page).
     c. Write refusals. The expected answer never comes from the route's own code, which is what
@@ -1424,12 +1424,12 @@ the item is NOT RUN with the reason "no browser here".
     d. Verify column definitions use `DataTableColumnHeader` (provides Excel filtering + sorting)
     e. Verify `storageKey` prop is set (enables state persistence)
     f. Grep all page files for raw `<table` usage -- any match outside the DataTable
-       component files themselves is a U06 violation. Fix by replacing with DataTable. Until card
-       E02-S103 fixes them, the scaffold's own admin pages have raw tables: a match in
+       component files themselves is a U06 violation. Fix by replacing with DataTable. Until the
+       scaffold is fixed, its own admin pages have raw tables: a match in
        `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
        or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
        `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is reported once as
-       "known, from the scaffold (card E02-S103)", not a FAIL and not fixed. A raw table in any
+       "known, from the scaffold", not a FAIL and not fixed. A raw table in any
        page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
