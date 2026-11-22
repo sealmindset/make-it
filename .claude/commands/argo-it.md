@@ -792,7 +792,7 @@ LATEST_RUN=$(gh run list --workflow=build-and-deploy.yml --limit=1 --json databa
 | `completed` + `failure` | CI failed -- image was never pushed. | "Your build didn't finish successfully. Let me check what went wrong..." Then read the logs, diagnose, and auto-fix if possible. |
 | `in_progress` | CI is still running. | "Your changes are still being built. It usually takes 3-5 minutes -- I'll check again in a couple of minutes." Then re-check (no ask). |
 | No recent run | CI never triggered. Push may not have reached GitHub. | "It looks like your changes haven't been sent yet." Then go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply; never push from here without them. |
-| Run exists but wrong branch | CI ran on a different branch. | "Your build ran on a different branch. Let me push from the right one..." |
+| Run exists but wrong branch | CI ran on a different branch. | "Your last build ran from a different branch than the one you're working on. I'll check your changes and ask before I send anything from this one." Then go to PHASE 5b (redeploy) from its step 1 -- its checks and its "Update {hostname}" pick come first; never push from here. |
 
 **2. If CI succeeded, check if the deploy branch was updated:**
 
@@ -870,11 +870,11 @@ Common issues and plain-language translations:
 | Issue | Auto-fix? | Action |
 |-------|-----------|--------|
 | CI didn't run | Yes | Go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply (same as the step-1 table above) |
-| CI failed (lint/build) | Yes | Fix locally, push (same as pre-push self-review) |
+| CI failed (lint/build) | Yes | Fix the cause in the project's files (the same safe fixes as PHASE 5b 3a) and leave the fix unsaved. Tell the user: "I found why your build failed ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the safe fixes don't cover the cause, tell the user what you found, in plain words, and change nothing. |
 | Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
 | Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
 | Pod running old image | Guide (if no kubectl) | Walk user through Argo CD UI pod delete |
-| Pod crash-looping | Maybe | Read logs, fix code if clear, push again |
+| Pod crash-looping | Maybe | Read the logs; if the cause is clear, fix the code and leave the fix unsaved. Tell the user: "I found why your app keeps stopping ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the cause isn't clear, tell the user what you saw, in plain words, and change nothing. |
 | Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
 | Missing K8s secrets | No | Tell user: "Your app needs some settings that your DevOps team hasn't added yet. Share ONBOARDING-K8S.md with them." |
 
@@ -2050,7 +2050,7 @@ its step 4 saves the user's own changes and sends them with the update.)
 # and argo-it's own files. Not a make-it project: nothing to seal, so nothing to check
 [ -f .make-it/app-context.json ] || exit 0
 pre=$(git rev-parse --show-prefix 2>/dev/null)
-u=$(git status --porcelain=v1 --untracked-files=all --no-renames -- . | cut -c4- | while IFS= read -r f; do
+u=$(git status --porcelain=v1 -z --untracked-files=all --no-renames -- . | tr '\0' '\n' | cut -c4- | while IFS= read -r f; do
   f=${f#"$pre"}
   case "$f" in (*.[mM][dD]|.make-it/*|backend/make-it-stamp.json|.gitattributes) continue;; esac
   for g in {generated_files}; do [ "$f" = "$g" ] && continue 2; done
@@ -2080,15 +2080,17 @@ for f in .make-it/manifest.json .make-it/sealed-files.txt MAKE-IT.md backend/mak
 done
 git ls-files --others -- .make-it/ledger/ | sed -n -E '/^\.make-it\/ledger\/[0-9]{4,}-[0-9a-f]{12}\.json$/p'
 # .gitattributes too, when its only unsaved difference from the saved version is the seal's own lines (watermark.py's
-# header and four lines, added this run or an earlier one); those lines with any other change: stop
+# header and four lines, added this run or an earlier one); those lines with any other change, a blank line too: stop
 if [ -f .gitattributes ] && [ -n "$(git status --porcelain -- .gitattributes)" ]; then
   o="$(git rev-parse --git-dir)/argo-it-gitattributes-saved"
   git show HEAD:./.gitattributes > "$o" 2>/dev/null || : > "$o"
   k=$(awk -v f="$o" 'BEGIN { s["# make-it seal"]=1; s["* -text"]=1; s["MAKE-IT.md merge=union"]=1
       s[".make-it/sealed-files.txt merge=union"]=1; s["backend/make-it-stamp.json merge=union"]=1 }
-    FILENAME == f { old[$0]=1; next }
-    { now[$0]=1; if (!($0 in old)) { if ($0 in s) seal=1; else other=1 } }
-    END { for (l in old) if (!(l in now)) other=1; print (seal ? (other ? "mixed" : "seal") : "none") }' "$o" .gitattributes)
+    FILENAME == f { old[$0]++; next }
+    { now[$0]++ }
+    END { for (l in now) if (now[l] > old[l]) { if (l in s) seal=1; else other=1 }
+          for (l in old) if (old[l] > now[l]) other=1
+          print (seal ? (other ? "mixed" : "seal") : "none") }' "$o" .gitattributes)
   rm -f "$o"
   [ "$k" != mixed ] || { echo "GITATTRIBUTES MIXED"; exit 1; }
   [ "$k" != seal ] || printf '%s\n' .gitattributes
@@ -2962,6 +2964,7 @@ existing pattern.
 
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
+- Troubleshooting (PHASE 5c) never commits, pushes or sends on its own: a fix it makes stays unsaved, and every send from it goes through PHASE 5b from its step 1 (the checks, the read of GitHub, the "Update {hostname}" pick, 3a-3e, then step 4's save and send)
 - The user NEVER sees linter names, tool output, or raw error messages
 - Auto-fix only what's safe (3a's safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user picks which
 - STOP on potential secret leaks -- never commit secrets even if the user says "just push it"
