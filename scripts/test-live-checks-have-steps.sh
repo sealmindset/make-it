@@ -12,6 +12,10 @@
 #   - /make-it's "no reachable AI provider" rows are exactly the rows /resume-it's table does not run because they call
 #     the AI provider; the table covers every `[LIVE]` row once; the live pass is pinned whole.
 #   - /retrofit-it's Part B is /make-it's by reference; the skill tables say how live rows run.
+# Paper case the wording must catch (proof run 2, bug 3): `create_note`'s `Depends(require_permission("notes",
+# "create"))` replaced by `Depends(get_current_user)`. R04's file check names `POST /api/notes/` (a write route with no
+# require_permission, not on the public list); step 28 c expects 403 for it as the lowest role because `notes.create` is
+# in the app's permission list and not in that role's /auth/me, read from the seed, never from the router being checked.
 # A wording test is a tripwire, not a proof: it catches a step dropped, renamed away, turned into a file read or
 # loosened, not an agent skipping a step it read, and not a step that does the wrong thing in the right words.
 # Usage: test-live-checks-have-steps.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on
@@ -52,12 +56,12 @@ never as NOT RUN, and not written to TODO.md. A check that could not run goes in
 RUN with its reason, never as passed. "As User" means signed in as that role's test user, the way
 step 25 signs in. Never print a key or token value: not in a command, a log or the results.
 
-**Browser steps** use the app's own Playwright setup in `e2e/`, run in the Playwright container
-whose version matches `e2e/package.json`'s `@playwright/test`
-(`mcr.microsoft.com/playwright:v<version>-noble`) with `--network host`, so the frontend and the
-sign-in redirects at `localhost` work; nothing is installed on the host. When that can't run (no
-`e2e/`, or the container can't reach the app), the row is NOT RUN with the reason "no browser
-here".
+**Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
+shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
+the host, only when it is already installed there: `cd e2e && npx --no-install playwright
+--version` works and a headless Chromium launches. This build doesn't install it; /try-it's smoke
+test does, later (`npx playwright install chromium`). When it isn't installed or can't launch,
+the item is NOT RUN with the reason "no browser here".
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -126,9 +130,9 @@ here".
     docker compose --profile dev up -d 2>&1
     ```
     If the first command printed a name, it removed a leftover changed-setting run: note "Removed
-    a leftover <project>-live-check container" in the results, and start with
-    `docker compose --profile dev up -d --force-recreate <backend>` so the backend gets its
-    network back.
+    a leftover <project>-live-check container" in the results, and after the start above also run
+    `docker compose --profile dev up -d --wait --force-recreate <backend>` so the backend gets its
+    network back. Every other service starts as usual.
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
@@ -153,19 +157,27 @@ here".
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
     c. Verify the callback completes and a JWT cookie is set
     d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
-    e. Verify the dashboard loads with content (a browser step, as above)
+    e. In a browser: verify the dashboard loads with content
     f. Test logout (POST to /auth/logout, verify JWT cookie is cleared, verify 401 after)
 
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
     A role with no test user in the mock sign-in seed is an M02 gap (one user per role): add the
-    user to the seed and the database seed, then test that role; it is not skipped.
+    user to `scripts/seed-mock-services.sh` and, for the database, in a new migration -- never an
+    edited one, which a database that already exists would not apply -- then test that role; it
+    is not skipped.
 
 26. **Test every API endpoint (V05):**
     For each API route in the app (with a valid JWT): the routes, their methods, required query
     parameters and request bodies come from `GET /openapi.json`; ids and values come from the seed
     data (a GET of the list first).
-    a. Call the endpoint, as a role allowed to use it
+    a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
+       update, then delete of this step's own test record per resource, its name or title starting
+       `live-check-test-`, never a seed record; a resource with no create route isn't written.
+       Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
+       a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
+       aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
+       name the rest in the results as not exercised.
     b. Verify 2xx response
     c. Verify response is valid JSON with expected structure
     d. Verify list endpoints return NON-EMPTY arrays where the seed data has rows for them. A
@@ -178,23 +190,45 @@ here".
     For each page defined in app-context.json (with a valid JWT):
     a. Request the page URL
     b. Verify it loads (200)
-    c. Verify it has meaningful content (not empty tables, not "no data found")
+    c. In a browser: verify it has meaningful content (not empty tables, not "no data found")
 
 28. **Test permission boundaries (V07):**
     For each role, signed in as in step 25, verify:
     a. Can access pages/endpoints they SHOULD access
-    b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
-    c. Write refusals: for each POST, PUT, PATCH and DELETE route in `/openapi.json`, as a role
-       whose `/auth/me` permissions lack the permission the route's `require_permission(resource,
-       action)` names, send the request with an empty JSON body `{}`, and for a route with an id,
-       a random UUID that no record has. Expect: 403 (401 signed out). The permission check runs
-       before the body is checked (FastAPI resolves `require_permission` before body validation),
-       so a refused request writes nothing. Fail: 422 (the request got past a missing guard to
-       validation; nothing was written), 404 (got past it to the lookup), or 2xx (it wrote a
-       record: name the record from the response, delete it as Super Admin through its own
-       route, and if it can't be deleted, put it at the top of TODO.md). Never send a DELETE for
-       an id that exists. In a stack whose permission check doesn't come first, this item is NOT
-       RUN with the reason "writes can't be probed safely here".
+    b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
+       browser) a page that shows a refusal and none of its data or working controls. A page
+       that renders its normal shell with an empty table is a FAIL. On apps built before card
+       E02-S102 that FAIL is expected: report it as "the page isn't guarded, only its data (card
+       E02-S102)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
+       (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
+       signed-out person to the sign-in page).
+    c. Write refusals. The expected answer never comes from the route's own code, which is what
+       is being checked. For each POST, PUT, PATCH and DELETE route in `/openapi.json`, sent to
+       the exact path it declares (trailing slash included) with an empty JSON body `{}`, and an
+       id or slug no record has where the path takes one:
+       - Signed out: expect 401.
+       - As the seeded role with the fewest permissions: map the route to a permission from its
+         path and method: the first path segment after `/api/` (after `/api/admin/`, with
+         `admin.` in front) is the resource, and POST is `create`, PUT or PATCH `update`, DELETE
+         `delete` -- `POST /api/notes/` is `notes.create`, `PUT /api/admin/settings/{key}` is
+         `admin.settings.update`. Look it up in the app's own permission list (its seed, or
+         `app-context.json`'s permission matrix); not there, try `admin.<resource>` (the scaffold
+         guards `/api/users` with `admin.users`). When the role's `/auth/me` permissions don't
+         have it, expect 403. A route whose permission can't be found that way is NOT RUN for
+         that route, named in the results with the reason "no permission matches this route";
+         never skipped silently.
+       A 308 is the frontend's proxy moving a trailing-slash path: follow it with the same method
+       and body (`curl -L`); the answer after it is the result, and a 308 alone is neither.
+       FastAPI checks `require_permission` before the body, so a refused request writes nothing.
+       Fail: 422 (it got past a missing guard to the body check; nothing was written), 404 (past
+       it to the lookup), or 2xx (it wrote a record: name it from the response, delete it as
+       Super Admin through its own route, and if it can't be deleted, put it at the top of
+       TODO.md). Routes that would do something if their guard were missing -- every DELETE, and
+       a path with `run`, `replay`, `test`, `curation`, `statement`, `send`, `email`, `notify`,
+       `messages`, `chat` or `agents` -- get only the signed-out request, and only when their
+       path takes an id or slug (none exists, so nothing runs); R04's file check (Part A) covers
+       them otherwise. In a stack whose permission check doesn't come first, this item is NOT RUN
+       with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
@@ -211,16 +245,23 @@ here".
 
 31. **Test DataTable features on every list page (V12):**
     For each page that displays tabular data:
-    a. Fetch the page HTML and verify it contains DataTable markup:
+    a. In a browser: open the page and verify it shows DataTable markup:
        - Pagination text (e.g., "Page 1 of") and page size selector
        - Column header buttons (not plain `<th>` text)
        - Toolbar area with search input and/or filter buttons
-    b. Verify data rows exist (seed data must populate -- no empty "No results" state)
+    b. In a browser: verify data rows exist (seed data must populate -- no empty "No results"
+       state)
     c. Verify the page source imports from `@/components/data-table` (read the page .tsx file)
     d. Verify column definitions use `DataTableColumnHeader` (provides Excel filtering + sorting)
     e. Verify `storageKey` prop is set (enables state persistence)
     f. Grep all page files for raw `<table` usage -- any match outside the DataTable
-       component files themselves is a U06 violation. Fix by replacing with DataTable.
+       component files themselves is a U06 violation. Fix by replacing with DataTable. Until card
+       E02-S103 fixes them, the scaffold's own admin pages have raw tables: a match in
+       `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
+       or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
+       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is reported once as
+       "known, from the scaffold (card E02-S103)", not a FAIL and not fixed. A raw table in any
+       page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
     a. Verify `<ModeToggle />` appears in the authenticated layout header (read the layout file)
@@ -436,7 +477,7 @@ The live pass runs only checks that call no paid AI provider and leave nothing i
 Which rows those are is fixed by this table, not decided each time; the rows in the two "Not run
 here" columns are run by /make-it's build-verify Part B, not here.
 
-| Area | Catch-up checks | Files (path contains) | Run here | Not run here: calls the AI provider | Not run here: would leave test records |
+| Area | Catch-up checks | Files (path contains) | Run here | Not run here: needs the AI provider | Not run here: would leave test records |
 |------|-----------------|-----------------------|----------|-------------------------------------|----------------------------------------|
 | Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 | -- | -- |
 | Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06, V07 | -- | -- |
@@ -458,13 +499,16 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
    does. One whose host isn't a compose service name, `localhost` or `127.0.0.1` → start nothing:
    every row of the pass is NOT RUN, with the reason "your settings point at <host>".
-3. **Start it.** Note whether it was already running (`docker compose --profile dev ps`). Then
-   `docker rm -f <project>-live-check 2>/dev/null`: if it printed a name, a leftover
-   changed-setting run was serving the app with a changed setting; add `--force-recreate
-   <backend>` to the next command, and tell the user: "I found a test copy of your app's server
-   left over from an earlier check, and put the normal one back." Then `docker compose --profile
-   dev up -d --build --wait` (it rebuilds what changed; a TLS or certificate error gets /try-it
-   step 1's security-tool ask, as there), then `bash scripts/seed-mock-services.sh`, only
+3. **Start it.** The app counts as already running only when every one of its services in
+   `docker compose --profile dev ps` is up and healthy; anything less (some services up, the
+   backend down) counts as not running. Then `docker rm -f <project>-live-check 2>/dev/null`: if
+   it printed a name, a leftover changed-setting run was serving the app with a changed setting;
+   tell the user: "I found a test copy of your app's server left over from an earlier check, and
+   put the normal one back." Then `docker compose --profile dev up -d --build --wait`, which
+   starts every service (it rebuilds what changed; a TLS or certificate error gets /try-it step
+   1's security-tool ask, as there); only when a leftover was found, also `docker compose
+   --profile dev up -d --wait --force-recreate <backend>`. Then `bash
+   scripts/seed-mock-services.sh`, only
    against this project's own services (make-it step 24: a seed script with a literal port is
    fixed first, check M02). No other ask: starting the app is routine here. If it doesn't
    come up healthy, that is V02 failing, fixed as step 5 says; if it still won't start, the rest
@@ -475,7 +519,8 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    written: the same requests, roles, expected results and fail rules, the changed-setting run
    and its put-back included, and N/A for a feature the app doesn't have. Each row in a "Not run
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
-   "it would leave test records".
+   "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
+   configured, priced AI provider" (their check expects no call).
 5. **Each row's result is PASS, FAIL, NOT RUN with its reason, N/A, or LEFT OUT (your choice).**
    N/A is a row whose feature the app doesn't have: reported, not written to TODO.md. A row
    that belongs to an item in `## Left out by your choice` (read as
@@ -657,6 +702,23 @@ free = expand(mf.group(1)) if mf else None
 check("make-it.md names the rows that need an AI provider and the ones that don't", bool(needs) and bool(free)
       and not set(needs) & set(free))
 check("Part B never prints a key: it tests for set or empty", "printenv" not in fpb and "echo set || echo empty" in fpb)
+check("browser items use the app's own e2e/ Playwright on the host, never a container route",
+      "npx --no-install playwright" in fpb and "--network host" not in fpb and "mcr.microsoft.com/playwright" not in fpb)
+s28 = next((flat("\n".join(s["body"])) for s in steps if s["n"] == "28"), "")
+check("step 28 c takes the expected answer from the app's permission list, never from the route's code",
+      "never comes from the route's own code" in s28 and "permission list" in s28
+      and "the permission the route's `require_permission(resource, action)` names" not in s28)
+# 31f's known scaffold files are exactly the scaffold pages that have a raw <table (outside the DataTable component)
+import glob, os
+known = set()
+for root_, pre in ((".claude/make-it/scaffolds/fastapi-nextjs/", ""), (".claude/make-it/scaffolds/nextjs-fullstack/", "")):
+    for f in glob.glob(root_ + "**/*.tsx", recursive=True):
+        if "data-table" in os.path.basename(f) or "/components/" in f: continue
+        if "<table" in open(f, encoding="utf-8").read(): known.add(f[len(root_):])
+s31 = next((flat("\n".join(s["body"])) for s in steps if s["n"] == "31"), "")
+named31 = set(re.findall(r"`((?:frontend|src)/[^`]+\.tsx)`", s31))
+check("31f's list of known scaffold pages is exactly the scaffold's pages with a raw <table", bool(known) and named31 == known,
+      f"scaffold: {sorted(known)}; step 31: {sorted(named31)}")
 
 # 6. /resume-it's live pass: a fixed table covering every [LIVE] row once, in one of three groups
 check("resume-it.md has the live-pass step once", rs.count('<step name="live-pass">') == 1)
@@ -702,6 +764,8 @@ tab_dup = sorted({i for i in tab if tab.count(i) > 1})
 tab_stray = sorted(i for i in tab if i not in live)
 check("the table puts each row in one group only (run here, AI, records), and names only [LIVE] rows",
       not tab_dup and not tab_stray, "in two groups: " + " ".join(tab_dup) + "; not [LIVE]: " + " ".join(tab_stray))
+check("/resume-it gives AC12 and ACV02 the build's reason, not \"it would call the AI provider\"",
+      'except AC12 and ACV02, which get the build\'s reason, "needs a configured, priced AI provider"' in flat(lp))
 check("/resume-it never runs a row /make-it says needs the AI provider",
       bool(needs) and sorted(set(needs)) == grp["ai"] and not set(needs) & set(grp["run"]),
       f"make-it: {sorted(needs or [])}; resume AI column: {grp['ai']}")
@@ -725,6 +789,13 @@ check "CLAUDE.md's table: /make-it's Part B runs every [LIVE] check" \
   'grep -xF "| \`/make-it\` | Build-verify Part A runs all checks for active tiers; Part B runs every check marked \`[LIVE]\` on the running app |" "$CM" >/dev/null'
 check "CLAUDE.md's table: /resume-it's live pass, free and reversible checks only" \
   'grep -xF "| \`/resume-it\` | Catch-up scan compares project against latest checks, surfaces gaps; after a change that touches a \`[LIVE]\` check that calls no paid AI provider and leaves no test records, its live pass runs that check on the running app |" "$CM" >/dev/null'
+
+S_R04='**R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`. Permission check must use the union of all effective roles, not just the primary role. Write routes, concretely: every route whose method is POST, PUT, PATCH or DELETE carries `require_permission(...)` (in its signature or its `dependencies=`; `requirePermission` in a Next.js route handler), unless it is on the public list: `POST /api/auth/logout` (it only signs the caller out). A write route without it that isn'"'"'t on the list is a FAIL naming the route. This is read from the code, so it holds where a live check can'"'"'t tell: a route whose guard was removed names no permission to test.'
+S_PA='- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating). R04, concretely: list every route whose method is POST, PUT, PATCH or DELETE (each router file'"'"'s decorators); each carries `require_permission(...)` unless it is on R04'"'"'s public list. One that doesn'"'"'t is a FAIL naming the route.'
+S_RB='   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage, and R04'"'"'s write-route rule: every POST, PUT, PATCH and DELETE route carries `require_permission`, except R04'"'"'s public list'
+check "R04 makes the write-route rule concrete, with its public list, whole" 'grep -xF -- "$S_R04" "$BS" >/dev/null'
+check "/make-it's Part A runs R04's write-route rule" 'tr "\n" " " < "$MK" | tr -s " " | grep -F -- "$S_PA" >/dev/null'
+check "/resume-it's catch-up runs R04's write-route rule" 'grep -xF -- "$S_RB" "$RS" >/dev/null'
 
 # 8. controls (this repo only): each opposite fails the checks above, for its own reason
 if [ -z "${1:-}" ]; then
@@ -789,6 +860,20 @@ if [ -z "${1:-}" ]; then
     'opp "$RS" "s/^4b\. Then run the live pass.*\n//m" "the live pass and its hooks are in resume-it.md"'
   check "(control) retrofit-it's Part B back to its own list" \
     'opp "$RF" "s/^Run every step of \/make-it.*?running app:\n/Run ALL live verification checks from \`build-standards.md\`:\n/ms" "retrofit-it'"'"'s Part B runs /make-it'"'"'s Part B steps"'
+  check "(control) step 28 c back to taking the permission from the route under test (bug 3 slips through)" \
+    'opp "$MK" "s/The expected answer never comes from the route.s own code, which is what\n       is being checked\. //" "step 28 c takes the expected answer"'
+  check "(control) R04's public list widened to every POST" \
+    'opp "$BS" "s/unless it is on the public list: \\\`POST \/api\/auth\/logout\\\` \(it only signs the caller out\)/unless it is a POST/" "R04 makes the write-route rule concrete"'
+  check "(control) the browser back to a container with --network host" \
+    'opp "$MK" "s/on\n the host, only when it is already installed there/in a container with --network host/" "browser items use the app"'
+  check "(control) a scaffold page with a raw table dropped from 31f's known list" \
+    'opp "$MK" "s/ or\n       \\\`src\/app\/\(authenticated\)\/admin\/roles\/page\.tsx\\\` \(nextjs-fullstack\),//" "31f'"'"'s list of known scaffold pages"'
+  check "(control) /resume-it says AC12 and ACV02 would call the AI provider" \
+    'opp "$RS" "s/, except AC12 and ACV02, which get the build.s reason, \"needs a\n   configured, priced AI provider\" \(their check expects no call\)//" "/resume-it gives AC12 and ACV02"'
+  check "(control) a partly-up app counted as already running" \
+    'opp "$RS" "s/ anything less \(some services up, the\n   backend down\) counts as not running\.//" "the live pass and its hooks are in resume-it.md"'
+  check "(control) V05 back to calling every route, deletes of seed records included" \
+    'opp "$MK" "s/    a\. Call the read routes \(GET\).*?(?=\n    b\. Verify 2xx)/    a. Call the endpoint, as a role allowed to use it/s" "Part B is exactly the pinned text"'
   check "(control) the [LIVE] definition removed" \
     'opp "$BS" "s/^- \`\[LIVE\]\` after the severity = .*?(?=^\n)//ms" "build-standards.md says once what [LIVE] means"'
 fi

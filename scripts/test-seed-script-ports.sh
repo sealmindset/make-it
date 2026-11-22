@@ -46,10 +46,14 @@ for s in "$FN:FRONTEND_PORT" "$NF:APP_PORT"; do
     '[ "$(ports "$f" "$v")" = "$W_FN" ]'
 done
 
-S_M02='**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs. It takes every host port from the same variables docker-compose.yml uses (`MOCK_OIDC_PORT`, and `FRONTEND_PORT` or `APP_PORT`, from the environment or the project'"'"'s `.env`), with the build'"'"'s port only as the default -- never a literal port in a URL -- so in a worktree or a copy with its own ports it seeds that project'"'"'s own services. Fix: the scaffold'"'"'s `env_port` lines in place of the literal ports.'
+S_M02='**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs. It takes every host port from the same variables docker-compose.yml uses (`MOCK_OIDC_PORT`, and `FRONTEND_PORT` or `APP_PORT`, from the environment or the project'"'"'s `.env`), with the build'"'"'s port only as the default -- never a literal port in a URL -- so in a worktree or a copy with its own ports it seeds that project'"'"'s own services. Fix: replace the script'"'"'s literal-port lines with these (the scaffold'"'"'s own; a Next.js full-stack app uses `APP_PORT` and `APP_URL` in place of `FRONTEND_PORT` and `FRONTEND_URL`), with the build'"'"'s ports as the defaults and `ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"` above them:'
 S_PT='- The seed script takes every host port from the same variables docker-compose.yml uses (from the environment or the project'"'"'s .env, with the build'"'"'s port only as the default), never a literal, so in a worktree or copy with its own ports it seeds that project'"'"'s own services (check M02)'
-S_RS='- **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh, and that the seed script reads its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`) instead of a literal port (M02; an app built before that is fixed from the scaffold'"'"'s `env_port` lines)'
+S_RS='- **Mock Services (M01-M04):** Check for mock-oidc/, seed-mock-services.sh, and that the seed script reads its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`) instead of a literal port (M02; an app built before that is fixed with the lines M02 quotes)'
 check "check M02 says the seed script takes its ports from the compose variables, whole" 'grep -xF -- "$S_M02" "$BS" >/dev/null'
+# M02's fenced block is the scaffold's own helper, byte for byte, so an installed copy can fix an older app on its own
+m02_block() { awk '/^[*][*]M02[*][*] /{on=1; next} on && /^```bash$/{inb=1; next} inb && /^```$/{exit} inb' "$BS"; }
+fn_block() { awk '/^env_port\(\) \{/{on=1} on; on && /^FRONTEND_URL=/{exit}' "$FN"; }
+check "M02 quotes the scaffold's env_port helper and port lines exactly" '[ -n "$(m02_block)" ] && [ "$(m02_block)" = "$(fn_block)" ]'
 check "the prompt that generates a seed script says the same" 'tr "\n" " " < "$PT" | tr -s " " | grep -F -- "$S_PT" >/dev/null'
 check "/resume-it's catch-up looks for it (M02)" 'grep -xF -- "   $S_RS" "$RS" >/dev/null'
 
@@ -66,6 +70,8 @@ if [ -z "${1:-}" ]; then
     'opp "$FN" "s/^MOCK_OIDC_URL=.*\$/MOCK_OIDC_URL=\"http:\/\/localhost:[MOCK_OIDC_PORT]\"/m" "$FN: no URL has a literal"'
   check "(control) the .env no longer read (only the default used)" \
     'opp "$NF" "s/\[ -f \"\\\$ROOT_DIR\/\.env\" \]/false/" "$NF: a built copy seeds the .env"'
+  check "(control) M02's quoted helper no longer the scaffold's (it stops reading .env)" \
+    'opp "$BS" "s/(\n```bash\nenv_port.*?)\[ -f \"\\\$ROOT_DIR\/\.env\" \]/\$1false/s" "M02 quotes the scaffold"'
   check "(control) M02 back to its old text" \
     'opp "$BS" "s/ It takes every host port from the same variables.*?literal ports\.//" "check M02 says"'
 fi
