@@ -9994,5 +9994,242 @@ class ArgoItSealFilesCases(_FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _Firs
                     self.assertTrue(os.path.isfile(r.path(f)), 'a file beside the seal was removed: %s' % f)
 
 
+
+_SealFiles = type('_SealFiles', (object,), {k: v for k, v in ArgoItSealFilesCases.__dict__.items()
+                                          if not k.startswith(('test', '__'))})
+_RedeployCallA = type('_RedeployCallA', (object,), {k: v for k, v in ArgoItRedeployCallACases.__dict__.items()
+                                                    if not k.startswith(('test', '__'))})
+
+
+class ArgoItSealGitattributesCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6,
+                                   _FirstSendFix5, _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1,
+                                   _FirstSendFix1, _FirstSend, Base):
+    """Owner, 2026-11-21: `.gitattributes` goes in the first-deploy save only when the seal step just changed it. If it
+    also held an unsaved change of the user's before the seal ran (changed, or new and not yet saved), the save doesn't
+    guess: PHASE 5 stops before the ask, says so in one plain line, and sends nothing. The seal itself is prose (main's
+    step); here it is played by `_seal`, between PHASE 5's before-the-seal block and its seal list, as the agent runs
+    them."""
+
+    ATTRS = '*.png binary\n'
+    SEAL_LINES = '# make-it seal\n* -text\n'
+
+    def _before_block(self, p=None):
+        """(start, end, code) of the one ```bash block in PHASE 5 that notes how .gitattributes stands before the seal."""
+        blocks = [f for f in self._fences(p or self._phase()) if '.gitattributes' in f[2] and '.make-it/ledger' not in f[2]
+                  and f[0] < self._seal_list(p)[0]]
+        self.assertEqual(len(blocks), 1, "PHASE 5 has no one ```bash block, before the seal list, that notes how "
+                         ".gitattributes stands before the seal (%d found)" % len(blocks))
+        return blocks[0]
+
+    def _sh(self, r, code, shell):
+        return subprocess.run([shell, '-c', code], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=60)
+
+    def _project(self, r, attrs=True):
+        r.write('.make-it/app-context.json', '{}\n')
+        if attrs:
+            r.write('.gitattributes', self.ATTRS)
+        r.commit('a make-it project')
+        r.push()
+
+    def _seal(self, r, change_attrs):
+        for rel, t in self.SEAL.items():
+            r.write(rel, t)
+        if change_attrs:
+            have = open(r.path('.gitattributes')).read() if os.path.exists(r.path('.gitattributes')) else ''
+            r.write('.gitattributes', have + self.SEAL_LINES)
+
+    def _step1(self, r, shell, change_attrs, user_edit=None):
+        """The user's own unsaved .gitattributes (`user_edit`: its text), then PHASE 5 step 1 as the agent runs it:
+        the before-the-seal block, the seal, the seal list. Returns the list's run."""
+        need_shell(shell)
+        self._prep(r)
+        if user_edit is not None:
+            r.write('.gitattributes', user_edit)
+        self.assertEqual(self._sh(r, self._before_block()[2], shell).returncode, 0, 'the before-the-seal block failed')
+        self._seal(r, change_attrs)
+        return self._sh(r, self._seal_list()[2], shell)
+
+    def _sent_attrs(self, r):
+        return self._origin(r, 'show', 'refs/heads/main:.gitattributes')
+
+    def test_1_the_seal_changed_it_so_it_is_listed_and_sent(self):
+        for shell in ('bash', 'zsh'):
+            for attrs in (True, False):  # the seal adds lines to it, or writes it new
+                with self.subTest(shell=shell, had_one=attrs):
+                    r = self.fresh()
+                    self._project(r, attrs)
+                    cp = self._step1(r, shell, True)
+                    out = cp.stdout.decode().split()
+                    self.assertEqual(cp.returncode, 0, out)
+                    self.assertEqual(sorted(out), sorted(list(self.SEAL) + ['.gitattributes']))
+                    files = sorted(self._generate(r) + out)
+                    st = self._flow(r, shell, files)
+                    self.assertIsNone(st['stopped'], st['stopped'])
+                    self.assertEqual(self._sent_attrs(r).decode(), (self.ATTRS if attrs else '') + self.SEAL_LINES,
+                                     "GitHub's .gitattributes isn't the one the seal wrote")
+
+    def test_2_the_seal_did_not_change_it_so_it_is_not_listed_or_sent(self):
+        for shell in ('bash', 'zsh'):
+            for edit in (None, '*.png binary\n*.jpg binary\n'):  # clean, or the user's own unsaved change only
+                with self.subTest(shell=shell, user_edit=bool(edit)):
+                    r = self.fresh()
+                    self._project(r)
+                    cp = self._step1(r, shell, False, edit)
+                    out = cp.stdout.decode().split()
+                    self.assertEqual(cp.returncode, 0, out)
+                    self.assertEqual(sorted(out), sorted(self.SEAL))
+                    st = self._flow(r, shell, sorted(self._generate(r) + out))
+                    self.assertIsNone(st['stopped'], st['stopped'])
+                    self.assertEqual(self._sent_attrs(r).decode(), self.ATTRS, '.gitattributes was sent')
+
+    def test_3_the_users_own_unsaved_change_and_the_seals_stop_before_the_ask(self):
+        for shell in ('bash', 'zsh'):
+            for tracked in (True, False):  # a change to a saved file, or a new file not saved yet
+                with self.subTest(shell=shell, tracked=tracked):
+                    r = self.fresh()
+                    self._project(r, tracked)
+                    before = self._sent_refs(r)
+                    cp = self._step1(r, shell, True, '*.jpg binary\n')
+                    lines = cp.stdout.decode().splitlines()
+                    marks = [l for l in lines if re.fullmatch(self.MARK_LINE, l)]
+                    self.assertNotEqual(cp.returncode, 0, 'the seal list went on: %r' % lines)
+                    self.assertEqual(len(marks), 1, 'no one stop line printed: %r' % lines)
+                    self.assertNotIn('.gitattributes', lines, '.gitattributes listed to be saved')
+                    self.assertEqual(self._sent_refs(r), before, 'GitHub changed')
+                    qs = self._told(self._phase(), marks[0])
+                    self.assertTrue(any(re.search(self.SENT_NONE, q) and '.gitattributes' in q
+                                        and not re.search(self.NEVER_SAY, q) for q in qs),
+                                    "the stop doesn't say, in plain words, that nothing was sent and why: %r" % qs)
+                    rule = re.sub(r'\s+', ' ', self._phase())
+                    i = rule.index('`%s`' % marks[0])
+                    self.assertRegex(rule[i:i + 300], self.NOT_SHOWN, "the stop doesn't say the ask isn't shown")
+
+
+class ArgoItRedeployReadsGitHubFirstCases(_RedeployCallA, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2,
+                                          _FirstSendFix6, _FirstSendFix5, _FirstSendFix4, _FirstSendFix3,
+                                          _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend, Base):
+    """The coordinator's extension of the owner's calls A and B (2026-11-21) to the redeploy (PHASE 5b): a split origin
+    stops it before the ask, in PHASE 5's words; step 1 reads GitHub (the same lines as PHASE 5 step 2) before it
+    counts "saved changes not sent yet", so the number in the ask counts what GitHub has, and a failed read is a stop
+    before the ask, never a guessed number. The copied lines stay identical; outside a repo the message says so."""
+
+    SHALLOW = '[ "$(git rev-parse --is-shallow-repository)" != true ]'
+    FETCH = "git fetch --prune --no-tags --refmap= origin"
+    SPLIT = '[ "$(git remote get-url --all origin)" ='
+
+    def _step1_5b(self):
+        p = self._phase5b()
+        a, b = re.search(r'^\*\*1\. ', p, re.M).start(), re.search(r'^\*\*2\. ', p, re.M).start()
+        fs = [f for f in self._fences(p) if a < f[0] < b]
+        self.assertTrue(fs, 'PHASE 5b step 1 has no ```bash block')
+        return [f[2] for f in fs]
+
+    def _run_step1(self, cwd, shell):
+        out, code = b'', 0
+        for c in self._step1_5b():
+            cp = subprocess.run([shell, '-c', c], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+            out += cp.stdout
+            code = cp.returncode
+            if code:
+                break
+        return out.decode(), code
+
+    def test_1_a_split_origin_stops_the_redeploy_before_the_ask_in_phase_5s_words(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                Repo._git(r.root, 'init', '-q', '--bare', 'fork')
+                r.git('remote', 'set-url', '--push', 'origin', os.path.join(r.root, 'fork'))
+                r.append('app.py', 'x = 1\n')
+                self._prep(r)
+                before = self._sent_refs(r)
+                out, code = self._run_step1(r.work, shell)
+                self.assertIn('SPLIT ORIGIN', out.splitlines(), 'step 1 lets a split origin through to the ask')
+                st = self._redeploy(r, shell, 'main')
+                self.assertEqual((st['stopped'], st['mark']), ('printed', 'SPLIT ORIGIN'))
+                self.assertIsNone(st['res'], '3e ran')
+                self.assertIsNone(st['sent'], 'step 4 ran')
+                self.assertEqual(self._sent_refs(r), before, 'GitHub changed')
+                self._split_told(self._told(self._phase5b(), 'SPLIT ORIGIN'))
+                self.assertEqual(self._told(self._phase5b(), 'SPLIT ORIGIN'), self._told(self._phase(), 'SPLIT ORIGIN'),
+                                 "the redeploy's split-origin stop isn't PHASE 5's, word for word")
+
+    def test_2_the_count_in_the_ask_is_what_github_lacks(self):
+        for v, env in self._gits():
+            with self._using(env):
+                for shell in ('bash', 'zsh'):
+                    for opts in (('--single-branch', '-b', 'main'), ('--depth', '1')):
+                        for where in ('on another branch', 'only through a tag'):
+                            with self.subTest(git=v, shell=shell, clone=' '.join(opts), token=where):
+                                r = self.fresh()
+                                self._clone(r, *opts)
+                                self._keyed_redeploy(r, shell, where)
+                                mine = self._mine(r)
+                                out, code = self._run_step1(r.work, shell)
+                                self.assertEqual(code, 0, out)
+                                nums = [l for l in out.splitlines() if re.fullmatch(r'\d+', l)]
+                                self.assertEqual(nums[-1:], ['1'], 'step 1 counts what GitHub already has (%s) as '
+                                                 'not sent: %r' % (where, out))
+                                self.assertNotIn('my token, already on GitHub', out)
+                                self.assertIn('my notes, not sent yet', out)
+                                self.assertEqual(self._mine(r), mine, "step 1 changed the user's own refs")
+
+    def test_3_a_failed_read_stops_before_the_ask_with_no_number(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                self._clone(r, '--single-branch', '-b', 'main')
+                r.write('notes.md', '# my notes\n')
+                r.commit('my notes, not sent yet')
+                with open(os.path.join(r.root, 'origin', 'refs', 'heads', 'broken'), 'w') as f:
+                    f.write('0' * 39 + '1\n')
+                self._prep(r)
+                out, code = self._run_step1(r.work, shell)
+                self.assertNotEqual(code, 0)
+                self.assertIn('FETCH FAILED', out.splitlines())
+                self.assertFalse([l for l in out.splitlines() if re.fullmatch(r'\d+', l)], 'a count was made: %r' % out)
+                qs = self._told(self._phase5b(), 'FETCH FAILED')
+                self.assertTrue(any(re.search(self.SENT_NONE, q) and not re.search(self.NEVER_SAY, q) for q in qs), qs)
+                rule = re.sub(r'\s+', ' ', re.sub(self.FENCE, '', self._phase5b(), flags=re.M | re.S))
+                i = rule.index('`FETCH FAILED`')
+                self.assertRegex(rule[i:i + 300], self.NOT_SHOWN, "the stop doesn't say the ask isn't shown")
+
+    def test_4_the_copied_lines_are_identical(self):
+        p5, p5b = self._phase(), self._phase5b()
+        w = ArgoItWiringCases('test_old_inline_scan_is_gone')
+        copies = {'PHASE 5 step 2': self._step_block(p5, 2)[2], 'PHASE 5b step 1': '\n'.join(self._step1_5b()),
+                  'PHASE 5b 3e': w._block()}
+        for start in (self.SHALLOW, self.FETCH, self.SPLIT):
+            got = {k: [l for l in c.splitlines() if l.startswith(start)] for k, c in copies.items()}
+            if start == self.SPLIT:
+                got.pop('PHASE 5b 3e')
+            for k, ls in got.items():
+                self.assertEqual(len(ls), 1, '%s: %d lines start %r' % (k, len(ls), start))
+            self.assertEqual(len({ls[0] for ls in got.values()}), 1, 'the copies differ: %r' % got)
+
+    def test_5_outside_a_repo_the_message_says_so(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                with tempfile.TemporaryDirectory() as td:
+                    w = ArgoItWiringCases('test_old_inline_scan_is_gone')
+                    res = w._run(os.path.realpath(td))
+                    self.assertEqual(res.code, 2)
+                    self.assertNotIn('FETCH FAILED', res.lines, '3e says GitHub failed outside a repo')
+                    self.assertIn('NOT A REPO', res.lines)
+                    out, code = self._run_step1(os.path.realpath(td), shell)
+                    self.assertNotEqual(code, 0)
+                    self.assertNotIn('FETCH FAILED', out.splitlines())
+                    self.assertIn('NOT A REPO', out.splitlines())
+        qs = self._told(self._phase5b(), 'NOT A REPO')
+        self.assertTrue(any(re.search(self.SENT_NONE, q) and not re.search(self.NEVER_SAY, q)
+                            and not re.search(r'(?i)github', q) for q in qs), qs)
+        sec = re.sub(r'\s+', ' ', w._section())
+        self.assertRegex(sec, r'`NOT A REPO`', "3e's reasons don't cover NOT A REPO")
+
+
 if __name__ == '__main__':
     unittest.main()
