@@ -35,13 +35,23 @@ Using a specialist and recording one are two separate jobs.
   rebuilds the record from one kind of evidence. A signal is recorded only on evidence (the code,
   `app-context.json`, or what the person said); a writer does not record a signal its evidence
   cannot show. What disproves a signal, per writer:
-  - `/make-it`: the person's answers, only when they state the opposite ("no payments"); they cannot
-    disprove a `code:` signal they say nothing about.
+  - `/make-it`: the person's answers, only when they state the opposite ("no payments"); they never
+    remove a `code:` signal.
   - `/retrofit-it`: the code, only when the thing is absent from it (`features: card payments` with
     no payment path in the code); it cannot disprove a signal from the answers or `app-context.json`
     that the code says nothing about (a user count, an uptime promise).
-  - `/resume-it`: the planned work, only when it takes the thing out (the work removes payments);
-    work that does not touch a signal leaves it as it is.
+  - `/resume-it`: the planned work, only when it takes the thing out (the work removes payments),
+    and what the person says in the session, only when it states the opposite ("it's really 20
+    internal users"); work that does not touch a signal leaves it as it is.
+
+  Who can remove which signal: a `code:` signal goes only on code evidence (`/retrofit-it`) or
+  planned work that takes the thing out of the code (`/resume-it`); the person's words alone never
+  remove it, and the writer says nothing about them. Any other signal (a count, an uptime promise,
+  external users, a feature the person named) goes when the person says the opposite, in
+  `/make-it` or `/resume-it`, when work removes the thing, or, for a feature, when `/retrofit-it`
+  finds it absent from the code. Whether evidence is indirect (recorded and `unconfirmed`) or
+  absent (no signal) is a judgement the examples guide; two readers may differ at the edge, and
+  that is accepted.
 - **Same record or a different one.** Two records name the same specialists when they have the same
   ranks (security, data, reliability, AI, a variant's, the floor) in the same order, with the floor
   for the same `project_type`. How a specialist's name is spelled out does not count. With the same

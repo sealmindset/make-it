@@ -729,8 +729,8 @@ every route below that changes the app.
    signal that nobody confirms or disproves stays unconfirmed; with no new work there is no
    re-check.
 3. With a trigger, start from the record's signals, `code:` ones included, and apply only the
-   planned work's changes, as the reference's "The record is the starting point" says: the work
-   adds a signal it brings and removes one only when it takes the thing out, with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
+   planned work's changes, as the reference's "The record is the starting point" says: the work adds a signal it brings and removes one only when it takes the thing out or the person
+   says the opposite in the session (never a `code:` signal on words alone), with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
    the work adds is written `<field>: <value>` from the app-context field the work changes, and one the person gave only as a guess is marked `"unconfirmed": true`.
 4. Compare it as the reference's "Same record or a different one" says. With the same
    specialists, keep their names, `set_by` and `set_at`, and bring only the signals up to date,
