@@ -17,7 +17,7 @@
 # THE WRITE GUARD IS A TRIPWIRE, NOT THE PROTECTION (the pinned blocks are). It scans every command file, every text
 #   file under .claude/make-it/ except scaffolds/ (app code), this reference and the template, every file under
 #   desktop/skills/, and CLAUDE.md, minus the writers' own pinned blocks (/make-it's Design step, /retrofit-it's
-#   opening block and Discovery step 7). A unit naming expert_persona with a write word is a write; so is any line
+#   opening block and Discovery step 7, /resume-it's re-check block, build-standards check S15). A unit naming expert_persona with a write word is a write; so is any line
 #   with "expert_persona": or expert_persona =. Honest reads are let through: "the `expert_persona` record",
 #   "no `expert_persona` set", "if `expert_persona` changed", "the specialist(s) recorded in `expert_persona`", and
 #   provenance naming one of the three writers ("set by /make-it"). Known gaps, on purpose: a write with a word not
@@ -408,7 +408,9 @@ CODE = re.compile(r'"expert_persona"\s*:|\bexpert_persona\s*=')
 # each writer's own pinned blocks: (file suffix, start line regex, end line regex) -- removed before the scan
 EXEMPT = [("/commands/make-it.md", r"^\*\*Project specialist \(SILENT", r"^\*\*Build the app-context internally"),
           ("/commands/retrofit-it.md", r"^\*\*Adopt the specialist persona before retrofitting", r"^@~/\.claude/make-it/references/expert-personas\.md$"),
-          ("/commands/retrofit-it.md", r"^\*\*7\. Project specialist \(SILENT", r"^</step>")]
+          ("/commands/retrofit-it.md", r"^\*\*7\. Project specialist \(SILENT", r"^</step>"),
+          ("/commands/resume-it.md", r"^\*\*Project specialist re-check", r"^\*\*A\. Continue building"),
+          ("/references/build-standards.md", r"^\*\*S15\*\* ", r"^\s*$")]
 def units(lines):
     out, cur, fence = [], [], False
     for ln in lines:
