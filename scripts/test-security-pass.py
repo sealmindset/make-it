@@ -248,6 +248,7 @@ GOOD = [  # requirements text -> the exact file the script writes for pip
     ("", ""),
 ]
 WHY = ", so pip-audit was not run on this file"
+SEPARATORS = ["\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"]  # str.splitlines() breaks on each
 BAD = [  # requirements text -> the exact NOT RUN reason (never a value from the line)
     (f"--hash=sha256:a#b --index-url https://evil.example.invalid/simple\nrequests\n", "line 1: a package index or host option"),
     ("-r base.txt\nflask\n", "line 1: a file include (-r or -c)"),
@@ -316,6 +317,17 @@ class Sanitise(unittest.TestCase):
     def test_nul_and_non_utf8_are_not_run(self):
         self.assertEqual(sp.sanitise(b"pkg\x00==1\n"), (None, "the file has a NUL byte" + WHY))
         self.assertEqual(sp.sanitise(b"pkg==1\xff\n"), (None, "the file is not UTF-8" + WHY))
+
+    def test_a_line_separator_pip_would_split_on_is_not_run(self):
+        """pip splits with str.splitlines(): text after one of these inside a comment is a real requirement for pip."""
+        for ch in SEPARATORS:
+            for text, line in ((f"flask==2.0.0 #{ch}django==2.0\n", 1), (f"# deps\n#{ch}django==2.0\n", 2)):
+                self.assertEqual(sp.sanitise(text.encode()), (None, f"line {line}: a control or line-separator character" + WHY), repr(text))
+
+    def test_any_other_control_character_is_not_run(self):
+        for ch in ["\x01", "\x1b", "\x1f", "\x7f", "\x80", "\x9f"]:
+            self.assertEqual(sp.sanitise(f"flask==2.0.0\nrequests # x{ch}y\n".encode()), (None, "line 2: a control or line-separator character" + WHY), repr(ch))
+        self.assertEqual(sp.sanitise(b"flask==2.0.0\t# tab is fine\r\n"), ("flask==2.0.0\n", None))
 
     def test_the_table_is_big_enough(self):
         self.assertGreaterEqual(len(GOOD) + len(BAD), 30)
@@ -589,6 +601,20 @@ class Scan(unittest.TestCase):
         ok = json.dumps({"errors": [], "metrics": {"./a.py": {"loc": 1}, "_totals": {"loc": 1}}, "results": []})
         out, _, _ = self.run_scan(self.bandit_plan({"stdout": ok, "stderr": "bandit: error: x\n", "exit": 2}, "ok"))
         self.assertEqual(out.stdout.splitlines()[1], 'bandit: NOT RUN -- "batch 1 of 2: bandit: error: x"')
+
+    def test_separator_files_never_reach_pip(self):
+        for i, ch in enumerate(SEPARATORS):
+            write(os.path.join(self.proj, f"sep{i}/requirements.txt"), f"flask==2.0.0 #{ch}django==2.0\n")
+            write(os.path.join(self.proj, f"sep{i}/requirements-only.txt"), f"#{ch}django==2.0\n")
+        out, calls, result = self.run_scan()
+        parts = {p["file"]: p for p in result["scanners"]["pip-audit"]["parts"]}
+        for i in range(len(SEPARATORS)):
+            for name in ("requirements.txt", "requirements-only.txt"):
+                part = parts[f"sep{i}/{name}"]
+                self.assertFalse(part["ran"]); self.assertIn("a control or line-separator character", part["text"])
+        pips = [c for c in calls if c[:1] == ["run"] and sp.IMAGES["python"] in c]
+        self.assertEqual(len(pips), 1)  # only backend/requirements.txt
+        self.assertFalse(any(os.path.exists(os.path.join(result["run_dir"], f"pip-audit--{n}.req.txt")) for n in range(3, 40)))
 
     def test_a_linked_lockfile_is_never_mounted(self):
         write(os.path.join(self.proj, "web/package.json"), "{}")

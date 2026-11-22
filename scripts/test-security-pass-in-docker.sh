@@ -8,7 +8,11 @@
 # change, by design, so a reviewer sees both.
 # The comparison folds whitespace inside prose (re-wrapping a paragraph passes) but keeps every heading, list item,
 # table row and line of a fenced block as its own unit, so joining two rows or renaming a heading fails.
-# Keyword checks remain only for other files: the governance doc, the desktop guardrails skill and check Q09.
+# A unit's leading indentation is kept (a paragraph indented four spaces is a code block in Markdown and fails).
+# So that both copies cannot drift together, a few must-say checks also run against the PINNED copy itself: the exact
+# script call, NOT RUN never as clean, any other exit means the pass did not complete, nothing installed on the computer,
+# and no bare scanner command outside the script. A reversal then needs a third visible edit, to this test.
+# Keyword checks otherwise remain only for other files: the governance doc, the desktop guardrails skill and check Q09.
 # Its controls (section 3) mutate a copy and must fail; an unchanged copy must pass.
 # Usage: test-security-pass-in-docker.sh [ROOT]. With no ROOT it checks this repo and runs the controls.
 set -euo pipefail
@@ -40,6 +44,7 @@ def units(path):
         if cur:
             out.append("P " + " ".join(cur)); cur.clear()
     for raw in open(path, encoding="utf-8").read().split("\n"):
+        indent = len(raw) - len(raw.lstrip(" "))
         line = " ".join(raw.split())
         if raw.lstrip().startswith(("```", "~~~")):
             flush(); fence = not fence; out.append("F " + line); continue
@@ -50,10 +55,10 @@ def units(path):
         if re.match(r"(#+ |\||[-*+] |\d+[.] |---$)", line):
             flush()
             if line.startswith("|"):
-                out.append("T " + line); continue
+                out.append("T %d %s" % (indent, line)); continue
             if line.startswith("#") or line == "---":
-                out.append("H " + line); continue
-        cur.append(line)
+                out.append("H %d %s" % (indent, line)); continue
+        cur.append(line if cur else "%d %s" % (indent, line))
     flush()
     return out
 a, b = units(sys.argv[1]), units(sys.argv[2])
@@ -68,6 +73,15 @@ sys.exit(1)' "$1" "$2"
 
 # 1. Part D, the whole file
 check "build-verify-security.md is the pinned text, whole (every sentence, row, heading and command)" '[ -s "$PINNED" ] && same "$B" "$PINNED"'
+
+# 1b. must-say checks on the PINNED copy, so the two copies cannot be reversed together
+check "pinned copy: the exact script call" 'row "$PINNED" "python3 -I \"\$HOME/.claude/make-it/scripts/security-pass.py\" scan ."'
+check "pinned copy: a NOT RUN scanner is never recorded as clean or as no findings" \
+  'has "$PINNED" "It is skipped, the build is not blocked, and the internal report lists it with that reason -- never as clean or as no findings."'
+check "pinned copy: any other exit means the pass did not complete" 'has "$PINNED" "Any other exit means the pass did not complete"'
+check "pinned copy: nothing is installed on the computer" 'has "$PINNED" "Docker is already a make-it prerequisite; nothing is installed on the computer."'
+check "pinned copy: no bare scanner command outside the script" \
+  'm="$(awk "/^[[:space:]]*(\`\`\`|~~~)/{c=!c; next} c" "$PINNED" | grep -vF "security-pass.py" | grep -E "(semgrep scan|bandit -r|pip-audit|npm audit|trivy fs)" || true)"; [ -z "$m" ] || { printf "%s\n" "$m" | sed "s/^/  found: /"; false; }'
 
 # 2. the other files: keyword checks
 check "governance doc: the Part D pipeline, each scanner row with its NOT RUN caveat, the sentence after the table, Docker on the roadmap" \
@@ -99,6 +113,13 @@ harmless sentence: end of file	B	the rest are logged to TODO.md.	the rest are lo
 a table row joined to the next	B	| Yes (if mechanical fix exists) |\n| HIGH	| Yes (if mechanical fix exists) | | HIGH
 a heading renamed	B	### 6c. Fix\n	### 6c. Fixes\n
 a heading removed	B	### 6d. What is left, and what is said\n	\n
+a paragraph indented four spaces (a code block)	B	Run all available static analysis silently.	    Run all available static analysis silently.
+both copies: the script call changed	BOTH	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" scan .	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" scan ./src
+both copies: NOT RUN no longer never clean	BOTH	-- never as clean or as no findings.	-- recorded as clean.
+both copies: any other exit no longer incomplete	BOTH	Any other exit means the pass	Any other exit means the pass is fine and the pass
+both copies: things installed on the computer	BOTH	nothing is installed on the computer.	the scanners are installed on the computer when missing.
+both copies: a bare semgrep block	BOTH	### Fix Rules	```bash\nsemgrep scan --config auto .\n```\n\n### Fix Rules
+both copies: a bare pip-audit block	BOTH	### Fix Rules	```\npip-audit -r requirements.txt\n```\n\n### Fix Rules
 a word changed inside a fenced block	B	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" scan .	python3 -I "$HOME/.claude/make-it/scripts/security-pass.py" scan ./src
 review 3: NOT RUN counts as ran	B	Findings are read from the reports	A scanner that is NOT RUN counts as ran.\n\nFindings are read from the reports
 review 3: exit 0 means every scanner ran	B	The script exits 0 when the pass completed, whatever the lines say.	Exit 0 means every scanner ran.
@@ -121,8 +142,11 @@ if [ -z "${1:-}" ]; then
   opp() {
     local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"
     tar -cf - "$B" "$PINNED" "$GOV" "$DSK" "$BS" | tar -xf - -C "$d"
-    O="$2" N="$3" perl -0pi -e '($o, $n) = ($ENV{O}, $ENV{N}); s/\\n/\n/g for ($o, $n); s/\Q$o\E/$n/' "$d/$1"
-    ! cmp -s "$1" "$d/$1" || { echo "  control did not change $1: $2"; return 1; }
+    local f
+    for f in $1; do
+      O="$2" N="$3" perl -0pi -e '($o, $n) = ($ENV{O}, $ENV{N}); s/\\n/\n/g for ($o, $n); s/\Q$o\E/$n/' "$d/$f"
+      ! cmp -s "$f" "$d/$f" || { echo "  control did not change $f: $2"; return 1; }
+    done
     ! bash "$SELF" "$d" < /dev/null > /dev/null 2>&1 || { echo "  control passed (should fail): $2 -> $3"; return 1; }
   }
   check "(control) an unchanged copy passes" \
@@ -140,7 +164,8 @@ if [ -z "${1:-}" ]; then
   while IFS='	' read -r name f old new; do
     [ -n "$name" ] || continue
     n=$((n+1))
-    if opp "${!f}" "$old" "$new"; then caught=$((caught+1)); else missed="$missed
+    if [ "$f" = BOTH ]; then files="$B $PINNED"; else files="${!f}"; fi
+    if opp "$files" "$old" "$new"; then caught=$((caught+1)); else missed="$missed
   missed: $name"; fi
   done <<< "$CTRLS"
   check "(control) every one of the $n opposites fails this script ($caught caught)" '[ "$caught" = "$n" ] || { printf "%s\n" "$missed"; false; }'
