@@ -25,7 +25,8 @@ check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
 ERRF="$(mktemp)"; TMPD="$(mktemp -d)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&4; rm -rf "$ERRF" "$TMPD"' EXIT
 
 BS=.claude/make-it/references/build-standards.md; MK=.claude/commands/make-it.md; RS=.claude/commands/resume-it.md
-FILES="$BS $MK $RS"
+RF=.claude/commands/retrofit-it.md; CM=CLAUDE.md
+FILES="$BS $MK $RS $RF $CM"
 
 # The rows whose method is checking the running app on 2026-11-22 (E12-S6 step 0). A floor, not the mapping: a row
 # may gain [LIVE]; none of these may lose it.
@@ -455,7 +456,19 @@ check("the live pass and its hooks are in resume-it.md, whole, unit by unit", no
 sys.exit(1 if failed else 0)
 PY
 
-# 5. controls (this repo only): each opposite fails the checks above, for its own reason
+# 5. /retrofit-it's Part B is /make-it's, by reference; the tables that say how the rulebook is run say so
+RF_B="$(awk '/^[*][*]PART B: Live verification/{on=1} on && /^[*][*]PART C: /{exit} on' "$RF" | tr '\n' ' ' | tr -s ' ')"
+S_RF='Run every step of /make-it'"'"'s build-verify Part B, as written there (`~/.claude/commands/make-it.md`, steps 21-33i): each step names the rulebook rows it checks, and every row marked `[LIVE]` in `build-standards.md` has one. Among them:'
+check "retrofit-it's Part B runs /make-it's Part B steps, by reference" 'printf "%s" "$RF_B" | grep -F -- "$S_RF" >/dev/null'
+check "retrofit-it's Part B no longer lists its own checks as the whole of it" '! grep -F "Run ALL live verification checks from \`build-standards.md\`:" "$RF" >/dev/null'
+check "build-standards.md's skill table: /retrofit-it's Part B is /make-it's" \
+  'grep -xF "| \`/retrofit-it\` | Verify phase (Part A static checks; Part B runs /make-it'"'"'s Part B steps) |" "$BS" >/dev/null'
+check "CLAUDE.md's table: /make-it's Part B runs every [LIVE] check" \
+  'grep -xF "| \`/make-it\` | Build-verify Part A runs all checks for active tiers; Part B runs every check marked \`[LIVE]\` on the running app |" "$CM" >/dev/null'
+check "CLAUDE.md's table: /resume-it's live pass" \
+  'grep -xF "| \`/resume-it\` | Catch-up scan compares project against latest checks, surfaces gaps; after a change that touches a \`[LIVE]\` check, its live pass runs that check on the running app |" "$CM" >/dev/null'
+
+# 6. controls (this repo only): each opposite fails the checks above, for its own reason
 if [ -z "${1:-}" ]; then
   # opp FILE PERL REASON: a copy of the files with one edit must fail this script, on the check named REASON
   opp() {
@@ -489,6 +502,8 @@ if [ -z "${1:-}" ]; then
     'opp "$RS" "s/is NOT RUN, never passed\./is counted as passed./" "the live pass and its hooks are in resume-it.md"'
   check "(control) the catch-up hook removed" \
     'opp "$RS" "s/^4b\. Then run the live pass.*\n//m" "the live pass and its hooks are in resume-it.md"'
+  check "(control) retrofit-it's Part B back to its own list" \
+    'opp "$RF" "s/^Run every step of \/make-it.*?Among them:\n/Run ALL live verification checks from \`build-standards.md\`:\n/ms" "retrofit-it'"'"'s Part B runs /make-it'"'"'s Part B steps"'
   check "(control) the [LIVE] definition removed" \
     'opp "$BS" "s/^- \`\[LIVE\]\` after the severity = .*?(?=^- )//ms" "build-standards.md says once what [LIVE] means"'
 fi
