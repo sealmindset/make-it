@@ -443,12 +443,20 @@ Never show raw Python tracebacks.
 
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
+# First read everything GitHub has, exactly as PHASE 5 step 2 does: every branch and tag into argo-it's own names
+# (refs/argo-it/gh/...), never the user's branches, remote-tracking refs or tags; in a shallow clone, all the history
+# first. A failed read is "couldn't check" (exit 2): without it, what GitHub already has can't be told.
+[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 2; }
+git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 2; }
 # Scans what step 4 will send, under three labels: == unsaved edits == and == new files ==
-# (as step 4 will stage them), then == saved, not sent == (every unsent commit). Each hit is
-# printed under its label as file:line -- never a value or any other part of the line.
-# Exit 0 = clean, 1 = hits, 2 = couldn't check. Needs git 2.25 or later.
-python3 ~/.claude/make-it/scripts/secret-scan.py
+# (as step 4 will stage them), then == saved, not sent == (every commit GitHub doesn't have: none of
+# refs/argo-it/gh/ reaches it). Each hit is printed under its label as file:line -- never a value or
+# any other part of the line. Exit 0 = clean, 1 = hits, 2 = couldn't check. Needs git 2.25 or later.
+python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*'
 ```
+
+What GitHub already has is what argo-it's own names (`refs/argo-it/gh/`) reach, as in PHASE 5
+step 2: a commit GitHub holds on any branch, or only through a tag, is never "saved, not sent".
 
 Run it from the project root with a 120-second timeout, then read the result:
 - **Exit 0**, the three labels each once, in that order, and nothing else: no secrets found;
@@ -476,8 +484,11 @@ Run it from the project root with a 120-second timeout, then read the result:
   The script not found -- "The tool that does this check is missing. Type /make-it update, then
   run /argo-it again." `git --version` older than 2.25 -- "This check needs a newer version of
   Git (2.25 or later). Update Git, then run /argo-it again." A timeout -- "The check took too
-  long to finish." Anything else -- "The check stopped before it finished." For those last two,
-  add: "Run /argo-it again; if it happens again, ask your DevOps team for help."
+  long to finish." The block printed `FETCH FAILED` -- "I couldn't reach GitHub to see what's
+  already there. [why, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] Fix
+  that, then run /argo-it again." Anything else -- "The check stopped before it finished." For a
+  timeout and anything else, add: "Run /argo-it again; if it happens again, ask your DevOps team
+  for help."
 
 Name each hit only by its file and line number. Nothing from a hit's line -- not a value, not
 part of one, not the rest of the line -- goes into anything you tell the user; the one exception
