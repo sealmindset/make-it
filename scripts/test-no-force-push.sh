@@ -273,14 +273,14 @@ if HOME="$H4" bash install.sh >"$T/i8" 2>&1; then
   hc=$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));h=[h for e in d["hooks"]["PreToolUse"] for h in e["hooks"]][0];assert h.get("onFailure")=="block";print(h["command"])' "$H4/.claude/settings.json") \
     && ok "install.sh: the entry sets onFailure: block" || bad "install.sh: the entry doesn't set onFailure: block"
   hf="$H4/.claude/make-it/hooks/no-force-push.sh"
-  printf '%s' "$(payload 'git push --force')" | sh -c "$hc" 2>/dev/null; [ $? = 2 ] && ok "odd HOME: the written command refuses a force push" || bad "odd HOME: the written command doesn't refuse a force push"
-  printf '%s' "$(payload 'git status')" | sh -c "$hc" 2>/dev/null && ok "odd HOME: a plain command runs" || bad "odd HOME: a plain command was blocked"
+  payload 'git push --force' > "$T/p.json"; sh -c "$hc" < "$T/p.json" 2>/dev/null; [ $? = 2 ] && ok "odd HOME: the written command refuses a force push" || bad "odd HOME: the written command doesn't refuse a force push"
+  payload 'git status' > "$T/p.json"; sh -c "$hc" < "$T/p.json" 2>/dev/null && ok "odd HOME: a plain command runs" || bad "odd HOME: a plain command was blocked"
   mv "$hf" "$hf.gone"
   for c in 'git status' 'git push --force'; do
-    printf '%s' "$(payload "$c")" | sh -c "$hc" 2>/dev/null && ok "hook file gone: '$c' runs (the guard is off, by design)" || bad "hook file gone: '$c' was blocked"
+    payload "$c" > "$T/p.json"; sh -c "$hc" < "$T/p.json" 2>/dev/null && ok "hook file gone: '$c' runs (the guard is off, by design)" || bad "hook file gone: '$c' was blocked"
   done
   echo 'if then fi (' > "$hf"
-  printf '%s' "$(payload 'git status')" | sh -c "$hc" 2>/dev/null; rc=$?; [ "$rc" != 0 ] && ok "a broken hook file blocks (exit $rc)" || bad "a broken hook file let the command through"
+  payload 'git status' > "$T/p.json"; sh -c "$hc" < "$T/p.json" 2>/dev/null; rc=$?; [ "$rc" != 0 ] && ok "a broken hook file blocks (exit $rc)" || bad "a broken hook file let the command through"
   mv "$hf.gone" "$hf"
 else bad "install.sh failed in an odd HOME: $(tail -3 "$T/i8")"; fi
 for want in 'If the hook file is gone' ; do
