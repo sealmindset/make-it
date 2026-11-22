@@ -93,7 +93,7 @@ b = re.search(r"^41c\. .*?```bash\n(.*?)\n```", t, re.S | re.M)
 print(";".join(sorted(set(re.findall(r"SKIP=(\S+)", b.group(1) if b else "")))))
 PY
 )
-[ "$sk" = "no-commit-to-branch;no-commit-to-branch,eslint,prettier" ] && ok "41c's first save skips only no-commit-to-branch and the container checks (ruff runs on it)" || bad "41c skips more than it should: $sk"
+[ "$sk" = "no-commit-to-branch,eslint,prettier" ] && ok "41c's first save skips only no-commit-to-branch and the container checks (ruff runs on it)" || bad "41c skips more than it should: $sk"
 cmp -s "$SC/scripts/precommit-in-container.sh" "$SF/scripts/precommit-in-container.sh" && ok "both scaffolds ship the same container script" || bad "the scaffolds' container scripts differ"
 
 # --- Part 2: the hook check, and try-it's save line, run as written ----------------------------------
@@ -274,8 +274,8 @@ PY
 )
     if [ -z "$snap" ]; then bad "no retrofit snapshot block found to run"; else
       L="$T/legacy"; rm -rf "$L" "$L.pre-retrofit"; mkdir -p "$L" && cd "$L" && git init -q -b main . && git config user.name t && git config user.email t@example.invalid
-      printf 'repos:\n  - repo: local\n    hooks:\n      - id: always-fails-lint\n        name: a lint check this legacy app fails\n        entry: "false"\n        language: system\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks\n' > .pre-commit-config.yaml
-      echo "x = 1" > app.py; git add -A; SKIP=always-fails-lint git commit -q -m legacy; pre-commit install >/dev/null
+      printf 'repos:\n  - repo: local\n    hooks:\n      - id: flake8\n        name: a lint check this legacy app fails\n        entry: "false"\n        language: system\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks\n' > .pre-commit-config.yaml
+      echo "x = 1" > app.py; git add -A; SKIP=flake8 git commit -q -m legacy; pre-commit install >/dev/null
       echo "y = 2" >> app.py
       out=$(bash -c "$snap" 2>&1)
       case $out in *"snapshot: tag "*) [ "$(git log -1 --format=%s)" = "Save pre-retrofit state" ] && ok "retrofit snapshot: a lint hook the app fails doesn't stop it (saved with the security hooks only)" || bad "retrofit snapshot: tagged without saving the changes" ;;
@@ -298,7 +298,8 @@ PY
       case $out in *"SNAPSHOT FAILED: the check 'our-own-check' your project runs before every save stopped it"*) ok "retrofit snapshot: an unknown check that fails stops it, named" ;;
         *) bad "retrofit snapshot: an unknown failing check wasn't named: $(printf '%s' "$out" | tail -2)" ;; esac
       rm -rf "$L.pre-retrofit" ran-*; git checkout -q -- app.py
-      git show HEAD~2:.pre-commit-config.yaml > .pre-commit-config.yaml; git add -A; SKIP=always-fails-lint,our-own-check,ruff git commit -q -m back
+      printf 'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks\n' > .pre-commit-config.yaml
+      git add -A; git commit -q -m back
       k=$(key); printf 'TOKEN = "%s"\n' "$k" > keys.py
       out=$(bash -c "$snap" 2>&1)
       case $out in *"SNAPSHOT FAILED: "*"password or key"*) printf '%s' "$out" | grep -qF "$k" && bad "retrofit snapshot: the refusal printed the key" || ok "retrofit snapshot: a key in the unsaved changes stops it, with the true line" ;;
