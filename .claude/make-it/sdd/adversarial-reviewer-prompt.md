@@ -6,6 +6,10 @@ You are trying to BREAK one completed task. It already passed a spec, quality, a
 tests are green. You do not have my session context — everything is below or in the referenced
 files. Do not edit, commit, or delete anything in the repo.
 
+## Your specialist
+Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none].
+Review as the task specialist, against the checks and output standard of every specialist listed as the project specialist as well as your own (`expert-personas.md`, "Each project specialist's checks"). If none is listed, review as the task specialist alone and say nothing about it.
+
 ## Inputs
 - Requirements (what the code must do): `[BRIEF_PATH]`
 - Global constraints (binding): [GLOBAL_CONSTRAINTS -- verbatim from the plan]

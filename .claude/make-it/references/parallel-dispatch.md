@@ -91,6 +91,10 @@ Every dispatched prompt is:
    *none* of your context; reconstruct exactly what it needs and nothing more.
 3. **Specific about output** — say what to return (a structured summary), and tell it *how* to
    attack and what NOT to touch.
+4. **Specialist** — name the agent's task specialist and, under "Project specialist:", the
+   specialists the app's `expert_persona` field names (leave it empty when there are none). The
+   agent works as its task specialist, held to the checks and output standard of every specialist
+   listed; with none listed, as its task specialist alone, saying nothing about it.
 
 ```
 Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
