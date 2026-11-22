@@ -336,7 +336,7 @@ e=$(git rev-parse --git-dir 2>&1 >/dev/null) || { case "$e" in (*safe.directory*
 # git's insteadOf rewriting applied), then everything it has, read into argo-it's own names (refs/argo-it/gh/...),
 # never the user's branches, remote-tracking refs or tags
 git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
 git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 git status --short
@@ -753,10 +753,24 @@ done
 [ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked" 2>/dev/null)" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
 git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
 s=$(git rev-parse HEAD) || fail "could not read the save"
+# The save itself, checked against what GitHub has: a hook that runs on save can add or change files after 3e.
+# Labels and file:line only, never a value. Anything but a clean exit 0 sends nothing; the save stays here.
+python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit "$s" || { echo "SAVE NOT SENT"; exit 1; }
 
 # Send exactly that save, by its id (never a submodule's commits) -- CI takes over from here
 git push origin "${s}:refs/heads/{current_branch}" --recurse-submodules=no
 ```
+
+**If the block prints `SAVE NOT SENT`, stop here -- the save is made on this computer, and nothing
+was sent.** Read the check's output above that line as 3e reads a result: hits under `== saved, not
+sent ==` as `file:line`, or anything else as "couldn't check". Tell the user:
+
+"I saved your changes on this computer, but I didn't send them: [with hits: I found what looks like
+a password or secret key on **line [N] of [file]** [, one per hit] in that save -- something changed
+it after my first check, such as a step your project runs whenever changes are saved / otherwise: I
+couldn't check that save for secrets]. What to do next: [with hits: take the value out of [file]
+and ask your DevOps team to help remove it from your saved history before anything is sent /
+otherwise: run /argo-it again; if it happens again, ask your DevOps team for help]."
 
 **If the block prints `CHANGED SINCE THE ASK`, stop here -- nothing was saved or sent.** A save was
 made, undone or pulled, or another branch was switched to, after the step-2 ask, so this send would
@@ -2101,18 +2115,33 @@ included, while this save holds only argo-it's files and the seal's: with unsave
 GitHub would fail the project's seal check. Unsaved code is each path `git status` lists in the
 project folder -- a change to a saved file, staged or not, or a new file git doesn't ignore --
 that the seal fingerprints (not Markdown, not under `.make-it/`, not `backend/make-it-stamp.json`),
-except `.gitattributes` (the seal list below has its own rule for it) and argo-it's own files from
-this run, by exact name. Ignored files never count. (The redeploy, PHASE 5b, doesn't get this stop:
+except argo-it's own files from this run, by exact name. `.gitattributes` counts when its unsaved
+change holds none of the seal's own lines; when it holds them, the seal list below has its own rule
+for it. Ignored files never count. (The redeploy, PHASE 5b, doesn't get this stop:
 its step 4 saves the user's own changes and sends them with the update.)
 
 ```bash
-# Unsaved code: each path git status lists in the project folder that the seal fingerprints, except .gitattributes
-# and argo-it's own files. Not a make-it project: nothing to seal, so nothing to check
+# Unsaved code: each path git status lists in the project folder that the seal fingerprints, except argo-it's own
+# files (and .gitattributes when its change holds the seal's lines). Not a make-it project: nothing to seal or check
 [ -f .make-it/app-context.json ] || exit 0
 pre=$(git rev-parse --show-prefix 2>/dev/null)
+# .gitattributes: unsaved code when its unsaved change holds no seal line (the seal list's rule takes the rest)
+k=none
+if [ -f .gitattributes ] && [ -n "$(git status --porcelain -- .gitattributes)" ]; then
+  o="$(git rev-parse --git-dir)/argo-it-gitattributes-saved"
+  git show HEAD:./.gitattributes > "$o" 2>/dev/null || : > "$o"
+  k=$(awk -v f="$o" 'BEGIN { s["# make-it seal"]=1; s["* -text"]=1; s["MAKE-IT.md merge=union"]=1
+      s[".make-it/sealed-files.txt merge=union"]=1; s["backend/make-it-stamp.json merge=union"]=1 }
+    FILENAME == f { old[$0]++; next }
+    { now[$0]++ }
+    END { for (l in now) if (now[l] > old[l]) { if (l in s) seal=1; else other=1 }
+          for (l in old) if (old[l] > now[l]) other=1
+          print (seal ? (other ? "mixed" : "seal") : "none") }' "$o" .gitattributes)
+  rm -f "$o"
+fi
 u=$(git status --porcelain=v1 -z --untracked-files=all --no-renames -- . | tr '\0' '\n' | cut -c4- | while IFS= read -r f; do
   f=${f#"$pre"}
-  case "$f" in (*.[mM][dD]|.make-it/*|backend/make-it-stamp.json|.gitattributes) continue;; esac
+  case "$f" in (*.[mM][dD]|.make-it/*|backend/make-it-stamp.json) continue;; (.gitattributes) [ "$k" = none ] || continue;; esac
   for g in {generated_files}; do [ "$f" = "$g" ] && continue 2; done
   printf '%s\n' "$f"
 done)
@@ -2193,7 +2222,7 @@ into a command. `{generated_files}` are argo-it's files, by name, as Option 1 li
 # the same host and owner/repository both ways (git's insteadOf rewriting applied; the scheme, a user@, a trailing
 # .git or / don't count)
 git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 # Read everything GitHub has -- every branch and tag -- into argo-it's own names (refs/argo-it/gh/...), never the
 # user's branches, remote-tracking refs or tags; in a shallow clone, all the history first, so what GitHub has is exact
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
@@ -3050,6 +3079,7 @@ existing pattern.
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
 - Save messages are never checked for secrets -- only the lines a change adds are: a value typed into a save's message is sent with it
+- A file with a zero byte in its first 8,000 bytes is read as binary (git's own rule) and is never checked, unless it opens with a UTF-16 byte-order mark: a secret in such a file is not found
 - Troubleshooting (PHASE 5c) never commits, pushes or sends on its own: a fix it makes stays unsaved, and every send from it goes through PHASE 5b from its step 1 (the checks, the read of GitHub, the "Update {hostname}" pick, 3a-3e, then step 4's save and send)
 - The user NEVER sees linter names, tool output, or raw error messages
 - Auto-fix only what's safe (3a's safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user picks which
