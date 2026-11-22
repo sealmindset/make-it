@@ -11,7 +11,9 @@ Reports go to a private folder, ~/.cache/make-it-security/<project>/<run>/, with
 Anything printed that came from the project or a tool is JSON-quoted: data, never a line of its own.
 Exit: 0 the pass completed (whatever the lines say); 2 it could not do its job. `audit-check` exits with the
 checker's own code. Standard library only. Everything in the project is read as data, never run here.
-Not for Windows yet: it exits 2 there.
+Accepted limits: Windows is refused (exit 2). The kept pip options (--pre, --prefer-binary, --require-hashes,
+--only-binary, --no-binary) change the audit only as they change the app's own install. Trivy's own requirements
+reader does not split a line at the separator characters this script refuses for pip (checked with U+001C only).
 """
 import hashlib
 import json
@@ -52,6 +54,8 @@ MARKER_VARS = {"python_version", "python_full_version", "os_name", "sys_platform
                "platform_version", "platform_machine", "platform_python_implementation", "implementation_name",
                "implementation_version", "extra", "and", "or", "in", "not"}
 MTOK = re.compile(r"""\s*(\(|\)|===|==|!=|<=|>=|~=|<|>|"[A-Za-z0-9._ *+!-]*"|'[A-Za-z0-9._ *+!-]*'|[A-Za-z_]+)""")
+BREAKS = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029]")  # every control character but tab and newline, and the
+# Unicode line and paragraph separators: str.splitlines() breaks on several of them (\x0b \x0c \x1c-\x1e \x85 U+2028/9)
 COMMENT = re.compile(r"(^|\s+)#.*$")  # pip's own rule: "#" starts a comment at line start or after whitespace
 HASH = re.compile(r"^(sha256|sha384|sha512):[0-9a-fA-F]+$")
 BINVAL = re.compile(rf"^(:all:|:none:|{NAME}(?:,{NAME})*)$")
@@ -202,7 +206,11 @@ def sanitise(raw):
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         return None, "the file is not UTF-8" + WHY
-    lines = text.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    text = text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    odd = BREAKS.search(text)  # pip splits lines with str.splitlines(): the two must never disagree on where a line ends
+    if odd:
+        return None, f"line {text.count(chr(10), 0, odd.start()) + 1}: a control or line-separator character{WHY}"
+    lines = text.splitlines()
     logical, buf, start = [], [], 0
     for n, line in enumerate(lines, 1):  # pip's join_lines: a trailing backslash continues the line
         if not line.endswith("\\") or COMMENT.match(line):

@@ -90,6 +90,12 @@ What it does:
   with `-r` or `-c`, an editable or local package, a URL, an index or host option, any other
   option) makes the whole file NOT RUN, with the line number and the kind of line, never its
   contents. So does a file over 1,000,000 bytes, one that is not UTF-8, or one with a NUL byte.
+  So does a control character other than tab, or a line or paragraph separator, anywhere in
+  the file, because pip splits lines on more characters than a newline and the script and pip
+  must agree on where a line ends. The kept options change the audit only as they change the
+  app's own install. Trivy's own requirements reader does not split a line at those characters
+  (checked with one of them, U+001C: it read only the package before the comment), so for such a
+  file pip-audit's NOT RUN line is what shows it; the others were not tried with Trivy.
 - Every container runs with `--cap-drop=ALL` and `no-new-privileges`, with no variable from the
   computer's environment and no Docker socket; Bandit and npm audit also run as a user other than
   root. Semgrep's usage reporting is off (`--metrics=off`).
