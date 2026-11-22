@@ -18,6 +18,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.join(ROOT, '.claude', 'make-it', 'scripts')  # where secret-scan.py lives
@@ -50,7 +51,7 @@ class Repo(object):
         self.root = os.path.realpath(td.name)
         self.work = os.path.join(self.root, 'work')
         if remote:
-            self._git(self.root, 'init', '-q', '--bare', 'origin')
+            self._git(self.root, 'init', '-q', '--bare', '-b', 'main', 'origin')
         self._git(self.root, 'init', '-q', '-b', 'main', 'work')
         self.git('commit', '-q', '--allow-empty', '-m', 'init')
         self.write('app.py', BASE)
@@ -5321,7 +5322,7 @@ class ArgoItFirstSendFix2Cases(_FirstSendAdv1, _FirstSendFix1, _FirstSend, Base)
         r = Repo.__new__(Repo)
         r.test, r.root = self, os.path.realpath(td.name)
         r.work = os.path.join(r.root, 'work')
-        Repo._git(r.root, 'init', '-q', '--bare', 'origin')
+        Repo._git(r.root, 'init', '-q', '--bare', '-b', 'main', 'origin')
         Repo._git(r.root, 'init', '-q', '-b', 'main', 'work')
         r.git('remote', 'add', 'origin', os.path.join(r.root, 'origin'))
         return r
@@ -11581,6 +11582,504 @@ class ConfirmClusterCases(ArgoItRestartAsksCases):
             i = flat.index('If it prints `%s`' % mark)
             self.assertRegex(flat[i:i + 1200], r"(?i)only knows local clusters, so there's none to record yet", mark)
         self.assertRegex(flat, r"(?i)If the user asks to record the app's cluster[^.]{0,200}only local clusters")
+
+
+class ArgoItSetupBranchCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5,
+                             _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend,
+                             Base):
+    """E12-S1, owner 2026-11-22: /argo-it's first set-up always goes onto its own branch, `argo-it/setup`, built on
+    GitHub's main version (the branch GitHub's HEAD names), and reaches it only through ONE proposed change (a pull
+    request) holding only the generated files; it never sends `main` or the branch the user is on, and the branch here
+    never moves. It goes on only when the code here is exactly GitHub's main version (owner choice A: ahead, behind,
+    apart and no main version yet each stop before the ask). A missing deploy branch starts at GitHub's main version,
+    without the set-up (D1). After the send, the sent commit is kept here on `refs/argo-it/setup` and each local copy
+    that is exactly what was sent is taken out of the folder; one that differs stays and is named (L2). While the
+    set-up waits for review, a second run sends nothing and offers only the local try-out, from that commit in a
+    temporary folder. The generated workflow doesn't build or deploy on a push to `argo-it/**`, and deploys the
+    exact version the same run built (B2). `gh` is never the real one: a fake on PATH records its arguments."""
+
+    SETUP = 'refs/heads/argo-it/setup'
+    GH_URL = 'https://github.com/acme/app.git'
+    TIDY_LINE = ("Your set-up files are saved on their own copy waiting for review, so I've taken them out of your "
+                 "folder until it's accepted.")
+    STOPS = ('NO MAIN VERSION', 'AHEAD OF GITHUB', 'BEHIND GITHUB', 'APART FROM GITHUB', 'SETUP WAITING',
+             'SET UP ALREADY')
+
+    # --- fixtures --------------------------------------------------------------------------------------------------
+    def _github(self, r):
+        """origin's address names a GitHub repository, while git sends and reads the fixture's bare repo (insteadOf)."""
+        r.git('remote', 'set-url', 'origin', self.GH_URL)
+        r.git('config', 'url.%s.insteadOf' % os.path.join(r.root, 'origin'), self.GH_URL)
+
+    def _fake_gh(self, r, create_exit=0):
+        """A fake `gh` first on PATH: it writes each call's arguments, one per line, then `---`, to gh.log."""
+        d = os.path.join(r.root, 'fakebin')
+        os.makedirs(d, exist_ok=True)
+        log = os.path.join(r.root, 'gh.log')
+        with open(os.path.join(d, 'gh'), 'w') as f:
+            f.write('#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a"; done >> "%s"\necho --- >> "%s"\n'
+                    'case "$1 $2" in\n  "pr create") [ %d = 0 ] || exit %d; echo https://github.com/acme/app/pull/7;;\n'
+                    'esac\nexit 0\n' % (log, log, create_exit, create_exit))
+        os.chmod(os.path.join(d, 'gh'), 0o755)
+        return mock.patch.dict(os.environ, {'PATH': d + os.pathsep + os.environ.get('PATH', '')}), log
+
+    @staticmethod
+    def _gh_calls(log):
+        if not os.path.exists(log):
+            return []
+        with open(log) as f:
+            return [c.strip('\n').split('\n') for c in f.read().split('---\n') if c.strip()]
+
+    def _empty_remote(self):
+        """Commits here, and an origin that has never been sent anything."""
+        r = self.fresh(remote=False)
+        Repo._git(r.root, 'init', '-q', '--bare', '-b', 'main', 'origin')
+        r.git('remote', 'add', 'origin', os.path.join(r.root, 'origin'))
+        return r
+
+    def _setup_sent(self, r, st):
+        return self._sent_refs(r).get(self.SETUP)
+
+    def _send(self, shell, r=None, files=None, **kw):
+        r = r or self.fresh()
+        files = files or self._gen(r)
+        before, start, here = self._sent_refs(r), self._head(r), self._branches(r)
+        st = self._flow(r, shell, files, **kw)
+        return r, files, before, start, here, st
+
+    # --- 1. the definition of done ------------------------------------------------------------------------------------
+    def test_1a_a_first_send_from_main_leaves_main_here_and_on_github_unchanged_and_sends_only_the_setup_branch(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r, files, before, start, here, st = self._send(shell)
+                self.assertIsNotNone(st['ask'], 'a clean first send stopped before the ask: %r %r'
+                                     % (st['stopped'], st['failed']))
+                self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                after = self._sent_refs(r)
+                self.assertEqual(self._changed(before, after), {self.SETUP, 'refs/heads/' + self.DEPLOY},
+                                 'GitHub changed on other branches than argo-it/setup and the new deploy branch')
+                self.assertEqual(after['refs/heads/main'], before['refs/heads/main'], "GitHub's main moved")
+                self.assertEqual(after['refs/heads/' + self.DEPLOY], start, "the new deploy branch isn't GitHub's main "
+                                 "version as it was: it holds the set-up, so it could deploy before the review")
+                setup = after[self.SETUP]
+                self.assertEqual(r.git('rev-list', '--parents', '-n', '1', setup).decode().split()[1:], [start],
+                                 "argo-it/setup isn't built on GitHub's main version")
+                self.assertEqual(r.git('diff', '--name-only', start, setup).decode().split(), sorted(files),
+                                 'the set-up holds more than the generated files')
+                self.assertEqual(self._branches(r), here, 'a branch here moved')
+                self.assertEqual(r.git('rev-parse', 'refs/argo-it/setup').decode().strip(), setup,
+                                 'the sent commit is not kept here on refs/argo-it/setup')
+                self.assertEqual(r.git('status', '--porcelain', '-uall').decode(), '', 'the local copies of the '
+                                 'set-up files are still in the folder: a pull after the merge would refuse them')
+
+    def test_1b_a_first_send_from_work_level_with_main_never_sends_work_or_main(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                r.git('checkout', '-q', '-b', 'work')
+                r.git('push', '-q', 'origin', 'work')
+                r, files, before, start, here, st = self._send(shell, r)
+                self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                after = self._sent_refs(r)
+                for b in ('refs/heads/main', 'refs/heads/work'):
+                    self.assertEqual(after[b], before[b], '%s moved on GitHub' % b)
+                self.assertEqual(self._branches(r), here, 'a branch here moved')
+                self.assertEqual(r.git('rev-parse', after[self.SETUP] + '^').decode().strip(), start)
+
+    def test_1c_contract_no_push_in_phase_5_sends_main_or_the_current_branch(self):
+        p = self._phase()
+        pushes = [l.strip() for f in self._fences(p) for l in f[2].splitlines()
+                  if re.match(r'\s*(?:\S+\s*\|\|\s*)?git\s+push\b', l) or re.search(r'\bgit\s+push\b', l.split('#')[0])]
+        self.assertTrue(pushes, 'PHASE 5 has no git push')
+        for l in pushes:
+            dest = re.findall(r':refs/heads/([^"\s]+)"?', l)
+            self.assertTrue(dest, 'a push in PHASE 5 names no destination branch: %r' % l)
+            for d in dest:
+                self.assertIn(d, ('argo-it/setup', '$d'), 'a push in PHASE 5 sends a branch other than argo-it/setup '
+                              'or the deploy branch: %r' % l)
+            self.assertNotRegex(l, r'\bHEAD\b|\$b\b|asked-branch|\{current_branch\}|\bmain\b',
+                                'a push in PHASE 5 can send main or the branch the user is on: %r' % l)
+            if 'argo-it/setup' in l:
+                self.assertIn('--force-with-lease=refs/heads/argo-it/setup:', l, 'the set-up push may overwrite an '
+                              'argo-it/setup already on GitHub: it must only create it')
+                self.assertIn('{saved_head}:', l)
+            else:
+                self.assertIn('{checked_head}:', l, 'the deploy branch is not started from the commit the check read '
+                              '(GitHub\'s main version, without the set-up)')
+        self.assertNotRegex(re.sub(self.FENCE, '', p, flags=re.M | re.S) + '\n'.join(f[2] for f in self._fences(p)),
+                            r'update-ref "refs/heads/\$b"', 'PHASE 5 still moves the branch here')
+
+    # --- 2. the local copies after the send (owner choice L2) -----------------------------------------------------------
+    def test_2_a_copy_changed_after_the_save_stays_in_the_folder_and_is_named(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                files = self._gen(r)
+                rel = 'ONBOARDING-K8S.md'
+                r, files, before, start, here, st = self._send(
+                    shell, r, files, after_save=lambda: r.write(rel, '# Onboarding\nmy note\n'))
+                self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                self.assertTrue(os.path.exists(r.path(rel)), 'a copy that differs from what was sent was removed')
+                with open(r.path(rel)) as f:
+                    self.assertEqual(f.read(), '# Onboarding\nmy note\n')
+                for f in files:
+                    if f != rel:
+                        self.assertFalse(os.path.exists(r.path(f)), '%s is exactly what was sent but stays' % f)
+                out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs'])
+                self.assertIn('kept: ' + rel, out.splitlines(), 'the copy that differs is not named')
+
+    def test_2b_the_tidy_line_is_said_once_after_the_send(self):
+        flat = self._flat(self._phase())
+        self.assertEqual(flat.count(self.TIDY_LINE), 1, 'the plain line about the files leaving the folder: %r'
+                         % self.TIDY_LINE)
+
+    # --- 3. the proposed change -----------------------------------------------------------------------------------------
+    def test_3a_on_github_gh_opens_one_request_from_argo_it_setup_into_main_with_no_reviewer(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._github(r)
+                patch, log = self._fake_gh(r)
+                with patch:
+                    r, files, before, start, here, st = self._send(shell, r)
+                self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                creates = [c for c in self._gh_calls(log) if c[:2] == ['pr', 'create']]
+                self.assertEqual(len(creates), 1, 'not one gh pr create: %r' % self._gh_calls(log))
+                c = creates[0]
+                for k, v in (('--repo', 'github.com/acme/app'), ('--head', 'argo-it/setup'), ('--base', 'main')):
+                    self.assertIn(k, c)
+                    self.assertEqual(c[c.index(k) + 1], v, '%s %r' % (k, c))
+                self.assertNotIn('--reviewer', c, 'argo-it names reviewers; CODEOWNERS is GitHub\'s own')
+                out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs'])
+                self.assertIn('pr: https://github.com/acme/app/pull/7', out.splitlines())
+                self.assertIn(self.SETUP, self._sent_refs(r))
+
+    def test_3b_when_gh_fails_or_the_remote_is_not_github_the_branch_is_sent_and_the_user_opens_the_request(self):
+        for shell in ('bash', 'zsh'):
+            for case in ('gh fails', 'not GitHub'):
+                with self.subTest(shell=shell, case=case):
+                    r = self.fresh()
+                    if case == 'gh fails':
+                        self._github(r)
+                    patch, log = self._fake_gh(r, create_exit=1 if case == 'gh fails' else 0)
+                    with patch:
+                        r, files, before, start, here, st = self._send(shell, r)
+                    self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                    self.assertIn(self.SETUP, self._sent_refs(r), 'the set-up branch was not sent')
+                    out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs'])
+                    self.assertTrue([l for l in out.splitlines() if l.startswith('by hand: ')], out)
+                    if case == 'not GitHub':
+                        self.assertFalse([c for c in self._gh_calls(log) if c[:2] == ['pr', 'create']],
+                                         'gh was asked to open a request for a remote that is not on GitHub')
+        p = self._phase()
+        self.assertTrue(any('command -v gh' in f[2] for f in self._fences(p)), 'gh is run without checking it is here')
+        rule = self._flat(p[p.find('`by hand:'):])
+        self.assertRegex(rule[:1500], r'"I[^"]*argo-it/setup[^"]*open[^"]*"', 'no plain message tells the user to '
+                         'open the request themselves')
+
+    # --- 4. where the code here stands against GitHub's main version (owner choice A) ----------------------------------
+    def _stopped_at(self, st, r, before, mark):
+        self.assertIsNone(st['ask'], 'the ask was shown: %r' % st['trace'])
+        self.assertEqual(st['failed'], mark, '%r %r' % (st['stopped'], st['failed']))
+        self.assertEqual(self._sent_refs(r), before, 'something was sent')
+
+    def test_4a_ahead_behind_apart_and_no_main_version_each_stop_before_the_ask_with_nothing_sent(self):
+        for shell in ('bash', 'zsh'):
+            for case, mark in (('ahead', 'AHEAD OF GITHUB'), ('behind', 'BEHIND GITHUB'), ('apart', 'APART FROM GITHUB'),
+                               ('empty remote', 'NO MAIN VERSION'), ('no commits, empty remote', 'NO MAIN VERSION'),
+                               ('no commits here', 'BEHIND GITHUB')):
+                with self.subTest(shell=shell, case=case):
+                    if case == 'empty remote':
+                        r = self._empty_remote()
+                    elif case == 'no commits, empty remote':
+                        r = self._unborn()
+                        Repo._git(r.root, '--git-dir', os.path.join(r.root, 'origin'), 'symbolic-ref', 'HEAD',
+                                  'refs/heads/main')
+                    elif case == 'no commits here':
+                        r = self._unborn()
+                        self._theirs_on_origin(r, 'first')
+                    else:
+                        r = self.fresh()
+                        if case in ('behind', 'apart'):
+                            self._theirs_on_origin(r, case)
+                        if case in ('ahead', 'apart'):
+                            r.append('app.py', 'x = 2\n')
+                            r.commit('mine, not sent')
+                    r, files, before, start, here, st = self._send(shell, r)
+                    self._stopped_at(st, r, before, mark)
+
+    def test_4b_each_stop_says_plainly_that_nothing_was_saved_or_sent_and_what_to_do(self):
+        p = self._phase()
+        flat = self._flat(re.sub(self.FENCE, ' ', p, flags=re.M | re.S))
+        for mark, need in (('NO MAIN VERSION', r'/ship-it'), ('AHEAD OF GITHUB', r'/ship-it'),
+                           ('BEHIND GITHUB', r'(?i)get the latest'), ('APART FROM GITHUB', r'/ship-it'),
+                           ('SETUP WAITING', r'argo-it/setup'), ('SET UP ALREADY', r'(?i)already')):
+            i = flat.find('If it prints `%s`' % mark)
+            self.assertNotEqual(i, -1, 'PHASE 5 has no rule for %s' % mark)
+            q = re.search(r'"(I[^"]{20,})"', flat[i:i + 2500])
+            self.assertTrue(q, 'no message for %s' % mark)
+            q = q.group(1)
+            self.assertRegex(q, self.SENT_NONE, '%s: the message does not say nothing was sent' % mark)
+            self.assertRegex(q, need, '%s: %r' % (mark, q))
+            self.assertRegex(q, r'What to do next', mark)
+            self.assertNotRegex(re.sub(r'\[[^\]]*\]', '', q), self.NEVER_SAY, '%s: not in plain words: %r' % (mark, q))
+
+    def test_4c_the_new_checks_sit_after_2bs_secret_check_and_before_the_ask(self):
+        p = self._phase()
+        blocks = [f for f in self._fences(p) if '--symref' in f[2]]
+        self.assertEqual(len(blocks), 1, 'no one block reads GitHub\'s main version')
+        self.assertGreater(blocks[0][0], self._scan(p)[1], 'the new checks run before the secret check')
+        self.assertLess(blocks[0][1], self._ask_at(p))
+
+    # --- 5. a second run ------------------------------------------------------------------------------------------------
+    def test_5a_while_the_setup_waits_for_review_a_second_run_sends_nothing_and_tidies_its_copies_again(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r, files, before, start, here, st = self._send(shell)
+                self.assertFalse(st['stopped'] or st['failed'])
+                files = self._gen(r)  # the second run generates the same files again
+                r, files, before, start, here, st = self._send(shell, r, files)
+                self._stopped_at(st, r, before, 'SETUP WAITING')
+                self.assertEqual(r.git('status', '--porcelain', '-uall').decode(), '', 'the copies made again, exactly '
+                                 'what waits for review, are left in the folder')
+
+    def test_5b_after_the_setup_was_accepted_a_first_set_up_run_sends_nothing(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                files = self._gen(r)
+                r.commit('the set-up, accepted')
+                r.push()
+                files = self._gen(r)
+                r, files, before, start, here, st = self._send(shell, r, files)
+                self._stopped_at(st, r, before, 'SET UP ALREADY')
+
+    def test_5c_the_waiting_stop_offers_only_the_local_try_out(self):
+        p = self._phase()
+        flat = self._flat(re.sub(self.FENCE, ' ', p, flags=re.M | re.S))
+        i = flat.find('If it prints `SETUP WAITING`')
+        rule = flat[i:flat.find('If it prints `', i + 10)]
+        self.assertRegex(rule, r'(?i)try')
+        self.assertNotRegex(rule, r'(?i)\bSend it\b|step-3 (?:ask|pick)\b(?! (?:isn\'t|is not))', 'the waiting stop '
+                            'offers more than the try-out: %r' % rule)
+
+    # --- 6. the try-out from the sent commit, in a temporary folder ----------------------------------------------------
+    def test_6_the_try_out_of_the_waiting_setup_runs_from_a_temporary_folder_and_sends_nothing(self):
+        p = self._phase()
+        blocks = [f[2] for f in self._fences(p) if 'git archive' in f[2]]
+        self.assertEqual(len(blocks), 1, 'no one try-out block that unpacks the set-up into a temporary folder')
+        code = blocks[0]
+        self.assertTrue(all('--context {local_context}' in l for l in code.splitlines()
+                            if l.strip().startswith('kubectl')), 'a kubectl line is not pinned to the local cluster')
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r, files, before, start, here, st = self._send(shell)
+                d = os.path.join(r.root, 'fakebin')
+                os.makedirs(d, exist_ok=True)
+                log = os.path.join(r.root, 'k.log')
+                with open(os.path.join(d, 'kubectl'), 'w') as f:
+                    f.write('#!/bin/sh\necho "$*" >> "%s"\nfor a in "$@"; do [ -d "$a" ] && (cd "$a" && find . -type f'
+                            ' | sort) >> "%s"; done\nexit 0\n' % (log, log))
+                with open(os.path.join(d, 'docker'), 'w') as f:
+                    f.write('#!/bin/sh\nexit 0\n')
+                for t in ('kubectl', 'docker'):
+                    os.chmod(os.path.join(d, t), 0o755)
+                sent = self._sent_refs(r)
+                run = self._fill(code.replace('{local_context}', 'rancher-desktop').replace('{namespace}', 'app'))
+                cp = subprocess.run([shell, '-c', run], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    timeout=60, env=dict(os.environ, PATH=d + os.pathsep + os.environ['PATH']))
+                self.assertEqual(cp.returncode, 0, cp.stderr[:300])
+                with open(log) as f:
+                    k = f.read()
+                self.assertRegex(k, r'--context rancher-desktop apply -k \S+/env/dev/?\n')
+                self.assertIn('./kustomization.yaml', k, 'the temporary folder did not hold the sent files')
+                self.assertNotIn(r.work, k.split('apply -k ')[1].split('\n')[0], 'the try-out ran from the project')
+                self.assertEqual(self._sent_refs(r), sent, 'the try-out sent something')
+                self.assertEqual(r.git('status', '--porcelain', '-uall').decode(), '', 'the try-out changed the folder')
+
+    # --- 7. the ask and the messages say what now happens --------------------------------------------------------------
+    def test_7a_the_ask_says_the_setup_goes_on_its_own_branch_as_a_proposed_change_and_nothing_deploys_before_it(self):
+        p = self._phase()
+        ask = self._flat(p[self._ask_at(p):p.find(self.PICK)])
+        for rx in (r'argo-it/setup', r'(?i)proposed change for review', r'(?i)Nothing builds or deploys until',
+                   r'(?i)stays as it is'):
+            self.assertRegex(ask, rx)
+        self.assertNotIn('If I send this to GitHub, then from now on', ask)
+        self.assertNotRegex(ask, r'This also sends the \[M\]', 'the ask names other saves, but 2c stops before the ask '
+                                                              'when there are any')
+        pick = self._flat(p[p.find(self.PICK):p.find('Wait for the pick')])
+        self.assertRegex(pick, r'\*\*Send it for review -- deploys to \{hostname\} once accepted\*\*')
+
+    def test_7b_the_report_after_the_send_never_says_it_is_live_or_set_up(self):
+        p = self._phase()
+        tail = self._flat(p[p.find('**If every push worked'):])
+        self.assertNotIn('Pushed!', tail)
+        self.assertNotIn('Your deployment pipeline is set up!', tail)
+        self.assertRegex(tail, r'(?i)proposed change')
+
+    def test_7c_git_operations_still_names_the_one_save_built_with_hooks_off(self):
+        with open(os.path.join(ROOT, '.claude', 'make-it', 'references', 'git-operations.md')) as f:
+            t = self._flat(f.read())
+        self.assertIn("One save is built with the hooks off by design: /argo-it's first-deploy save (PHASE 5)", t)
+
+    # --- 8. the generated workflow (B2) -----------------------------------------------------------------------------
+    def _workflow_step(self):
+        doc = ArgoItWiringCases._doc(self)
+        i = doc.find('<step name="generate-workflow">')
+        return doc[i:doc.find('</step>', i)]
+
+    def _yaml_blocks(self, t=None):
+        return re.findall(r'^```yaml\n(.*?)^```', t or self._workflow_step(), re.M | re.S)
+
+    @staticmethod
+    def _run_body(block, name):
+        lines = block.splitlines()
+        i = next(k for k, l in enumerate(lines) if l.strip() == '- name: %s' % name)
+        j = next(k for k in range(i, len(lines)) if lines[k].strip() == 'run: |')
+        ind = len(lines[j]) - len(lines[j].lstrip()) + 2
+        body = []
+        for l in lines[j + 1:]:
+            if l.strip() and len(l) - len(l.lstrip()) < ind:
+                break
+            body.append(l[ind:])
+        return '\n'.join(body) + '\n'
+
+    @staticmethod
+    def _gh_glob(pat, name):
+        rx = ''
+        k = 0
+        while k < len(pat):
+            if pat.startswith('**', k):
+                rx, k = rx + '.*', k + 2
+            elif pat[k] == '*':
+                rx, k = rx + '[^/]*', k + 1
+            else:
+                rx, k = rx + re.escape(pat[k]), k + 1
+        return re.fullmatch(rx, name) is not None
+
+    def _triggers(self, t=None, event='push'):
+        on = self._yaml_blocks(t)[0]
+        m = re.search(r'^  %s:\n    branches:\n((?:      - .*\n)+)' % event, on, re.M)
+        self.assertTrue(m, 'the workflow has no %s branches list' % event)
+        return [re.match(r'\s*- "?([^"#\s]+)"?', l).group(1) for l in m.group(1).splitlines()]
+
+    def _runs_on(self, pats, branch):
+        on = False
+        for pat in pats:
+            neg = pat.startswith('!')
+            if self._gh_glob(pat.lstrip('!'), branch):
+                on = not neg
+        return on
+
+    def test_8a_a_push_to_argo_it_setup_never_runs_the_build_and_deploy_and_pull_requests_still_build(self, t=None):
+        push = self._triggers(t)
+        for b in ('argo-it/setup', 'argo-it/x'):
+            self.assertFalse(self._runs_on(push, b), 'a push to %s runs the build-and-deploy: %r' % (b, push))
+        for b in ('main', 'work', 'feature/x'):
+            self.assertTrue(self._runs_on(push, b), 'a push to %s no longer runs: %r' % (b, push))
+        self.assertTrue(self._runs_on(self._triggers(t, 'pull_request'), 'main'), 'pull requests no longer build')
+
+    def _built_tags(self, ref, sha, t=None):
+        meta = [b for b in self._yaml_blocks(t) if 'docker/metadata-action' in b][0]
+        tags = set()
+        for l in re.findall(r'^\s*(type=.*?)\s*$', meta, re.M):
+            kv_ = dict(x.split('=', 1) for x in l.split(','))
+            en = kv_.get('enable')
+            if en:
+                m = re.fullmatch(r"\$\{\{ github\.ref_name (==|!=) '([^']+)' \}\}", en)
+                self.assertTrue(m, 'an enable the test cannot read: %r' % en)
+                if (ref == m.group(2)) != (m.group(1) == '=='):
+                    continue
+            if kv_['type'] == 'raw':
+                tags.add(kv_['value'])
+            elif kv_['type'] == 'sha':
+                self.assertEqual(kv_.get('format'), 'short')
+                tags.add(kv_.get('prefix', '') + sha[:7])
+            elif kv_['type'] == 'ref' and kv_.get('event') == 'branch':
+                tags.add(re.sub(r'[^A-Za-z0-9_.-]', '-', ref))
+            else:
+                self.fail('a tag type the test cannot read: %r' % l)
+        return tags
+
+    @staticmethod
+    def _bash_ge4():
+        """GitHub's runners run a step's script with bash 5: a bash 4 or later here, else None."""
+        for b in [shutil.which('bash'), '/opt/homebrew/bin/bash', '/usr/local/bin/bash']:
+            if b and os.path.exists(b):
+                v = subprocess.run([b, '-c', 'echo ${BASH_VERSINFO[0]}'], stdout=subprocess.PIPE).stdout.strip()
+                if v.isdigit() and int(v) >= 4:
+                    return b
+        return None
+
+    def _step_bash(self, body, env, mount):
+        """A workflow step's script under bash 4 or later, as a GitHub runner runs it; `env` is all it is given (PATH
+        gets the runner's own folders after any of `env`'s). With only an older bash here (macOS has 3.2), it runs in
+        ubuntu:24.04 under Docker, `mount` shared at the same path; with neither, the test fails."""
+        b = self._bash_ge4()
+        base = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+        if b:
+            e = dict(env, PATH=(env['PATH'] + os.pathsep if 'PATH' in env else '') + os.environ['PATH'])
+            return subprocess.run([b, '-c', body], env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        self.assertTrue(shutil.which('docker'), 'these checks need bash 4 or later (GitHub runs this step with bash 5) '
+                                                'or Docker; this computer has neither')
+        e = dict(env, PATH=(env['PATH'] + ':' if 'PATH' in env else '') + base)
+        cmd = ['docker', 'run', '--rm', '-v', '%s:%s' % (mount, mount)]
+        for k, v in e.items():
+            cmd += ['-e', '%s=%s' % (k, v)]
+        return subprocess.run(cmd + ['ubuntu:24.04', 'bash', '-c', body], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=300)
+
+    def _deploy_tag(self, ref, sha, t=None):
+        blk = [b for b in self._yaml_blocks(t) if 'Select deploy tag' in b][0]
+        body = self._run_body(blk, 'Select deploy tag')
+        with tempfile.TemporaryDirectory() as td:
+            out = os.path.join(os.path.realpath(td), 'out')
+            open(out, 'w').close()
+            env = {'IMAGE_BASE': 'ghcr.io/Acme/app', 'GITHUB_SHA': sha, 'GITHUB_REF_NAME': ref, 'GITHUB_OUTPUT': out}
+            cp = self._step_bash(body, env, os.path.realpath(td))
+            self.assertEqual(cp.returncode, 0, cp.stderr)
+            with open(out) as f:
+                return dict(l.split('=', 1) for l in f.read().splitlines())['DEPLOY_TAG']
+
+    def test_8b_the_deploy_tag_is_a_tag_the_same_run_built_on_main_and_on_another_branch(self, t=None):
+        sha = '0123456789abcdef0123456789abcdef01234567'
+        for ref in ('main', 'work'):
+            self.assertIn(self._deploy_tag(ref, sha, t), self._built_tags(ref, sha, t),
+                          'a push to %s deploys a version that run never built' % ref)
+
+    def test_8c_the_smoke_test_step_runs_under_set_u_and_starts_the_version_the_run_deploys(self, t=None):
+        blk = [b for b in self._yaml_blocks(t) if 'Smoke test container startup' in b][0]
+        body = self._run_body(blk, 'Smoke test container startup').replace('{service}', 'backend')
+        self.assertIn('set -euo pipefail', body)
+        self.assertNotIn('${{', body)
+        sha = 'fedcba9876543210fedcba9876543210fedcba98'
+        with tempfile.TemporaryDirectory() as td:
+            td = os.path.realpath(td)
+            log = os.path.join(td, 'docker.log')
+            with open(os.path.join(td, 'docker'), 'w') as f:
+                f.write('#!/bin/sh\necho "$*" > "%s"\n' % log)
+            os.chmod(os.path.join(td, 'docker'), 0o755)
+            env = {'IMAGE_BASE': 'ghcr.io/Acme/app', 'GITHUB_SHA': sha, 'PATH': td}
+            cp = self._step_bash(body, env, td)
+            self.assertEqual(cp.returncode, 0, cp.stderr)
+            with open(log) as f:
+                self.assertIn('ghcr.io/acme/app/backend:%s ' % self._deploy_tag('main', sha, t), f.read())
+
+    def test_8d_control_the_workflow_checks_fail_on_the_old_text(self):  # control: each check fails on the old text
+        new = self._workflow_step()
+        olds = {
+            'test_8a_a_push_to_argo_it_setup_never_runs_the_build_and_deploy_and_pull_requests_still_build':
+                re.sub(r'\n\s*- "!argo-it/\*\*"[^\n]*', '', new),
+            'test_8b_the_deploy_tag_is_a_tag_the_same_run_built_on_main_and_on_another_branch':
+                re.sub(r'DEPLOY_TAG="[^"\n]*"', 'DEPLOY_TAG="dev-latest"', new),
+            'test_8c_the_smoke_test_step_runs_under_set_u_and_starts_the_version_the_run_deploys':
+                re.sub(r'(set -euo pipefail\n)(?:[ \t]*(?:IMAGE_BASE_LC|DEPLOY_TAG)=[^\n]*\n)+', r'\1', new, count=1),
+        }
+        for name, old in olds.items():
+            self.assertTrue(old != new, 'the old text for %s was not rebuilt' % name)
+            with self.subTest(old=name):
+                with self.assertRaises(AssertionError):
+                    getattr(self, name)(old)
 
 
 if __name__ == '__main__':
