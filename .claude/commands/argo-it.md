@@ -2035,16 +2035,37 @@ build argo-it's save of its files by name (no branch moves, and a save that hold
 argo-it's files is never sent), check exactly that save, and send it by its id -- the same order
 as PHASE 5b, where 3e checks before step 4 saves.
 
-In a make-it project (one with `.make-it/app-context.json`), first note how `.gitattributes`
-stands, from the project root -- the seal can add lines to it, and it is saved with argo-it's files
-only when the seal just changed it:
+In a make-it project (one with `.make-it/app-context.json`), first check for unsaved code, from
+the project root, before the seal runs. The seal fingerprints the whole project folder, unsaved work
+included, while this save holds only argo-it's files and the seal's: with unsaved code, what reaches
+GitHub would fail the project's seal check. Unsaved code is each path `git status` lists in the
+project folder -- a change to a saved file, staged or not, or a new file git doesn't ignore --
+that the seal fingerprints (not Markdown, not under `.make-it/`, not `backend/make-it-stamp.json`),
+except `.gitattributes` (the seal list below has its own rule for it) and argo-it's own files from
+this run, by exact name. Ignored files never count. (The redeploy, PHASE 5b, doesn't get this stop:
+its step 4 saves the user's own changes and sends them with the update.)
 
 ```bash
-# Before the seal: .gitattributes's content id ("none" if there is no such file), then any unsaved change git
-# sees in it (nothing if there is none)
-g="$(git rev-parse --git-dir)/argo-it-gitattributes"
-{ git hash-object -- .gitattributes 2>/dev/null || echo none; git status --porcelain -- .gitattributes; } > "$g"
+# Unsaved code: each path git status lists in the project folder that the seal fingerprints, except .gitattributes
+# and argo-it's own files. Not a make-it project: nothing to seal, so nothing to check
+[ -f .make-it/app-context.json ] || exit 0
+pre=$(git rev-parse --show-prefix 2>/dev/null)
+u=$(git status --porcelain=v1 --untracked-files=all --no-renames -- . | cut -c4- | while IFS= read -r f; do
+  f=${f#"$pre"}
+  case "$f" in (*.[mM][dD]|.make-it/*|backend/make-it-stamp.json|.gitattributes) continue;; esac
+  for g in {generated_files}; do [ "$f" = "$g" ] && continue 2; done
+  printf '%s\n' "$f"
+done)
+[ -z "$u" ] || { echo "UNSAVED CODE"; printf '%s\n' "$u" | wc -l | tr -d ' '; printf '%s\n' "$u" | sed -n '1,2p'; exit 1; }
 ```
+
+If it prints `UNSAVED CODE`, stop -- don't run the seal and don't show the step-3 ask; the seal
+writes nothing, and nothing is saved or sent. The line after it is how many files hold unsaved code, then the first one or
+two, by path from the project folder. Tell the user, naming paths only, never what is in them:
+
+"I haven't saved or sent anything: [N] [file in your project has / files in your project have]
+changes that aren't saved yet ([the first path][, [the second path]][, and others -- only if N is
+3 or more]). What to do next: save your changes, or run /wrap-it, then run /argo-it again."
 
 Then run the seal step now, before step 2: it writes its files beside argo-it's, and the check and
 the save on 'Send it' must both see them. The seal's files count as argo-it's files: one save holds
@@ -2058,20 +2079,28 @@ for f in .make-it/manifest.json .make-it/sealed-files.txt MAKE-IT.md backend/mak
   [ -f "$f" ] && printf '%s\n' "$f"
 done
 git ls-files --others -- .make-it/ledger/ | sed -n -E '/^\.make-it\/ledger\/[0-9]{4,}-[0-9a-f]{12}\.json$/p'
-# .gitattributes too, only when the seal just changed it -- and never when it already held an unsaved change
-g="$(git rev-parse --git-dir)/argo-it-gitattributes"
-if [ -f "$g" ] && [ "$(git hash-object -- .gitattributes 2>/dev/null || echo none)" != "$(sed -n 1p "$g")" ]; then
-  [ -z "$(sed -n 2p "$g")" ] || { echo "GITATTRIBUTES MIXED"; exit 1; }
-  printf '%s\n' .gitattributes
+# .gitattributes too, when its only unsaved difference from the saved version is the seal's own lines (watermark.py's
+# header and four lines, added this run or an earlier one); those lines with any other change: stop
+if [ -f .gitattributes ] && [ -n "$(git status --porcelain -- .gitattributes)" ]; then
+  o="$(git rev-parse --git-dir)/argo-it-gitattributes-saved"
+  git show HEAD:./.gitattributes > "$o" 2>/dev/null || : > "$o"
+  k=$(awk -v f="$o" 'BEGIN { s["# make-it seal"]=1; s["* -text"]=1; s["MAKE-IT.md merge=union"]=1
+      s[".make-it/sealed-files.txt merge=union"]=1; s["backend/make-it-stamp.json merge=union"]=1 }
+    FILENAME == f { old[$0]=1; next }
+    { now[$0]=1; if (!($0 in old)) { if ($0 in s) seal=1; else other=1 } }
+    END { for (l in old) if (!(l in now)) other=1; print (seal ? (other ? "mixed" : "seal") : "none") }' "$o" .gitattributes)
+  rm -f "$o"
+  [ "$k" != mixed ] || { echo "GITATTRIBUTES MIXED"; exit 1; }
+  [ "$k" != seal ] || printf '%s\n' .gitattributes
 fi
 ```
 
 If it prints `GITATTRIBUTES MIXED`, stop -- don't show the step-3 ask; nothing is saved or sent.
-The seal just added lines to `.gitattributes`, which already held a change that wasn't saved, and
-argo-it doesn't guess which lines to save. Tell the user:
+`.gitattributes` holds the seal's own lines next to another unsaved change, and argo-it doesn't
+guess which lines to save. Tell the user:
 
-"I haven't saved or sent anything: your .gitattributes file had changes that weren't saved yet,
-and the make-it record I add to your project just added lines to it too, so I won't save the two
+"I haven't saved or sent anything: your .gitattributes file has changes that aren't saved yet
+besides the lines the make-it record I add to your project puts there, and I won't save the two
 together. What to do next: save or undo your own change to .gitattributes, then run /argo-it
 again."
 
