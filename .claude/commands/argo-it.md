@@ -881,34 +881,85 @@ running app picked them up:
 
 **4. If the user can't access Argo CD (or doesn't know how):**
 
-Check if they have kubectl access:
+Diagnosing reads and changes nothing, so it needs no ask -- but it only ever reads the app's own
+cluster: the one setup recorded as `deployment.k8s_context` in `.make-it/app-context.json`, named on
+every command (`--context`), never whichever cluster this computer happens to point at. From the
+project root:
 
 ```bash
-# Try to check pod status directly
-kubectl get pods -n {namespace} 2>/dev/null
+# The app's own cluster, as setup recorded it (deployment.k8s_context); none recorded: no command here reads one
+c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
+# Read only, on that cluster by name: the running version, then the one the last build sent
+kubectl --context "$c" get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}'
+grep 'image:' env/dev/{service}.yaml
 ```
 
-If kubectl is available:
+If it prints `NO KUBECTL`: tell the user to ask their DevOps team to restart the app, or guide them
+through the Argo CD steps (step 3 above). If it stops because no cluster is recorded, use the
+line for that stop below. If the running version is the one the last build sent, a restart won't help: go on to step 5.
+If it is older, check the cluster before anything is offered:
+
 ```bash
-# Check current image on the running pod
-kubectl get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}' 2>/dev/null
-
-# Compare with what CI pushed (from the deploy branch manifest)
-grep 'image:' env/dev/{service}.yaml 2>/dev/null
-
-# If images don't match, restart the deployment to pull the new image
-kubectl rollout restart deployment/{service} -n {namespace} 2>/dev/null
+# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it now
+c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
 ```
 
-If kubectl is NOT available: tell the user to ask their DevOps team to restart the pod,
-or guide them through the Argo CD UI (step 3 above).
+If it prints `CLUSTER UNKNOWN`: never restart and never ask. Tell the user, then give step 3's Argo
+CD steps:
+
+"I won't restart your app from here: I have no record of which cluster (the group of servers)
+{hostname} runs on, so I can't be sure I'd restart the right one. Here's how to restart it in Argo
+CD instead:"
+
+If it prints `OTHER CLUSTER`: never restart and never ask. Tell the user, then give step 3's Argo CD
+steps:
+
+"I won't restart your app from here: this computer is set to work with [the current cluster's name,
+or 'no cluster'], not [the app's cluster name], where {hostname} runs. Here's how to restart it in
+Argo CD instead:"
+
+Otherwise ask once. A restart interrupts everyone using the app, so this is active confirmation,
+per the approval block: the user picks the target by name, a plain yes isn't an answer. Fill every
+bracket from what step 4 read; never show raw output.
+
+"Your app at {hostname} is still running an older version than the last one built and sent: [the
+evidence, in plain words -- e.g. 'the running version came from Tuesday's build; the latest is from
+today']. I can restart it on [the app's cluster name] -- the group of servers it runs on -- so it
+picks up the latest version. Anyone using {hostname} right now is interrupted for about 30 seconds
+while it restarts. There's nothing to undo: a restart only starts your app again on the version
+already sent, and your code and data don't change. The one thing to check: is anyone in the middle
+of something on {hostname} right now?
+
+- **Restart {hostname}** -- restart it now on [the app's cluster name]
+- **Not now** -- I change nothing"
+
+Wait for the pick. 'Not now', a dismissed ask, or any other answer changes nothing: end
+troubleshooting and tell the user: "I haven't changed anything. When it suits you, run /argo-it
+again and pick Restart {hostname}." Only on 'Restart {hostname}', run, from the project root:
+
+```bash
+# Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
+c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
+[ -n "$c" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
+kubectl --context "$c" rollout restart deployment/{service} -n {namespace}
+```
+
+If it prints `OTHER CLUSTER` (this computer moved to another cluster since the ask), nothing was
+restarted: use the `OTHER CLUSTER` line above, with the Argo CD steps.
 
 **5. If the pod restarted but the app still doesn't work:**
 
 This means the new image deployed but has a runtime issue. Check pod logs:
 
 ```bash
-kubectl logs -n {namespace} deploy/{service} --tail=100 2>/dev/null
+# Read only, on the app's own cluster by name: what the running version printed last
+c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+kubectl --context "$c" logs -n {namespace} deploy/{service} --tail=100
 ```
 
 Common issues and plain-language translations:
@@ -928,8 +979,8 @@ Common issues and plain-language translations:
 |-------|-----------|--------|
 | CI didn't run | Yes | Go to PHASE 5b (redeploy) from its step 1 -- its deploy gate and pre-send check apply (same as the step-1 table above) |
 | CI failed (lint/build) | Yes | Fix the cause in the project's files (the same safe fixes as PHASE 5b 3a) and leave the fix unsaved. Tell the user: "I found why your build failed ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the safe fixes don't cover the cause, tell the user what you found, in plain words, and change nothing. |
-| Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
-| Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
+| Deploy branch not updated | Ask first | The rebuild ask below; its block runs only after the user picks **Rebuild {hostname}** |
+| Pod running old image | Ask first (if kubectl) | Step 4: the cluster check, then the restart ask; its block runs only after the user picks **Restart {hostname}** |
 | Pod running old image | Guide (if no kubectl) | Walk user through Argo CD UI pod delete |
 | Pod crash-looping | Maybe | Read the logs. If the cause is clear and one of 3a's safe fixes covers it (formatting, imports), make that fix and leave it unsaved; if the fix needs any other change to the code, ask first (the crash-looping ask below) and touch nothing until the user picks the change. Tell the user: "I found why your app keeps stopping ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the cause isn't clear, tell the user what you saw, in plain words, and change nothing. |
 | Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
@@ -951,6 +1002,29 @@ of editing?
 
 Wait for the pick. On 'Leave it', change nothing and stop. On 'Change [file]', make exactly that
 change, leave it unsaved, and go on as the row says.
+
+**The rebuild ask:** running the last build again sends the latest version to the running app, so
+it is the same kind of ask as the restart: active confirmation, per the approval block. Fill every
+bracket from step 1 and step 2.
+
+"The last build of your app didn't finish handing the latest version to the deployment system:
+[the evidence, in plain words]. I can run that build again: it builds the last version you sent and
+hands it over, and [the app's cluster name / the servers your app runs on] picks it up within a few
+minutes. Anyone using {hostname} may be interrupted for about 30 seconds when the new version
+starts. There's nothing to undo: it sends the same version again, and your code and data don't
+change. The one thing to check: is anyone in the middle of something on {hostname} right now?
+
+- **Rebuild {hostname}** -- run the last build again now
+- **Not now** -- I change nothing"
+
+Wait for the pick. 'Not now', a dismissed ask, or any other answer changes nothing: end
+troubleshooting and tell the user: "I haven't changed anything. When it suits you, run /argo-it
+again and pick Rebuild {hostname}." Only on 'Rebuild {hostname}', run:
+
+```bash
+# Only after the user picked "Rebuild {hostname}": the last build of this project, run again
+gh run rerun {run_id}
+```
 
 **Communication rules (same as always):**
 - NEVER say: pod, container, image, SHA, digest, rollout, kubectl, CrashLoopBackOff
@@ -1028,6 +1102,14 @@ split routing so API calls go directly to the backend for better performance.
 **Storage class** (only if the app uses volumes AND not in .argo-it.yml or detected):
 "What storage class does your cluster use for persistent volumes?"
 - Common options: longhorn, gp3, standard, local-path
+
+**Cluster** (only if `kubectl` is present and `kubectl config get-contexts -o name` lists at least one
+cluster that isn't a local one -- rancher-desktop, docker-desktop, minikube or kind-*): "Which
+cluster does your app run on? I'll only ever restart it there, and only when you ask." A select:
+one option per such cluster, by name, and **None of these / not sure**.
+- Save the pick to app-context.json as `deployment.k8s_context`; on **None of these / not sure**
+  save nothing (troubleshooting then never restarts the app from this computer: it gives the Argo
+  CD steps)
 
 **Deploy branch** (if not in .argo-it.yml or detected):
 "Which branch does Argo CD watch for deployments?"
@@ -3069,8 +3151,8 @@ existing pattern.
 - Walk the diagnostic chain IN ORDER: CI status → deploy branch → Argo sync → pod image → logs
 - Stop at the first failure -- don't check everything if you find the problem early
 - The #1 most common issue is: pod running a stale image (fix: restart the deployment)
-- If kubectl is available, use `kubectl rollout restart` -- don't ask the user to click around Argo
-- If kubectl is NOT available, give click-by-click Argo CD UI instructions
+- Restart the running app or re-run its build only after the user picks Restart {hostname} or Rebuild {hostname} in its one ask, and restart only on the app's own cluster (`--context`, from `deployment.k8s_context`); on another cluster, with no record of the app's cluster, or with no kubectl, give the click-by-click Argo CD steps instead
+- Every kubectl command in troubleshooting names the app's cluster (`--context`), never the one this computer happens to point at
 - NEVER tell the user to "check the logs" -- read them yourself and translate to plain language
 - NEVER say: pod, container, image, SHA, digest, rollout, CrashLoopBackOff, kubectl
 - INSTEAD say: "your app", "the running version", "restart", "the latest version", "update"
