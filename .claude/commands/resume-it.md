@@ -722,16 +722,16 @@ every route below that changes the app.
 
 1. The triggers are the reference's "What changes it" list, not a judgement: the planned work adds
    or removes a signal of rule 2 (payments; personal or health data beyond the app's own sign-in
-   accounts; external users or thousands of them; separate tenants or data at scale; heavy AI use
+   accounts; external users or thousands of them; an uptime promise for production; separate tenants or data at scale; heavy AI use
    or prompts that non-developers edit; a signal its variant declares), the user's words or the
    planned work confirm or disprove an unconfirmed signal, or `project_type` becomes set.
 2. With no trigger, nothing is written: the record stays byte for byte as it is. An unconfirmed
    signal that nobody confirms or disproves stays unconfirmed; with no new work there is no
    re-check.
-3. With a trigger, work the record out again by the reference's rule from `app-context.json` and
-   the planned work, with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
-   the work adds is written `<field>: <value>` from the app-context field the work changes, and
-   one the user did not state is marked `"unconfirmed": true`.
+3. With a trigger, start from the record's signals, `code:` ones included, and apply only the
+   planned work's changes, as the reference's "The record is the starting point" says: the work
+   adds a signal it brings and removes one only when it takes the thing out, with `set_by` `"/resume-it"` and `set_at` today's date (YYYY-MM-DD). A signal
+   the work adds is written `<field>: <value>` from the app-context field the work changes, and one the person gave only as a guess is marked `"unconfirmed": true`.
 4. Compare it as the reference's "Same record or a different one" says. With the same
    specialists, keep their names, `set_by` and `set_at`, and bring only the signals up to date,
    silently. With different specialists, higher or lower but never below the floor, write the new

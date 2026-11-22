@@ -38,8 +38,8 @@ app's `app-context.json` names (the template's `[PROJECT_SPECIALISTS]` slot), an
 specialist that task's domain calls for (`[TASK_SPECIALIST]`). The implementer and the test-writer
 work as the task specialist, held to the checks and output standard of every specialist recorded
 in `expert_persona`; the task reviewer, the adversarial reviewer and the final `/code-review`
-review against those checks too. With no `expert_persona` set, or a run outside an app, the slot is
-left empty and each agent works as its task specialist alone and says nothing. Choose the task
+review against those checks too. With no `expert_persona` set, an older value the reference does not count (its "Reading an older value"), or a run outside an
+app, the slot is left empty and each agent works as its task specialist alone and says nothing. Choose the task
 specialist per task from the task's text; never work a project specialist out from signals, and
 never change the specialist record. No user prompt. See the reference below.
 

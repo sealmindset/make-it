@@ -103,7 +103,7 @@ You don't need to memorize this. Each skill tells you the natural next step when
 
 Here's something the framework does quietly in the background that makes a real difference to quality.
 
-A general-purpose assistant is a jack-of-all-trades. But the *best* work on a risky task comes from a **specialist** — a security expert thinks differently than a database expert, who thinks differently than someone who keeps live systems running. So before the framework tackles high-stakes work, **it has the AI step into the role of the right specialist** for that exact job, instead of staying a generalist.
+A general-purpose assistant is a jack-of-all-trades. But the *best* work on a risky task comes from a **specialist** — a security expert thinks differently than a database expert, who thinks differently than someone who keeps live systems running. So before the framework changes or judges your app's code, **it has the AI step into the role of the right specialist** for that exact job, instead of staying a generalist.
 
 You don't ask for this and you won't see a prompt — it happens automatically, chosen from what your app actually involves (does it handle payments? personal data? thousands of users?). It simply means the AI brings the mindset — and produces the deliverables — of the specialist the work deserves.
 

@@ -60,7 +60,7 @@ It first confirms the problems really are independent, groups them into domains,
 
 ## Which expert does the AI become?
 
-Because each helper works on a *different* problem, each one is given the **specialist role its own problem needs** — the helper on a security issue works as a security engineer, the one on a slow-performance issue works as a reliability engineer, and so on. One right expert per problem, all at once — chosen automatically. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+Because each helper works on a *different* problem, each one is given the **specialist role its own problem needs** — the helper on a security issue works as a security engineer, the one on a slow or flaky bug works as a senior maintainer of your app's stack, and so on. Each one is also handed your app's recorded specialist and holds its work to that standard too. One right expert per problem, all at once — chosen automatically. (See the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
 
 ---
 

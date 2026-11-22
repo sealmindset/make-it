@@ -9,7 +9,7 @@ everything you need is below or in the files referenced.
 [ONE line: what the project is and where this task sits in it.]
 
 ## Your specialist
-Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none].
+Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none or the field holds an older value the reference does not count (its "Reading an older value")].
 Work as the task specialist, held to the checks and output standard of every specialist listed as the project specialist (`expert-personas.md`, "Each project specialist's checks"). If none is listed, work as the task specialist alone and say nothing about it.
 
 ## Your requirements (read this FIRST)

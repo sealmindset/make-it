@@ -41,7 +41,8 @@ each rule comes up here.
    **instruction-drift canary**: every generated project gets a root `CLAUDE.md` whose first
    section is the canary. Use the builder's name if you know it (ask once if you don't). If they
    decline, use the fixed token from `references/guardrails.md`.
-3. **Pick the expert persona** with `references/expert-personas.md` and work in character, silently.
+3. **Work as the specialist** `references/expert-personas.md` names: read the project specialist from
+   `app-context.json` when there is one, add the specialist the task needs, and work in character, silently.
 4. **Verify what the sandbox can run**, for the active tiers:
    - the static checks in `references/build-standards.md`: files, config, secrets, validation,
      code quality, lint/format/type-check if the tools are available

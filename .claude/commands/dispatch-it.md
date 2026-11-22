@@ -37,9 +37,9 @@ Full doctrine (always loaded):
 /dispatch-it adopts no specialist itself. Every agent it launches on app code is handed, in its
 prompt, the project specialist (the specialists the `expert_persona` field in the app's
 `app-context.json` names) and the task specialist its own problem calls for: a security problem →
-application security engineer; a slow or flaky bug → SRE / performance engineer; a data problem →
+application security engineer; a slow or flaky bug → senior maintainer of that stack; a data problem →
 data engineer. The agent works as its task specialist, held to the checks and output standard of
-every specialist recorded in `expert_persona`. With no `expert_persona` set, or a run outside an
+every specialist recorded in `expert_persona`. With no `expert_persona` set, an older value the reference does not count (its "Reading an older value"), or a run outside an
 app, the agent works as its task specialist alone and says nothing. Choose the task specialist per
 agent from its problem; never work a project specialist out from signals, and never change the
 specialist record. No user prompt. See the reference below.

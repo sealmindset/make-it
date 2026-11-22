@@ -7,7 +7,7 @@ or in the referenced files. Review the diff as written; do not run the implement
 (except a narrowed check's mutants, under Safeguards).
 
 ## Your specialist
-Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none].
+Task specialist: [TASK_SPECIALIST]. Project specialist: [PROJECT_SPECIALISTS -- the specialists the app's `expert_persona` field names, primary first; leave empty when there are none or the field holds an older value the reference does not count (its "Reading an older value")].
 Review as the task specialist, against the checks and output standard of every specialist listed as the project specialist as well as your own (`expert-personas.md`, "Each project specialist's checks"). If none is listed, review as the task specialist alone and say nothing about it.
 
 ## Inputs

@@ -45,6 +45,8 @@ This skill has 5 phases:
 @~/.claude/make-it/references/guardrails.md
 @~/.claude/make-it/references/operator-safety.md
 @~/.claude/make-it/references/build-standards.md
+@~/.claude/make-it/references/expert-personas.md
+
 @~/.claude/make-it/references/worktree-workflow.md
 @~/.claude/make-it/references/parallel-dispatch.md
 @~/.claude/make-it/references/subagent-driven-development.md
@@ -457,20 +459,22 @@ chosen:
    order decides the primary" paragraph. In app-context they are carried by: security --
    `compliance`, `purpose`, `features` (personal data as rule 2 defines it, not the sign-in
    accounts every app has); data -- `multi_tenancy.needed` and the answers; reliability --
-   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI
-   -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
+   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts` (the app's own AI use, never
+   the scaffold's AI Instructions screens); a variant -- the
    `variant_config` fields its definition file names, at the rank it declares.
-3. Each signal is written `<field>: <value>`, and one the user did not state (a guess or a smart
-   default, such as a rough user count) is marked `"unconfirmed": true`.
+3. Each signal is written `<field>: <value>`. Only what the person said counts: a smart default
+   /make-it filled in is not a signal, and one the person gave only as a guess ("maybe a few
+   thousand") is marked `"unconfirmed": true`.
 4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
-5. If `app-context.json` already holds a record (a returning run), compare it with the new one as
-   the reference's "Same record or a different one" says: with the same specialists only the
+5. If `app-context.json` already holds a record (a returning run), update it as the reference's
+   "The record is the starting point" says (keep each signal the answers do not disprove), then
+   compare as its "Same record or a different one" says: with the same specialists only the
    signals are brought up to date, silently; different specialists write the new one. When the new
    one is written over a record, the one plain line (e.g. "Your app now gets a security specialist
    because it takes card payments.") goes in the plain-English summary's sentence on what departs
    from the standard setup, and into `CHANGELOG.md`: now if the file exists, otherwise in the
-   initial entry Build step g writes. A value the reference reads as no record (its "Reading an
-   older value") is not a record: write the new one and say nothing.
+   initial entry Build step g writes. An older value (the reference's "Reading an older value") is not compared: replace it and say
+   S15's line the same way.
 
 The record is never a plain text value and never a generalist. /make-it builds and reviews in the
 role of every specialist in the record, the primary leading, and hands the record to every
@@ -1132,7 +1136,7 @@ Run ALL checks from `build-standards.md` that match the project's active tiers.
 Reference: `~/.claude/make-it/references/build-standards.md`
 
 For Tier 1 (web-app), this includes checks across all categories:
-- **S01-S14**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
+- **S01-S15**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
 - **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
