@@ -11006,37 +11006,42 @@ class ReviewRound2Cases(ArgoItUnsavedCodeCases):
 
 
 # Task 5: the troubleshooting blocks and asks, pinned whole
-T5_CTX = '''c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)'''
+T5_CTX = '''c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)'''
 
-T5_READ = '''# The app's own cluster, as setup recorded it (deployment.k8s_context); none recorded: no command here reads one
+T5_SAME = '''[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ]'''
+
+T5_READ = '''# The app's own cluster, as setup recorded it (deployment.k8s_context, and its server address deployment.k8s_server)
 ''' + T5_CTX + '''
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+[ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
-# Read only, on that cluster by name: the running version, then the one the last build sent
-kubectl --context "$c" get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}'
-grep 'image:' env/dev/{service}.yaml
+# Read only, and only while this computer points at that cluster, by its name and its server address
+''' + T5_SAME + ''' || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" get pods -n "{namespace}" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
+grep 'image:' "env/dev/{service}.yaml"
 '''
 
-T5_CHECK = '''# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it now
+T5_CHECK = '''# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it, by name and address
 ''' + T5_CTX + '''
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
-[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
+[ -n "$c" ] && [ -n "$v" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+''' + T5_SAME + ''' || { echo "OTHER CLUSTER"; exit 1; }
 '''
 
 T5_RESTART = '''# Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
 ''' + T5_CTX + '''
-[ -n "$c" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
-kubectl --context "$c" rollout restart deployment/{service} -n {namespace}
+[ -n "$c" ] && [ -n "$v" ] && ''' + T5_SAME + ''' || { echo "OTHER CLUSTER"; exit 1; }
+kubectl --context "$c" rollout restart "deployment/{service}" -n "{namespace}"
 '''
 
 T5_RERUN = '''# Only after the user picked "Rebuild {hostname}": the last build of this project, run again
 gh run rerun {run_id}
 '''
 
-T5_LOGS = '''# Read only, on the app's own cluster by name: what the running version printed last
+T5_LOGS = '''# Read only, on the app's own cluster by name and address: what the running version printed last
 ''' + T5_CTX + '''
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
-kubectl --context "$c" logs -n {namespace} deploy/{service} --tail=100
+[ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
+''' + T5_SAME + ''' || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" logs -n "{namespace}" "deploy/{service}" --tail=100 || { echo "READ FAILED"; exit 1; }
 '''
 
 T5_RESTART_ASK = '''"Your app at {hostname} is still running an older version than the last one built and sent: [the
@@ -11151,16 +11156,17 @@ class ArgoItRestartAsksCases(Base):
                       flat)
 
     # --- run under bash and zsh, with a fake kubectl and gh --------------------------------------------------------
-    def _env(self, td, ctx):
+    def _env(self, td, ctx, server='https://k8s.acme.example:6443'):
         bin_ = os.path.join(td, 'bin')
         os.makedirs(bin_, exist_ok=True)
         log = os.path.join(td, 'calls.log')
         for tool in ('kubectl', 'gh'):
             with open(os.path.join(bin_, tool), 'w') as f:
                 f.write('#!/bin/sh\necho "%s $*" >> "%s"\ncase "$*" in\n  *"config current-context"*) printf '
-                        "'%%s\\n' \"$FAKE_CTX\";;\n  *\"get pods\"*) echo reg/app:old;;\nesac\n" % (tool, log))
+                        "'%%s\\n' \"$FAKE_CTX\";;\n  *\"config view\"*) printf '%%s\\n' \"$FAKE_SERVER\";;\n"
+                        "  *\"get pods\"*) echo reg/app:old;;\nesac\n" % (tool, log))
             os.chmod(os.path.join(bin_, tool), 0o755)
-        return log, dict(os.environ, PATH=bin_ + os.pathsep + os.environ['PATH'], FAKE_CTX=ctx)
+        return log, dict(os.environ, PATH=bin_ + os.pathsep + os.environ['PATH'], FAKE_CTX=ctx, FAKE_SERVER=server)
 
     def _run(self, code, cwd, env, shell):
         code = (code.replace('{namespace}', 'acme').replace('{service}', 'backend').replace('{hostname}', 'acme.example')
@@ -11171,7 +11177,8 @@ class ArgoItRestartAsksCases(Base):
     def _project(self, td, recorded):
         os.makedirs(os.path.join(td, '.make-it'))
         with open(os.path.join(td, '.make-it', 'app-context.json'), 'w') as f:
-            f.write('{"deployment": {"k8s_context": "acme-prod-eu"}}\n' if recorded else '{"deployment": {}}\n')
+            f.write('{"deployment": {"k8s_context": "acme-prod-eu", "k8s_server": "https://k8s.acme.example:6443"}}\n'
+                    if recorded else '{"deployment": {}}\n')
         os.makedirs(os.path.join(td, 'env', 'dev'))
         with open(os.path.join(td, 'env', 'dev', 'backend.yaml'), 'w') as f:
             f.write('image: reg/app:new\n')
@@ -11230,6 +11237,236 @@ class ArgoItRestartAsksCases(Base):
             self.assertIn(cut, self.RESTART_ASK)
             self.assertNotIn(self.RESTART_ASK.replace(cut, ''), sec, 'the ask without %r passes' % cut)
         self.assertNotIn(self.RESTART.replace('--context "$c" ', ''), self._fences(sec))
+
+
+
+class ReReviewRedeployCases(ReviewRedeployCases):
+    """Re-review of 03aef71, finding 1: the redeploy's pin also covers new files (step 1 keeps the path list; a path
+    3a, 3b, 3c or a 3e move changed is written to argo-it-touched), runs before anything is staged, catches a change to
+    the online copy's branches, and the push sends the checked save by id even if HEAD moves during the check.
+    Finding 3: SAVE NOT SENT only when a save was made in step 4."""
+
+    test_f2_a_hook_that_adds_a_secret_at_the_save_never_sends_it = None
+    test_f2_control_a_clean_redeploy_sends_the_checked_commit = None
+    test_f7_a_commit_made_after_the_ask_is_not_sent = None
+    test_f7_the_first_deploys_re_asks_restart_at_the_seal = None
+    test_f8_argo_its_pushes_never_send_submodule_commits = None
+    test_f8_the_rules_say_commit_messages_are_not_checked = None
+
+    def _run5b2(self, r, shell, after_step1=None, scanner=None):
+        p = self._phase5b()
+        heads = [(m.start(), m.group(1)) for m in re.finditer(r'^\*\*(\d[a-e]?)\. ', p, re.M)]
+        h1, h4 = [a for a, h in heads if h == '1'][0], [a for a, h in heads if h == '4'][0]
+        fences = [f for f in self._fences(p) if f[0] > h1]
+        last = next(i for i, f in enumerate(fences) if f[0] > h4)
+        out, done = [], False
+        for f in fences[:last + 1]:
+            step = [h for at, h in heads if at < f[0]][-1]
+            if step in ('3a', '3b', '3c', '3d'):
+                continue
+            if step != '1' and not done:
+                done = True
+                if after_step1:
+                    after_step1()
+            code = f[2].replace('{current_branch}', 'main').replace('{deploy_branch}', self.DEPLOY)
+            if scanner and step == '4':
+                code = code.replace('python3 ' + INSTALLED, scanner)
+            code = code.replace(INSTALLED, SCRIPT)
+            cp = subprocess.run([shell, '-c', code], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=180)
+            out.append((step, cp))
+            marks = [l for l in cp.stdout.decode().splitlines() if re.fullmatch(self.MARK_LINE, l)]
+            if marks or (cp.returncode and step != '3e'):
+                return out, (marks[-1] if marks else None)
+            if step == '3e' and cp.returncode:
+                return out, '3e'
+        return out, None
+
+    def _ready(self, shell):
+        need_shell(shell)
+        r = self.fresh()
+        r.append('app.py', 'x = 1\n')
+        self._prep(r)
+        return r
+
+    def test_1_a_new_file_after_the_ask_is_not_sent_and_nothing_is_staged(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self._ready(shell)
+                before = self._sent_refs(r)
+                gi = open(r.path('.gitignore')).read() if os.path.exists(r.path('.gitignore')) else None
+                out, mark = self._run5b2(r, shell, lambda: r.write('late.py', 'late = 1\n'))
+                self.assertEqual(mark, 'CHANGED SINCE THE ASK')
+                self.assertEqual(self._sent_refs(r), before)
+                self.assertEqual(r.git('diff', '--cached', '--name-only').decode(), '', 'the index was left staged')
+                self.assertEqual(open(r.path('.gitignore')).read() if os.path.exists(r.path('.gitignore')) else None,
+                                 gi, '.gitignore was changed before the stop')
+
+    def test_2_a_listed_file_changed_again_or_a_touched_file_still_goes(self):
+        for shell in ('bash', 'zsh'):
+            for how in ('a listed file, changed again', 'a file 3b changed, recorded'):
+                with self.subTest(shell=shell, how=how):
+                    r = self._ready(shell)
+
+                    def between():
+                        if how.startswith('a listed'):
+                            r.append('app.py', 'y = 2\n')
+                        else:
+                            r.write('env/dev/backend.yaml', 'kind: Deployment\n')
+                            with open(os.path.join(r.work, '.git', 'argo-it-touched'), 'a') as f:
+                                f.write('env/dev/backend.yaml\n')
+                    out, mark = self._run5b2(r, shell, between)
+                    self.assertIsNone(mark, [(s_, c.stdout[-200:]) for s_, c in out])
+                    self.assertEqual(self._ref(r, 'main'), self._head(r))
+
+    def test_3_a_change_to_the_online_copys_branches_stops_the_send(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self._ready(shell)
+                r.write('b.py', 'b = 1\n')
+                r.commit('a save not sent yet')
+                before = None
+
+                def elsewhere():  # someone sends that save from another copy before step 4
+                    r.git('push', '-q', 'origin', 'HEAD:refs/heads/elsewhere')
+                out, mark = self._run5b2(r, shell, elsewhere)
+                self.assertEqual(mark, 'CHANGED SINCE THE ASK')
+
+    def test_4_the_push_sends_the_checked_save_even_if_head_moves_during_the_check(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self._ready(shell)
+                wrap = os.path.join(r.root, 'scan-then-commit.sh')
+                with open(wrap, 'w') as f:
+                    f.write('#!/bin/sh\n"%s" "%s" "$@"; rc=$?\ngit -c user.name=t -c user.email=t@t commit -q '
+                            '--allow-empty -m "made during the check"\nexit $rc\n' % (sys.executable, SCRIPT))
+                os.chmod(wrap, 0o755)
+                out, mark = self._run5b2(r, shell, scanner=wrap)
+                self.assertIsNone(mark, [(s_, c.stdout[-200:]) for s_, c in out])
+                sent = self._ref(r, 'main')
+                self.assertEqual(r.git('log', '-1', '--format=%s', sent).decode().strip(),
+                                 'Deploy: [brief description of changes]', 'a commit the check never read was sent')
+
+    def test_5_save_not_sent_only_when_a_save_was_made(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                r.write('b.py', 'b = 1\n')
+                r.commit('saved, nothing unsaved')
+                self._prep(r)
+                fail = os.path.join(r.root, 'scan-fails.sh')
+                with open(fail, 'w') as f:
+                    f.write('#!/bin/sh\nexit 2\n')
+                os.chmod(fail, 0o755)
+                out, mark = self._run5b2(r, shell, scanner=fail)
+                self.assertEqual(mark, 'NOT SENT')
+                qs = self._told(self._phase5b(), 'NOT SENT')
+                self.assertTrue(qs and not [q for q in qs if re.search(r'(?i)\bI saved\b', q)], qs)
+                self.assertTrue(any(re.search(self.SENT_NONE, q) or re.search(r"(?i)didn't send", q) for q in qs), qs)
+
+    def test_6_the_text_says_which_paths_may_change(self):
+        flat = re.sub(r'\s+', ' ', self._phase5b())
+        self.assertRegex(flat, r'(?i)argo-it-touched')
+        self.assertRegex(flat, r'(?i)3a, 3b, 3c or a 3e move')
+
+
+class ReReviewMiscCases(ArgoItRestartAsksCases):
+    """Re-review of 03aef71, findings 2, 4, 5, 6, 7, 8, 10."""
+
+    for _t in [k for k in list(vars(ArgoItRestartAsksCases)) if k.startswith('test')]:
+        locals()[_t] = None
+    del _t
+
+    def test_f2_same_name_other_server_no_restart_no_ask(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                with tempfile.TemporaryDirectory() as td:
+                    self._project(td, True)
+                    log, env = self._env(td, 'acme-prod-eu', 'https://somewhere-else:6443')
+                    self.assertIn(b'OTHER CLUSTER', self._run(self.CHECK, td, env, shell).stdout)
+                    self.assertIn(b'NOT ITS CLUSTER', self._run(self.READ, td, env, shell).stdout)
+                    self._run(self.RESTART, td, env, shell)
+                    self.assertFalse([c for c in self._calls(log) if 'rollout restart' in c or ' get pods' in c])
+
+    def test_f2_setup_saves_the_server_address(self):
+        doc = self._doc()
+        i = doc.index('<step name="setup">')
+        setup = re.sub(r'\s+', ' ', doc[i:doc.index('</step>', i)])
+        self.assertRegex(setup, r'deployment\.k8s_server')
+        self.assertIn("kubectl config view --minify --context", setup)
+
+    def test_f7_read_step_stops_have_their_own_lines_with_no_restart_talk(self):
+        flat = re.sub(r'\s+', ' ', self._section())
+        for mark in ('NO CLUSTER RECORD', 'NOT ITS CLUSTER', 'READ FAILED'):
+            i = flat.index('If it prints `%s`' % mark)
+            line = re.search(r'"(I[^"]{20,})"', flat[i:i + 900]).group(1)
+            self.assertNotRegex(line, r'(?i)restart', '%s talks about a restart: %r' % (mark, line))
+            self.assertRegex(flat[i:i + 900], r'(?i)Argo CD', mark)
+
+    def test_f8_names_in_5c_commands_are_quoted(self):
+        for f in self._fences(self._section()):
+            for l in f.splitlines():
+                if l.lstrip().startswith('#'):
+                    continue
+                spans = [(m.start(), m.end()) for m in re.finditer(r'"[^"]*"', l)]
+                for m in re.finditer(r'\{(?:namespace|service)\}', l):
+                    self.assertTrue(any(a < m.start() < b for a, b in spans), 'unquoted in %r' % l)
+
+    def test_f10_no_record_says_how_to_turn_restarts_on(self):
+        flat = re.sub(r'\s+', ' ', self._section())
+        for mark in ('NO CLUSTER RECORD', 'CLUSTER UNKNOWN'):
+            i = flat.index('If it prints `%s`' % mark)
+            self.assertRegex(flat[i:i + 900], r'ask me to record its cluster', mark)
+        self.assertRegex(flat, r"(?i)If the user asks to record the app's cluster")
+
+
+class ReReviewOriginCases(ReviewOriginCases):
+    """Re-review of 03aef71, findings 4, 5 and 6."""
+
+    for _t in [k for k in list(vars(ReviewOriginCases)) if k.startswith('test')]:
+        locals()[_t] = None
+    del _t
+
+    def test_f4_an_scp_path_starting_with_digits_is_a_path_not_a_port(self):
+        self.assertEqual(self._split([('remote', 'set-url', '--push', 'origin', 'git@github.com:22/acme/app.git')]),
+                         [True, True])
+        self.assertEqual(self._split([('remote', 'set-url', '--push', 'origin', 'ssh://git@github.com:22/acme/app.git')]),
+                         [False, False])
+
+    def test_f4_the_case_limit_is_written_down(self):
+        flat = re.sub(r'\s+', ' ', self._phase())
+        self.assertRegex(flat, r'(?i)capital letters alone still count')
+
+    def test_f6_the_redeploy_text_names_no_host(self):
+        p = self._phase5b()
+        lines = [l for l in p.splitlines() if 'GitHub' in l]
+        self.assertEqual(lines, [l for l in lines if 'GitHub Actions workflow mirrors' in l], lines)
+
+
+class ReReviewKeepOutCases(ArgoItUnsavedCodeCases):
+    """Re-review of 03aef71, finding 5: every keep-out file is named."""
+
+    test_1_unsaved_code_stops_before_the_seal_naming_how_many_and_the_first_two = None
+    test_2_untracked_look_alikes_are_unsaved_code_and_stop_the_send = None
+    test_3_what_is_not_unsaved_code_goes_on = None
+    test_4_not_a_make_it_project_no_check = None
+    test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line = None
+
+    def test_f5_every_keep_out_file_is_named(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._project(r)
+                for n in ('a.pem', 'b.key', 'c.db'):
+                    r.write(n, 'x\n')
+                code, out = self._check(r, shell)
+                self.assertEqual(sorted(l for l in out if l.startswith('keep-out: ')),
+                                 ['keep-out: a.pem', 'keep-out: b.key', 'keep-out: c.db'], out)
+        flat = re.sub(r'\s+', ' ', self._phase())
+        i = flat.index('`UNSAVED CODE`')
+        self.assertRegex(flat[i:i + 1600], r'(?i)each path after a `keep-out:` line')
 
 
 if __name__ == '__main__':
