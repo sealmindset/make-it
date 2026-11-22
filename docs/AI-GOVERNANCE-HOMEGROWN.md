@@ -287,9 +287,9 @@ Phase 1: Static Security Scan
   ├─ 1a. Code Pattern Scan (always) -- hardcoded secrets, SQL injection,
   │       XSS, insecure deserialization, missing timeouts, verify=False,
   │       external font CDNs, module-level throws
-  ├─ 1b. Semgrep (OWASP Top 10 + security-audit rulesets)
-  ├─ 1c. Bandit (Python-specific security)
-  └─ 1d. Dependency Scan (npm audit + pip-audit + trivy)
+  └─ 1b. One script (security-pass.py), from pinned images: Semgrep (OWASP
+          Top 10 + security-audit rulesets), Bandit (Python), npm audit,
+          pip-audit and Trivy
 
 Phase 2: AI Safety Scan (if AI features present)
   ├─ 2a. 15 safety control wiring checks (code-level)
@@ -354,10 +354,10 @@ Phase 6: Report
 |-----------------|---------|-------------------|----------|
 | **Code Pattern Scanner** (grep-based) | Hardcoded secrets, SQL injection, XSS, insecure deserialization, missing timeouts | Build-verify Part D Phase 1a | Always runs, no external tools needed |
 | **Semgrep** (OWASP Top 10 + security-audit) | SAST -- broad code vulnerability detection | Build-verify Part D Phase 1b | Every build, from a pinned image |
-| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1c | Every build, from a pinned image; Python projects only |
-| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1d | Every build, from a pinned image, in each folder with a package-lock.json |
-| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1d | Every build, from a pinned image, on each requirements file |
-| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1d | Every build, from a pinned image |
+| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1b | Every build, from a pinned image; Python projects only |
+| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image, in each folder with a package-lock.json |
+| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from the pinned Python image (pip-audit 2.9.0 is installed when it starts), on each requirements file |
+| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image |
 | **NeMo Guardrails** | AI behavioral safety testing (6 categories) | /nemo-it (its own cases and, in a separate block when picked, the app's generated suite), when someone runs it with a live AI provider. Build-verify checks the app's generated suite exists (check AI09) and does not run it | The app's suite is generated for every AI app. A /nemo-it run is recommended, not enforced. With a live AI provider it runs /nemo-it's own cases, and the app's suite when picked, each in its own block |
 | **mock-oidc** | Local OIDC provider for auth testing | Docker dev profile | Every web app with auth |
 | **Build-verify E2E** | Live auth flow, API endpoint, page content, permission boundary testing | Build-verify Part B | Every web app |

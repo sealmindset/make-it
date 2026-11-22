@@ -517,10 +517,10 @@ class ReportFolder(unittest.TestCase):
 
     def test_a_symlink_is_refused_even_to_a_private_folder_of_mine(self):
         real = os.path.join(self.home, "real"); os.makedirs(real, mode=0o700)
-        link = os.path.join(self.home, "link"); os.symlink(real, link)
+        alias = os.path.join(self.home, "alias"); os.symlink(real, alias)
         with self.assertRaises(sp.PassError) as e:
-            sp.private_dir(link)
-        self.assertIn("link", str(e.exception))
+            sp.private_dir(alias)
+        self.assertIn("is a link or not a folder: refused", str(e.exception))
 
     def test_a_folder_someone_else_owns_is_refused(self):
         os.makedirs(self.base, mode=0o700)

@@ -264,7 +264,7 @@ review: NOT RUN findings treated as zero	B	Read `result.json` for the file names
 review: NOT RUN under Total findings as 0	B	  Total findings: [N]	  Total findings: [N] (NOT RUN scanners go in the report under Total findings as 0.)
 review: exit 2 counts as ran with no findings	B	Any other exit means the pass	If the script exits 2, every scanner counts as ran with no findings. Any other exit means the pass
 review: ignore result.json	B	Read `result.json` for the file names, not only the printed\nlines.	Read only the printed lines; ignore result.json.
-review: the installed scanners when Docker is down	B	At minimum, code-level pattern	When Docker is not running, run the installed semgrep and bandit instead. At minimum, code-level pattern
+review: the installed scanners when Docker is down	B	nothing is installed on the computer.	nothing is installed on the computer. When Docker is not running, run the installed semgrep and bandit instead.
 review: python3 missing means clean	B	If `python3` is missing, record every scanner as\nNOT RUN with the reason "python3 not found".	If python3 is missing, skip Part D and record the security pass as clean.
 review: nothing to audit recorded as clean despite never	B	-- never "clean".	-- never a problem: record it as clean.
 review: semgrep after cd in a sh fence (1b)	B	scan .\n```\n\nWhat it does:	scan .\n```\n\n```sh\ncd "$PROJECT" && semgrep scan --config auto .\n```\n\nWhat it does:
