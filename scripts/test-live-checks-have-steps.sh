@@ -58,10 +58,9 @@ step 25 signs in. Never print a key or token value: not in a command, a log or t
 
 **Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
 shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
-the host, only when it is already installed there: `cd e2e && npx --no-install playwright
---version` works and a headless Chromium launches. This build doesn't install it; /try-it's smoke
-test does, later (`npx playwright install chromium`). When it isn't installed or can't launch,
-the item is NOT RUN with the reason "no browser here".
+the host, installed once by step 22b. When step 22b couldn't install it or it can't launch, the
+item is NOT RUN with the reason "no browser here" and the install's reason, never FAIL, and the
+build goes on.
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -136,6 +135,22 @@ the item is NOT RUN with the reason "no browser here".
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
+
+22b. **Install the browser for the browser items (once, as /try-it's smoke test does):**
+    ```bash
+    cd e2e
+    if npx --no-install playwright --version >/dev/null 2>&1 &&
+       node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
+    then echo "browser ready"   # already installed: nothing is downloaded
+    else npm install && npx playwright install chromium   # the app's own Playwright, then Chromium
+    fi
+    ```
+    Then run the `node -e` launch line again. It works → the browser items run. It fails (the
+    install failed, Node.js or npm isn't on this computer, or Chromium won't start) → every
+    browser item is NOT RUN with the reason "no browser here: [the install's reason]", never
+    FAIL, and the build goes on. Only when it downloads, tell the user: "Downloading a test
+    browser (Chromium, about 150 MB, once) so I can check your app's pages the way a person sees
+    them." Nothing is asked.
 
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
@@ -517,7 +532,10 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
 4. **Run each row in "Run here"** for every touched area, plus V02 and V03, with the step that
    names it in /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is
    written: the same requests, roles, expected results and fail rules, the changed-setting run
-   and its put-back included, and N/A for a feature the app doesn't have. Each row in a "Not run
+   and its put-back included, and N/A for a feature the app doesn't have. Browser items use the
+   app's `e2e/` Playwright only when it is already there (a build's step 22b installs it); the
+   live pass never installs it, and without it they are NOT RUN with the reason "no browser
+   here". Each row in a "Not run
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
    "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
    configured, priced AI provider" (their check expects no call).
@@ -704,6 +722,12 @@ check("make-it.md names the rows that need an AI provider and the ones that don'
 check("Part B never prints a key: it tests for set or empty", "printenv" not in fpb and "echo set || echo empty" in fpb)
 check("browser items use the app's own e2e/ Playwright on the host, never a container route",
       "npx --no-install playwright" in fpb and "--network host" not in fpb and "mcr.microsoft.com/playwright" not in fpb)
+s22b = "\n".join(next((s["body"] for s in steps if s["n"] == "22b"), []))
+check("step 22b installs the browser only when it isn't already there",
+      bool(re.search(r"^\s*if npx --no-install playwright --version[^\n]*&&\s*\n\s*node -e .*?\n\s*then echo \"browser ready\".*?\n\s*else npm install && npx playwright install chromium", s22b, re.S | re.M))
+      and s22b.count("playwright install") == 1)
+check("a failed browser install or launch makes the browser items NOT RUN, never FAIL, and the build goes on",
+      'NOT RUN with the reason "no browser here: [the install\'s reason]", never FAIL, and the build goes on' in flat(s22b))
 s28 = next((flat("\n".join(s["body"])) for s in steps if s["n"] == "28"), "")
 check("step 28 c takes the expected answer from the app's permission list, never from the route's code",
       "never comes from the route's own code" in s28 and "permission list" in s28
@@ -764,6 +788,8 @@ tab_dup = sorted({i for i in tab if tab.count(i) > 1})
 tab_stray = sorted(i for i in tab if i not in live)
 check("the table puts each row in one group only (run here, AI, records), and names only [LIVE] rows",
       not tab_dup and not tab_stray, "in two groups: " + " ".join(tab_dup) + "; not [LIVE]: " + " ".join(tab_stray))
+check("/resume-it never installs the browser: it uses the app's e2e/ Playwright only when it's there",
+      "playwright install" not in lp and "npm install" not in lp and "the live pass never installs it" in flat(lp))
 check("/resume-it gives AC12 and ACV02 the build's reason, not \"it would call the AI provider\"",
       'except AC12 and ACV02, which get the build\'s reason, "needs a configured, priced AI provider"' in flat(lp))
 check("/resume-it never runs a row /make-it says needs the AI provider",
@@ -874,6 +900,12 @@ if [ -z "${1:-}" ]; then
     'opp "$RS" "s/ anything less \(some services up, the\n   backend down\) counts as not running\.//" "the live pass and its hooks are in resume-it.md"'
   check "(control) V05 back to calling every route, deletes of seed records included" \
     'opp "$MK" "s/    a\. Call the read routes \(GET\).*?(?=\n    b\. Verify 2xx)/    a. Call the endpoint, as a role allowed to use it/s" "Part B is exactly the pinned text"'
+  check "(control) the browser installed every time (the readiness check removed)" \
+    'opp "$MK" "s/    if npx --no-install playwright --version.*?\n    then echo \"browser ready\"[^\n]*\n    else (npm install && npx playwright install chromium)/    \$1/s" "step 22b installs the browser only when"'
+  check "(control) a failed browser install counted as a FAIL" \
+    'opp "$MK" "s/browser item is NOT RUN with the reason \"no browser here: \[the install.s reason\]\", never\n    FAIL, and the build goes on/browser item is a FAIL/" "a failed browser install or launch"'
+  check "(control) /resume-it's live pass installs the browser" \
+    'opp "$RS" "s/the\n   live pass never installs it, and without it/the\n   live pass runs npx playwright install chromium first, and without it/" "/resume-it never installs the browser"'
   check "(control) the [LIVE] definition removed" \
     'opp "$BS" "s/^- \`\[LIVE\]\` after the severity = .*?(?=^\n)//ms" "build-standards.md says once what [LIVE] means"'
 fi
