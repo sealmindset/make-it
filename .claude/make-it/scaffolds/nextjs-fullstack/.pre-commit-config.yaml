@@ -29,20 +29,24 @@ repos:
   # -------------------------------------------------------------------------
   # TypeScript / JavaScript -- ESLint + Prettier
   # -------------------------------------------------------------------------
+  # eslint and prettier need the app's packages, which live in its container: the script runs them
+  # there, and skips with a printed line when Docker isn't available (CI still runs them).
   - repo: local
     hooks:
       - id: eslint
         name: eslint
-        entry: npx eslint --max-warnings 0 .
+        entry: bash scripts/precommit-in-container.sh eslint .
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
+        verbose: true   # so a skipped check says so
       - id: prettier
         name: prettier
-        entry: npx prettier --check .
+        entry: bash scripts/precommit-in-container.sh prettier .
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json]
         pass_filenames: false
+        verbose: true   # so a skipped check says so
 
   # -------------------------------------------------------------------------
   # Secret detection -- gitleaks

@@ -33,7 +33,7 @@ repos:
     rev: v0.8.6
     hooks:
       - id: ruff
-        args: ["--fix", "--config", "pyproject.toml"]
+        args: ["--fix", "--config", "pyproject.toml", "--output-format", "concise"]   # concise: never echoes the line (a key it flags)
         types_or: [python, pyi]
       - id: ruff-format
         args: ["--config", "pyproject.toml"]
@@ -42,20 +42,24 @@ repos:
   # -------------------------------------------------------------------------
   # TypeScript / JavaScript -- ESLint + Prettier
   # -------------------------------------------------------------------------
+  # eslint and prettier need the app's packages, which live in its container: the script runs them
+  # there, and skips with a printed line when Docker isn't available (CI still runs them).
   - repo: local
     hooks:
       - id: eslint
         name: eslint
-        entry: bash -c 'cd frontend && npx eslint --max-warnings 0 .'
+        entry: bash scripts/precommit-in-container.sh eslint frontend
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
+        verbose: true   # so a skipped check says so
       - id: prettier
         name: prettier
-        entry: bash -c 'cd frontend && npx prettier --check .'
+        entry: bash scripts/precommit-in-container.sh prettier frontend
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json]
         pass_filenames: false
+        verbose: true   # so a skipped check says so
 
   # -------------------------------------------------------------------------
   # Secret detection -- gitleaks

@@ -17,10 +17,8 @@ useDefault = true
 [allowlist]
   description = "Known-safe patterns for local development"
   paths = [
-    '''\.env\.example$''',
-    '''mock-services/''',
-    '''scripts/seed-mock-services\.sh$''',
-    '''tests/''',
+    '''(^|/)\.env\.example$''',
+    '''^scripts/seed-mock-services\.sh$''',
   ]
   regexes = [
     '''mock-oidc-secret''',
