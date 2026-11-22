@@ -93,7 +93,7 @@ c4236b6ac91adde0cf51759e2ee1f892e8a0f2a13a9f5e9ecb8237868aa7263c  make-it/resolv
 7a9ddb44061184640574500fb66739a34efba903e191e3e3781a2a2839940174  make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml
 601d813a9bcfbae1573497e741e757fd94bc0c5de3cb9ce0060ed56ebbe7310f  make-it/scaffolds/fastapi-nextjs/.gitignore
 9d5e8147fa45d22b321bb581686fdd2887583b7e19d71149bda32e536eff2724  make-it/scaffolds/fastapi-nextjs/.gitleaks.toml
-2f4e360eb014f752fb7e62b78f5141bf1b5259301a9e422b7246e2c7b4e19263  make-it/scaffolds/fastapi-nextjs/.pre-commit-config.yaml
+4b2b4bde7ca22a6c2403e4f9e97194d1e1c53e0a429ea56d28e9f0ec2f54d2ad  make-it/scaffolds/fastapi-nextjs/.pre-commit-config.yaml
 3f1753a2318f7a051f364aee05aa51947ddd7ba807365871b4cb525a586c8207  make-it/scaffolds/fastapi-nextjs/README.md
 67533f0ed4b1a2d139be0a03ad7d9d37f35e9acd012e271850f04985aa278fc5  make-it/scaffolds/fastapi-nextjs/backend/.dockerignore
 f55ad06edd1080e68cc868dc7e2af7987e20db947107b39d584be39b9f4139c7  make-it/scaffolds/fastapi-nextjs/backend/Dockerfile
@@ -223,7 +223,7 @@ fd5aa3ab9083f411a71553eb120fb68d016910bb67562ba0b9d39d38dbd4a8b2  make-it/scaffo
 0711602630c754fceb05c17b07b5a20a200ab338be4e844f3ea6c127df7e117f  make-it/scaffolds/nextjs-fullstack/.env.example
 d7de1e6cf825f9e964c5046e0a71d01b0d47ea2fba8031c4897c23b3d700a9f2  make-it/scaffolds/nextjs-fullstack/.gitignore
 18df9c8755283073bff42ecaa31537142b523a28084ec3871a5c632362e944d2  make-it/scaffolds/nextjs-fullstack/.gitleaks.toml
-6e9907966eee22215509e9ee1566a76b3041f58fc5b2dd14c5cc7a51981e544b  make-it/scaffolds/nextjs-fullstack/.pre-commit-config.yaml
+bcdcf81067636b3588481a6ee9eb2c3f63dafd339e5eb7fbd29aeb399e4faea0  make-it/scaffolds/nextjs-fullstack/.pre-commit-config.yaml
 2c53f5e691d69c5ac3dd67c0b6f5fd81cf66e698e804c7e148c5371443b7e705  make-it/scaffolds/nextjs-fullstack/.prettierignore
 2b314e8db96c9cd5daeca6c89089b0cd1e0cc85f2658e1ea5b1f3867942edb2b  make-it/scaffolds/nextjs-fullstack/.prettierrc
 fe4778c90cb9673fafb7d5875a7c7996306ba3f9617d6f99de6db1012f3a8056  make-it/scaffolds/nextjs-fullstack/Dockerfile

@@ -52,14 +52,14 @@ repos:
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
-        verbose: true   # so a skipped check says so
+        verbose: true # so a skipped check says so
       - id: prettier
         name: prettier
         entry: bash scripts/precommit-in-container.sh prettier frontend
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json]
         pass_filenames: false
-        verbose: true   # so a skipped check says so
+        verbose: true # so a skipped check says so
 
   # -------------------------------------------------------------------------
   # Secret detection -- gitleaks
