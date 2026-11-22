@@ -9980,6 +9980,10 @@ class ArgoItSealFilesCases(_FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _Firs
                 need_shell(shell)
                 r = self.fresh()
                 self._sealed(r)
+                # coordinator, 2026-11-21: the look-alikes are git-ignored here, so they aren't unsaved code (the owner's
+                # decision 2); untracked ones stop the send: ArgoItUnsavedCodeCases test_2
+                with open(os.path.join(r.work, '.git', 'info', 'exclude'), 'a') as f:
+                    f.write(''.join('/%s\n' % n for n in self.BESIDE))
                 files = sorted(self._generate(r) + self._listed(r, shell))
                 st = self._flow(r, shell, files)
                 self.assertIsNone(st['stopped'], 'a clean first send with the seal stopped: %r' % st['stopped'])
@@ -10229,6 +10233,206 @@ class ArgoItRedeployReadsGitHubFirstCases(_RedeployCallA, _FirstSendAdv3, _First
                             and not re.search(r'(?i)github', q) for q in qs), qs)
         sec = re.sub(r'\s+', ' ', w._section())
         self.assertRegex(sec, r'`NOT A REPO`', "3e's reasons don't cover NOT A REPO")
+
+
+
+class ArgoItUnsavedCodeCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5,
+                             _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend,
+                             Base):
+    """Owner, 2026-11-21 (decision 2): in a make-it project the first deploy stops BEFORE the seal when the user has
+    unsaved code -- each path git status lists in the project folder that the seal fingerprints (watermark.py
+    sealed_path: not Markdown, not under .make-it/, not backend/make-it-stamp.json), except .gitattributes and
+    argo-it's own generated files. Ignored files never count. The redeploy doesn't get this stop."""
+
+    def _unsaved_block(self, p=None):
+        p = p or self._phase()
+        blocks = [f for f in self._fences(p) if '--untracked-files=all' in f[2]]
+        self.assertEqual(len(blocks), 1, 'PHASE 5 has no one ```bash block that checks for unsaved code (%d)' % len(blocks))
+        return blocks[0]
+
+    def _project(self, r, sub=''):
+        r.write(sub + '.make-it/app-context.json', '{}\n')
+        r.write(sub + 'lib/util.py', 'x = 1\n')
+        r.write(sub + 'README.md', '# app\n')
+        r.write(sub + '.gitattributes', '*.png binary\n')
+        r.commit('a make-it project')
+        r.push()
+
+    def _check(self, r, shell, files=(), sub=''):
+        need_shell(shell)
+        self._prep(r)
+        code = self._files_filled(self._unsaved_block()[2], list(files) or ['ONBOARDING-K8S.md'])
+        cp = subprocess.run([shell, '-c', code], cwd=os.path.join(r.work, sub) if sub else r.work,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        return cp.returncode, cp.stdout.decode().splitlines()
+
+    def test_1_unsaved_code_stops_before_the_seal_naming_how_many_and_the_first_two(self):
+        cases = {'a change to a saved file': lambda r: r.append('lib/util.py', 'y = 2\n'),
+                 'a staged change': lambda r: (r.append('lib/util.py', 'y = 2\n'), r.git('add', 'lib/util.py')),
+                 'a deleted file': lambda r: os.remove(r.path('lib/util.py')),
+                 'a new file': lambda r: r.write('lib/new.py', 'z = 3\n')}
+        for shell in ('bash', 'zsh'):
+            for what, do in cases.items():
+                with self.subTest(shell=shell, what=what):
+                    r = self.fresh()
+                    self._project(r)
+                    do(r)
+                    code, out = self._check(r, shell)
+                    self.assertNotEqual(code, 0, what)
+                    self.assertEqual(out[:2], ['UNSAVED CODE', '1'], out)
+                    self.assertIn(out[2], ('lib/util.py', 'lib/new.py'), out)
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell, what='three files, in a project below the repo top'):
+                r = self.fresh()
+                self._project(r, 'web/')
+                for n in ('a.py', 'b.py', 'c.py'):
+                    r.write('web/' + n, 'v = 1\n')
+                code, out = self._check(r, shell, sub='web/')
+                self.assertEqual(out[:2], ['UNSAVED CODE', '3'], out)
+                self.assertEqual(out[2:], ['a.py', 'b.py'], 'not the first two, by path from the project folder')
+
+    def test_2_untracked_look_alikes_are_unsaved_code_and_stop_the_send(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                self._sealed(r)
+                before = self._sent_refs(r)
+                files = sorted(self._generate(r) + self._listed(r, shell))
+                st = self._flow(r, shell, files)
+                self.assertTrue(st['stopped'] or st['failed'], 'untracked look-alikes went through')
+                self.assertIsNone(st['ask'], 'the ask was shown')
+                self.assertEqual(self._sent_refs(r), before, 'GitHub changed')
+                code, out = self._check(r, shell, files)
+                self.assertEqual(out[:2], ['UNSAVED CODE', '2'], out)  # MAKE-IT.md.orig, backend/make-it-stamp.json.tmp
+                self.assertEqual(sorted(out[2:]), ['MAKE-IT.md.orig', 'backend/make-it-stamp.json.tmp'])
+
+    def test_3_what_is_not_unsaved_code_goes_on(self):
+        cases = {"argo-it's own files": lambda r: [r.write(f, t) for f, t in self.GENERATED.items()],
+                 'an ignored file': lambda r: (r.write('.gitignore', 'build/\n'), r.commit('ignore build'), r.push(),
+                                               r.write('build/out.js', 'x\n')),
+                 'a Markdown file': lambda r: r.append('README.md', 'more\n'),
+                 "the seal's own files": lambda r: [r.write(f, t) for f, t in self.SEAL.items()],
+                 "the user's own line in .gitattributes": lambda r: r.append('.gitattributes', '*.jpg binary\n')}
+        for shell in ('bash', 'zsh'):
+            for what, do in cases.items():
+                with self.subTest(shell=shell, what=what):
+                    r = self.fresh()
+                    self._project(r)
+                    do(r)
+                    code, out = self._check(r, shell, sorted(self.GENERATED))
+                    self.assertEqual((code, out), (0, []), what)
+
+    def test_4_not_a_make_it_project_no_check(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                r.append('app.py', 'x = 1\n')
+                self.assertEqual(self._check(r, shell), (0, []))
+
+    def test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line(self):
+        p = self._phase()
+        at = self._unsaved_block(p)[0]
+        flat = re.sub(r'\s+', ' ', p)
+        self.assertLess(p.index('`.make-it/app-context.json`'), at)
+        self.assertLess(at, p.index('run the seal step now'), 'the unsaved-code check is not before the seal')
+        qs = self._told(p, 'UNSAVED CODE')
+        good = [q for q in qs if re.search(self.SENT_NONE, q) and not re.search(self.NEVER_SAY, q)
+                and '/wrap-it' in q and re.search(r'\[N\]', q) and re.search(r'\[(?:the )?first path\]', q)]
+        self.assertTrue(good, qs)
+        i = flat.index('`UNSAVED CODE`')
+        self.assertRegex(flat[i:i + 400], r"(?i)don't run the seal", "the stop doesn't say the seal isn't run")
+        self.assertRegex(flat[i:i + 400], self.NOT_SHOWN)
+        self.assertRegex(flat, r'(?i)redeploy[^.]{0,120}\b(?:doesn.t|does not)\b[^.]{0,40}\bstop',
+                         "the text doesn't say the redeploy doesn't get this stop")
+
+
+class ArgoItGitattributesContentCases(_SealFiles, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6,
+                                      _FirstSendFix5, _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1,
+                                      _FirstSendFix1, _FirstSend, Base):
+    """Coordinator, 2026-11-21 (concern 1): .gitattributes is listed when its unsaved difference from the saved version
+    is ONLY the seal's own lines (watermark.py ATTRS and its '# make-it seal' header), added in this run or an earlier
+    one; seal lines with anything else -> GITATTRIBUTES MIXED; no seal line in the difference -> not listed."""
+
+    ATTRS = '*.png binary\n'
+    SEAL_LINES = ('# make-it seal\n* -text\nMAKE-IT.md merge=union\n.make-it/sealed-files.txt merge=union\n'
+                  'backend/make-it-stamp.json merge=union\n')
+
+    def _project(self, r):
+        r.write('.make-it/app-context.json', '{}\n')
+        r.write('.gitattributes', self.ATTRS)
+        r.commit('a make-it project')
+        r.push()
+
+    def _list(self, r, shell):
+        need_shell(shell)
+        self._prep(r)
+        for rel, t in self.SEAL.items():
+            r.write(rel, t)
+        cp = subprocess.run([shell, '-c', self._seal_list()[2]], cwd=r.work, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=60)
+        return cp.returncode, cp.stdout.decode().splitlines()
+
+    def test_1_seal_lines_left_from_an_earlier_run_are_listed_and_sent(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._project(r)
+                r.append('.gitattributes', self.SEAL_LINES)  # an earlier run's seal; then "Not now"
+                code, out = self._list(r, shell)
+                self.assertEqual(code, 0, out)
+                self.assertIn('.gitattributes', out)
+                st = self._flow(r, shell, sorted(self._generate(r) + out))
+                self.assertIsNone(st['stopped'], st['stopped'])
+                self.assertEqual(self._origin(r, 'show', 'refs/heads/main:.gitattributes').decode(),
+                                 self.ATTRS + self.SEAL_LINES)
+
+    def test_2_seal_lines_and_a_user_line_stop(self):
+        for shell in ('bash', 'zsh'):
+            for order in ('user first', 'seal first'):
+                with self.subTest(shell=shell, order=order):
+                    r = self.fresh()
+                    self._project(r)
+                    parts = ['*.jpg binary\n', self.SEAL_LINES]
+                    r.append('.gitattributes', ''.join(parts if order == 'user first' else parts[::-1]))
+                    code, out = self._list(r, shell)
+                    self.assertNotEqual(code, 0)
+                    self.assertIn('GITATTRIBUTES MIXED', out)
+                    self.assertNotIn('.gitattributes', out)
+
+    def test_3_a_user_line_only_is_not_listed(self):
+        for shell in ('bash', 'zsh'):
+            for edit in ('add', 'remove'):
+                with self.subTest(shell=shell, edit=edit):
+                    r = self.fresh()
+                    self._project(r)
+                    if edit == 'add':
+                        r.append('.gitattributes', '*.jpg binary\n')
+                    else:
+                        r.write('.gitattributes', '')
+                    code, out = self._list(r, shell)
+                    self.assertEqual(code, 0, out)
+                    self.assertNotIn('.gitattributes', out)
+                    self.assertNotIn('GITATTRIBUTES MIXED', out)
+
+    def test_4_no_difference_is_not_listed(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._project(r)
+                r.append('.gitattributes', self.SEAL_LINES)
+                r.commit('saved with the seal lines')
+                code, out = self._list(r, shell)
+                self.assertEqual((code, '.gitattributes' in out), (0, False), out)
+
+    def test_5_the_seal_lines_are_watermark_pys(self):
+        with open(os.path.join(ROOT, '.claude', 'make-it', 'scripts', 'watermark.py'), encoding='utf-8') as f:
+            src = f.read()
+        attrs = re.search(r'^ATTRS = \[(.*)\]$', src, re.M).group(1)
+        block = self._seal_list()[2]
+        for line in re.findall(r'"([^"]+)"', attrs) + ['# make-it seal']:
+            self.assertIn(line, src if line.startswith('#') else attrs)
+            self.assertIn(line, block, 'the seal list does not know the seal line %r' % line)
 
 
 if __name__ == '__main__':
