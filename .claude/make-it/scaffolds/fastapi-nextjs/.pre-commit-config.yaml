@@ -8,9 +8,6 @@
 # Update:  pre-commit autoupdate
 # =============================================================================
 
-default_language_version:
-  python: python3.12
-
 repos:
   # -------------------------------------------------------------------------
   # General file hygiene
