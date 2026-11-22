@@ -1216,9 +1216,17 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 **Rows checked on the running app.** Each step in Part B names, in its title, the rulebook rows
 it checks, and every row marked `[LIVE]` in `build-standards.md` is named by one of them. A row
-whose feature the app doesn't have is N/A. A check that could not run goes in TODO.md as NOT RUN
-with its reason, never as passed. "As User" means signed in as that role's test user, the way
-step 25 signs in.
+or step whose feature the app doesn't have ("Skip unless", "Only when") is N/A: reported as N/A,
+never as NOT RUN, and not written to TODO.md. A check that could not run goes in TODO.md as NOT
+RUN with its reason, never as passed. "As User" means signed in as that role's test user, the way
+step 25 signs in. Never print a key or token value: not in a command, a log or the results.
+
+**Browser steps** use the app's own Playwright setup in `e2e/`, run in the Playwright container
+whose version matches `e2e/package.json`'s `@playwright/test`
+(`mcr.microsoft.com/playwright:v<version>-noble`) with `--network host`, so the frontend and the
+sign-in redirects at `localhost` work; nothing is installed on the host. When that can't run (no
+`e2e/`, or the container can't reach the app), the row is NOT RUN with the reason "no browser
+here".
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -1282,9 +1290,14 @@ step 25 signs in.
 
 22. **Build and start containers:**
     ```bash
+    docker rm -f "<project>-live-check" 2>/dev/null   # a leftover changed-setting run (see below)
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
+    If the first command printed a name, it removed a leftover changed-setting run: note "Removed
+    a leftover <project>-live-check container" in the results, and start with
+    `docker compose --profile dev up -d --force-recreate <backend>` so the backend gets its
+    network back.
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
@@ -1292,7 +1305,11 @@ step 25 signs in.
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
 
-24. **Run the mock service seed script (V03):**
+24. **Run the mock service seed script (V03):** Only against this project's own services: the
+    script takes its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`), from the
+    environment or the project's `.env`, as `docker-compose.yml` does (check M02). If it still has
+    a literal port, fix it first (M02); never run it as it is, because in a worktree or copy it
+    would write to another app's sign-in service.
     ```bash
     bash scripts/seed-mock-services.sh
     ```
@@ -1305,18 +1322,25 @@ step 25 signs in.
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
     c. Verify the callback completes and a JWT cookie is set
     d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
-    e. Verify the dashboard loads with content
+    e. Verify the dashboard loads with content (a browser step, as above)
     f. Test logout (POST to /auth/logout, verify JWT cookie is cleared, verify 401 after)
 
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
+    A role with no test user in the mock sign-in seed is an M02 gap (one user per role): add the
+    user to the seed and the database seed, then test that role; it is not skipped.
 
 26. **Test every API endpoint (V05):**
-    For each API route in the app (with a valid JWT):
-    a. Call the endpoint
+    For each API route in the app (with a valid JWT): the routes, their methods, required query
+    parameters and request bodies come from `GET /openapi.json`; ids and values come from the seed
+    data (a GET of the list first).
+    a. Call the endpoint, as a role allowed to use it
     b. Verify 2xx response
     c. Verify response is valid JSON with expected structure
-    d. Verify list endpoints return NON-EMPTY arrays (seed data must exist)
+    d. Verify list endpoints return NON-EMPTY arrays where the seed data has rows for them. A
+       list the seed leaves empty on a fresh app (audit logs, statements, results of a job not
+       yet run) passes with an empty array; note it. A 422 for a request built from the schema is
+       a FAIL; a 422 from a missing required parameter means the request was wrong: fix it.
     e. Verify permission-protected endpoints return 403 for unauthorized roles
 
 27. **Test every page (V06):**
@@ -1329,6 +1353,17 @@ step 25 signs in.
     For each role, signed in as in step 25, verify:
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
+    c. Write refusals: for each POST, PUT, PATCH and DELETE route in `/openapi.json`, as a role
+       whose `/auth/me` permissions lack the permission the route's `require_permission(resource,
+       action)` names, send the request with an empty JSON body `{}`, and for a route with an id,
+       a random UUID that no record has. Expect: 403 (401 signed out). The permission check runs
+       before the body is checked (FastAPI resolves `require_permission` before body validation),
+       so a refused request writes nothing. Fail: 422 (the request got past a missing guard to
+       validation; nothing was written), 404 (got past it to the lookup), or 2xx (it wrote a
+       record: name the record from the response, delete it as Super Admin through its own
+       route, and if it can't be deleted, put it at the top of TODO.md). Never send a DELETE for
+       an id that exists. In a stack whose permission check doesn't come first, this item is NOT
+       RUN with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
@@ -1365,13 +1400,14 @@ step 25 signs in.
     e. Grep all `.tsx` page files (under `app/(auth)/`) for hardcoded colors:
        - Pattern: `#[0-9a-fA-F]{3,8}` or `rgb(` or `hsl(` or `oklch(`
        - Any match in a page file is a U09 violation (colors must use CSS variables or
-         Tailwind semantic classes so they respond to the theme toggle)
+         Tailwind semantic classes so they respond to the theme toggle), except inside an
+         `@media print` rule: print output is black on white whatever the theme
        - Fix by replacing with `var(--*)` CSS variables or Tailwind classes
     f. Verify the ModeToggle component uses the `mounted` state pattern (prevents hydration errors)
-    g. In a browser, as User: open the dashboard and click the mode toggle twice. Expect: the
-       `<html>` class switches between `light` and `dark`, localStorage `theme` holds the choice,
-       and the choice stays after a reload. Fail: the class doesn't change, or a page keeps one
-       theme.
+    g. In a browser, as User: open the dashboard and use the mode toggle to pick light, then dark
+       (the scaffold's toggle steps through light, dark and system). Expect: the `<html>` class
+       switches between `light` and `dark`, localStorage `theme` holds the choice, and the choice
+       stays after a reload. Fail: the class doesn't change, or a page keeps one theme.
 
 33. **Test File Upload (V11) (if app has Documents page or upload feature):**
     a. Upload a valid PDF via the upload API endpoint -- verify 200 with extracted text
@@ -1394,11 +1430,13 @@ so two worktrees never share one. In this order:
     3. Wait at most 60 seconds, reading `docker inspect -f '{{.State.Status}} {{.State.ExitCode}}'
        <run>` and the backend's health URL once a second, then run the check.
     4. **Put it back, always** -- whether the check passed, failed, was cut off or errored:
-       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait <backend>`, then one
-       request through the app's frontend that reaches the backend. Write in the results that the
+       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait --force-recreate
+       <backend>` (a plain start can leave the backend with no network after a hard kill), then
+       one request through the app's frontend that reaches the backend. Write in the results that the
        normal backend is back, healthy and reached through the frontend; if it isn't, fix that
        before any other check.
-    Never edit `.env` for it, and never leave `<run>` behind. "The AI address unreachable" means
+    Never edit `.env` for it, and never leave `<run>` behind. If this session dies mid-run, the
+    next start (step 22, or /resume-it's live pass) removes the leftover `<run>`. "The AI address unreachable" means
     `http://127.0.0.1:9` in the setting the provider reads: `AZURE_AI_FOUNDRY_ENDPOINT`
     (anthropic_foundry), `ANTHROPIC_BASE_URL` (anthropic, read by the Anthropic SDK),
     `OPENAI_BASE_URL` (openai, read by the OpenAI SDK), `OLLAMA_BASE_URL` (ollama). claude_agent
@@ -1406,13 +1444,18 @@ so two worktrees never share one. In this order:
 
 **No reachable AI provider** (steps 33a-33h). A default build may have none: `claude_agent` ships
 with an empty token, and the scaffold has no mock AI provider. Before these steps, read the
-provider's key in the backend (`docker compose exec <backend> printenv <KEY>`, with `<KEY>` one of
-`AZURE_AI_FOUNDRY_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`;
-ollama has no key) and, as User, send one chat message or trigger one agent. An empty key, or an
+provider's key in the backend without printing it (`docker compose exec <backend> sh -c '[ -n
+"$<KEY>" ] && echo set || echo empty'`, with `<KEY>` one of `AZURE_AI_FOUNDRY_API_KEY`,
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`; ollama has no key) and, as User,
+send one chat message or trigger one agent. An empty key, or an
 answer that says the AI is unavailable, means there is no reachable provider. Then these rows are
-NOT RUN with the reason "no AI key yet" -- never FAIL, and never fixed: V14, V16, F10, AI11, AI12,
-AI13, BN03, BNV01, BNV02, AC02, AC04, ACV01. These need no provider and run either way: F11,
-AI01d, BN04, BN05, BNV03, AC11, AC12, ACV02.
+NOT RUN with the reason "no AI key yet" -- never FAIL, and never fixed: V14, V16, F10, F11, AI11,
+AI12, AI13, BN03, BNV01, BNV02, AC02, AC04, ACV01. With no key, or with a provider whose prices
+are $0 (claude_agent's are), these are NOT RUN with the reason "needs a configured, priced AI
+provider" -- never FAIL, and never fixed: AC12, ACV02. So is AC11's agent-off check; its 403 and
+audit checks run either way. These need no provider and run either way: AI01d, BN04, BN05,
+BNV03. A default build has no key, so it can't catch a broken budget cap: that needs a mock AI
+provider, which the scaffold doesn't have yet.
 
 33a. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
     a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
@@ -1465,8 +1508,9 @@ AI01d, BN04, BN05, BNV03, AC11, AC12, ACV02.
       compose exec <backend> claude --version` and `docker compose exec <backend> python -c
       "import claude_agent_sdk"`. Then as User, in the changed-setting run with
       `CLAUDE_CODE_OAUTH_TOKEN=` (empty): send one chat message. Expect: a version line, a clean
-      import, and the friendly "run `claude setup-token`" message (available: false). Fail:
-      either command fails, or a 500 or a crash without the token.
+      import, and the friendly "run `claude setup-token`" message (available: false), with any
+      status (a 503 with that message is a pass). Fail: either command fails, or a 500 or a crash
+      without the token.
 
 33e. **Test chat: streaming, history, privacy and the chat screen (V14, AI11, AI12, AI13)** --
     Skip unless the app has conversational AI.
@@ -1527,13 +1571,18 @@ AI01d, BN04, BN05, BNV03, AC11, AC12, ACV02.
       trigger one agent. Expect: the new row has `priced = false` and no cost, and AI Spend's
       unpriced count went up by one. Add the price back. Expect: the row is priced. Fail: a cost
       of 0, or `priced = true` with no price.
-    - **AC11** -- As User: GET and PATCH the Control Plane API. Expect: 403 both times. As Admin:
-      make one change. Expect: exactly one new `control_audit_log` row with before and after.
-      Set an agent `off` and trigger it. Expect: no provider call and no `ok` ledger row. Fail:
-      the User gets in, no audit row, or the agent still calls the AI.
-    - **AC12** -- As Admin: set that agent's day cap below today's seed spend, then trigger it.
-      Expect: a `refused_budget` row with cost 0, no provider call, the agent's fallback answer,
-      and the admins' 100% notice. Fail: an `ok` row, a provider call, or no fallback.
+    - **AC11** -- As User: GET the Control Plane API, and send its change request with the method
+      the app's router or `/openapi.json` gives it (PUT in the scaffold, not PATCH). Expect: 403
+      both times. As Admin: make one change. Expect: exactly one new `control_audit_log` row with
+      before and after. Only with a configured, priced provider (above): set an agent `off` and
+      trigger it. Expect: no provider call and no `ok` ledger row. Fail: the User gets in, no
+      audit row, or the agent still calls the AI.
+    - **AC12** -- Only with a configured, priced provider (above). As Admin: trigger the agent
+      once, read what it spent today (the sum of today's `cost_usd` for it in `ai_usage_events`),
+      then set its day cap below that sum and trigger it again. Expect: a `refused_budget` row
+      with cost 0, no provider call, and the admins' 100% notice; for an agent with
+      `rule_based_fallback: true`, its fallback answer too. Fail: an `ok` row, a provider call,
+      or, for an agent that declares a fallback, no fallback answer.
 
 33i. **Run the variant's live checks (P03)** -- Only when ACTIVE_VARIANT is set: run every item
     under `### Live checks (Part B)` in the variant's definition file.

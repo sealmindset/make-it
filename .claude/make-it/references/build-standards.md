@@ -221,7 +221,7 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 **M01** [Tier 1, 5] [FIX] **mock-oidc exists** -- Copied from scaffold as-is (never regenerated). In docker-compose with profile: dev. Internal/external URL split configured. **SaaS auth pattern only -- skip if EasyAuth is selected.**
 
-**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs.
+**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs. It takes every host port from the same variables docker-compose.yml uses (`MOCK_OIDC_PORT`, and `FRONTEND_PORT` or `APP_PORT`, from the environment or the project's `.env`), with the build's port only as the default -- never a literal port in a URL -- so in a worktree or a copy with its own ports it seeds that project's own services. Fix: the scaffold's `env_port` lines in place of the literal ports.
 
 **M03** [Tier 1, 5] [BLOCK] **Service client ↔ mock contracts** -- Cross-reference client methods with mock route files. Fix endpoint mismatches.
 

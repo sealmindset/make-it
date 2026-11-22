@@ -770,7 +770,7 @@ if [ -z "${1:-}" ]; then
   check "(control) the put-back is made conditional" \
     'opp "$MK" "s/\*\*Put it back, always\*\* -- whether the check passed, failed, was cut off or errored:/**Put it back** when the check passed:/" "Part B is exactly the pinned text"'
   check "(control) a unit with no fail rule: AC12 loses its Fail" \
-    'opp "$MK" "s/ Fail: an \`ok\` row, a provider call, or no fallback\.//" "every live unit says who it runs as"'
+    'opp "$MK" "s/ Fail: an \`ok\` row, a provider call,\s+or, for an agent that declares a fallback, no fallback answer\.//" "every live unit says who it runs as"'
   check "(control) a row named by two steps: BN05 added to the brain step" \
     'opp "$MK" "s/Test brain layer \(BNV01-BNV03\)/Test brain layer (BNV01-BNV03, BN05)/" "no row is named by two Part B steps"'
   check "(control) a multi-row step missing a row's unit: the BN05 unit removed" \
