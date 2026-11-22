@@ -235,13 +235,14 @@ else
     git reset -q
     cp "$T/gl.toml" .gitleaks.toml; rm -f backend/tests/test_planted.py; git checkout -q -- . 2>/dev/null
     # 5. a .tsx and a .py save on work with Docker absent: the frontend checks say they skipped, the save goes through
-    nd_path=$(printf '%s' "$PATH" | tr ':' '\n' | while read -r p; do [ -x "$p/docker" ] || printf '%s:' "$p"; done)
+    # Docker absent: a docker that can't run, first on the PATH (git and the rest stay where they are)
+    mkdir -p "$T/nodocker"; printf '#!/bin/sh\nexit 127\n' > "$T/nodocker/docker"; chmod +x "$T/nodocker/docker"
     printf 'export const planted = "hello";\n' > frontend/lib/planted.ts
     printf 'export function Planted() {\n  return <p>hello</p>;\n}\n' > frontend/components/planted.tsx
     printf 'def planted() -> str:\n    return "hello"\n' > backend/app/planted.py
     git add frontend/lib/planted.ts frontend/components/planted.tsx backend/app/planted.py
-    if PATH="$nd_path" git commit -m "frontend and backend, no Docker" >"$T/c4" 2>&1; then
-      grep -q "SKIPPED: the eslint check of your frontend code, because Docker isn't installed" "$T/c4" && grep -q "CI runs this check" "$T/c4" \
+    if PATH="$T/nodocker:$PATH" git commit -m "frontend and backend, no Docker" >"$T/c4" 2>&1; then
+      grep -q "SKIPPED: the eslint check of your frontend code, because Docker isn't running" "$T/c4" && grep -q "CI runs this check" "$T/c4" \
         && ok "no Docker: a .tsx and a .py save go through, the frontend checks print their skip line" || bad "no Docker: saved without the skip line: $(grep -i eslint "$T/c4")"
     else bad "no Docker: a .tsx/.py save was refused: $(tail -6 "$T/c4")"; fi
     # 6. with Docker: the frontend checks run in the container -- a clean change passes, a badly formatted one is refused
@@ -279,7 +280,8 @@ PY
       echo "y = 2" >> app.py
       out=$(bash -c "$snap" 2>&1)
       case $out in *"snapshot: tag "*) [ "$(git log -1 --format=%s)" = "Save pre-retrofit state" ] && ok "retrofit snapshot: a lint hook the app fails doesn't stop it (saved with the security hooks only)" || bad "retrofit snapshot: tagged without saving the changes" ;;
-        *) bad "retrofit snapshot: the app's lint hook stopped it: $out" ;; esac
+        *) bad "retrofit snapshot: the app's lint hook stopped it: $out"
+           SKIP=flake8 pre-commit run 2>&1 | tail -15 ;; esac
       git tag -d "$(git tag | head -1)" >/dev/null; rm -rf "$L.pre-retrofit"
       # hooks it doesn't know (an official gitleaks id, trufflehog, anything else) run; a known lint id is skipped
       printf 'repos:\n  - repo: local\n    hooks:\n' > .pre-commit-config.yaml
