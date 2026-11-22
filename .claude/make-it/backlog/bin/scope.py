@@ -108,7 +108,7 @@ def self_test():
     with tempfile.TemporaryDirectory() as b:
         def card(epic, name, **kv):
             os.makedirs(f'{b}/items/{epic}/stories', exist_ok=True)
-            open(f'{b}/items/{epic}/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            open(f'{b}/items/{epic}/{name}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
         E = lambda n: f'EPIC-0{n}-x'
         card(E(1), 'epic.md', id='E01', type='epic', status='in-progress')
         card(E(1), 'stories/S1.md', id='E01-S1', status='backlog', parent='E01')

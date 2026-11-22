@@ -104,7 +104,7 @@ def facts(B, T=None):
                  key=lambda p: (v(op[p], 'priority') or 'P9', opened(p, op[p]), p))
     plan, pf = None, os.path.join(B, 'PLAN.md')
     if os.path.exists(pf):
-        txt = open(pf).read(); pd = day((re.search(r'\d{4}-\d{2}-\d{2}', txt.split('\n', 1)[0]) or [''])[0])
+        txt = open(pf, encoding='utf-8').read(); pd = day((re.search(r'\d{4}-\d{2}-\d{2}', txt.split('\n', 1)[0]) or [''])[0])
         cand = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready', 'designing') and v(d, 'id').upper() not in parents]
         listed = {i.upper() for i in re.findall(r'(?:· |^\s*- [^\w]*?)(E\d+(?:-S\d+)?)', txt, re.M)}  # wave items and bullets, not reason text
         new = sum(v(op[p], 'id').upper() not in listed for p in cand)  # a plan leads the cards it lists; the rest go after it
@@ -207,7 +207,7 @@ def self_test():
                                                    '-c', 'core.hooksPath=/dev/null', *a], check=True, capture_output=True,
                                                   env=dict(os.environ, GIT_AUTHOR_DATE=f'{when}T12:00:00', GIT_COMMITTER_DATE=f'{when}T12:00:00'))
         def card(name, when, **kv):
-            open(f'{t}/items/EPIC-01-bugs/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            open(f'{t}/items/EPIC-01-bugs/{name}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
             git('add', '-A', when=when); git('commit', '-qm', name, when=when)
         git('init', '-q')
         bug = dict(type='breakfix', priority='P2', status='in-progress')
@@ -241,10 +241,10 @@ def self_test():
         card('stories/S3.md', d(2), id='E01-S3', title='Filings give up', **dict(bug, status='backlog'), stage='Reported', decision=Q, answers=A, created=d(2))
         card('stories/S4.md', d(2), id='E01-S4', **dict(bug, status='backlog', priority='P1'), stage='Reported', stakes='critical', created=d(2))
         card('stories/S5.md', d(1), id='E01-S5', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(1))
-        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(5)}  (scope: all)\n\n## Waves\n1. **solo** · E01-S1 · done -- unblocks E01-S11\n2. **solo** · E01-S8 · next\n\n## Held\n- ⚠️ E01-S20 · held\n')
+        open(f'{t}/PLAN.md', 'w', encoding='utf-8').write(f'# Run Plan -- {d(5)}  (scope: all)\n\n## Waves\n1. **solo** · E01-S1 · done -- unblocks E01-S11\n2. **solo** · E01-S8 · next\n\n## Held\n- ⚠️ E01-S20 · held\n')
         git('mv', 'items/EPIC-01-bugs/stories/S1.md', 'items/EPIC-01-bugs/stories/S1-moved.md', when=d(0)); git('commit', '-qm', 'mv', when=d(0))
         card('stories/S1.md', d(0), id='E01-S15', **dict(bug, status='backlog', priority='P3'), stage='Reported', created=d(0))  # new card, S1's old path
-        open(f'{t}/items/EPIC-01-bugs/stories/S19.md', 'w').write(f'---\nid: E01-S19\ntype: breakfix\nstatus: in-progress\nstage: Cause found\ncreated: {d(5)}\nupdated: {d(0)}\n---\n')  # written, not committed: busy
+        open(f'{t}/items/EPIC-01-bugs/stories/S19.md', 'w', encoding='utf-8').write(f'---\nid: E01-S19\ntype: breakfix\nstatus: in-progress\nstage: Cause found\ncreated: {d(5)}\nupdated: {d(0)}\n---\n')  # written, not committed: busy
         f = facts(t, T)
         ids = lambda ps: [v(f['cards'][p], 'id') for p in ps]
         rows = [r[1:] for r in f['rows']]
@@ -272,9 +272,9 @@ def self_test():
         assert f'    E01-S3 · Filings give up · idle 2d\n      {Q}\n        Retry -- runs them again tonight\n        Refile -- you re-enter the 3 by hand\n' in n, n
         assert '        (no context' in n.split('E01-S21')[1].split('E01-S3')[0] and 'answers not on card' in n, n  # BOARD.md's shape, gaps flagged
         assert 'growing +3.5/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
-        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n')  # every wave merged
+        open(f'{t}/PLAN.md', 'w', encoding='utf-8').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n')  # every wave merged
         g = facts(t, T); assert g['plan'][3] is None and 'PLAN.md ran out' in render(g, 't'), g['plan']
-        open(f'{t}/PLAN.md', 'w').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n2. **solo** · E01-S4 · held\n')
+        open(f'{t}/PLAN.md', 'w', encoding='utf-8').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n2. **solo** · E01-S4 · held\n')
         g = facts(t, T)  # the next wave can't start (S4 is high-stakes): stuck, not silently waiting forever
         assert g['plan'][4] == ['E01-S4'] and 'PLAN.md stuck' in render(g, 't') and 'waits on E01-S4' in render(g, 't'), g['plan']
         assert len(facts(t, T - D(days=15))['rows']) == 3  # no week that ends before the history starts
@@ -296,5 +296,5 @@ if __name__ == '__main__':
     if not proj:
         parent = os.path.dirname(B)
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
-        proj = open(f'{B}/.project').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
+        proj = open(f'{B}/.project', encoding='utf-8').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
     print(render(facts(B), proj, needs_only=needs))

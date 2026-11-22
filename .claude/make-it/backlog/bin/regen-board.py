@@ -11,7 +11,7 @@ import datetime, glob, os, re, sys
 ORDER = ['in-progress', 'ready', 'blocked', 'designing', 'backlog', 'done']
 BIG = 30  # ponytail: an epic past this many cards counts its done cards and groups the rest by category
 def fm(p):
-    m = re.match(r'---\n(.*?)\n---', open(p).read(), re.S)
+    m = re.match(r'---\n(.*?)\n---', open(p, encoding='utf-8').read(), re.S)
     return dict(l.split(':', 1) for l in m.group(1).splitlines() if ':' in l) if m else {}
 def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
@@ -143,8 +143,8 @@ def main(args):
         import subprocess, tempfile
         with tempfile.TemporaryDirectory() as t:
             os.makedirs(f'{t}/items/EPIC-01-bugs/stories')
-            def card(name, **kv): open(f'{t}/items/EPIC-01-bugs/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
-            def board(): subprocess.run([sys.executable, __file__, t, '--project', 't'], check=True); return open(f'{t}/BOARD.md').read()
+            def card(name, **kv): open(f'{t}/items/EPIC-01-bugs/{name}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            def board(): subprocess.run([sys.executable, __file__, t, '--project', 't'], check=True); return open(f'{t}/BOARD.md', encoding='utf-8').read()
             card('epic.md', id='E01', title='Bugs', status='in-progress')
             card('stories/S1.md', id='E01-S1', status='backlog', type='breakfix', priority='P1', stakes='critical')
             card('stories/S2.md', id='E01-S2', status='backlog', type='breakfix', priority='P1', dependsOn='E01-S4')
@@ -184,10 +184,10 @@ def main(args):
             assert '**Next up:** S3' in board()
             # A big epic (over 30 cards): done cards as a count, open cards grouped by category; small epics unchanged
             os.makedirs(f'{t}/items/EPIC-02-big/stories')
-            open(f'{t}/items/EPIC-02-big/epic.md', 'w').write('---\nid: E02\ntitle: Big\nstatus: in-progress\n---\n')
+            open(f'{t}/items/EPIC-02-big/epic.md', 'w', encoding='utf-8').write('---\nid: E02\ntitle: Big\nstatus: in-progress\n---\n')
             for n in range(1, 34):
                 kv = dict(id=f'E02-S{n}', title=f'T{n}', status='done' if n < 3 else 'backlog', category='zeta' if n % 2 else 'alpha')
-                open(f'{t}/items/EPIC-02-big/stories/S{n}.md', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+                open(f'{t}/items/EPIC-02-big/stories/S{n}.md', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
             b = board(); big = b.split('## E02')[1]
             assert '### done (2)\n_listed by `/backlog-it show E02`_' in big and 'E02-S1 ·' not in big and 'E02-S2 ·' not in big, big
             assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
@@ -208,8 +208,8 @@ def main(args):
             assert '**Live, waits:** 2026-02-30 → S25 · v2098.12.31 → S26 · 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b  # in date order
             # what a card waits on: an id with children means its open cards; an epic's dependsOn holds for every card under it
             os.makedirs(f'{t}/items/EPIC-03-later/stories')
-            open(f'{t}/items/EPIC-03-later/epic.md', 'w').write('---\nid: E03\nstatus: backlog\n---\n')
-            later = lambda n, st: open(f'{t}/items/EPIC-03-later/stories/S{n}.md', 'w').write(f'---\nid: E03-S{n}\nstatus: {st}\nparent: E03\n---\n')
+            open(f'{t}/items/EPIC-03-later/epic.md', 'w', encoding='utf-8').write('---\nid: E03\nstatus: backlog\n---\n')
+            later = lambda n, st: open(f'{t}/items/EPIC-03-later/stories/S{n}.md', 'w', encoding='utf-8').write(f'---\nid: E03-S{n}\nstatus: {st}\nparent: E03\n---\n')
             later(1, 'done')
             card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2', dependsOn='[E03]')
             assert '**Next up:** S3' in board()  # an open epic whose cards are all done is finished
@@ -242,9 +242,9 @@ def main(args):
     if not proj:
         parent = os.path.dirname(B)  # <repo>/.claude/backlog -> name the repo, not ".claude"
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
-        proj = open(f'{B}/.project').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
+        proj = open(f'{B}/.project', encoding='utf-8').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
 
-    open(f'{B}/BOARD.md', 'w').write(render(B, proj))
+    open(f'{B}/BOARD.md', 'w', encoding='utf-8').write(render(B, proj))
 
 if __name__ == '__main__':
     main(sys.argv[1:])
