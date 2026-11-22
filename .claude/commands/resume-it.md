@@ -885,44 +885,70 @@ needs; it works as both, instead of inferring a specialist of its own.
 a piece of work is a relevant change when it touches an area in this table; with no area touched
 there is no live pass. The area comes from the table, never a judgement: an applied catch-up gap
 whose ID prefix (the letters before its number: `A` for A03, `AI` for AI12) is in "Catch-up
-checks", or a changed file whose path contains a word in "Files".
+checks", or a changed file whose path contains a word in "Files". A project with no compose file
+at its root (`docker-compose.yml`, `docker-compose.yaml`, `compose.yml` or `compose.yaml`) has no
+live pass: nothing is triggered, started or recorded.
 
-| Area | Catch-up checks | Files (path contains) | Rows run live |
-|------|-----------------|-----------------------|---------------|
-| Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 |
-| Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06 |
-| Activity logs | L | `log_store`, `logs` | V08 |
-| Notifications | N | `notification` | V10 |
-| Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 |
-| File upload | F | `upload`, `document`, `import` | V11, F09, F10, F14 |
-| AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | F11, AI01a, AI01b, AI01d, AI11, AI12, AI13, AI14, AI20, AI21, AI22, AI25, AI26, AI27, V14, V16 |
-| AI memory | BN | `brain`, `memor` | BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13, BNV01, BNV02, BNV03 |
-| AI accounting | AC | `usage`, `ledger`, `spend`, `budget`, `price`, `statement`, `ai-control` | AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15, ACV01, ACV02, ACV03 |
-| The mobile variant | P | `sw.ts`, `manifest.json` | P03 |
-| Every live pass (starting the app) | -- | -- | V02, V03 |
+The live pass runs only checks that call no paid AI provider and leave nothing in the app's data.
+Which rows those are is fixed by this table, not decided each time; the rows in the two "Not run
+here" columns are run by /make-it's build-verify Part B, not here.
+
+| Area | Catch-up checks | Files (path contains) | Run here | Not run here: calls the AI provider | Not run here: would leave test records |
+|------|-----------------|-----------------------|----------|-------------------------------------|----------------------------------------|
+| Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 | -- | -- |
+| Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06 | -- | -- |
+| Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 | -- | -- |
+| File upload | F | `upload`, `document`, `import` | F09 | F10 | V11, F14 |
+| AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | F11 | V14, V16, AI11, AI12, AI13 | AI01d |
+| AI memory | BN | `brain`, `memor` | BNV03 | BN03, BNV01, BNV02 | BN04, BN05 |
+| AI accounting | AC | `usage`, `ledger`, `spend`, `budget`, `price`, `statement`, `ai-control` | -- | AC02, AC04, ACV01 | AC11, AC12, ACV02 |
+| The mobile variant | P | `sw.ts`, `manifest.json` | P03 | -- | -- |
+| Every live pass (starting the app) | -- | -- | V02, V03 | -- | -- |
+
+V05 here sends GET requests only; its other requests are NOT RUN, with the reason "it would leave
+test records".
 
 1. **Where.** In the folder the change was made in (its worktree, with its own `.env` and ports).
-2. **Only when the settings point at this machine.** Read the database, queue and cache URLs in
-   `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
+2. **Only when it can start here.** `docker info` fails → start nothing: every row of the pass is
+   NOT RUN, with the reason "Docker isn't running". Then read the database, queue and cache URLs
+   in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
    does. One whose host isn't a compose service name, `localhost` or `127.0.0.1` → start nothing:
    every row of the pass is NOT RUN, with the reason "your settings point at <host>".
-3. **Start it.** `docker compose --profile dev up -d --build --wait` (it rebuilds what changed; a
-   TLS or certificate error gets /try-it step 1's security-tool ask, as there), then `bash
-   scripts/seed-mock-services.sh`. No other ask: starting the app is routine here.
-4. **Run each row** of every touched area, plus V02 and V03, with the step that names it in
-   /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is written: the
-   same requests, roles, expected results and fail rules, and N/A for a feature the app doesn't
-   have.
-5. **Each row's result is PASS, FAIL or NOT RUN with its reason.** A check that could not run --
-   the app didn't start, the step needs something this app lacks, a request couldn't be made --
-   is NOT RUN, never passed. A FAIL is fixed like any test failure in this session (diagnose,
-   fix, re-run that row, up to 3 rounds); one still failing after that goes in TODO.md.
+3. **Start it.** Note whether it was already running (`docker compose --profile dev ps`). Then
+   `docker compose --profile dev up -d --build --wait` (it rebuilds what changed; a TLS or
+   certificate error gets /try-it step 1's security-tool ask, as there), then `bash
+   scripts/seed-mock-services.sh`. No other ask: starting the app is routine here. If it doesn't
+   come up healthy, that is V02 failing, fixed as step 5 says; if it still won't start, the rest
+   of the pass is NOT RUN, with the reason "the app didn't start", and the start problem goes at
+   the top of TODO.md.
+4. **Run each row in "Run here"** for every touched area, plus V02 and V03, with the step that
+   names it in /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is
+   written: the same requests, roles, expected results and fail rules, the changed-setting run
+   and its put-back included, and N/A for a feature the app doesn't have. Each row in a "Not run
+   here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
+   "it would leave test records".
+5. **Each row's result is PASS, FAIL, NOT RUN with its reason, or LEFT OUT (your choice).** A row
+   that belongs to an item in `## Left out by your choice` (read as
+   `~/.claude/make-it/references/left-out-record.md`'s read steps say) is LEFT OUT: reported,
+   never run and never fixed. A check that could not run -- the app didn't start, the step needs
+   something this app lacks, a request couldn't be made -- is NOT RUN, never passed. A FAIL is
+   fixed like any test failure in this session (diagnose, fix, re-run that row, up to 3 rounds);
+   one still failing after that goes in TODO.md.
 6. **Record it** under `## Test Status` in `.make-it-state.md`: "Live pass [date] ([areas]):
-   [n] passed, [n] failed, [n] not run ([row]: [reason], ...)". Each NOT RUN row also gets a
-   TODO.md line with its reason.
-7. **Tell the user one plain line**, filled from the results: "I started your app and checked
-   [the areas, in plain words] on it: [everything passed / N things failed and I'm fixing them /
-   N checks couldn't run because [reason]]."
+   [n] passed, [n] failed, [n] not run ([row]: [reason], ...), [n] left out". Each NOT RUN row
+   has one TODO.md line with its reason: when its line is already there, update its date and
+   reason; never add a second line for it.
+7. **Tell the user one plain line**, the one that fits what happened:
+   - It ran: "I started your app and checked [the areas, in plain words] on it: [everything
+     passed / N things failed and I'm fixing them][; N checks weren't run here because they'd
+     call the AI or leave test records]." When it wasn't running before, add: "I've left it
+     running; /wrap-it stops it."
+   - Docker isn't running: "I couldn't check [the areas] on your app because Docker isn't
+     running, so those checks are marked not run."
+   - The settings point elsewhere: "I didn't start your app to check [the areas]: its settings
+     point at [host], so those checks are marked not run."
+   - It won't start: "I couldn't get your app to start, so [the areas] weren't checked: [the
+     reason, in plain words]. It's at the top of your to-do list."
 
 Leave the app running afterwards, as /try-it does; /wrap-it shuts it down.
 

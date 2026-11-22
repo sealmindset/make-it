@@ -1351,8 +1351,12 @@ Tell user: "Your app is retrofitted! Now making sure everything works perfectly.
 **PART B: Live verification (start the app and test it)**
 
 Run every step of /make-it's build-verify Part B, as written there (`~/.claude/commands/make-it.md`,
-steps 21-33i): each step names the rulebook rows it checks, and every row marked `[LIVE]` in
-`build-standards.md` has one. Among them:
+steps 21-33i), with two changes for an app the scaffold didn't build: `<backend>` is the app's
+backend service as its `docker-compose.yml` names it, and where a step names a scaffold route, use
+the app's own route for the same thing (from its router files, or its OpenAPI spec at
+`/openapi.json` when it has one). Each step names the rulebook rows it checks, and every row
+marked `[LIVE]` in `build-standards.md` has one. They include V01-V09 and ACV01-ACV03; N01-N08 are
+Part A file checks, and step 30 checks the same notifications on the running app:
 - **V01-V09**: SSL proxy detection, container health, seed script, auth flow per role,
   API endpoints, page content, permission boundaries, Activity Logs, Docker cache
 - **N01-N08**: Notification model, query helper, REST API, bell component, type coding,

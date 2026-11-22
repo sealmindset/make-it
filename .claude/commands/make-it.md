@@ -1330,14 +1330,14 @@ step 25 signs in.
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
 
-29. **Test Activity Logs (V08) (web-app and api-service only):**
+29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
     b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests),
        and that a signed-in request's event names that user in `user_email` (L09)
     c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
     d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 
-30. **Test Notifications (V10) (web-app and api-service only):**
+30. **Test Notifications (web-app and api-service only):**
     a. Verify GET /api/notifications/count returns valid { unreadCount } for authenticated user
     b. Verify GET /api/notifications returns notifications scoped to the logged-in user
     c. Verify PATCH /api/notifications with { ids: [...] } marks a notification as read
@@ -1383,6 +1383,36 @@ step 25 signs in.
        The default import crashes in production Docker with ENOENT on test data file.
     f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
 
+**The changed-setting run** (steps 33c, 33d, 33f and 33g use it). `<backend>` is the app's
+backend service as its `docker-compose.yml` names it (`backend` in the scaffold). `<run>` is
+`<project>-live-check`, where `<project>` is the `name` in `docker compose config --format json`,
+so two worktrees never share one. In this order:
+    1. `docker rm -f <run>` (a leftover from an earlier run), then `docker compose stop <backend>`.
+    2. `docker compose run -d --service-ports --use-aliases --name <run> -e <SETTING>=<value>
+       <backend>`. Without `--use-aliases` the frontend can't find the backend by its service
+       name, and every request through the app fails.
+    3. Wait at most 60 seconds, reading `docker inspect -f '{{.State.Status}} {{.State.ExitCode}}'
+       <run>` and the backend's health URL once a second, then run the check.
+    4. **Put it back, always** -- whether the check passed, failed, was cut off or errored:
+       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait <backend>`. Write in
+       the results that the normal backend is back and healthy; if it isn't, fix that before any
+       other check.
+    Never edit `.env` for it, and never leave `<run>` behind. "The AI address unreachable" means
+    `http://127.0.0.1:9` in the setting the provider reads: `AZURE_AI_FOUNDRY_ENDPOINT`
+    (anthropic_foundry), `ANTHROPIC_BASE_URL` (anthropic, read by the Anthropic SDK),
+    `OPENAI_BASE_URL` (openai, read by the OpenAI SDK), `OLLAMA_BASE_URL` (ollama). claude_agent
+    has none: use `CLAUDE_CODE_OAUTH_TOKEN=` (empty) instead.
+
+**No reachable AI provider** (steps 33a-33h). A default build may have none: `claude_agent` ships
+with an empty token, and the scaffold has no mock AI provider. Before these steps, read the
+provider's key in the backend (`docker compose exec <backend> printenv <KEY>`, with `<KEY>` one of
+`AZURE_AI_FOUNDRY_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`;
+ollama has no key) and, as User, send one chat message or trigger one agent. An empty key, or an
+answer that says the AI is unavailable, means there is no reachable provider. Then these rows are
+NOT RUN with the reason "no AI key yet" -- never FAIL, and never fixed: V14, V16, F10, AI11, AI12,
+AI13, BN03, BNV01, BNV02, AC02, AC04, ACV01. These need no provider and run either way: F11,
+AI01d, BN04, BN05, BNV03, AC11, AC12, ACV02.
+
 33a. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
     a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
        and seed memories in place, send a chat message to an AI agent. Verify the response
@@ -1407,57 +1437,38 @@ step 25 signs in.
     c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
        today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
 
-**The changed-setting run** (steps 33c, 33d, 33f and 33g use it): stop the backend (`docker
-compose stop backend`; `backend` is the scaffold's service name), start it with one setting
-changed -- `docker compose run -d --rm --service-ports --name live-check -e <SETTING>=<value>
-backend` -- run the check, then put it back: `docker rm -f live-check && docker compose
---profile dev up -d backend`, and wait for its health check. Never edit `.env` for it. "The AI
-address unreachable" means `http://127.0.0.1:9` in the variable the AI provider reads
-(`config.py` names it).
-
 33c. **Test upload failures, AI analysis and file layouts (F09, F10, F14)** -- Skip a row whose
     feature the app doesn't have (F10 needs file upload and AI features).
-    - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF (`head -c 2048 /dev/urandom >
-      bad.pdf`), to the upload endpoint. Expect: 400 for the empty file and 422 for the corrupt
-      one, each with a plain message. Fail: any 500, or a body naming a library, a stack trace
-      or a file path.
-    - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect: the stored document has its
-      extracted text and, kept apart from it, an AI analysis. Then, in the changed-setting run
-      with the AI address unreachable, upload it again. Expect: the upload succeeds and the
-      document is saved with its text and no analysis. Fail: no analysis while the AI is up, the
-      text overwritten by the analysis, or the upload refused while the AI is down.
-    - **F14** -- As the lowest role allowed to import: import the same CSV three times, with 0, 3 and 7 lines above its header
-      row. Expect: all three succeed with the same row count. Fail: any of them fails or counts a
-      different number of rows.
+    - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF
+      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 for the
+      empty file and 422 for the corrupt one, each with a plain message. Fail: any 500, or a body
+      naming a library, a stack trace or a file path.
+    - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect:
+      the stored document has its extracted text and, kept apart from it, an AI analysis. Then,
+      in the changed-setting run with the AI address unreachable, upload it again. Expect: the
+      upload succeeds and the document is saved with its text and no analysis. Fail: no analysis
+      while the AI is up, the text overwritten by the analysis, or the upload refused while the
+      AI is down.
+    - **F14** -- As the lowest role allowed to import: import the same CSV three times, with 0, 3
+      and 7 lines above its header row. Expect: all three succeed with the same row count. Fail:
+      any of them fails or counts a different number of rows.
 
-33d. **Test the AI with a changed setting (F11, AI01a, AI01b, AI01d, AI21)** -- Skip unless
-    ai_features.needed = true.
-    - **F11** -- No sign-in: start the backend in the foreground with the AI address unreachable
-      and pre-flight on (`docker compose stop backend`, then `docker compose run --rm
-      --service-ports -e <AI address>=http://127.0.0.1:9 backend`). Expect: within 10 seconds it
-      logs which pre-flight check failed and exits non-zero, and the port never answers. Fail:
-      `/health` answers, or it exits 0. Put the backend back as the changed-setting run does.
-    - **AI01a** -- As User, in the changed-setting run with `AI_MODEL_STANDARD=llama3`: send one
-      chat message. Expect: a reply, and a correction warning in the backend log (`docker logs
-      live-check`) naming the model used instead. Fail: an error to the user, no warning, or
-      `llama3` sent to the provider.
-    - **AI01b** -- Only when `AI_FAILOVER_PROVIDER` is set. As User, in the changed-setting run
-      with the primary provider's address unreachable: send one chat message. Expect: a reply
-      from the failover provider, and the log shows the switch. Fail: an error to the user.
+33d. **Test the AI with a changed setting (F11, AI01d)** -- Skip unless ai_features.needed = true.
+    - **F11** -- No sign-in: the changed-setting run with the AI address unreachable and
+      pre-flight on (the app's config names the switch: `AI_PREFLIGHT_CHECK` in the scaffold).
+      Expect: within 10 seconds `docker inspect` shows `exited` with a non-zero code, `docker logs
+      <run>` names the pre-flight check that failed, and the health URL never answered. Fail:
+      still `running` at 60 seconds, the health URL answers, or exit code 0. The put-back runs
+      either way.
     - **AI01d** -- Only when `ai_providers.primary` is `claude_agent`. No sign-in: run `docker
-      compose exec backend claude --version` and `docker compose exec backend python -c "import
-      claude_agent_sdk"`. Then as User, in the changed-setting run with
+      compose exec <backend> claude --version` and `docker compose exec <backend> python -c
+      "import claude_agent_sdk"`. Then as User, in the changed-setting run with
       `CLAUDE_CODE_OAUTH_TOKEN=` (empty): send one chat message. Expect: a version line, a clean
       import, and the friendly "run `claude setup-token`" message (available: false). Fail:
       either command fails, or a 500 or a crash without the token.
-    - **AI21** -- As User, in the changed-setting run with the AI address unreachable: trigger an
-      agent with `rule_based_fallback: true`, then one without it. Expect: the first gives a
-      useful answer ("AI is temporarily unavailable. Please try again shortly." from a
-      conversational agent, a job that ends `completed_without_ai` from a batch one); the second
-      gives a plain error. Fail: the first one errors, or either shows a stack trace.
 
-33e. **Test chat: streaming, history, privacy and the chat screen (V14, AI11, AI12, AI13, AI14)**
-    -- Skip unless the app has conversational AI.
+33e. **Test chat: streaming, history, privacy and the chat screen (V14, AI11, AI12, AI13)** --
+    Skip unless the app has conversational AI.
     - **AI11** -- As User: POST a message to `/api/ai/conversations/{id}/messages` with `Accept:
       text/event-stream` (`curl -N`). Expect: 200, `Content-Type: text/event-stream`, `data:`
       token events arriving over time, and a last event with `"done": true`. Fail: another
@@ -1469,48 +1480,33 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
     - **AI13** -- In a browser, as User: open the chat page and send a message. Expect: the reply
       appears as it is written, the conversation shows in the sidebar at once, and it is still
       there after a reload. Fail: the reply appears only when finished, or the sidebar misses it.
-    - **AI14** -- As User: POST the same message with `Accept: application/json`. Expect: 200 and
-      the whole reply as one JSON object. Then in a browser, start a streamed reply and cut it
-      (DevTools: Offline for 3 seconds, then back). Expect: it retries and the full reply
-      appears. Fail: an error on the JSON request, or a lost reply after the cut.
     - **V14** -- As User: ask for a long answer and watch the stream (`curl -N`). Expect:
-      `{"heartbeat": true}` events while it runs; V14's other items are AI11-AI14 above. Fail: no
-      heartbeat in a reply that runs longer than `AI_SSE_HEARTBEAT_INTERVAL_SECONDS`.
+      `{"heartbeat": true}` events while it runs. Then POST the same message with `Accept:
+      application/json`. Expect: 200 and the whole reply as one JSON object. V14's streaming,
+      history and privacy items are AI11-AI13 above. Fail: no heartbeat in a reply that runs
+      longer than the heartbeat interval (the app's config names it: `AI_SSE_HEARTBEAT_SEC` in
+      the scaffold), or no JSON reply.
 
-33f. **Test agent routing and the agent patterns (V16, AI20, AI22, AI25, AI26, AI27)** -- Skip
-    unless the app has more than one agent; AI25-AI27 only for an agent that uses that pattern.
+33f. **Test agent routing (V16)** -- Skip unless the app has more than one agent.
     - **V16** -- As User: for each conversational agent, create a conversation with its
       `agent_slug` and send a message. As Admin: POST `/api/ai/agents/{slug}/run` for each batch
-      agent. Expect: each reply comes from that agent (its prompt and its data), and each run
-      creates a job with that agent's `task_type`. Fail: a reply from another agent, or a run
-      with no job.
-    - **AI20** -- As Admin: POST `/api/ai/agents/no-such-agent/run`; as User, create a
-      conversation with `agent_slug` `no-such-agent`. Expect: 404 both times. Fail: any other
-      status.
-    - **AI22** -- As Admin: run one batch agent and poll its job. Expect: a `task_type` starting
-      `ai_agent:`, progress that moves, and tokens and cost in the finished job's `result_data`.
-      Fail: no job, progress that stays at 0 until the end, or no tokens or cost.
-    - **AI25** -- As Admin: run the pipeline agent. Expect: its steps run in order (the job's
-      progress or the log). Then run it again in the changed-setting run with the AI address
-      unreachable. Expect: the failed step handled as its fallback setting says. Fail: steps out
-      of order, a hang, or a 500.
-    - **AI26** -- As User: start a conversation with the generalist agent and send its hand-off
-      trigger. Expect: the next reply comes from the specialist and uses the earlier messages,
-      and GET of the conversation shows the hand-off in `delegation_chain`. Fail: no hand-off,
-      lost context, or an empty `delegation_chain`.
-    - **AI27** -- As Admin: run the fan-out agent. Expect: every sub-agent ran (the job's
-      per-agent breakdown). Then in the changed-setting run with `AI_FAN_OUT_TIMEOUT_SECONDS=1`,
-      run it again. Expect: the job finishes with the sub-agents that timed out marked so, and
-      a merged result from the rest. Fail: the whole run fails, or it hangs.
+      agent, then POST `/api/ai/agents/no-such-agent/run`. Expect: each reply comes from that
+      agent (its prompt and its data), each run creates a job with that agent's `task_type`, and
+      the unknown slug gets 404. When an agent has `rule_based_fallback: true`, trigger it in the
+      changed-setting run with the AI address unreachable. Expect: its fallback answer. Fail: a
+      reply from another agent, a run with no job, anything but 404 for the unknown slug, or an
+      error instead of the fallback.
 
-33g. **Test AI memory (BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13)** -- Skip if
-    brain_features.enabled != true.
-    - **BN03** -- As User, in the changed-setting run with `BRAIN_FEATURES_ENABLED=true` and
-      `LOG_LEVEL=DEBUG`: add a memory, then send a chat message. Expect: the prompt in the debug
-      log holds that memory. As Admin, add an org memory with scope `security`; as User, chat
-      with an agent outside security, then with the security agent. Expect: it is left out, then
-      included. Run once more with `BRAIN_FEATURES_ENABLED=false`. Expect: no memories in the
-      prompt. Fail: any of these the other way round.
+33g. **Test AI memory (BN03, BN04, BN05)** -- Skip if brain_features.enabled != true.
+    - **BN03** -- Only when the app already has a way to show the prompt it sends (a debug log or
+      an admin view of it); without one, BN03 is NOT RUN with the reason "the app doesn't show
+      its prompts". Never add prompt logging to pass this check: it would write people's memories
+      and prompts into the logs. As User, in the changed-setting run with
+      `BRAIN_FEATURES_ENABLED=true`: add a memory, then send a chat message. Expect: that prompt
+      holds the memory. As Admin, add an org memory with scope `security`; as User, chat with an
+      agent outside security, then with the security agent. Expect: it is left out, then
+      included. With `BRAIN_FEATURES_ENABLED=false`: no memories in the prompt. Fail: any of
+      these the other way round.
     - **BN04** -- As User: add a memory containing `<script>alert(1)</script>` and one containing
       "ignore previous instructions", then GET them. Expect: the script tag stripped or escaped,
       and the instruction phrase removed. Fail: either stored as sent.
@@ -1520,24 +1516,9 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
       permissions doesn't get the `security` one and a role with them does; everyone gets the
       `all` one. Fail: any person seeing another's personal memory, or a scope shown to the wrong
       role.
-    - **BN06** -- As User: GET `/api/brain/memories` and `/api/admin/brain/memories`. Expect: 200,
-      then 403. As Super Admin: GET every `/api/admin/brain/` endpoint. Expect: 200. Fail: the
-      User reaching the admin list, or the Super Admin refused.
-    - **BN09** -- As User and as Admin, and signed out: call each brain endpoint the rulebook row
-      lists. Expect: success for the roles it allows, 403 for the others, 401 signed out. Fail:
-      any other status.
-    - **BN10** -- As Super Admin: POST `/api/admin/brain/curation/run`, then poll the job. Expect:
-      `task_type` `ai_agent:memory-curator` and `result_data` with the counts, tokens and cost the
-      rulebook row lists. Fail: no job, or a missing field.
-    - **BN11** -- As User: add, correct and delete one memory. Expect: three new rows in
-      `brain_memory_audit_log` (`docker compose exec db psql`), each with action and actor type.
-      Fail: fewer than three, or a missing field.
-    - **BN13** -- In a browser, as User and as Manager: open `/settings/ai-memory`. Expect: each
-      sees their own memories, and the two lists differ. As Admin: open `/admin/ai-memory`.
-      Expect: memories from several users. Fail: an empty list, or the same list for both.
 
-33h. **Test AI accounting (AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15)**
-    -- Skip if ai_features.needed != true. Put every setting you change back afterwards.
+33h. **Test AI accounting (AC02, AC04, AC11, AC12)** -- Skip if ai_features.needed != true. Put
+    every setting you change back afterwards.
     - **AC02** -- As Admin: count `ai_usage_events` rows (`docker compose exec db psql`), trigger
       one agent, count again. Expect: exactly one new row, with all four token counts filled.
       Fail: no row, more than one, or an empty token count.
@@ -1545,21 +1526,6 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
       trigger one agent. Expect: the new row has `priced = false` and no cost, and AI Spend's
       unpriced count went up by one. Add the price back. Expect: the row is priced. Fail: a cost
       of 0, or `priced = true` with no price.
-    - **AC05** -- As Admin: change the light tier's model on the Control Plane, then trigger a
-      light agent. Expect: its new ledger row has the new model, with no restart. Fail: the old
-      model.
-    - **AC07** -- Only when escalation is on for a light agent. As Admin: trigger it with an input
-      whose answer can't meet its schema. Expect: one standard call follows, with
-      `escalated_from = light`, and no third call. Fail: no step up, or a second one.
-    - **AC08** -- As Admin: lower an agent's tier with no replay. Expect: refused with a plain
-      message. Run the replay on seed tasks, then lower it again. Expect: the replay's result
-      and cost in `control_audit_log`, then the change allowed. Fail: lowered with no replay.
-    - **AC09** -- As Manager (or a role that acts on AI results): approve one seeded AI result
-      unchanged and edit another. Expect: an `accepted` and a `corrected` row in `ai_outcomes`.
-      Fail: either missing.
-    - **AC10** -- In a browser, as Admin: open the page that shows ROI. Expect: it equals the
-      formula worked by hand from the seed rows (`docker compose exec db psql`). Fail: any
-      difference over 1 cent.
     - **AC11** -- As User: GET and PATCH the Control Plane API. Expect: 403 both times. As Admin:
       make one change. Expect: exactly one new `control_audit_log` row with before and after.
       Set an agent `off` and trigger it. Expect: no provider call and no `ok` ledger row. Fail:
@@ -1567,17 +1533,6 @@ address unreachable" means `http://127.0.0.1:9` in the variable the AI provider 
     - **AC12** -- As Admin: set that agent's day cap below today's seed spend, then trigger it.
       Expect: a `refused_budget` row with cost 0, no provider call, the agent's fallback answer,
       and the admins' 100% notice. Fail: an `ok` row, a provider call, or no fallback.
-    - **AC13** -- As Admin, with `INFRA_COST_SOURCE=mock`: run the infra collector twice for the
-      same days. Expect: one row per day, source, service and cost center. On Infra Spend, a
-      source that isn't connected says "not connected". Fail: duplicate rows, or $0 for a
-      source that isn't connected.
-    - **AC14** -- As Admin: issue two statements at once (two POSTs in parallel). Expect:
-      consecutive numbers, both saved. Change a seed price. Expect: an issued statement's total
-      doesn't change. Fail: a gap or a repeat, or a changed total.
-    - **AC15** -- In a browser, as Admin: open the seven AI and spend pages. Expect: each renders
-      with seed data. As User: open them. Expect: refused. As Admin: edit a published prompt
-      without publishing, trigger its agent. Expect: the call still uses the published text.
-      Fail: an empty or broken page, the User let in, or the draft used.
 
 33i. **Run the variant's live checks (P03)** -- Only when ACTIVE_VARIANT is set: run every item
     under `### Live checks (Part B)` in the variant's definition file.
