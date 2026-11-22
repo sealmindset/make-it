@@ -61,7 +61,7 @@ Describe (or point it at) the problem. It reads the actual error, reproduces the
 
 ## Which expert does the AI become?
 
-For debugging, the AI works as a **reliability & performance engineer**, not a generalist — automatically, no prompt. That means it thinks about the causes generalists skip (timing issues, resource limits, things happening twice) instead of slapping on a quick patch. What you get: the *proven* root cause, a fix for it, and a test so the bug can't quietly return. (Set behind the scenes from your app's details — see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+For debugging, the AI works as a **senior maintainer of your app's stack**, not a generalist — automatically, no prompt. That means it knows how that stack usually breaks and looks for the real cause instead of slapping on a quick patch. What you get: the *proven* root cause, a fix for it, and a test so the bug can't quietly return. It also reads the specialist your app's record names and holds the work to that standard too (see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job)).
 
 ---
 

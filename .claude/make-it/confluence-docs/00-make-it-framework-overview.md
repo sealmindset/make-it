@@ -111,7 +111,7 @@ A few examples:
 
 | When you run… | The AI works as a… | So it catches / delivers… |
 |---|---|---|
-| [`/debug-it`](10-debug-it.md) on a slow or flaky bug | reliability & performance engineer | the *real* root cause (not a band-aid), plus a test so it never comes back |
+| [`/debug-it`](10-debug-it.md) on any bug | senior maintainer of your app's stack | the *real* root cause (not a band-aid), plus a test so it never comes back |
 | [`/nemo-it`](08-nemo-it.md) / [`/fix-it`](09-fix-it.md) | security engineer | thinks like an attacker, fixes the cause, documents why it's safe |
 | [`/argo-it`](07-argo-it.md) | platform/operations engineer | a plan for what happens if something breaks, not just "make it live" |
 | [`/retrofit-it`](03-retrofit-it.md) | software architect | upgrades without breaking what already works |

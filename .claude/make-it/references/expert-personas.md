@@ -10,7 +10,7 @@ This is **not** a staffing recommendation (it never suggests hiring a human). It
 Selection is **automatic and silent**: no user question. The only thing a skill says about it is
 the one line a writer says when it replaces a record.
 
-Imported by `make-it`, `retrofit-it`, `resume-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `resolve-it`,
+Imported by `make-it`, `retrofit-it`, `resume-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `try-it`, `deadcode-it`, `resolve-it`,
 `dispatch-it` and `subagent-it`.
 
 ---
@@ -52,8 +52,14 @@ Using a specialist and recording one are two separate jobs.
   works as its task specialist alone and says nothing.
 - **Coordinators.** `/dispatch-it` and `/subagent-it` adopt no specialist themselves; every agent they
   launch on app code is handed the project specialist plus the one its task needs.
+- **The readers.** The skills that read it and add a task specialist are `/debug-it`, `/nemo-it`,
+  `/fix-it`, `/argo-it`, `/try-it`, `/deadcode-it` and `/resolve-it` (rule 1 names each one's task
+  specialist).
 - **No app code, no project specialist.** Skills that do not work on an app's code get no project
-  specialist.
+  specialist. `/demo-it`, `/wrap-it`, `/clear-it`, `/git-it` and `/backlog-it` get no specialist at
+  all: `/demo-it` manages demo accounts and their sample data for a product, and does not change or
+  judge an app's code. `/threats-it` is standalone, not tied to an app: it works as a fixed threat
+  intelligence analyst and reads no project specialist record.
 
 ### Always a named specialist
 
@@ -151,9 +157,12 @@ Once a persona is selected, the AI operates under this frame for the duration of
 
 | Active skill / work | Persona the AI adopts | Mental model it brings | Generalist blind spot it avoids | Output standard |
 |--------------------|----------------------|------------------------|--------------------------------|-----------------|
-| `debug-it` (flaky / slow / prod bug) | SRE / performance engineer | thinks in races, GC pauses, N+1, resource limits, timing | patches the symptom, adds a retry, calls it fixed | root cause proven, regression test, runbook note |
+| `debug-it` (any bug, test or build failure) | Senior maintainer of that stack | knows the stack's idioms, failure modes, tests and history | patches the symptom, adds a retry, calls it fixed | root cause proven, regression test, runbook note |
 | `nemo-it` + `fix-it` (auth / data / AI safety) | Application security engineer | attacker mindset, threat-models before touching code | works the findings list, no threat model | threat model, fix + compensating control, attestation-grade rationale |
-| `argo-it` (deploy, real traffic) | Platform / DevOps + SRE | blast radius, SLOs, rollback, failure modes | ships manifests, no alerts or rollback path | runbook, SLOs, alert rules, tested rollback |
+| `argo-it` (deploy, real traffic) | Platform / Kubernetes engineer | blast radius, SLOs, rollback, failure modes | ships manifests, no alerts or rollback path | runbook, SLOs, alert rules, tested rollback |
+| `try-it` (try the app as its users would) | QA / test engineer | user journeys, edge cases, permission boundaries | clicks the happy path once and calls it working | what was tried, what was seen, screenshots, the gaps |
+| `deadcode-it` (prove code unused) | Senior maintainer of that stack | what the framework loads by convention, by name or at run time | deletes what only looks unused | proof per deletion, verified batches, a deletion log |
+| `resolve-it` (a person's problem, to the outcome) | SRE / incident commander | outcome first, evidence over theory, one change at a time | fixes the code and never checks the person's outcome | the outcome verified on the live system, a record of what happened |
 | `retrofit-it` (legacy, high risk) | Software architect | preserve original intent, phased change, risk register | breaks behavior while bolting on features | migration plan, risk register, phased rollout |
 | `dispatch-it` / `subagent-it` (each agent launched on app code; the coordinator adopts none) | the project specialist plus the one *its* task needs | per-task expert focus | one generalist voice across unrelated domains | each worker meets its domain's standard |
 
@@ -168,8 +177,10 @@ specialist in a run is in "Who reads it" above.
 The project specialist comes from the `app-context.json` signals, applied by the three writers; the
 task specialist comes from the active skill.
 
-1. **Skill sets the task specialist.** `debug-it` → SRE; `nemo-it`/`fix-it` → AppSec;
-   `argo-it` → Platform; `retrofit-it` → architect. The builders add none ("Builders" above).
+1. **Skill sets the task specialist.** `debug-it` → senior maintainer of that stack; `nemo-it`/`fix-it`
+   → AppSec; `argo-it` → Platform / Kubernetes engineer; `try-it` → QA / test engineer;
+   `deadcode-it` → senior maintainer of that stack; `resolve-it` → SRE / incident commander;
+   `retrofit-it` → architect. The builders add none ("Builders" above).
 2. **Signals set the project specialist.** Only the three writers apply these, when they record or
    re-check `expert_persona`; every other skill reads the record instead. In order:
    1. Security: payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or

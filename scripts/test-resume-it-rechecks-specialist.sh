@@ -215,7 +215,7 @@ if [ -z "${1:-}" ]; then
   passes() { local d; d="$(edit "$@")" || return 1; bash "$SELF" "$d" >/dev/null 2>&1 || { bash "$SELF" "$d" | grep -A3 "^FAIL" | head -8 | sed "s|^|    inner: |"; false; }; }
   add() { fails "$1" "$2" "$2$3"; }
   check "(control) the unchanged copy passes" 'd="$(copy)"; bash "$SELF" "$d" >/dev/null 2>&1'
-  check "(control, D5) a harmless sentence added inside the block fails" 'add "$RS" "this block only keeps the record current." " This keeps things tidy."'
+  check "(control, D5) a harmless sentence added inside the block fails" 'add "$RS" "instead of inferring a specialist of its own." " This keeps things tidy."'
   check "(control, D5) a harmless sentence added outside the block passes" 'passes "$RS" "Fewer tasks: just do the work." "Fewer tasks: just do the work. (Tidy.)"'
   check "(control) fails: the re-check runs after building" 'fails "$RS" "when work is planned, before anything is built" "after the work is built"'
   check "(control) fails: a judgement trigger added" 'add "$RS" "or \`project_type\` becomes set." " Also re-check whenever the stakes feel different."'

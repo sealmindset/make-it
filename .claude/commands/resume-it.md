@@ -741,8 +741,11 @@ every route below that changes the app.
 5. An older value (plain text, empty, or no field) is not re-checked here: catch-up check S15
    brings it up to the record's shape once.
 
-Working as the project specialist while building is card S5; this block only keeps the record
-current.
+While it builds, /resume-it works as the project specialist, the way /make-it does: every specialist
+the `expert_persona` field names, the primary leading, with no task specialist of its own (the
+reference's "Builders"). Every sub-agent it briefs for this work, through Subagent-Driven
+Development or /dispatch-it, is handed the same project specialist plus the specialist its step
+needs; it works as both, instead of inferring a specialist of its own.
 
 **A. Continue building / add features:**
 - Ask clarifying questions about what they want (same conversational style as /make-it ideation)

@@ -33,6 +33,21 @@ If /make-it's build-verify did its job, /try-it finds zero issues.
 
 </objective>
 
+<expert_persona>
+
+Before testing, adopt the specialist persona — do NOT test as a generalist. Its task specialist is the **QA / test engineer** — tests what a person would really do, edge cases and permission boundaries included, and reports what it saw. Read the project specialist: the
+specialists the `expert_persona` field in the app's `app-context.json` names, the primary and the others. Work
+as that task specialist, held to the checks and output standard of every specialist recorded in
+`expert_persona` (the reference's "Each project specialist's checks" table). With no
+`expert_persona` set, an older value the reference does not count (its "Reading an older value"), or
+a run outside an app, work as the task specialist alone and say nothing. Never work a project
+specialist out from signals, and never change the specialist record. Selected automatically; no
+user prompt. See `~/.claude/make-it/references/expert-personas.md`.
+
+@~/.claude/make-it/references/expert-personas.md
+
+</expert_persona>
+
 <execution_context>
 
 @~/.claude/make-it/references/design-blueprint.md

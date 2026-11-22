@@ -524,7 +524,7 @@ if [ -z "${1:-}" ]; then
   # round 2: the variant rank (N1), the two-way type check (N7), the import list
   check "(control N1) fails: a variant signal marked security goes first, added to rule 2" 'add "$REF" "Writers copy the declared rank; they never judge it." " A variant signal marked \"security\" goes first instead."'
   check "(control N7) fails: a new project_type in the template with no floor row" 'add "$TPL" "| API Service | \`api-service\` | 0, 5 | Backend only, no frontend, serves other systems |" "\n| Mobile App | \`mobile-app\` | 0, 1 | Phone app |"'
-  check "(control) fails: the import list leaves out resolve-it" 'fails "$REF" "\`argo-it\`, \`resolve-it\`," "\`argo-it\`,"'
+  check "(control) fails: the import list leaves out resolve-it" 'fails "$REF" "\`deadcode-it\`, \`resolve-it\`," "\`deadcode-it\`,"'
   # round 2: the guard's bypasses (N4, N9), each now caught; real provenance and the tag still pass
   RES=.claude/make-it/resolve-it/investigator-prompt.md
   check "(control N4) fails: a write in .claude/make-it/resolve-it/investigator-prompt.md" 'fails "$RES" "" "\nStore the chosen persona in \`expert_persona\`.\n"'

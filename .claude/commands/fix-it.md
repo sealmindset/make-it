@@ -22,10 +22,14 @@ The skill reads the attestation, classifies each finding as auto-fixable or manu
 all auto-fixable changes, verifies the application still works, and re-runs `/nemo-it` to produce
 an updated attestation showing the delta.
 
-**Adopt the specialist persona before fixing — do NOT fix as a generalist.** Default here:
-**application security engineer** — fix root cause + compensating control, not a surface patch.
-Auto-selected from `app-context.json` + this skill; no user prompt. See
-`~/.claude/make-it/references/expert-personas.md` (imported below).
+**Adopt the specialist persona before fixing — do NOT fix as a generalist.** Its task specialist is the **Application security engineer** — fix the root cause with a compensating control, not a surface patch. Read the project specialist: the
+specialists the `expert_persona` field in the app's `app-context.json` names, the primary and the others. Work
+as that task specialist, held to the checks and output standard of every specialist recorded in
+`expert_persona` (the reference's "Each project specialist's checks" table). So an app whose record holds customer, personal or health data gets a privacy-aware review. With no
+`expert_persona` set, an older value the reference does not count (its "Reading an older value"), or
+a run outside an app, work as the task specialist alone and say nothing. Never work a project
+specialist out from signals, and never change the specialist record. Selected automatically; no
+user prompt. See `~/.claude/make-it/references/expert-personas.md`.
 
 @~/.claude/make-it/references/expert-personas.md
 

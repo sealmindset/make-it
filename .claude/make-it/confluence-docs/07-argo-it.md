@@ -64,7 +64,7 @@ After that, the workflow is simply: **push your code → automation deploys it.*
 
 ## Which expert does the AI become?
 
-For large-scale deployment, the AI works as a **platform / operations engineer**, not a generalist — automatically, no prompt. It plans for what happens when things go wrong (how to roll back, how you'll know there's a problem), not just how to get the app live. (Set behind the scenes from your app's details — see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job).)
+For large-scale deployment, the AI works as a **platform / operations engineer**, not a generalist — automatically, no prompt. It plans for what happens when things go wrong (how to roll back, how you'll know there's a problem), not just how to get the app live. It also reads the specialist your app's record names and holds the work to that standard too (see the [framework overview](00-make-it-framework-overview.md#the-ai-becomes-the-right-expert-for-each-job)).
 
 ---
 
