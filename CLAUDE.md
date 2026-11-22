@@ -419,9 +419,9 @@ See `ship-it-guide.md` for the full lifecycle, CI/CD automation contract, and se
 
 | Skill | How it uses build-standards.md |
 |-------|-------------------------------|
-| `/make-it` | Build-verify Part A runs all checks for active tiers |
+| `/make-it` | Build-verify Part A runs all checks for active tiers; Part B runs every check marked `[LIVE]` on the running app |
 | `/retrofit-it` | Verify phase runs all checks + retrofit-specific preservation checks |
-| `/resume-it` | Catch-up scan compares project against latest checks, surfaces gaps |
+| `/resume-it` | Catch-up scan compares project against latest checks, surfaces gaps; after a change that touches a `[LIVE]` check, its live pass runs that check on the running app |
 
 Each check has an ID (S01, A01, R01, etc.), a tier, and a severity:
 - `[BLOCK]` -- must pass before handoff

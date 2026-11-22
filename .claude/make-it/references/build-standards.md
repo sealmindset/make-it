@@ -6,7 +6,7 @@ All three skills reference this file:
 | Skill | When it runs these checks |
 |-------|--------------------------|
 | `/make-it` | Build-verify (Part A static checks; Part B runs every `[LIVE]` check on the running app) |
-| `/retrofit-it` | Verify phase (Part A static checks) |
+| `/retrofit-it` | Verify phase (Part A static checks; Part B runs /make-it's Part B steps) |
 | `/resume-it` | Catch-up scan during context discovery; `[LIVE]` checks on the running app after a change that touches them (its live pass) |
 
 **How to use this file:**
