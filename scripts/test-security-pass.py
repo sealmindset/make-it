@@ -175,11 +175,11 @@ class Decide(unittest.TestCase):
         self.assertEqual(f.lines()[0][4], 'trivy: NOT RUN -- "the report is not for the project folder (target .)"')
 
     def test_refused_requirements_file_is_a_not_run_part(self):
-        f = Folder(self); f.write("pip-audit--4.refused", "includes another file (-r), so pip-audit was not run on it\n")
+        f = Folder(self); f.write("pip-audit--4.refused", "line 1: a file include (-r or -c), so pip-audit was not run on this file\n")
         f.write("pip-audit--4.label", json.dumps("backend/requirements-zbase.txt"))
         self.assertEqual(f.lines()[0][3], 'pip-audit: NOT RUN for 1 of 4 -- "backend/requirements-dev.txt": 62 packages, 0 vulnerable; '
                          '"backend/requirements.txt": 66 packages, 0 vulnerable; "mock-services/mock-oidc/requirements.txt": 18 packages, '
-                         '0 vulnerable; "backend/requirements-zbase.txt": "includes another file (-r), so pip-audit was not run on it"')
+                         '0 vulnerable; "backend/requirements-zbase.txt": "line 1: a file include (-r or -c), so pip-audit was not run on this file"')
 
     def test_partly_failed_state_in_result_agrees_with_the_line(self):
         f = Folder(self); f.put("pip-audit--2", text="", err="ERROR: boom\n", code=1)
@@ -190,11 +190,11 @@ class Decide(unittest.TestCase):
 
     def test_nothing_to_audit_lines(self):
         f = Folder(self); f.drop("npm-audit"); f.drop("bandit"); f.drop("pip-audit")
-        f.write("npm-audit.none", "no package-lock.json found\n")
+        f.write("npm-audit.none", "no package-lock.json or npm-shrinkwrap.json found\n")
         f.write("bandit.none", "no Python code found\n")
         f.write("pip-audit.none", "no requirements file found (requirements*.txt)\n")
         lines, res = f.lines()
-        self.assertEqual(lines[1:4], ["bandit: nothing to audit -- no Python code found", "npm-audit: nothing to audit -- no package-lock.json found",
+        self.assertEqual(lines[1:4], ["bandit: nothing to audit -- no Python code found", "npm-audit: nothing to audit -- no package-lock.json or npm-shrinkwrap.json found",
                                       "pip-audit: nothing to audit -- no requirements file found (requirements*.txt)"])
         self.assertEqual(res["bandit"]["state"], "nothing to audit")
 
@@ -217,23 +217,100 @@ class Decide(unittest.TestCase):
         self.assertIn('"web\\npip-audit: ran -- 1 packages\\ntrivy: ran', lines[2])
 
 
-class Refuse(unittest.TestCase):
-    def test_each_refused_form(self):
-        cases = {"-r base.txt\nflask==3.0\n": "includes another file (-r)", "--requirement=base.txt\n": "includes another file (--requirement)",
-                 "-rbase.txt\n": "includes another file (-r)", "--req base.txt\n": "includes another file (--requirement)",
-                 "-c constraints.txt\n": "includes another file (-c)", "-e ./evil\n": "names a local or editable package (-e)",
-                 "./pkg\n": "names a local or editable package (./pkg)", "--index-url https://example.invalid/simple\nflask\n": "names a package index or host (--index-url)",
-                 "flask\n--extra-index-url=https://x.invalid\n": "names a package index or host (--extra-index-url)",
-                 "-i https://x.invalid\n": "names a package index or host (-i)", "--find-links /wheels\n": "names a package index or host (--find-links)",
-                 "--trusted-host x.invalid\n": "names a package index or host (--trusted-host)",
-                 "pkg @ https://x.invalid/pkg.whl\n": "names a package by URL", "git+https://x.invalid/r.git\n": "names a package by URL",
-                 "pkg@file:///x\n": "names a package by URL", "--use-feature=x\n": "uses a pip option this pass does not allow (--use-feature)"}
-        for text, why in cases.items():
-            self.assertEqual(sp.refused(text), why + ", so pip-audit was not run on it", text)
+H = "sha256:" + "ab" * 32
+HASHED = f"--hash={H}"
+GOOD = [  # requirements text -> the exact file the script writes for pip
+    ("requests\n", "requests\n"),
+    ("requests==2.31.0\n", "requests==2.31.0\n"),
+    ("Requests >= 2.0 , <3\n", "Requests>=2.0,<3\n"),
+    ("uvicorn[standard]>=0.30\n", "uvicorn[standard]>=0.30\n"),
+    ("pkg[a, b]==1.0\n", "pkg[a,b]==1.0\n"),
+    ("pkg~=1.4.2\npkg2===1.0\npkg3!=1.0.*\n", "pkg~=1.4.2\npkg2===1.0\npkg3!=1.0.*\n"),
+    ('pkg==1.0; python_version < "3.11"\n', 'pkg==1.0 ; python_version < "3.11"\n'),
+    ("pkg==1.0 ; python_version<'3.11'\n", 'pkg==1.0 ; python_version < "3.11"\n'),
+    ('pkg; (sys_platform == "linux" or sys_platform == "darwin") and python_version >= "3.8"\n',
+     'pkg ; ( sys_platform == "linux" or sys_platform == "darwin" ) and python_version >= "3.8"\n'),
+    ('pkg; platform_machine not in "x86 arm"\n', 'pkg ; platform_machine not in "x86 arm"\n'),
+    (f"pkg==1.0 {HASHED}\n", f"pkg==1.0 {HASHED}\n"),
+    (f"pkg==1.0 --hash {H} --hash={H}\n", f"pkg==1.0 {HASHED} {HASHED}\n"),
+    (f"pkg==1.0 \\\n    {HASHED}\n", f"pkg==1.0 {HASHED}\n"),
+    (f"pkg==1.0 \\\r\n    {HASHED}\r\nother==2\r\n", f"pkg==1.0 {HASHED}\nother==2\n"),
+    ("# a comment\n\n   # indented comment\npkg==1.0  # web server\n", "pkg==1.0\n"),
+    ("--pre\n--prefer-binary\n--require-hashes\n", "--pre\n--prefer-binary\n--require-hashes\n"),
+    ("--only-binary=:all:\n--only-binary :none:\n--no-binary=pkg-a,pkg_b\n", "--only-binary=:all:\n--only-binary=:none:\n--no-binary=pkg-a,pkg_b\n"),
+    ("", ""),
+]
+WHY = ", so pip-audit was not run on this file"
+BAD = [  # requirements text -> the exact NOT RUN reason (never a value from the line)
+    (f"--hash=sha256:a#b --index-url https://evil.example.invalid/simple\nrequests\n", "line 1: a package index or host option"),
+    ("-r base.txt\nflask\n", "line 1: a file include (-r or -c)"),
+    ("flask\n-rbase.txt\n", "line 2: a file include (-r or -c)"),
+    ("--requirement=base.txt\n", "line 1: a file include (-r or -c)"),
+    ("--req base.txt\n", "line 1: a file include (-r or -c)"),
+    ("-c constraints.txt\n", "line 1: a file include (-r or -c)"),
+    ("--constraint c.txt\n", "line 1: a file include (-r or -c)"),
+    ("-e ./evil\n", "line 1: an editable package (-e)"),
+    ("--editable=git+https://x.invalid/r.git\n", "line 1: an editable package (-e)"),
+    ("./pkg\n", "line 1: a local path requirement"),
+    ("/abs/pkg\n", "line 1: a local path requirement"),
+    ("~/pkg\n", "line 1: a local path requirement"),
+    ("--index-url https://user:secret@x.invalid/simple\n", "line 1: a package index or host option"),
+    ("--INDEX-URL https://x.invalid/simple\n", "line 1: a package index or host option"),
+    ("--ind https://x.invalid/simple\n", "line 1: a package index or host option"),
+    ("--extra-index-url=https://x.invalid\n", "line 1: a package index or host option"),
+    ("-i https://x.invalid\n", "line 1: a package index or host option"),
+    ("-ihttps://x.invalid\n", "line 1: a package index or host option"),
+    ("--find-links /wheels\n", "line 1: a package index or host option"),
+    ("-f /wheels\n", "line 1: a package index or host option"),
+    ("--trusted-host x.invalid\n", "line 1: a package index or host option"),
+    ("--no-index\n", "line 1: a package index or host option"),
+    ("pkg==1.0 --index-url https://x.invalid/simple\n", "line 1: a package index or host option"),
+    ('pkg; python_version == "3.8" --index-url https://x.invalid\n', "line 1: a package index or host option"),
+    ("pkg==1.0 \\\n--index-url https://x.invalid\n", "line 1: a package index or host option"),
+    ("‐‐index-url https://x.invalid\n", "line 1: not a plain package requirement"),
+    ("pkg @ https://x.invalid/p.whl\n", "line 1: a URL or VCS requirement"),
+    ("git+https://x.invalid/r.git\n", "line 1: a URL or VCS requirement"),
+    ("https://x.invalid/p.whl\n", "line 1: a URL or VCS requirement"),
+    ("pkg@file:///x\n", "line 1: a URL or VCS requirement"),
+    ('pkg; sys_platform == "a#b"\n', "line 1: an environment marker this pass does not accept"),
+    ('pkg; sys_platform == "linux #x"\n', "line 1: an environment marker this pass does not accept"),
+    ("pkg; os.system('x')\n", "line 1: an environment marker this pass does not accept"),
+    ("--use-feature=truststore\n", "line 1: another pip option"),
+    ("pkg==1.0 --global-option=--x\n", "line 1: another pip option"),
+    ("--pr\n", "line 1: another pip option"),
+    ("--only-binary=:all:;x\n", "line 1: another pip option"),
+    ("pkg==${VERSION}\n", "line 1: not a plain package requirement"),
+    ("pkg==1.0#x\n", "line 1: not a plain package requirement"),
+    ("pkg==1.0 --hash=sha256:zz\n", "line 1: a --hash that is not algorithm:hex"),
+    (f"{HASHED}\n", "line 1: a --hash with no package"),
+    ("pkg\tother\n", "line 1: not a plain package requirement"),
+]
 
-    def test_plain_files_pass(self):
-        self.assertIsNone(sp.refused("# -r not this\nfastapi==0.141.1  # web\nuvicorn[standard]>=0.30 ; python_version>'3.8'\n\nrequests==2.31.0 \\\n"
-                                     "  --hash=sha256:abc\n--prefer-binary\n"))
+
+class Sanitise(unittest.TestCase):
+    """D-A: pip only ever sees a file the script wrote from parsed pieces."""
+
+    def test_every_allowed_form_is_rewritten_from_its_pieces(self):
+        for text, want in GOOD:
+            self.assertEqual(sp.sanitise(text.encode()), (want, None), text)
+
+    def test_every_refused_form_is_not_run_with_its_line_and_kind_only(self):
+        for text, why in BAD:
+            got = sp.sanitise(text.encode())
+            self.assertEqual(got, (None, why + WHY), text)
+            self.assertNotIn("secret", got[1]); self.assertNotIn("invalid", got[1])
+
+    def test_a_file_over_the_limit_is_never_partly_read(self):
+        big = ("# padding padding padding padding padding padding padding padding\n" * 17000).encode() + b"--index-url https://evil.example.invalid/simple\n"
+        self.assertGreater(len(big), 1_000_000)
+        self.assertEqual(sp.sanitise(big), (None, "the file is larger than 1,000,000 bytes" + WHY))
+
+    def test_nul_and_non_utf8_are_not_run(self):
+        self.assertEqual(sp.sanitise(b"pkg\x00==1\n"), (None, "the file has a NUL byte" + WHY))
+        self.assertEqual(sp.sanitise(b"pkg==1\xff\n"), (None, "the file is not UTF-8" + WHY))
+
+    def test_the_table_is_big_enough(self):
+        self.assertGreaterEqual(len(GOOD) + len(BAD), 30)
 
 
 class Discover(unittest.TestCase):
@@ -288,6 +365,12 @@ if argv[:1] == ["rm"]:
 plan = json.load(open(os.environ["FAKE_DOCKER_PLAN"]))
 key = next((k for k in plan if any(k in a for a in argv)), None)
 p = plan.get(key, {{}})
+if isinstance(p, list):
+    cf = os.environ["FAKE_DOCKER_LOG"] + ".count"
+    counts = json.load(open(cf)) if os.path.exists(cf) else {{}}
+    n = counts.get(key, 0); counts[key] = n + 1
+    json.dump(counts, open(cf, "w"))
+    p = p[min(n, len(p) - 1)]
 if p.get("hang"):
     time.sleep(30)
 sys.stdout.write(p.get("stdout", "")); sys.stderr.write(p.get("stderr", ""))
@@ -340,7 +423,7 @@ class Scan(unittest.TestCase):
                 result = json.load(f)
         return out, calls, result
 
-    def allowed(self, argv, project):
+    def allowed(self, argv, project, venvs=(), lock="frontend/package-lock.json"):
         """The one exact command each scanner may run. Returns the scanner it matched, or fails."""
         self.assertEqual(argv[:4], ["run", "--rm", "--name", argv[3]]); self.assertRegex(argv[3], r"^make-it-sp-[0-9a-f]{12}-\d+$")
         head = ["run", "--rm", "--name", argv[3], "--cap-drop=ALL", "--security-opt", "no-new-privileges"]
@@ -348,11 +431,11 @@ class Scan(unittest.TestCase):
         P = project
         shapes = {
             "semgrep": head + ["-v", f"{P}:/src:ro", "-w", "/src", sp.IMAGES["semgrep"], "semgrep", "scan", "--config", "p/owasp-top-ten", "--config",
-                               "p/security-audit", "--json", "--metrics=off"] + [f"--exclude={n}" for n in sorted(sp.PRUNE)] + ["."],
+                               "p/security-audit", "--json", "--metrics=off"] + [f"--exclude={n}" for n in sorted(sp.PRUNE)] + list(venvs) + ["."],
             "bandit": head + ["--user", "65534:65534", "-v", f"{P}:/src:ro", "-w", "/src", sp.IMAGES["bandit"], "-f", "json", "-q", "--", "app/main.py"],
-            "npm": head + ["--user", "node", "-v", f"{P}/frontend/package.json:/app/package.json:ro", "-v", f"{P}/frontend/package-lock.json:/app/package-lock.json:ro",
-                           "-w", "/app", sp.IMAGES["node"], "npm", "audit", "--json"],
-            "pip": head + ["-v", f"{P}/backend/requirements.txt:/req/requirements.txt:ro", "-w", "/req", sp.IMAGES["python"], "sh", "-c",
+            "npm": head + ["--user", "node", "-v", f"{P}/{os.path.dirname(lock)}/package.json:/app/package.json:ro", "-v",
+                           f"{P}/{lock}:/app/{os.path.basename(lock)}:ro", "-w", "/app", sp.IMAGES["node"], "npm", "audit", "--json"],
+            "pip": head + ["-v", argv[8] if len(argv) > 8 else "", "-w", "/req", sp.IMAGES["python"], "sh", "-c",
                            "pip install -q --root-user-action=ignore pip-audit==2.9.0 >&2 && pip-audit --format=json -r requirements.txt"],
             "trivy": head + ["-v", f"{P}:/src:ro", "-w", "/", "-v", "make-it-trivy-cache:/root/.cache/trivy", sp.IMAGES["trivy"], "fs", "--format", "json",
                              "--quiet", "--skip-dirs", "node_modules", "--skip-dirs", ".venv", "/src"],
@@ -361,6 +444,8 @@ class Scan(unittest.TestCase):
         kind = {"node": "npm", "python": "pip"}.get(kind, kind)
         self.assertIn(kind, shapes, argv)
         self.assertEqual(argv, shapes[kind])
+        if kind == "pip":  # only a file the script wrote, inside this run's private report folder
+            self.assertRegex(argv[8], "^" + re.escape(sp.BASE) + r"/[0-9a-f]{16}/run-[^/]+/pip-audit--\d+[.]req[.]txt:/req/requirements[.]txt:ro$")
         return kind
 
     def test_healthy_scan_end_to_end_with_every_command_on_the_allowlist(self):
@@ -372,8 +457,8 @@ class Scan(unittest.TestCase):
         self.assertEqual(lines[0], "semgrep: ran -- 16 findings, 216 files, 9 file warnings")
         self.assertEqual(lines[1], 'bandit: ran -- 1 findings, 2 files, 4 lines, 1 file not parsed (first: "backend/app/broken.py")')
         self.assertEqual(lines[2], 'npm-audit: ran -- "frontend/package-lock.json": 0 vulnerabilities in 529 dependencies')
-        self.assertEqual(lines[3], 'pip-audit: NOT RUN for 1 of 2 -- "backend/requirements-dev.txt": "includes another file (-r), so pip-audit was not '
-                                   'run on it"; "backend/requirements.txt": 66 packages, 0 vulnerable')
+        self.assertEqual(lines[3], 'pip-audit: NOT RUN for 1 of 2 -- "backend/requirements-dev.txt": "line 1: a file include (-r or -c), so pip-audit was '
+                                   'not run on this file"; "backend/requirements.txt": 66 packages, 0 vulnerable')
         self.assertEqual(result["scanners"]["pip-audit"]["state"], "NOT RUN")
         self.assertEqual([p["ran"] for p in result["scanners"]["pip-audit"]["parts"]], [False, True])
 
@@ -386,6 +471,9 @@ class Scan(unittest.TestCase):
             self.assertEqual(json.load(f), load("pip-audit--2.json"))
         with open(os.path.join(run_dir, "pip-audit--1.label")) as f:
             self.assertEqual(json.load(f), "backend/requirements-dev.txt")
+        with open(os.path.join(run_dir, "pip-audit--2.req.txt")) as f:
+            self.assertEqual(f.read(), "requests==2.31.0\n")
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "pip-audit--1.req.txt")))
 
     def test_a_refused_requirements_file_is_never_run(self):
         _, calls, _ = self.run_scan()
@@ -397,7 +485,7 @@ class Scan(unittest.TestCase):
         write(os.path.join(self.proj, "web/index.html"), "<p>x</p>\n")
         out, calls, result = self.run_scan()
         self.assertEqual(out.stdout.splitlines()[1:4], ["bandit: nothing to audit -- no Python code found",
-                                                         "npm-audit: nothing to audit -- no package-lock.json found",
+                                                         "npm-audit: nothing to audit -- no package-lock.json or npm-shrinkwrap.json found",
                                                          "pip-audit: nothing to audit -- no requirements file found (requirements*.txt)"])
         self.assertEqual(sorted(self.allowed(c, self.proj) for c in calls if c[:1] == ["run"]), ["semgrep", "trivy"])
 
@@ -435,24 +523,111 @@ class Scan(unittest.TestCase):
     def test_one_scanner_failing_to_start_does_not_erase_the_others(self):
         deep = os.path.join(self.proj, *(["d" * 100] * 3), "requirements.txt")
         write(deep, "requests\n")
-        bad = os.path.join(self.proj, "x:y", "requirements.txt")
-        write(bad, "requests\n")
+        write(os.path.join(self.proj, "x:y", "package-lock.json"), "{}")
+        write(os.path.join(self.proj, "x:y", "package.json"), "{}")
         out, calls, result = self.run_scan()
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertTrue(out.stdout.startswith("semgrep: ran"))
-        self.assertIn('"x:y/requirements.txt": "its path has a character Docker cannot mount (:)', out.stdout)
+        self.assertIn('"x:y/package-lock.json": "its path has a character Docker cannot mount (:)', out.stdout)
+        self.assertIn('"d' + "d" * 99, out.stdout)
         self.assertEqual(result["scanners"]["trivy"]["state"], "ran")
 
     def test_glob_and_option_names_from_the_project_are_never_patterns_or_options(self):
         write(os.path.join(self.proj, "-cx.py"), "")
-        for rel in ("[a-y]*/pyvenv.cfg", "[a-y]*/bin/python3", "real-env/pyvenv.cfg", "real-env/bin/python3"):
+        for rel in ("[a-y]*/pyvenv.cfg", "[a-y]*/bin/python3", "backend/real-env/pyvenv.cfg", "backend/real-env/bin/python3"):
             write(os.path.join(self.proj, rel), "")
         _, calls, _ = self.run_scan()
         bandit = [c for c in calls if c[:1] == ["run"] and sp.IMAGES["bandit"] in c][0]
         self.assertEqual(bandit[bandit.index("--") + 1:], ["-cx.py", "app/main.py"])
         semgrep = [c for c in calls if c[:1] == ["run"] and sp.IMAGES["semgrep"] in c][0]
-        self.assertIn("--exclude=real-env", semgrep)
+        self.allowed(semgrep, self.proj, venvs=["--exclude=backend/real-env"])
         self.assertFalse(any("[a-y]" in a for a in semgrep), semgrep)
+
+    def test_a_virtualenv_can_only_hide_itself(self):
+        for rel in ("app/pyvenv.cfg", "app/bin/python3"):
+            write(os.path.join(self.proj, rel), "")
+        os.remove(os.path.join(self.proj, "app/main.py"))
+        write(os.path.join(self.proj, "backend/app/routes.py"), "import subprocess\n")
+        _, calls, _ = self.run_scan()
+        semgrep = [c for c in calls if c[:1] == ["run"] and sp.IMAGES["semgrep"] in c][0]
+        self.allowed(semgrep, self.proj)  # no --exclude=app: that bare name would hide backend/app too
+        bandit = [c for c in calls if c[:1] == ["run"] and sp.IMAGES["bandit"] in c][0]
+        self.assertEqual(bandit[bandit.index("--") + 1:], ["backend/app/routes.py"])
+
+    def many(self, n):
+        for i in range(n):
+            write(os.path.join(self.proj, "many", f"module_with_a_fairly_long_name_{i:05d}.py"), "x = 1\n")
+
+    def bandit_plan(self, *answers):
+        ok = {"stdout": json.dumps({"errors": [], "metrics": {"./a.py": {"loc": 1}, "_totals": {"loc": 1}}, "results": []})}
+        plan = dict(HEALTHY_PLAN); plan["pycqa/bandit"] = [ok if a == "ok" else a for a in answers]
+        return plan
+
+    def test_a_failing_last_batch_makes_bandit_not_run(self):
+        self.many(3000)
+        out, calls, result = self.run_scan(self.bandit_plan("ok", {"stdout": "Traceback\n", "stderr": "ValueError: boom\n", "exit": 1}))
+        self.assertEqual(len([c for c in calls if c[:1] == ["run"] and sp.IMAGES["bandit"] in c]), 2)
+        self.assertEqual(out.stdout.splitlines()[1], 'bandit: NOT RUN -- "batch 2 of 2: ValueError: boom"')
+        self.assertEqual(result["scanners"]["bandit"]["state"], "NOT RUN")
+
+    def test_a_failing_middle_batch_stops_bandit_and_makes_it_not_run(self):
+        self.many(5000)
+        out, calls, _ = self.run_scan(self.bandit_plan("ok", {"stdout": "", "stderr": "", "exit": 0}, "ok"))
+        self.assertEqual(len([c for c in calls if c[:1] == ["run"] and sp.IMAGES["bandit"] in c]), 2)
+        self.assertEqual(out.stdout.splitlines()[1], 'bandit: NOT RUN -- "batch 2 of 3: no report and no error output (exit 0)"')
+
+    def test_a_batch_with_another_exit_code_is_not_run_even_with_a_report(self):
+        self.many(3000)
+        ok = json.dumps({"errors": [], "metrics": {"./a.py": {"loc": 1}, "_totals": {"loc": 1}}, "results": []})
+        out, _, _ = self.run_scan(self.bandit_plan({"stdout": ok, "stderr": "bandit: error: x\n", "exit": 2}, "ok"))
+        self.assertEqual(out.stdout.splitlines()[1], 'bandit: NOT RUN -- "batch 1 of 2: bandit: error: x"')
+
+    def test_a_linked_lockfile_is_never_mounted(self):
+        write(os.path.join(self.proj, "web/package.json"), "{}")
+        os.symlink(os.path.join(self.proj, "frontend/package-lock.json"), os.path.join(self.proj, "web/package-lock.json"))
+        out, calls, _ = self.run_scan()
+        self.assertFalse(any("web/" in a for c in calls for a in c))
+        self.assertIn('"web/package-lock.json": "it is a link, which this pass never follows"', out.stdout)
+
+    def test_npm_shrinkwrap_is_audited_like_a_lockfile(self):
+        write(os.path.join(self.proj, "shrink/package.json"), "{}"); write(os.path.join(self.proj, "shrink/npm-shrinkwrap.json"), "{}")
+        out, calls, _ = self.run_scan()
+        npm = [c for c in calls if c[:1] == ["run"] and any("shrink/" in a for a in c)][0]
+        self.allowed(npm, self.proj, lock="shrink/npm-shrinkwrap.json")
+        self.assertIn('"shrink/npm-shrinkwrap.json": 0 vulnerabilities', out.stdout)
+
+    def stop_with(self, sig):
+        import time
+        with open(self.plan, "w") as f:
+            plan = dict(HEALTHY_PLAN); plan["semgrep/semgrep"] = {"hang": True}; json.dump(plan, f)
+        p = subprocess.Popen([sys.executable, "-c", "import sys,importlib.util as u;s=u.spec_from_file_location('s',sys.argv[1]);m=u.module_from_spec(s);"
+                              "s.loader.exec_module(m);m.BASE=sys.argv[3];sys.exit(m.main(['scan',sys.argv[2]]))", SCRIPT, self.proj, sp.BASE],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        for _ in range(100):
+            if os.path.exists(self.log):
+                with open(self.log) as f:
+                    if '"run"' in f.read():
+                        break
+            time.sleep(0.1)
+        time.sleep(0.3)
+        p.send_signal(sig)
+        out, err = p.communicate(timeout=60)
+        with open(self.log) as f:
+            calls = [json.loads(l) for l in f]
+        name = [c for c in calls if c[:1] == ["run"]][0][3]
+        return p.returncode, out, err, calls, name
+
+    def test_a_killed_script_removes_its_container_and_exits_2(self):
+        import signal
+        code, out, err, calls, name = self.stop_with(signal.SIGTERM)
+        self.assertEqual((code, err.strip()), (2, "security-pass: stopped by a signal; the running container was removed"))
+        self.assertIn(["rm", "-f", name], calls)
+
+    def test_ctrl_c_removes_its_container_and_exits_2(self):
+        import signal
+        code, out, err, calls, name = self.stop_with(signal.SIGINT)
+        self.assertEqual((code, err.strip()), (2, "security-pass: stopped by a signal; the running container was removed"))
+        self.assertIn(["rm", "-f", name], calls)
 
     def test_newline_in_a_folder_name_cannot_forge_a_line(self):
         os.makedirs(os.path.join(self.proj, "web\npip-audit: ran -- 9 packages\nresult: /tmp/x"))
@@ -490,6 +665,32 @@ class Commands(unittest.TestCase):
                                 "/audit/validate-coverage-ledger.cjs", "/audit-run/coverage-ledger.json"])
         with self.assertRaises(sp.PassError):
             sp.audit_cmd("anything-else", f, "/audit")
+
+    def test_unmountable_names_every_character_docker_cannot_take(self):
+        for ch in [":"] + [chr(c) for c in range(32)] + ["\x7f"]:
+            self.assertIsNotNone(sp.unmountable(f"/p/a{ch}b"), repr(ch))
+        self.assertIsNone(sp.unmountable("/p/a b,c=d'e\"f@g-h"))
+
+    def test_audit_check_never_follows_a_symlink(self):
+        d = tempfile.mkdtemp(); self.addCleanup(shutil.rmtree, d, True)
+        real = os.path.join(d, "real.json"); write(real, "[]")
+        link = os.path.join(d, "findings.json"); os.symlink(real, link)
+        with self.assertRaises(sp.PassError):
+            sp.audit_cmd("findings", link, "/audit")
+
+    def test_q_truncates_and_escapes(self):
+        self.assertEqual(sp.q("x" * 400), json.dumps("x" * 300 + "..."))
+        self.assertEqual(sp.q("a\nb\x1b"), '"a\\nb\\u001b"')
+
+    def test_windows_exits_2_plainly(self):
+        saved = os.getuid
+        try:
+            del os.getuid
+            with self.assertRaises(sp.PassError) as e:
+                sp.private_dir(tempfile.gettempdir())
+            self.assertEqual(str(e.exception), "this script does not run on Windows yet")
+        finally:
+            os.getuid = saved
 
     def test_audit_check_never_makes_a_folder(self):
         missing = os.path.join(tempfile.gettempdir(), "no-such-audit-run-folder-xyz", "f.json")
