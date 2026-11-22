@@ -2035,10 +2035,20 @@ build argo-it's save of its files by name (no branch moves, and a save that hold
 argo-it's files is never sent), check exactly that save, and send it by its id -- the same order
 as PHASE 5b, where 3e checks before step 4 saves.
 
-In a make-it project (one with `.make-it/app-context.json`), run the seal step now, before step 2:
-it writes its files beside argo-it's, and the check and the save on 'Send it' must both see them.
-The seal's files count as argo-it's files: one save holds both. Then list them, from the project
-root:
+In a make-it project (one with `.make-it/app-context.json`), first note how `.gitattributes`
+stands, from the project root -- the seal can add lines to it, and it is saved with argo-it's files
+only when the seal just changed it:
+
+```bash
+# Before the seal: .gitattributes's content id ("none" if there is no such file), then any unsaved change git
+# sees in it (nothing if there is none)
+g="$(git rev-parse --git-dir)/argo-it-gitattributes"
+{ git hash-object -- .gitattributes 2>/dev/null || echo none; git status --porcelain -- .gitattributes; } > "$g"
+```
+
+Then run the seal step now, before step 2: it writes its files beside argo-it's, and the check and
+the save on 'Send it' must both see them. The seal's files count as argo-it's files: one save holds
+both. Then list them, from the project root:
 
 ```bash
 # The seal's files, each by its exact name (none when the seal step was skipped): the four it rewrites, if there, and
@@ -2048,7 +2058,22 @@ for f in .make-it/manifest.json .make-it/sealed-files.txt MAKE-IT.md backend/mak
   [ -f "$f" ] && printf '%s\n' "$f"
 done
 git ls-files --others -- .make-it/ledger/ | sed -n -E '/^\.make-it\/ledger\/[0-9]{4,}-[0-9a-f]{12}\.json$/p'
+# .gitattributes too, only when the seal just changed it -- and never when it already held an unsaved change
+g="$(git rev-parse --git-dir)/argo-it-gitattributes"
+if [ -f "$g" ] && [ "$(git hash-object -- .gitattributes 2>/dev/null || echo none)" != "$(sed -n 1p "$g")" ]; then
+  [ -z "$(sed -n 2p "$g")" ] || { echo "GITATTRIBUTES MIXED"; exit 1; }
+  printf '%s\n' .gitattributes
+fi
 ```
+
+If it prints `GITATTRIBUTES MIXED`, stop -- don't show the step-3 ask; nothing is saved or sent.
+The seal just added lines to `.gitattributes`, which already held a change that wasn't saved, and
+argo-it doesn't guess which lines to save. Tell the user:
+
+"I haven't saved or sent anything: your .gitattributes file had changes that weren't saved yet,
+and the make-it record I add to your project just added lines to it too, so I won't save the two
+together. What to do next: save or undo your own change to .gitattributes, then run /argo-it
+again."
 
 **2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
 it' in step 4, after the user's go; nothing leaves the machine before the ask). First remember
