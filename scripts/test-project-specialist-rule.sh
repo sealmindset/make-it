@@ -509,7 +509,7 @@ if [ -z "${1:-}" ]; then
   check "(control R15a) fails: a second \"expert_persona\": \"generalist\" key in the template" 'add "$TPL" "  \"prompts_to_run\": []," "\n  \"expert_persona\": \"generalist\","'
   check "(control R15b) fails: an extra JSON example with the old text value in the template" 'fails "$TPL" "" "\n\`\`\`json\n{ \"expert_persona\": \"Application security engineer\" }\n\`\`\`\n"'
   # round 2: the variant rank (N1), the two-way type check (N7), the import list
-  check "(control N1) fails: a variant signal marked security goes first, added to rule 2" 'add "$REF" "takes that signal'\''s rank instead." " A variant signal marked \"security\" goes first instead."'
+  check "(control N1) fails: a variant signal marked security goes first, added to rule 2" 'add "$REF" "Writers copy the declared rank; they never judge it." " A variant signal marked \"security\" goes first instead."'
   check "(control N7) fails: a new project_type in the template with no floor row" 'add "$TPL" "| API Service | \`api-service\` | 0, 5 | Backend only, no frontend, serves other systems |" "\n| Mobile App | \`mobile-app\` | 0, 1 | Phone app |"'
   check "(control) fails: the import list leaves out resolve-it" 'fails "$REF" "\`argo-it\`, \`resolve-it\`," "\`argo-it\`,"'
   # round 2: the guard's bypasses (N4, N9), each now caught; real provenance and the tag still pass

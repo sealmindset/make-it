@@ -26,7 +26,7 @@ Additional questions to ask during ideation. These are woven conversationally in
 Additional decisions made silently during the Design phase (user never sees these):
 
 - **[Decision area]:** [How to decide based on ideation answers] → records `variant_config.[field]`
-- **Project specialist signals (optional):** a `variant_config` value that adds a specialist, written as `` `variant_config.[field]` is [value] -> [specialist] ``, with that specialist's checks and output standard. Its rank is the reference's rule 2, item 5: after the AI signal and before the floor, unless it is really a security, data, reliability or AI signal, which takes that signal's rank. /make-it, /retrofit-it and /resume-it apply it like any other signal.
+- **Project specialist signals (optional):** one line per signal, written as `` `variant_config.[field]` is [value] -> [specialist], rank: [security | data | reliability | AI | after AI, before the floor] ``, with that specialist's checks and output standard. Writers copy the declared rank and never judge it; /make-it, /retrofit-it and /resume-it apply the signal like any other.
 
 ---
 

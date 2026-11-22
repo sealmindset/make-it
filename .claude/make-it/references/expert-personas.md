@@ -27,20 +27,24 @@ Using a specialist and recording one are two separate jobs.
   `/retrofit-it` records it when it builds `app-context.json` from an existing app, and `/resume-it`
   re-checks it when the project's scope changes (below). No other skill writes it.
 - **What changes it.** The project's scope changes when its signals change: a signal added, a signal
-  removed, or an unconfirmed signal confirmed or disproved. The writer then works the record out
-  again by the same rule, so it can go up or down, never below the floor.
-- **Same record or a different one.** Two records are the same when they name the same specialists:
-  the same primary and the same added ones, in the same order. The signals' wording does not count.
-  A writer that finds the same specialists keeps the existing record exactly as it is, signals and
-  dates included, and says nothing. The one edit it makes there is to an unconfirmed signal the new
-  evidence settles: a confirmed one loses its `"unconfirmed": true`, and a disproved one is removed.
+  removed, an unconfirmed signal confirmed or disproved, or `project_type` becomes set. The writer
+  then works the record out again by the same rule, so it can go up or down, never below the floor.
+- **Same record or a different one.** Two records name the same specialists when they have the same
+  ranks (security, data, reliability, AI, a variant's, the floor) in the same order, with the floor
+  for the same `project_type`. How a specialist's name is spelled out does not count. With the same
+  specialists a writer keeps their names, `set_by` and `set_at` as they are, because the
+  specialists did not change, and keeps the signal list current without saying anything: it drops
+  signals that are gone, adds new ones, and settles unconfirmed ones (a confirmed one loses its
+  `"unconfirmed": true`, a disproved one is removed). A re-check that changes nothing writes nothing.
 - **No overwrite without saying so.** No skill overwrites the project specialist without saying so.
-  A writer that finds different specialists writes the new record, with its own `set_by` and
+  Overwriting means changing who is named: the primary or the added specialists. A writer that finds
+  different specialists writes the new record, with its own `set_by` and
   `set_at`, and says so the same way every writer does: one plain line to the user and the same line
   in `CHANGELOG.md`; it asks nothing. The `CHANGELOG.md` line is the history. Each writer's step
   says when its line is said and written.
 - **Builders.** `/make-it` and `/resume-it` build the app: they work as the project specialist, the
-  whole record, and add no task specialist of their own.
+  whole record, and add no task specialist of their own. When the record names several specialists,
+  the primary leads and the work is held to the checks and output standard of every one.
 - **Who reads it.** Every other skill that changes or judges code reads the project specialist, then
   adds the specialist its own task needs, the way `/resolve-it` does. For a run, the task specialist
   leads the work and is held to the checks and output standard of every specialist in the record as
@@ -169,7 +173,9 @@ task specialist comes from the active skill.
 2. **Signals set the project specialist.** Only the three writers apply these, when they record or
    re-check `expert_persona`; every other skill reads the record instead. In order:
    1. Security: payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or
-      `features` → **Application security engineer**.
+      `features` → **Application security engineer**. Personal data means data the app holds about
+      people beyond its own sign-in accounts (customers, patients, contacts and the like); the name
+      and email of the app's own users, kept for sign-in, do not count.
    2. Data: `multi_tenancy.needed == true`, or the answers describe data at scale → **Data engineer /
       DBA**.
    3. Reliability / platform: `users.internal_or_external == "external"`, `users.estimated_count` in
@@ -178,9 +184,10 @@ task specialist comes from the active skill.
       from the answers.
    4. AI: `ai_features.usage_level == "heavy"`, or `ai_features.who_edits_prompts` is not
       `developers` → **AI / prompt engineer**.
-   5. Variant: a signal the app's variant names in its definition file under "Project specialist
-      signals" → **the specialist it names**. A variant signal that is really a security, data,
-      reliability or AI signal takes that signal's rank instead.
+   5. Variant: a signal the app's variant declares in its definition file under "Project specialist
+      signals" → **the specialist it names**, at the rank the file declares next to it (security,
+      data, reliability, AI, or after AI and before the floor). Writers copy the declared rank; they
+      never judge it.
    6. The floor for the `project_type`.
 
    **The order decides the primary.** The highest specialist in this order that applies is primary;

@@ -26,10 +26,10 @@ specialist is the **software architect** — preserve original intent, phased ch
 don't break behavior while bolting on foundations. /retrofit-it is also one of the three writers
 of the project specialist: Discovery step 7 records it in `expert_persona` from the code, by the
 reference's rule. The two stay apart: the architect is the role this skill works in, and the
-record is the project's. Once the record is worked out (Discovery step 7), it works as the
-architect, held to the checks and output standard of every specialist in the record as well.
-Selected automatically; no user prompt. See `~/.claude/make-it/references/expert-personas.md`
-(imported below).
+specialist record is the project's. Once the specialist record is worked out (Discovery step 7), it
+works as the architect, held to the checks and output standard of every specialist in the record
+as well. Selected automatically; no user prompt. See
+`~/.claude/make-it/references/expert-personas.md` (imported below).
 
 @~/.claude/make-it/references/expert-personas.md
 
@@ -220,22 +220,23 @@ If stack has issues but is workable, note concerns but proceed.
 Set `project_type` from the code, by the Project Type Classification table in
 `templates/app-context.md` (a browser UI with its own backend is `web-app`, a backend with no UI
 that serves other systems is `api-service`, and so on). If the code fits no row, `project_type`
-stays empty, no record is written (the reference's rule), and TODO.md gets one line saying why.
+stays empty and no specialist record is written (the reference's rule); the run's first write of
+`app-context.json` adds one TODO.md line saying why.
 
 Then record the project specialist in `expert_persona` by the reference's rule (its floor row,
 filled in from `stack` as the reference says, and rule 2 in its order), as /make-it's Design step
 does, with `set_by` `"/retrofit-it"` and `set_at` the date of this run (YYYY-MM-DD). Every
-retrofitted app gets a record, a low-risk one its floor. The record is never a plain text value and
-never a generalist. What differs from /make-it is where the signals come from: the code, not an
-interview.
+retrofitted app gets a specialist record, a low-risk one its floor. The specialist record is never a
+plain text value and never a generalist. What differs from /make-it is where the signals come
+from: the code, not an interview.
 
 | Signal (rule 2) | Fires when the code shows |
 |---|---|
-| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data of the people the app serves (a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records) |
+| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data the app holds about people beyond its own sign-in accounts (customers, patients, contacts: a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records). A users table that only holds the app's own sign-in accounts does not fire it. |
 | Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
 | Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
 | AI | an AI SDK behind more than 10 distinct prompts or agents, or prompts stored where non-developers edit them |
-| Variant | what its definition file names under "Project specialist signals", when `app-context.json` already names the variant |
+| Variant | what its definition file declares under "Project specialist signals", at the rank it declares, when `app-context.json` already names the variant |
 
 Each signal is written `code: <what was found, and where>`; the floor's is
 `project_type: <value> (the floor)`. Where the code cannot tell whether a signal fires (for
@@ -244,24 +245,26 @@ specialist and mark that signal `"unconfirmed": true`. This is never a clarifyin
 does not count against Phase 3's 3-5 questions.
 
 The retrofit's own role (the software architect, its task specialist) is never written into
-`expert_persona`: the record comes from the signals and the floor only.
+`expert_persona`: the specialist record comes from the signals and the floor only.
 
-If `app-context.json` already holds a record (a second retrofit, or an app /make-it built),
-compare it with the new one as the reference's "Same record or a different one" says: the same
-specialists keep it as it is, even when its signals are worded from an interview; different
-specialists write the new one. When the new one is written over a record, the one plain line (e.g.
-"Your app now gets a security specialist because its code takes card payments.") goes in the
-report of the step that writes it, and into `CHANGELOG.md`, which that step adds if the app has
-none. A value the reference reads as no record (its "Reading an older value") is not a record:
-write the new one and say nothing.
+If `app-context.json` already holds a specialist record (a second retrofit, or an app /make-it
+built), compare it with the new one as the reference's "Same record or a different one" says: with
+the same specialists only the signals are brought up to date, silently, even when the old ones were
+worded from an interview; different specialists write the new one. When the new one is written over
+a specialist record, the one plain line (e.g. "Your app now gets a security specialist because its
+code takes card payments.") goes in the report of the step that writes it, and into
+`CHANGELOG.md`, which that step adds if the app has none. A value the reference reads as no record
+(its "Reading an older value") is not a specialist record: write the new one and say nothing.
 
-**When it is written.** Nothing is written before the plan is approved. The record goes into the
-run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and in a
-phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
+**When it is written.** Nothing is written before the plan is approved. The specialist record goes
+into the run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and
+in a phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
 Discovery found it, not the foundations the retrofit adds, so a phased retrofit stopped after any
-step already has its full record. Part E's final write of `app-context.json` keeps it as it is.
+step already has its full specialist record. Part E's final write of `app-context.json` keeps it as
+it is.
 
-Apart from the line for a replaced record, nothing here is shown to the user or asked of them.
+Apart from the line for a replaced specialist record, nothing here is shown to the user or asked of
+them.
 
 </step>
 

@@ -455,26 +455,27 @@ chosen:
    reference says. Its signal is `project_type: <value> (the floor)`.
 2. Check the signals of the reference's rule 2, in its order, and build the record by its "The
    order decides the primary" paragraph. In app-context they are carried by: security --
-   `compliance`, `purpose`, `features`; data -- `multi_tenancy.needed` and the answers; reliability
-   -- `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named;
-   AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
-   `variant_config` fields its definition file names.
+   `compliance`, `purpose`, `features` (personal data as rule 2 defines it, not the sign-in
+   accounts every app has); data -- `multi_tenancy.needed` and the answers; reliability --
+   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI
+   -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
+   `variant_config` fields its definition file names, at the rank it declares.
 3. Each signal is written `<field>: <value>`, and one the user did not state (a guess or a smart
    default, such as a rough user count) is marked `"unconfirmed": true`.
 4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
 5. If `app-context.json` already holds a record (a returning run), compare it with the new one as
-   the reference's "Same record or a different one" says: the same specialists keep it as it is;
-   different specialists write the new one. When the new one is written over a record, the one plain
-   line (e.g. "Your app now gets a security specialist because it takes card payments.") goes in
-   the plain-English summary's sentence on what departs from the standard setup, and into
-   `CHANGELOG.md`: now if the file exists, otherwise in the initial entry Build step g writes. A
-   value the reference reads as no record (its "Reading an older value") is not a record: write the
-   new one and say nothing.
+   the reference's "Same record or a different one" says: with the same specialists only the
+   signals are brought up to date, silently; different specialists write the new one. When the new
+   one is written over a record, the one plain line (e.g. "Your app now gets a security specialist
+   because it takes card payments.") goes in the plain-English summary's sentence on what departs
+   from the standard setup, and into `CHANGELOG.md`: now if the file exists, otherwise in the
+   initial entry Build step g writes. A value the reference reads as no record (its "Reading an
+   older value") is not a record: write the new one and say nothing.
 
 The record is never a plain text value and never a generalist. /make-it builds and reviews in the
-role of every specialist in the record, and hands the record to every sub-agent it briefs. This is
-a build-quality lever, not a staffing recommendation. Apart from the line in step 5, nothing here
-is shown to the user, and nothing is asked of them.
+role of every specialist in the record, the primary leading, and hands the record to every
+sub-agent it briefs. This is a build-quality lever, not a staffing recommendation. Apart from the
+line in step 5, nothing here is shown to the user, and nothing is asked of them.
 
 **Build the app-context internally.** Write it to `.make-it/app-context.json` in the project directory.
 
@@ -585,7 +586,7 @@ The user sees progress updates, NOT the technical details.
       ```
       .env.example keeps empty/placeholder values (committed). .env has real values (gitignored).
 
-   g. **Create CHANGELOG.md** with initial entry, **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
+   g. **Create CHANGELOG.md** with initial entry (carrying the specialist line from Design step 5 when Design wrote a new record over an older one), **TODO.md** with section headers, and **README.md** with: project name/description, features, tech stack, prerequisites, quick start instructions, project structure, test users/roles, and deployment notes. README.md is the front door for anyone visiting the repo. Do NOT mention /make-it, /ship-it, /resume-it, or Claude Code in the README.
 
    h. **Create `CLAUDE.md` with the instruction-drift canary** (Tier 0 guardrail). This file is
       the operating contract for any AI assistant working in the generated project. Write it with

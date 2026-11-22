@@ -276,7 +276,7 @@ if [ -z "${1:-}" ]; then
   check "(control) fails when the step moves before the stack is chosen" \
     'd="$(copy)"; perl -0pi -e "my \$b; s/(\*\*Project specialist \(SILENT.*?\n)(?=\*\*Build the app-context)/\$b = \$1; q()/se; s/(\*\*For everything else)/\$b\$1/" "$d/$MK"; ! cmp -s "$MK" "$d/$MK" && ! bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control) fails when the variant template line drops its rank" 'fails "$VT" ", rank: [security | data | reliability | AI | after AI, before the floor]" ""'
-  JOIN32='s/\n   3\. Each signal is written/ Each signal is written/'
+  JOIN32='s/\n3\. Each signal is written/ Each signal is written/'
   check "(control, H) fails: step 3 joined into step 2" 'd="$(copy)"; perl -0pi -e "$JOIN32" "$d/$MK"; ! cmp -s "$MK" "$d/$MK" && ! bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control, D9) fails: kept specialists get a new set_at" 'add "$MK" "$STEP5" " A kept record gets today'\''s \`set_at\`."'
   check "(control) fails: Build step g drops the specialist line" 'fails "$MK" " (carrying the specialist line from Design step 5 when Design wrote a new record over an older one)" ""'
