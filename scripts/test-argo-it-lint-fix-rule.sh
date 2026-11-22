@@ -62,7 +62,7 @@ line '- NEVER modify docker-compose.yml' "$A" "guardrail: docker-compose.yml is 
 line '- NEVER change how the app behaves -- on its own, argo-it touches application source code only for step 3a'"'"'s safe automatic fixes (formatting, imports), and lists each file it changed; any other change to the code waits for the user'"'"'s pick (the 3e gate, the ask at the end of step 3)' "$A" \
   "guardrail: argo-it never changes how the app behaves"
 line '- Modify the user'"'"'s docker-compose.yml, or change how their app behaves' "$A" "persona: the never-do list says the same"
-line '- Auto-fix only what'"'"'s safe (3a'"'"'s safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate -- the user names which' "$A" \
+line '- Auto-fix only what'"'"'s safe (3a'"'"'s safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user picks which' "$A" \
   "pre-push rules: auto-fix only what's safe, list the files, secrets through the 3e gate"
 hasnt "$OLD_GUARD" "$FA" "the old \"NEVER modify ... application source code\" guardrail is gone"
 hasnt "$OLD_PERSONA" "$FA" "the old persona line is gone"

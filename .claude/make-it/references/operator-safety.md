@@ -16,8 +16,8 @@ bundle these:
 - `*.pem`, `*.key`
 - SSH keys: `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, and anything under `~/.ssh/`
 - keychains: `*.keychain*`
-- `.aws/credentials`, `.netrc`
-- `.npmrc` / `.pypirc` that contain tokens
+- `.aws/credentials`, `.netrc`, `.git-credentials`
+- `.npmrc` / `.pypirc` / `.yarnrc.yml` that contain tokens
 - `*credentials*.json`
 - password-manager exports
 - browser profile and cookie stores
@@ -39,10 +39,11 @@ value into context. It must never print, quote, upload, commit, or bundle a valu
 **Ignore patterns.** When `.gitignore` or `.dockerignore` must exclude secret files, use only the
 patterns that make sense inside a project folder: `.env*` with `!.env.example`, `*.pem`,
 `*.key`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `*.keychain*`, `.aws/credentials`,
-`.netrc`, `*credentials*.json`. Add `.npmrc` / `.pypirc` only after a names-only check shows a
-token key in them (for example `grep -lsE '(_authToken|_auth|password)[[:space:]]*=' .npmrc
-.pypirc`, which prints file names only). `~/.ssh/`, password-manager exports, and browser
-profile or cookie stores are read rules, not ignore patterns.
+`.netrc`, `.git-credentials`, `*credentials*.json`. Add `.npmrc` / `.pypirc` / `.yarnrc.yml`
+only after a names-only check shows a token key in them (for example
+`grep -lsE '(_authToken|_auth|npmAuthToken|npmAuthIdent|password)[[:space:]]*[=:]' .npmrc .pypirc .yarnrc.yml`,
+which prints file names only). `~/.ssh/`, password-manager exports, and browser profile or cookie
+stores are read rules, not ignore patterns.
 
 **Other sensitive data -- stop and confirm first.** The user's own financial documents (bank,
 tax, statements), legal or client-matter folders, and HR or medical records. This is about the

@@ -968,6 +968,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.15 -- /argo-it's secret check is a tested script, and nothing is sent or restarted without your pick
+
+/argo-it looked for passwords and keys with a pattern written into its instructions, and
+some paths went around it: troubleshooting could push a fix or restart the live app on its own.
+
+- **The check is a script with tests.** `secret-scan.py` scans exactly what will be sent,
+  against what is already online, and shows only the file and line, never the value.
+- **A send carries only what you agreed to.** A new save, a new file, a branch switch, or a
+  save added by one of your project's own steps after the ask stops it.
+- **Unsaved code stops the first deploy** before the seal is taken, so the seal matches
+  what goes online.
+- **Troubleshooting never pushes.** A fix it makes stays unsaved and goes through the
+  redeploy and its pick.
+- **Restarts and re-runs ask first,** and only on the app's own cluster, matched by name
+  and server address. Setup asks once which cluster that is.
+- **Known limits.** Save messages are not scanned; not yet proven on a real cluster.
+
 ### v1.71.14 -- One project specialist per app, recorded once and read by every skill that touches code
 
 Each skill used to pick its own expert from whatever it noticed, so the same app could be
