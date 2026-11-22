@@ -1370,5 +1370,22 @@ class Wiring(unittest.TestCase):
                 self.assertEqual(p.returncode, 2, p.stdout)
 
 
+class WeakHashes(unittest.TestCase):
+    """A SHA-1 or MD5 call in the check is never a security control, and says so (bandit B324)."""
+
+    def test_weak_hashes_are_marked_not_for_security(self):
+        import ast
+        with open(SCRIPT, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr in ("sha1", "md5") and isinstance(n.func.value, ast.Name)
+                 and n.func.value.id == "hashlib"]
+        self.assertTrue(calls, "the check no longer computes git's blob id: update this test")
+        for c in calls:
+            flag = [k for k in c.keywords if k.arg == "usedforsecurity"]
+            self.assertTrue(flag and isinstance(flag[0].value, ast.Constant) and flag[0].value.value is False,
+                            f"line {c.lineno}: hashlib.{c.func.attr} without usedforsecurity=False")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
