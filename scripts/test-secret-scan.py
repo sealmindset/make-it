@@ -11353,6 +11353,10 @@ class ReReviewRedeployCases(ReviewRedeployCases):
                 need_shell(shell)
                 r = self.fresh()
                 r.write('b.py', 'b = 1\n')
+                # step 4 adds its keep-out lines to .gitignore when they're missing: here they're saved already
+                pats = ['.env*', '!.env.example'] + [x.decode() for x in RegistryFilesCases._scanner().KEEP_OUT
+                                                     if x != b'.env*'] + ['.aws/credentials']
+                r.write('.gitignore', ''.join(x + '\n' for x in pats))
                 r.commit('saved, nothing unsaved')
                 self._prep(r)
                 fail = os.path.join(r.root, 'scan-fails.sh')

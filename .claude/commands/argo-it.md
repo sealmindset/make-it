@@ -326,7 +326,7 @@ to deploy them. Do NOT explain the infrastructure -- just deploy.
 **This step runs when /argo-it detects that K8s manifests and CI are already set up.**
 The user just wants their changes deployed. Keep it simple and non-technical.
 
-**1. Check for uncommitted changes, after reading what GitHub has:**
+**1. Check for uncommitted changes, after reading what the online copy has:**
 
 ```bash
 # Git itself, and a project it keeps track of and trusts, before anything is read
@@ -336,17 +336,21 @@ e=$(git rev-parse --git-dir 2>&1 >/dev/null) || { case "$e" in (*safe.directory*
 # git's insteadOf rewriting applied), then everything it has, read into argo-it's own names (refs/argo-it/gh/...),
 # never the user's branches, remote-tracking refs or tags
 git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
 git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 git status --short
-git log --oneline HEAD --not --glob='refs/argo-it/gh/*'          # saved changes GitHub doesn't have yet
+git log --oneline HEAD --not --glob='refs/argo-it/gh/*'          # saved changes the online copy doesn't have yet
 git rev-list --count HEAD --not --glob='refs/argo-it/gh/*'       # M for "[M saved changes not sent yet]"
-# What the ask names, kept for step 4: this commit and the saves GitHub doesn't have
-{ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; } > "$(git rev-parse --git-dir)/argo-it-asked"
+# What the ask names, kept for step 4: this commit, the saves the online copy doesn't have, and every path that holds
+# a change now (3a, 3b, 3c and a 3e move write each path they change to argo-it-touched)
+g="$(git rev-parse --git-dir)"
+{ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; } > "$g/argo-it-asked"
+git status --porcelain=v1 -z --untracked-files=all --no-renames | tr '\0' '\n' | cut -c4- > "$g/argo-it-asked-paths"
+: > "$g/argo-it-touched"
 ```
 
-"Not sent" counts only what GitHub holds now: a commit GitHub has on any branch, or only through a
+"Not sent" counts only what the online copy holds now: a commit it has on any branch, or only through a
 tag, is already sent, so M is never a guess.
 
 If the block prints `SPLIT ORIGIN`, stop -- don't show the step-2 ask. Tell the user, as PHASE 5
@@ -416,6 +420,10 @@ container, manifest, kubectl, namespace, pod, or any other technical term.
 **Instead say:** save, send, update, deploy, your app, a few minutes.
 
 **3. Pre-push self-review (silent -- user never sees this):**
+
+Every file 3a, 3b, 3c or a 3e move changes, write its path (from the repo's top folder, as `git
+status` prints it), one per line, to `$(git rev-parse --git-dir)/argo-it-touched` with your file
+tool: step 4 sends only the paths the ask counted and these.
 
 Before committing and pushing, run a quick automated review. This catches common
 deploy-breaking issues BEFORE they enter the pipeline. The user never sees the review
@@ -501,20 +509,20 @@ Never show raw Python tracebacks.
 # Git itself, and a project it keeps track of and trusts, or it can't check (exit 2)
 command -v git >/dev/null 2>&1 || { echo "NO GIT"; exit 2; }
 e=$(git rev-parse --git-dir 2>&1 >/dev/null) || { case "$e" in (*safe.directory*) echo "NOT TRUSTED";; (*) echo "NOT A REPO";; esac; exit 2; }
-# Read everything GitHub has again, right before the scan, with step 1's lines (PHASE 5 step 2's): every branch and
+# Read everything the online copy has again, right before the scan, with step 1's lines (PHASE 5 step 2's): every branch and
 # tag into argo-it's own names (refs/argo-it/gh/...); in a shallow clone, all the history first. A failed read prints
-# FETCH FAILED and stops the block before the scan: without it, what GitHub already has can't be told.
+# FETCH FAILED and stops the block before the scan: without it, what the online copy already has can't be told.
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
 git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 # Scans what step 4 will send, under three labels: == unsaved edits == and == new files ==
-# (as step 4 will stage them), then == saved, not sent == (every commit GitHub doesn't have: none of
+# (as step 4 will stage them), then == saved, not sent == (every commit the online copy doesn't have: none of
 # refs/argo-it/gh/ reaches it). Each hit is printed under its label as file:line -- never a value or
 # any other part of the line. Exit 0 = clean, 1 = hits, 2 = couldn't check. Needs git 2.25 or later.
 python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*'
 ```
 
-What GitHub already has is what argo-it's own names (`refs/argo-it/gh/`) reach, as in PHASE 5
-step 2: a commit GitHub holds on any branch, or only through a tag, is never "saved, not sent".
+What the online copy already has is what argo-it's own names (`refs/argo-it/gh/`) reach, as in PHASE 5
+step 2: a commit it holds on any branch, or only through a tag, is never "saved, not sent".
 
 Run it from the project root with a 120-second timeout, then read the result:
 - **Exit 0**, the three labels each once, in that order, and nothing else: no secrets found;
@@ -549,7 +557,7 @@ Run it from the project root with a 120-second timeout, then read the result:
   printed `NOT A REPO` -- "This folder isn't a project that Git keeps
   track of, so there's nothing here I can check. Open your project's own folder, then run
   /argo-it again." The block printed `FETCH FAILED` -- "I couldn't reach your code's online home
-  ([the host from the project's address], e.g. github.com) to see what's already there. [why, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] Fix
+  ([the host from the project's address], e.g. github.com) to see what's already there. [why, in plain words -- e.g. 'Git can't sign in there from this computer'] Fix
   that, then run /argo-it again." Anything else -- "The check stopped before it finished." For a
   timeout and anything else, add: "Run /argo-it again; if it happens again, ask your DevOps team
   for help."
@@ -737,6 +745,13 @@ the manifests automatically.
 # the same list), at any depth: make sure each is ignored (own line, even if .gitignore lacks a
 # final newline), then unstage them in case any is tracked. :(top,...) = from the repo root, so
 # a nested repo's pre-staged files stay out too. If the save fails, stop here: nothing is sent.
+# Only what the step-2 ask named, before anything is staged: the commit it was shown on, the saves the online copy
+# didn't have, and no path with a change that wasn't there then (unless 3a, 3b, 3c or a 3e move changed it)
+g="$(git rev-parse --git-dir)"
+[ -f "$g/argo-it-asked-paths" ] && [ -f "$g/argo-it-touched" ] &&
+  [ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$g/argo-it-asked" 2>/dev/null)" ] &&
+  [ -z "$(git status --porcelain=v1 -z --untracked-files=all --no-renames | tr '\0' '\n' | cut -c4- | grep -vxF -f "$g/argo-it-asked-paths" | grep -vxF -f "$g/argo-it-touched")" ] ||
+  { echo "CHANGED SINCE THE ASK"; exit 3; }
 fail() { echo "SAVE FAILED: $1"; exit 1; }
 grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
 for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
@@ -749,13 +764,11 @@ done
   ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/.git-credentials' \
   ':(top,glob)**/*credentials*.json' ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' \
   ':(top,glob)**/*.db' ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
-# Only what the step-2 ask named: the commit it was shown on and the saves GitHub didn't have (step 1 kept them)
-[ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked" 2>/dev/null)" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
-git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
+made=; git diff --cached --quiet || { git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"; made=1; }
 s=$(git rev-parse HEAD) || fail "could not read the save"
-# The save itself, checked against what GitHub has: a hook that runs on save can add or change files after 3e.
-# Labels and file:line only, never a value. Anything but a clean exit 0 sends nothing; the save stays here.
-python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit "$s" || { echo "SAVE NOT SENT"; exit 1; }
+# What is sent, checked against what the online copy has: a hook that runs on save can add or change files after 3e.
+# Labels and file:line only, never a value. Anything but a clean exit 0 sends nothing; a save made here stays here.
+python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit "$s" || { if [ -n "$made" ]; then echo "SAVE NOT SENT"; else echo "NOT SENT"; fi; exit 1; }
 
 # Send exactly that save, by its id (never a submodule's commits) -- CI takes over from here
 git push origin "${s}:refs/heads/{current_branch}" --recurse-submodules=no
@@ -772,12 +785,23 @@ couldn't check that save for secrets]. What to do next: [with hits: take the val
 and ask your DevOps team to help remove it from your saved history before anything is sent /
 otherwise: run /argo-it again; if it happens again, ask your DevOps team for help]."
 
-**If the block prints `CHANGED SINCE THE ASK`, stop here -- nothing was saved or sent.** A save was
-made, undone or pulled, or another branch was switched to, after the step-2 ask, so this send would
-hold something the ask didn't name. Tell the user:
+**If the block prints `NOT SENT`, stop here -- step 4 had nothing new to save, and nothing was
+sent.** Read the check's output above that line as for `SAVE NOT SENT`. Tell the user:
 
-"I haven't saved or sent anything: your project changed after I asked you (a new save, or a switch
-to another branch), and I only send what I named. What to do next: run /argo-it again, and I'll ask
+"I didn't send anything: [with hits: I found what looks like a password or secret key on **line [N]
+of [file]** [, one per hit] in your saved changes / otherwise: I couldn't check your saved changes
+for secrets]. What to do next: [with hits: take the value out of [file] and ask your DevOps team
+to help remove it from your saved history before anything is sent / otherwise: run /argo-it again;
+if it happens again, ask your DevOps team for help]."
+
+**If the block prints `CHANGED SINCE THE ASK`, stop here -- nothing was saved or sent, and nothing
+was staged.** A save was made, undone or pulled, another branch was switched to, a file changed that
+the ask didn't count, or the online copy changed, after the step-2 ask, so this send would hold
+something the ask didn't name. Tell the user:
+
+"I haven't saved or sent anything: something changed after I asked you (a new save, a new or
+changed file, a switch to another branch, or a change to what's already online), and I only send
+what I named. What to do next: run /argo-it again, and I'll ask
 about what's there now."
 
 
@@ -887,40 +911,66 @@ every command (`--context`), never whichever cluster this computer happens to po
 project root:
 
 ```bash
-# The app's own cluster, as setup recorded it (deployment.k8s_context); none recorded: no command here reads one
-c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+# The app's own cluster, as setup recorded it (deployment.k8s_context, and its server address deployment.k8s_server)
+c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+[ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
-# Read only, on that cluster by name: the running version, then the one the last build sent
-kubectl --context "$c" get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}'
-grep 'image:' env/dev/{service}.yaml
+# Read only, and only while this computer points at that cluster, by its name and its server address
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" get pods -n "{namespace}" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
+grep 'image:' "env/dev/{service}.yaml"
 ```
 
 If it prints `NO KUBECTL`: tell the user to ask their DevOps team to restart the app, or guide them
-through the Argo CD steps (step 3 above). If it stops because no cluster is recorded, use the
-line for that stop below. If the running version is the one the last build sent, a restart won't help: go on to step 5.
-If it is older, check the cluster before anything is offered:
+through the Argo CD steps (step 3 above).
+
+If it prints `NO CLUSTER RECORD`: read nothing and offer nothing. Tell the user, then give step 3's
+Argo CD steps:
+
+"I can't look at your running app from here: I have no record of which cluster (the group of
+servers) {hostname} runs on. To let me check it from this computer, ask me to record its cluster:
+I'll show you the clusters this computer knows. Here's how to check it in Argo CD instead:"
+
+If it prints `NOT ITS CLUSTER`: read nothing and offer nothing. Tell the user, then give step 3's
+Argo CD steps:
+
+"I can't look at your running app from here: this computer is set to work with [the current
+cluster's name, or 'no cluster'][ only if that name is the app's: -- but at a different server
+address], not the cluster {hostname} runs on ([the app's cluster name], at the address setup
+recorded). Here's how to check it in Argo CD instead:"
+
+If it prints `READ FAILED`: offer nothing. Tell the user, then give step 3's Argo CD steps:
+
+"I couldn't read how your app is running on [the app's cluster name] just now: [the reason, in
+plain words]. Here's how to check it in Argo CD instead:"
+
+If the running version is the one the last build sent, a restart won't help: go on to step 5. If
+it is older, check the cluster before anything is offered:
 
 ```bash
-# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it now
-c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
-[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
+# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it, by name and address
+c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+[ -n "$c" ] && [ -n "$v" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "OTHER CLUSTER"; exit 1; }
 ```
 
 If it prints `CLUSTER UNKNOWN`: never restart and never ask. Tell the user, then give step 3's Argo
 CD steps:
 
 "I won't restart your app from here: I have no record of which cluster (the group of servers)
-{hostname} runs on, so I can't be sure I'd restart the right one. Here's how to restart it in Argo
-CD instead:"
+{hostname} runs on, so I can't be sure I'd restart the right one. To let me restart it from this
+computer, ask me to record its cluster: I'll show you the clusters this computer knows. Here's how
+to restart it in Argo CD instead:"
 
 If it prints `OTHER CLUSTER`: never restart and never ask. Tell the user, then give step 3's Argo CD
 steps:
 
 "I won't restart your app from here: this computer is set to work with [the current cluster's name,
-or 'no cluster'], not [the app's cluster name], where {hostname} runs. Here's how to restart it in
-Argo CD instead:"
+or 'no cluster'][ only if that name is the app's: -- but at a different server address], not the
+cluster {hostname} runs on ([the app's cluster name], at the address setup recorded). Here's how to
+restart it in Argo CD instead:"
 
 Otherwise ask once. A restart interrupts everyone using the app, so this is active confirmation,
 per the approval block: the user picks the target by name, a plain yes isn't an answer. Fill every
@@ -943,9 +993,10 @@ again and pick Restart {hostname}." Only on 'Restart {hostname}', run, from the 
 
 ```bash
 # Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
-c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
-[ -n "$c" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
-kubectl --context "$c" rollout restart deployment/{service} -n {namespace}
+c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+[ -n "$c" ] && [ -n "$v" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "OTHER CLUSTER"; exit 1; }
+kubectl --context "$c" rollout restart "deployment/{service}" -n "{namespace}"
 ```
 
 If it prints `OTHER CLUSTER` (this computer moved to another cluster since the ask), nothing was
@@ -956,10 +1007,12 @@ restarted: use the `OTHER CLUSTER` line above, with the Argo CD steps.
 This means the new image deployed but has a runtime issue. Check pod logs:
 
 ```bash
-# Read only, on the app's own cluster by name: what the running version printed last
-c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)
-[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
-kubectl --context "$c" logs -n {namespace} deploy/{service} --tail=100
+# Read only, on the app's own cluster by name and address: what the running version printed last
+c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+[ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" logs -n "{namespace}" "deploy/{service}" --tail=100 || { echo "READ FAILED"; exit 1; }
 ```
 
 Common issues and plain-language translations:
@@ -985,6 +1038,10 @@ Common issues and plain-language translations:
 | Pod crash-looping | Maybe | Read the logs. If the cause is clear and one of 3a's safe fixes covers it (formatting, imports), make that fix and leave it unsaved; if the fix needs any other change to the code, ask first (the crash-looping ask below) and touch nothing until the user picks the change. Tell the user: "I found why your app keeps stopping ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the cause isn't clear, tell the user what you saw, in plain words, and change nothing. |
 | Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
 | Missing K8s secrets | No | Tell user: "Your app needs some settings that your DevOps team hasn't added yet. Share ONBOARDING-K8S.md with them." |
+
+**Recording the app's cluster:** if the user asks to record the app's cluster, run setup's
+**Cluster** pick (PHASE 1 step 2) and save what they pick, its name and its server address; change
+nothing else. Nothing in troubleshooting asks this on its own.
 
 **Crash-looping fix (the ask before a change beyond 3a's safe fixes):** argo-it changes the app's
 code on its own only for 3a's safe fixes, so any other fix is active confirmation, per the approval
@@ -1107,7 +1164,10 @@ split routing so API calls go directly to the backend for better performance.
 cluster that isn't a local one -- rancher-desktop, docker-desktop, minikube or kind-*): "Which
 cluster does your app run on? I'll only ever restart it there, and only when you ask." A select:
 one option per such cluster, by name, and **None of these / not sure**.
-- Save the pick to app-context.json as `deployment.k8s_context`; on **None of these / not sure**
+- Save the pick to app-context.json as `deployment.k8s_context`, and that cluster's server address
+  (`kubectl config view --minify --context "<the picked name>" -o jsonpath='{.clusters[0].cluster.server}'`)
+  as `deployment.k8s_server`: a name alone isn't enough (k3s, k3d and many others call theirs
+  `default`); on **None of these / not sure**
   save nothing (troubleshooting then never restarts the app from this computer: it gives the Argo
   CD steps)
 
@@ -2234,22 +2294,23 @@ done)
     case "/$f" in (*/.aws/credentials) printf 'keep-out: %s\n' "$f"; continue;; esac
     case "${f##*/}" in (.env.example) ;; (.env*|*.pem|*.key|id_rsa*|id_ed25519*|id_ecdsa*|id_dsa*|*.keychain*|.netrc|\
       .git-credentials|*credentials*.json|*service-account*.json|*.sqlite*|*.db|*.db-*|*.p12|*.pfx) printf 'keep-out: %s\n' "$f";; esac
-  done | sed -n 1p
+  done
   exit 1; }
 ```
 
 If it prints `UNSAVED CODE`, stop -- don't run the seal and don't show the step-3 ask; the seal
 writes nothing, and nothing is saved or sent. The line after it is how many files hold unsaved code, then the first one or
-two, by path from the project folder, then, if one of them is on step 4's keep-out list (keys,
-certificates, settings files, local databases), a `keep-out:` line naming the first such file.
+two, by path from the project folder, then a `keep-out:` line for every one of them on step 4's
+keep-out list (keys, certificates, settings files, local databases).
 Tell the user, naming paths only, never what is in them:
 
 "I haven't saved or sent anything: [N] [file in your project has / files in your project have]
 changes that aren't saved yet ([the first path][, [the second path]][, and others -- only if N is
-3 or more]).[ only if a `keep-out:` line was printed: [the path after `keep-out:`] holds keys or
-private data that should never be saved with your code: move it out of your project folder, or ask
-your DevOps team to have it left out.] What to do next: save your changes[ only if a `keep-out:`
-line was printed: -- all but that file], or run /wrap-it, then run /argo-it again."
+3 or more]).[ only if `keep-out:` lines were printed: [each path after a `keep-out:` line, joined
+by and] [holds / hold] keys or private data that should never be saved with your code: move [it /
+them] out of your project folder, or ask your DevOps team to have [it / them] left out.] What to do
+next: save your changes[ only if `keep-out:` lines were printed: -- all but [that file / those
+files]], or run /wrap-it, then run /argo-it again."
 
 Then run the seal step now, before step 2: it writes its files beside argo-it's, and the check and
 the save on 'Send it' must both see them. The seal's files count as argo-it's files: one save holds
@@ -2304,7 +2365,7 @@ into a command. `{generated_files}` are argo-it's files, by name, as Option 1 li
 # the same host and owner/repository both ways (git's insteadOf rewriting applied; the scheme, a user@, a trailing
 # .git or / don't count)
 git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):[0-9]+/#\1/#; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 # Read everything GitHub has -- every branch and tag -- into argo-it's own names (refs/argo-it/gh/...), never the
 # user's branches, remote-tracking refs or tags; in a shallow clone, all the history first, so what GitHub has is exact
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
@@ -2328,6 +2389,10 @@ Tell the user:
 "I haven't saved or sent anything: this project has no online copy set up, so there's nowhere to
 send your setup. What to do next: ask your DevOps team to connect the project to its online home,
 then run /argo-it again."
+
+The two addresses are compared by host and owner/repository, so `https://`, `git@host:`, a `user@`,
+a port after `ssh://host`, a trailing `/` or `.git` don't count; two addresses that differ in capital
+letters alone still count as different, since not every host treats them as one.
 
 If the block prints `SPLIT ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent,
 and GitHub hasn't been read: this project sends changes to a different address than it reads
