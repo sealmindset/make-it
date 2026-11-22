@@ -166,6 +166,13 @@ class Decide(unittest.TestCase):
         self.assertTrue(line.startswith("pip-audit: NOT RUN for 1 of 3 -- "))
         self.assertIn('"backend/requirements.txt": "ERROR: No matching distribution found for pip-audit==2.9.0"', line)
 
+    def test_pip_failure_reason_is_pip_s_own_line(self):
+        f = Folder(self)
+        f.put("pip-audit--2", text="", code=1, err="ERROR:pip_audit._virtual_env:internal pip failure: ERROR: Hashes are required in --require-hashes mode\n"
+                                                    "ERROR:pip_audit._cli:Failed to install packages: ['/tmp/x/bin/python3.12', '-m', 'pip']\n")
+        self.assertIn('"backend/requirements.txt": "ERROR:pip_audit._virtual_env:internal pip failure: ERROR: Hashes are required in --require-hashes mode"',
+                      f.lines()[0][3])
+
     def test_pip_absent_report_and_empty_stderr_never_points_at_an_empty_file(self):
         f = Folder(self); f.put("pip-audit--2", text=None, err="", code=125)
         self.assertIn('"backend/requirements.txt": "no report and no error output (exit 125)"', f.lines()[0][3])
@@ -267,7 +274,8 @@ BAD = [  # requirements text -> the exact NOT RUN reason (never a value from the
     ("pkg==1.0 --index-url https://x.invalid/simple\n", "line 1: a package index or host option"),
     ('pkg; python_version == "3.8" --index-url https://x.invalid\n', "line 1: a package index or host option"),
     ("pkg==1.0 \\\n--index-url https://x.invalid\n", "line 1: a package index or host option"),
-    ("‐‐index-url https://x.invalid\n", "line 1: not a plain package requirement"),
+    ("‐‐pre\n", "line 1: not a plain package requirement"),
+    ("‐‐index-url https://x.invalid\n", "line 1: a URL or VCS requirement"),
     ("pkg @ https://x.invalid/p.whl\n", "line 1: a URL or VCS requirement"),
     ("git+https://x.invalid/r.git\n", "line 1: a URL or VCS requirement"),
     ("https://x.invalid/p.whl\n", "line 1: a URL or VCS requirement"),

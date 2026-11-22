@@ -16,8 +16,10 @@ Not for Windows yet: it exits 2 there.
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -35,17 +37,30 @@ IMAGE_OF = {"semgrep": "semgrep", "bandit": "bandit", "npm-audit": "node", "pip-
 ORDER = ["semgrep", "bandit", "npm-audit", "pip-audit", "trivy"]
 PRUNE = {"node_modules", ".git", ".tox", "site-packages", "__pycache__", ".next", "dist", "build", ".turbo",
          ".mypy_cache", ".pytest_cache", ".ruff_cache"}
-NOTHING = {"bandit": "no Python code found", "npm-audit": "no package-lock.json found",
+LOCKS = ("package-lock.json", "npm-shrinkwrap.json")
+NOTHING = {"bandit": "no Python code found", "npm-audit": "no package-lock.json or npm-shrinkwrap.json found",
            "pip-audit": "no requirements file found (requirements*.txt)"}
 HARDEN = ["--cap-drop=ALL", "--security-opt", "no-new-privileges"]
 NOBODY = ["--user", "65534:65534"]
 PIP_CMD = "pip install -q --root-user-action=ignore pip-audit==2.9.0 >&2 && pip-audit --format=json -r requirements.txt"
-PIP_ALLOWED = {"--hash", "--pre", "--prefer-binary", "--only-binary", "--no-binary", "--require-hashes"}
-PIP_FILES = {"-r": "--requirement", "-c": "--constraint"}
-PIP_LOCAL = {"-e": "--editable"}
-PIP_HOSTS = {"-i": "--index-url", "-f": "--find-links"}
-PIP_LONG = ["--requirement", "--constraint", "--editable", "--index-url", "--extra-index-url", "--find-links",
-            "--trusted-host", "--no-index"] + sorted(PIP_ALLOWED)
+LIMIT = 1_000_000  # bytes of one requirements file; a bigger file is NOT RUN, never partly read
+WHY = ", so pip-audit was not run on this file"
+NAME = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
+SPEC = r"(?:~=|===|==|!=|<=|>=|<|>)\s*[A-Za-z0-9.*+!_-]+"
+REQ = re.compile(rf"^({NAME})\s*(?:\[\s*({NAME}(?:\s*,\s*{NAME})*)\s*\])?\s*({SPEC}(?:\s*,\s*{SPEC})*)?\s*$")
+MARKER_VARS = {"python_version", "python_full_version", "os_name", "sys_platform", "platform_release", "platform_system",
+               "platform_version", "platform_machine", "platform_python_implementation", "implementation_name",
+               "implementation_version", "extra", "and", "or", "in", "not"}
+MTOK = re.compile(r"""\s*(\(|\)|===|==|!=|<=|>=|~=|<|>|"[A-Za-z0-9._ *+!-]*"|'[A-Za-z0-9._ *+!-]*'|[A-Za-z_]+)""")
+COMMENT = re.compile(r"(^|\s+)#.*$")  # pip's own rule: "#" starts a comment at line start or after whitespace
+HASH = re.compile(r"^(sha256|sha384|sha512):[0-9a-fA-F]+$")
+BINVAL = re.compile(rf"^(:all:|:none:|{NAME}(?:,{NAME})*)$")
+FLAGS = {"--pre", "--prefer-binary", "--require-hashes"}  # kept as they are: they change no host and read no file
+BINARY = {"--only-binary", "--no-binary"}  # kept with a checked value
+INCLUDE, EDIT, INDEX, OTHER = ("a file include (-r or -c)", "an editable package (-e)", "a package index or host option",
+                               "another pip option")
+LONG = [("--requirement", INCLUDE), ("--constraint", INCLUDE), ("--editable", EDIT), ("--index-url", INDEX),
+        ("--extra-index-url", INDEX), ("--find-links", INDEX), ("--trusted-host", INDEX), ("--no-index", INDEX)]
 GLOB = set("*?[]{}!\\")
 BASE = os.path.join(os.path.expanduser("~"), ".cache", "make-it-security")
 AUDIT_DIR = os.path.join(os.path.expanduser("~"), ".claude", "make-it", "security-audit")
@@ -92,7 +107,7 @@ def discover(project):
         dirs[:] = [d for d in dirs if d not in PRUNE and not os.path.islink(os.path.join(top, d))]
         for f in files:
             p = os.path.join(top, f)
-            audited = f == "package-lock.json" or (f.startswith("requirements") and f.endswith(".txt"))
+            audited = f in LOCKS or (f.startswith("requirements") and f.endswith(".txt"))
             if os.path.islink(p):
                 if audited:
                     found["linked"].append(rel(f))
@@ -101,49 +116,115 @@ def discover(project):
                 continue
             if f.endswith(".py") and "tests" not in rel(f).split("/")[:-1]:
                 found["py"].append(rel(f))
-            elif f == "package-lock.json":
+            elif f in LOCKS:
                 found["locks"].append(rel(f))
             elif audited:
                 found["reqs"].append(rel(f))
     return {k: sorted(v) for k, v in found.items()}
 
 
-def _option(word):
-    """A pip option word as its long name (abbreviations and -rFILE included), or None if it is not an option."""
-    if not word.startswith("-"):
-        return None
-    name = word.split("=", 1)[0]
-    if name.startswith("--"):
-        hits = [o for o in PIP_LONG if o.startswith(name)] if len(name) > 2 else []
-        if name in hits:
-            return name
-        risky = [o for o in hits if o not in PIP_ALLOWED]  # an abbreviation that could mean a refused option is that one
-        return (risky or hits or [name])[0]
-    short = name[:2]
-    return {**PIP_FILES, **PIP_LOCAL, **PIP_HOSTS}.get(short, short)
+def _kind(tok):
+    """What a pip option is, in any spelling: -rFILE, --req (pip takes abbreviations), --INDEX-URL."""
+    name = tok.split("=", 1)[0].lower()
+    if not name.startswith("--"):
+        return {"r": INCLUDE, "c": INCLUDE, "e": EDIT, "i": INDEX, "f": INDEX}.get(name[1:2], OTHER)
+    return next((kind for full, kind in LONG if len(name) > 2 and full.startswith(name)), OTHER)
 
 
-def refused(text):
-    """Why pip must not see this requirements file, or None. pip would fetch or read beyond the one file."""
-    for line in text.replace("\\\n", " ").splitlines():
-        words = line.split("#", 1)[0].split()
-        for w in words:
-            short = w.split("=", 1)[0][:2] if not w.startswith("--") else None
-            opt = _option(w)
-            shown = short if short in {**PIP_FILES, **PIP_LOCAL, **PIP_HOSTS} else opt
-            if opt in ("--requirement", "--constraint"):
-                return f"includes another file ({shown}), so pip-audit was not run on it"
-            if opt == "--editable":
-                return f"names a local or editable package ({shown}), so pip-audit was not run on it"
-            if opt in ("--index-url", "--extra-index-url", "--find-links", "--trusted-host", "--no-index"):
-                return f"names a package index or host ({shown}), so pip-audit was not run on it"
-            if opt is not None and opt not in PIP_ALLOWED:
-                return f"uses a pip option this pass does not allow ({w.split('=', 1)[0][:40]}), so pip-audit was not run on it"
-            if "://" in w or w.startswith(("git+", "hg+", "svn+", "bzr+", "file:")) or "@file:" in w:
-                return "names a package by URL, so pip-audit was not run on it"
-        if words and words[0].startswith((".", "/", "~")):
-            return f"names a local or editable package ({words[0][:40]}), so pip-audit was not run on it"
-    return None
+def _requirement(req):
+    """A plain requirement re-written from its parsed pieces, or the kind of line it is."""
+    spec, _, marker = req.partition(";")
+    if "://" in req or re.match(r"^\s*(git|hg|svn|bzr)\+", req) or "@" in spec:
+        return None, "a URL or VCS requirement"
+    if spec.lstrip().startswith((".", "/", "~")):
+        return None, "a local path requirement"
+    m = REQ.match(spec)
+    if not m:
+        return None, "not a plain package requirement"
+    out = m.group(1)
+    if m.group(2):
+        out += "[" + ",".join(x.strip() for x in m.group(2).split(",")) + "]"
+    if m.group(3):
+        out += ",".join(op + v for op, v in re.findall(r"(~=|===|==|!=|<=|>=|<|>)\s*([A-Za-z0-9.*+!_-]+)", m.group(3)))
+    if _:
+        toks, pos = [], 0
+        while pos < len(marker.rstrip()):
+            t = MTOK.match(marker, pos)
+            if not t or (t.group(1)[0].isalpha() and t.group(1) not in MARKER_VARS):
+                return None, "an environment marker this pass does not accept"
+            toks.append('"' + t.group(1)[1:-1] + '"' if t.group(1)[0] in "'\"" else t.group(1)); pos = t.end()
+        if not toks:
+            return None, "an environment marker this pass does not accept"
+        out += " ; " + " ".join(toks)
+    return out, None
+
+
+def _line(line):
+    """One logical line: (the line the script writes, None) or (None, the kind of line it refused)."""
+    tokens = line.split(" ")  # pip's own split: the requirement ends at the first word that starts with "-"
+    cut = next((i for i, t in enumerate(tokens) if t.startswith("-")), len(tokens))
+    req, opts = " ".join(t for t in tokens[:cut] if t), [t for t in tokens[cut:] if t]
+    flags = [t for t in opts if t.startswith("-")]
+    for kind in (INCLUDE, EDIT, INDEX):  # the ones that reach another file or host are named first
+        if any(t not in FLAGS | BINARY and _kind(t) == kind for t in flags):
+            return None, kind
+    out, hashes, i = [], [], 0
+    while i < len(opts):
+        t = opts[i]; name, eq, val = t.partition("=")
+        takes = name in BINARY or name == "--hash"
+        if takes and not eq:
+            i += 1; val = opts[i] if i < len(opts) else ""
+        if name == "--hash":
+            if not req:
+                return None, "a --hash with no package"
+            if not HASH.match(val):
+                return None, "a --hash that is not algorithm:hex"
+            hashes.append(val)
+        elif req or not ((t in FLAGS) or (name in BINARY and BINVAL.match(val))):
+            return None, OTHER
+        else:
+            out.append(t if t in FLAGS else f"{name}={val}")
+        i += 1
+    if not req:
+        return "\n".join(out), None
+    text, why = _requirement(req)
+    return (text + "".join(f" --hash={h}" for h in hashes), None) if text else (None, why)
+
+
+def sanitise(raw):
+    """D-A: the requirements file pip will see, written by this script from parsed pieces, or (None, why not).
+    A file is used whole or not at all: too big, not UTF-8, a NUL byte or one line off the grammar makes it NOT RUN."""
+    if len(raw) > LIMIT:
+        return None, f"the file is larger than {LIMIT:,} bytes{WHY}"
+    if b"\0" in raw:
+        return None, "the file has a NUL byte" + WHY
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None, "the file is not UTF-8" + WHY
+    lines = text.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    logical, buf, start = [], [], 0
+    for n, line in enumerate(lines, 1):  # pip's join_lines: a trailing backslash continues the line
+        if not line.endswith("\\") or COMMENT.match(line):
+            line = " " + line if COMMENT.match(line) else line
+            if buf:
+                logical.append((start, "".join(buf + [line]))); buf = []
+            else:
+                logical.append((n, line))
+        else:
+            start = start if buf else n
+            buf.append(line.strip("\\"))
+    if buf:
+        logical.append((start, "".join(buf)))
+    out = []
+    for n, line in logical:
+        line = COMMENT.sub("", line).strip()
+        if line:
+            text, kind = _line(line)
+            if text is None:
+                return None, f"line {n}: {kind}{WHY}"
+            out.append(text)
+    return "".join(l + "\n" for l in out), None
 
 
 def private_dir(path, uid=None):
@@ -201,31 +282,29 @@ def _chunks(files):
     return out + ([cur] if cur else [])
 
 
-def commands(project, found):
+def commands(project, found, pip_inputs):
     """(scanner, label, argv-after-name, refusal) for every container. The project goes in read-only, or one or two
-    files of it do; nothing else. A refusal means it is never run."""
+    files of it do, or for pip-audit only the requirements file the script wrote itself; nothing else. A refusal means
+    it is never run. pip_inputs: requirements file -> (the script's own copy, or None, and why not)."""
     src = ["-v", f"{project}:/src:ro", "-w", "/src"]
-    excl = [f"--exclude={n}" for n in sorted(PRUNE)] + [f"--exclude={v}" for v in found["venvs"] if not GLOB & set(v)]
+    # a virtualenv is left out only by an anchored path ("a/b"): a bare name would hide that name at any depth
+    excl = [f"--exclude={n}" for n in sorted(PRUNE)] + [f"--exclude={v}" for v in found["venvs"] if "/" in v and not GLOB & set(v)]
     bad = unmountable(project)
     out = [("semgrep", None, HARDEN + src + [IMAGES["semgrep"], "semgrep", "scan", "--config", "p/owasp-top-ten", "--config",
                                              "p/security-audit", "--json", "--metrics=off"] + excl + ["."], bad)]
     for chunk in _chunks(found["py"]):
         out.append(("bandit", None, HARDEN + NOBODY + src + [IMAGES["bandit"], "-f", "json", "-q", "--"] + chunk, bad))
-    for lock in found["locks"] + [l for l in found["linked"] if l.endswith("package-lock.json")]:
+    for lock in found["locks"] + [l for l in found["linked"] if os.path.basename(l) in LOCKS]:
         folder = os.path.dirname(lock)
         pkg = os.path.join(folder, "package.json") if folder else "package.json"
         why = ("it is a link, which this pass never follows" if lock in found["linked"] else
                "there is no package.json beside it" if not os.path.isfile(os.path.join(project, pkg)) or os.path.islink(os.path.join(project, pkg))
                else unmountable(f"{project}/{pkg}", f"{project}/{lock}"))
         out.append(("npm-audit", lock, HARDEN + ["--user", "node", "-v", f"{project}/{pkg}:/app/package.json:ro", "-v",
-                    f"{project}/{lock}:/app/package-lock.json:ro", "-w", "/app", IMAGES["node"], "npm", "audit", "--json"], why))
-    for req in found["reqs"] + [r for r in found["linked"] if not r.endswith("package-lock.json")]:
-        if req in found["linked"]:
-            why = "it is a link, which this pass never follows"
-        else:
-            with open(os.path.join(project, req), encoding="utf-8", errors="replace") as f:
-                why = unmountable(f"{project}/{req}") or refused(f.read(1_000_000))
-        out.append(("pip-audit", req, HARDEN + ["-v", f"{project}/{req}:/req/requirements.txt:ro", "-w", "/req",
+                    f"{project}/{lock}:/app/{os.path.basename(lock)}:ro", "-w", "/app", IMAGES["node"], "npm", "audit", "--json"], why))
+    for req in found["reqs"] + [r for r in found["linked"] if os.path.basename(r) not in LOCKS]:
+        copy, why = pip_inputs[req]
+        out.append(("pip-audit", req, HARDEN + ["-v", f"{copy}:/req/requirements.txt:ro", "-w", "/req",
                                                 IMAGES["python"], "sh", "-c", PIP_CMD], why))
     out.append(("trivy", None, HARDEN + ["-v", f"{project}:/src:ro", "-w", "/", "-v", "make-it-trivy-cache:/root/.cache/trivy",
                                          IMAGES["trivy"], "fs", "--format", "json", "--quiet", "--skip-dirs", "node_modules",
@@ -315,8 +394,9 @@ def _stderr_reason(err, code):
     lines = [l.strip() for l in (err or "").splitlines() if l.strip() and not l.strip().startswith(("Run 'docker", "See 'docker"))]
     marked = [l for l in lines if (l.lower().startswith("docker:") or any(w in l.lower() for w in ("error", "fatal", "failed", "denied")))
               and "complete log of this run" not in l]
+    useful = [l for l in marked if "pip_audit._cli:Failed to install packages" not in l]  # pip-audit's wrapper says less than pip
     if marked or lines:
-        return (marked or lines)[-1]
+        return (useful or marked or lines)[-1]
     return f"no report and no error output (exit {code})"
 
 
@@ -385,25 +465,23 @@ def line(s, res):
     return f"{s}: NOT RUN -- {text}" if len(parts) == 1 else f"{s}: NOT RUN for {bad} of {len(parts)} -- {text}"
 
 
-def _merge_bandit(outs):
-    """Bandit chunks into one report, or None if any chunk did not give one."""
-    merged = {"errors": [], "metrics": {"_totals": {"loc": 0}}, "results": []}
-    for out in outs:
-        try:
-            r = json.loads(out)
-            merged["errors"] += r["errors"]; merged["results"] += r["results"]
-            for k, v in r["metrics"].items():
-                if k == "_totals":
-                    merged["metrics"]["_totals"]["loc"] += v["loc"]
-                else:
-                    merged["metrics"][k] = v
-        except Exception:
-            return None
-    return json.dumps(merged).encode()
+class Stopped(Exception):
+    """The script was told to stop (a kill or Ctrl-C)."""
+
+
+def _stop(signum, frame):
+    raise Stopped()
+
+
+def _remove(name):
+    try:
+        subprocess.run(["docker", "rm", "-f", name], stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+    except Exception:
+        pass
 
 
 def _run(argv, name, deadline):
-    """Run one container; on timeout remove it. Returns (stdout, stderr, code)."""
+    """Run one container; on timeout, a kill or Ctrl-C remove it. Returns (stdout, stderr, code)."""
     left = deadline - time.monotonic()
     if left <= 0:
         return b"", f"the pass's time budget ({BUDGET} seconds) ran out before it started\n".encode(), "budget"
@@ -414,16 +492,27 @@ def _run(argv, name, deadline):
     except FileNotFoundError:
         return b"", b"docker: not found on this computer\n", 127
     except subprocess.TimeoutExpired:
-        try:
-            subprocess.run(["docker", "rm", "-f", name], stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
-        except Exception:
-            pass
+        _remove(name)
         return b"", f"timed out after {int(min(TIMEOUT, left))} seconds; the container was removed\n".encode(), 124
+    except (Stopped, KeyboardInterrupt):
+        _remove(name)
+        raise Stopped("the running container was removed")
 
 
 def _write(run_dir, base, ext, data):
     with open(os.path.join(run_dir, f"{base}.{ext}"), "wb" if isinstance(data, bytes) else "w") as f:
         f.write(data)
+
+
+def _bandit_report(out, code):
+    """A batch's report if it gave one: exit 0 or 1 and Bandit's own JSON."""
+    if code not in (0, 1):
+        return None
+    try:
+        r = json.loads(out)
+        return r if isinstance(r.get("errors"), list) and isinstance(r.get("results"), list) and "_totals" in r["metrics"] else None
+    except Exception:
+        return None
 
 
 def scan(project):
@@ -432,14 +521,30 @@ def scan(project):
     project = os.path.realpath(project)
     run_dir = new_run(project)
     found = discover(project)
-    linked_locks = [l for l in found["linked"] if l.endswith("package-lock.json")]
-    for s, have in (("bandit", found["py"]), ("npm-audit", found["locks"] + linked_locks),
-                    ("pip-audit", found["reqs"] + [l for l in found["linked"] if l not in linked_locks])):
+    linked_locks = [l for l in found["linked"] if os.path.basename(l) in LOCKS]
+    linked_reqs = [l for l in found["linked"] if l not in linked_locks]
+    for s, have in (("bandit", found["py"]), ("npm-audit", found["locks"] + linked_locks), ("pip-audit", found["reqs"] + linked_reqs)):
         if not have:
             _write(run_dir, s, "none", NOTHING[s] + "\n")
+    pip_inputs = {}
+    for n, req in enumerate(found["reqs"] + linked_reqs, 1):  # D-A: pip only ever sees the script's own copy
+        copy = os.path.join(run_dir, f"pip-audit--{n}.req.txt")
+        if req in linked_reqs:
+            pip_inputs[req] = (copy, "it is a link, which this pass never follows"); continue
+        try:
+            with open(os.path.join(project, req), "rb") as f:
+                text, why = sanitise(f.read(LIMIT + 1))
+        except OSError:
+            text, why = None, "the file could not be read" + WHY
+        why = why or unmountable(copy)
+        if text is not None and not why:
+            _write(run_dir, f"pip-audit--{n}", "req.txt", text)
+        pip_inputs[req] = (copy, why)
     token, deadline = secrets.token_hex(6), time.monotonic() + BUDGET
-    index, bandit = {}, []
-    for i, (s, label, argv, why) in enumerate(commands(project, found), 1):
+    cmds = commands(project, found, pip_inputs)
+    batches = sum(1 for c in cmds if c[0] == "bandit")
+    index, bandit, k = {}, [], 0
+    for i, (s, label, argv, why) in enumerate(cmds, 1):
         base = s
         if label is not None:
             index[s] = index.get(s, 0) + 1
@@ -448,21 +553,35 @@ def scan(project):
         if why:
             _write(run_dir, base, "refused", why + "\n")
             continue
-        if s == "bandit" and bandit and bandit[-1][2] not in (0, 1):
-            continue  # a chunk already failed: its report stands
+        if s == "bandit" and bandit is None:
+            continue  # a batch already failed: Bandit is NOT RUN, the rest is not started
         try:
             out, err, code = _run(argv, f"make-it-sp-{token}-{i}", deadline)
+        except Stopped:
+            raise
         except Exception as e:  # one scanner's failure never erases another's
             out, err, code = b"", f"could not start: {type(e).__name__}: {e}\n".encode(), "?"
         if s == "bandit":
-            bandit.append((out, err, code))
+            k += 1
+            report = _bandit_report(out, code)
+            if report is None:  # never another batch's report in its place
+                _write(run_dir, "bandit", "json", out); _write(run_dir, "bandit", "err", err); _write(run_dir, "bandit", "exit", f"{code}\n")
+                _write(run_dir, "bandit", "refused", f"batch {k} of {batches}: {_stderr_reason(err.decode('utf-8', 'replace'), code)}\n")
+                bandit = None
+            else:
+                bandit.append(report)
             continue
         _write(run_dir, base, "json", out); _write(run_dir, base, "err", err); _write(run_dir, base, "exit", f"{code}\n")
     if bandit:
-        failed = [b for b in bandit if b[2] not in (0, 1)]
-        merged = None if failed else _merge_bandit([b[0] for b in bandit])
-        out, err, code = (merged, b"".join(b[1] for b in bandit), max(b[2] for b in bandit)) if merged else (failed or bandit)[0]
-        _write(run_dir, "bandit", "json", out); _write(run_dir, "bandit", "err", err); _write(run_dir, "bandit", "exit", f"{code}\n")
+        merged = {"errors": [], "metrics": {"_totals": {"loc": 0}}, "results": []}
+        for r in bandit:
+            merged["errors"] += r["errors"]; merged["results"] += r["results"]
+            for key, v in r["metrics"].items():
+                if key == "_totals":
+                    merged["metrics"]["_totals"]["loc"] += v["loc"]
+                else:
+                    merged["metrics"][key] = v
+        _write(run_dir, "bandit", "json", json.dumps(merged)); _write(run_dir, "bandit", "err", ""); _write(run_dir, "bandit", "exit", "0\n")
     res = collect(run_dir)
     with open(os.path.join(run_dir, "result.json"), "w") as f:
         json.dump({"project": project, "run_dir": run_dir, "scanners": res}, f, indent=1)
@@ -473,6 +592,7 @@ def scan(project):
 
 
 def main(argv):
+    signal.signal(signal.SIGTERM, _stop)
     try:
         if argv[:1] == ["scan"] and len(argv) == 2:
             return scan(argv[1])
@@ -480,6 +600,9 @@ def main(argv):
             return subprocess.run(audit_cmd(argv[1], os.path.abspath(argv[2])), stdin=subprocess.DEVNULL).returncode
     except PassError as e:
         print(f"security-pass: {e}", file=sys.stderr)
+        return 2
+    except (Stopped, KeyboardInterrupt) as e:
+        print("security-pass: stopped by a signal" + (f"; {e}" if str(e) else ""), file=sys.stderr)
         return 2
     except Exception as e:
         print(f"security-pass: unexpected error: {type(e).__name__}: {e}", file=sys.stderr)

@@ -353,11 +353,11 @@ Phase 6: Report
 | Tool / Technique | Purpose | Integration Point | Coverage |
 |-----------------|---------|-------------------|----------|
 | **Code Pattern Scanner** (grep-based) | Hardcoded secrets, SQL injection, XSS, insecure deserialization, missing timeouts | Build-verify Part D Phase 1a | Always runs, no external tools needed |
-| **Semgrep** (OWASP Top 10 + security-audit) | SAST -- broad code vulnerability detection | Build-verify Part D Phase 1b | Every build, from a pinned image |
-| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1b | Every build, from a pinned image; Python projects only |
-| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image, in each folder with a package-lock.json |
-| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from the pinned Python image (pip-audit 2.9.0 is installed when it starts), on each requirements file |
-| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image |
+| **Semgrep** (OWASP Top 10 + security-audit) | SAST -- broad code vulnerability detection | Build-verify Part D Phase 1b | Every build, from a pinned image; NOT RUN with its reason when it cannot run |
+| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1b | Every build, from a pinned image; Python projects only; NOT RUN with its reason when it cannot run |
+| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image, in each folder with a package-lock.json or npm-shrinkwrap.json; NOT RUN with its reason when it cannot run |
+| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from the pinned Python image (pip-audit 2.9.0 is installed when it starts), on a copy of each requirements file that the script rewrote from parsed lines; NOT RUN with its reason when it cannot run |
+| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image; NOT RUN with its reason when it cannot run |
 | **NeMo Guardrails** | AI behavioral safety testing (6 categories) | /nemo-it (its own cases and, in a separate block when picked, the app's generated suite), when someone runs it with a live AI provider. Build-verify checks the app's generated suite exists (check AI09) and does not run it | The app's suite is generated for every AI app. A /nemo-it run is recommended, not enforced. With a live AI provider it runs /nemo-it's own cases, and the app's suite when picked, each in its own block |
 | **mock-oidc** | Local OIDC provider for auth testing | Docker dev profile | Every web app with auth |
 | **Build-verify E2E** | Live auth flow, API endpoint, page content, permission boundary testing | Build-verify Part B | Every web app |
