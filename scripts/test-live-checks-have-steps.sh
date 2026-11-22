@@ -37,7 +37,8 @@ AC09 AC10 AC11 AC12 AC13 AC14 AC15 ACV01 ACV02 ACV03 P03"
 cat > "$TMPD/bs.pin" <<'PIN'
 - `[LIVE]` after the severity = the check's method is checking the running app: a request, a browser
   action, an upload, a restart with one setting changed, or a command in a running container. /make-it's
-  build-verify Part B has a step that names it.
+  build-verify Part B has a step that names it; /resume-it runs that step in its live pass after a
+  change that touches the check's area.
 PIN
 cat > "$TMPD/mk.pin" <<'PIN'
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service

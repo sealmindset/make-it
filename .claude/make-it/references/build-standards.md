@@ -7,7 +7,7 @@ All three skills reference this file:
 |-------|--------------------------|
 | `/make-it` | Build-verify (Part A static checks; Part B runs every `[LIVE]` check on the running app) |
 | `/retrofit-it` | Verify phase (Part A static checks) |
-| `/resume-it` | Catch-up scan during context discovery |
+| `/resume-it` | Catch-up scan during context discovery; `[LIVE]` checks on the running app after a change that touches them (its live pass) |
 
 **How to use this file:**
 - Each check has an ID (e.g., `S01`) for cross-referencing
@@ -19,7 +19,8 @@ All three skills reference this file:
   (approval-block.md: a security finding is never put off).
 - `[LIVE]` after the severity = the check's method is checking the running app: a request, a browser
   action, an upload, a restart with one setting changed, or a command in a running container. /make-it's
-  build-verify Part B has a step that names it.
+  build-verify Part B has a step that names it; /resume-it runs that step in its live pass after a
+  change that touches the check's area.
 
 **Version:** When this file is updated with new checks, `/resume-it` automatically detects
 the gap on the next run and suggests the missing patterns as catch-up work.

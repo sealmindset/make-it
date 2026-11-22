@@ -453,6 +453,8 @@ a. **Determine active tiers** from app-context.json (`project_type` and `active_
 
 b. **Run a quick static scan** for each check ID in the active tiers. This is NOT a full
    build-verify -- it's a lightweight file-existence and pattern check:
+   A row marked `[LIVE]` is read here from its files only; its live part runs in the live pass
+   (step `live-pass`) after a change that touches its area.
 
    For each check category, do a targeted scan:
    - **Structure (S01-S15):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11, S12 and S14 all write the same file, `CLAUDE.md`: apply them together, S13 first and S14 last, as one change -- never as separate `/dispatch-it` lanes. S15: an `expert_persona` still in an older form (a plain text value, an empty one, or no field), brought up to date once.
@@ -739,6 +741,7 @@ minus the items left out above:
 2. Apply important gaps next (FIX items)
 3. Note nice-to-have gaps in TODO.md (WARN items)
 4. After each batch, run existing tests to verify nothing broke
+4b. Then run the live pass (step `live-pass`) for the areas the applied gaps touch.
 5. Update CHANGELOG.md with what was added
 6. Report results: what was applied (by group, naming each change) and what is left (the group
    the user didn't name, if any; each item left out this time, as one line,
@@ -864,6 +867,7 @@ needs; it works as both, instead of inferring a specialist of its own.
 
 **After ANY work is completed:**
 1. Run all existing tests silently
+1b. Then the live pass (step `live-pass`), when the work changed a file in one of its areas.
 2. Report results in plain language
 2b. Screens added or changed? UI gate Part 2 (`ui-gate.md`): built screens next to the approved
    preview -- wait for the yes before step 3 (its learnings go through step 3)
@@ -872,6 +876,55 @@ needs; it works as both, instead of inferring a specialist of its own.
    it would change; the user answers per item. Skip if nothing is queued; otherwise wait for the
    answer before the next question.
 4. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
+
+</step>
+
+<step name="live-pass">
+
+**The live pass: rows checked on the running app, after a relevant change.** A catch-up group or
+a piece of work is a relevant change when it touches an area in this table; with no area touched
+there is no live pass. The area comes from the table, never a judgement: an applied catch-up gap
+whose ID prefix (the letters before its number: `A` for A03, `AI` for AI12) is in "Catch-up
+checks", or a changed file whose path contains a word in "Files".
+
+| Area | Catch-up checks | Files (path contains) | Rows run live |
+|------|-----------------|-----------------------|---------------|
+| Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 |
+| Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06 |
+| Activity logs | L | `log_store`, `logs` | V08 |
+| Notifications | N | `notification` | V10 |
+| Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 |
+| File upload | F | `upload`, `document`, `import` | V11, F09, F10, F14 |
+| AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | F11, AI01a, AI01b, AI01d, AI11, AI12, AI13, AI14, AI20, AI21, AI22, AI25, AI26, AI27, V14, V16 |
+| AI memory | BN | `brain`, `memor` | BN03, BN04, BN05, BN06, BN09, BN10, BN11, BN13, BNV01, BNV02, BNV03 |
+| AI accounting | AC | `usage`, `ledger`, `spend`, `budget`, `price`, `statement`, `ai-control` | AC02, AC04, AC05, AC07, AC08, AC09, AC10, AC11, AC12, AC13, AC14, AC15, ACV01, ACV02, ACV03 |
+| The mobile variant | P | `sw.ts`, `manifest.json` | P03 |
+| Every live pass (starting the app) | -- | -- | V02, V03 |
+
+1. **Where.** In the folder the change was made in (its worktree, with its own `.env` and ports).
+2. **Only when the settings point at this machine.** Read the database, queue and cache URLs in
+   `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
+   does. One whose host isn't a compose service name, `localhost` or `127.0.0.1` → start nothing:
+   every row of the pass is NOT RUN, with the reason "your settings point at <host>".
+3. **Start it.** `docker compose --profile dev up -d --build --wait` (it rebuilds what changed; a
+   TLS or certificate error gets /try-it step 1's security-tool ask, as there), then `bash
+   scripts/seed-mock-services.sh`. No other ask: starting the app is routine here.
+4. **Run each row** of every touched area, plus V02 and V03, with the step that names it in
+   /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is written: the
+   same requests, roles, expected results and fail rules, and N/A for a feature the app doesn't
+   have.
+5. **Each row's result is PASS, FAIL or NOT RUN with its reason.** A check that could not run --
+   the app didn't start, the step needs something this app lacks, a request couldn't be made --
+   is NOT RUN, never passed. A FAIL is fixed like any test failure in this session (diagnose,
+   fix, re-run that row, up to 3 rounds); one still failing after that goes in TODO.md.
+6. **Record it** under `## Test Status` in `.make-it-state.md`: "Live pass [date] ([areas]):
+   [n] passed, [n] failed, [n] not run ([row]: [reason], ...)". Each NOT RUN row also gets a
+   TODO.md line with its reason.
+7. **Tell the user one plain line**, filled from the results: "I started your app and checked
+   [the areas, in plain words] on it: [everything passed / N things failed and I'm fixing them /
+   N checks couldn't run because [reason]]."
+
+Leave the app running afterwards, as /try-it does; /wrap-it shuts it down.
 
 </step>
 
@@ -1552,7 +1605,8 @@ After each major component (tables, service, API, UI), run a quick check:
 **Phase 4: Verify & Report**
 
 Run BN01-BN13 static checks against the implemented code.
-If app is running (docker-compose up), also run BNV01-BNV03 live checks.
+Then run the live pass (step `live-pass`) for AI memory: it starts the app if needed and runs that
+area's rows, BNV01-BNV03 included.
 
 Report to user:
 "Brain layer added to [PROJECT_NAME]! Here's what's new:
@@ -1619,7 +1673,8 @@ and the put-off line (discover-context), and return to the menu.
 **Phase 3: Build.** Prompt #10g steps 2-7, in its order. Route the call sites one agent at a
 time, running that agent's existing tests after each. Set `ai_accounting` in app-context.json.
 
-**Phase 4: Verify and report.** AC01-AC16, and ACV01-ACV03 with the app running. Report each
+**Phase 4: Verify and report.** AC01-AC16 from the files, then the live pass (step `live-pass`)
+for AI accounting, which runs ACV01-ACV03 and the AC rows marked `[LIVE]` on the running app. Report each
 passed or failed from what ran, then in plain words: what each AI step cost in the seed data, the
 pages and where they are, and the ladder's suggested switches, each waiting on its check.
 
