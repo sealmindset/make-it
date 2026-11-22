@@ -244,7 +244,7 @@ fi
 # install.ps1 adds the guard on every install and update (Install-MakeItSkills runs on both paths), with
 # git-bash running it, keeps the user's choice across updates, and stops when the helper refuses
 fn=$(awk '/^function Install-MakeItSkills/,/^}/' install.ps1)
-for want in 'add-no-force-push-hook.ps1' 'no-force-push.sh' 'CLAUDE_CODE_GIT_BASH_PATH' 'if ($LASTEXITCODE -ne 0) {' 'force-push-guard.state' 'MAKEIT_FORCE_PUSH_GUARD' 'in every project on this computer' 'To remove it:'; do
+for want in 'add-no-force-push-hook.ps1' 'no-force-push.sh' 'CLAUDE_CODE_GIT_BASH_PATH' 'if ($LASTEXITCODE -ne 0) {' 'force-push-guard.state' 'MAKEIT_FORCE_PUSH_GUARD' 'in every project on this computer' 'To remove it:' '[ -f "$0" ] || exit 0; exec "$BASH" "$0"'; do
   case $fn in *"$want"*) ok "install.ps1's Install-MakeItSkills has: $want" ;; *) bad "install.ps1's Install-MakeItSkills lacks: $want" ;; esac
 done
 grep -q 'Install-MakeItSkills \$tempState' install.ps1 && ok "install.ps1's update path runs Install-MakeItSkills" || bad "install.ps1's update path skips Install-MakeItSkills"
@@ -266,6 +266,28 @@ if HOME="$H" bash install.sh >"$T/i1" 2>&1; then
   HOME="$H" bash install.sh --add-force-push-guard >"$T/i5" 2>&1; [ "$(ours "$H/.claude/settings.json")" != "[]" ] && ok "install.sh: --add-force-push-guard brings it back" || bad "install.sh: --add-force-push-guard didn't"
   python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));assert d["model"]=="opus" and d["hooks"]["Stop"]' "$H/.claude/settings.json" && ok "install.sh: the user's settings survive" || bad "install.sh: the user's settings were lost"
 else bad "install.sh failed: $(tail -5 "$T/i1")"; fi
+# the written command, in a HOME with a space, a quote and a $: runs the hook when it is there; when the hook file
+# is gone (make-it removed), everything runs (the guard is off, by design); when the hook is broken, it blocks
+H4="$T/o'brien \$HOME home"; mkdir -p "$H4/.claude"
+if HOME="$H4" bash install.sh >"$T/i8" 2>&1; then
+  hc=$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));h=[h for e in d["hooks"]["PreToolUse"] for h in e["hooks"]][0];assert h.get("onFailure")=="block";print(h["command"])' "$H4/.claude/settings.json") \
+    && ok "install.sh: the entry sets onFailure: block" || bad "install.sh: the entry doesn't set onFailure: block"
+  hf="$H4/.claude/make-it/hooks/no-force-push.sh"
+  printf '%s' "$(payload 'git push --force')" | sh -c "$hc" 2>/dev/null; [ $? = 2 ] && ok "odd HOME: the written command refuses a force push" || bad "odd HOME: the written command doesn't refuse a force push"
+  printf '%s' "$(payload 'git status')" | sh -c "$hc" 2>/dev/null && ok "odd HOME: a plain command runs" || bad "odd HOME: a plain command was blocked"
+  mv "$hf" "$hf.gone"
+  for c in 'git status' 'git push --force'; do
+    printf '%s' "$(payload "$c")" | sh -c "$hc" 2>/dev/null && ok "hook file gone: '$c' runs (the guard is off, by design)" || bad "hook file gone: '$c' was blocked"
+  done
+  echo 'if then fi (' > "$hf"
+  printf '%s' "$(payload 'git status')" | sh -c "$hc" 2>/dev/null; rc=$?; [ "$rc" != 0 ] && ok "a broken hook file blocks (exit $rc)" || bad "a broken hook file let the command through"
+  mv "$hf.gone" "$hf"
+else bad "install.sh failed in an odd HOME: $(tail -3 "$T/i8")"; fi
+for want in 'If the hook file is gone' ; do
+  grep -qF "$want" "$HOOK" && ok "the hook's header says what happens when it is gone" || bad "the hook's header doesn't say what happens when it is gone"
+  grep -qF 'turns the guard off' README.md && ok "README says removing make-it turns the guard off" || bad "README doesn't say what removing make-it does"
+done
+
 # malformed settings: install.sh says so and leaves the file alone
 H2="$T/home2"; mkdir -p "$H2/.claude"; printf '{"model": ' > "$H2/.claude/settings.json"
 if HOME="$H2" bash install.sh >"$T/i6" 2>&1; then bad "install.sh: finished quietly over a malformed settings file"

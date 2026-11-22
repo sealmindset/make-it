@@ -80,6 +80,14 @@ for d in "$SC" "$SF"; do
 sys.exit(0 if d.get("extend",{}).get("useDefault") is True and all(p.startswith(("^","(^|/)")) for p in ps) and not any("tests/" in p or "mock-services/" in p for p in ps) else 1)' "$d/.gitleaks.toml" \
     && ok "$d: .gitleaks.toml keeps the default rules, allowlists no folder, anchors every path" || bad "$d: .gitleaks.toml has no rules, or allowlists a folder"
 done
+sk=$(python3 - "$MK" <<'PY'
+import re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+b = re.search(r"^41c\. .*?```bash\n(.*?)\n```", t, re.S | re.M)
+print(";".join(sorted(set(re.findall(r"SKIP=(\S+)", b.group(1) if b else "")))))
+PY
+)
+[ "$sk" = "no-commit-to-branch;no-commit-to-branch,eslint,prettier" ] && ok "41c's first save skips only no-commit-to-branch and the container checks (ruff runs on it)" || bad "41c skips more than it should: $sk"
 cmp -s "$SC/scripts/precommit-in-container.sh" "$SF/scripts/precommit-in-container.sh" && ok "both scaffolds ship the same container script" || bad "the scaffolds' container scripts differ"
 
 # --- Part 2: the hook check, and try-it's save line, run as written ----------------------------------
@@ -212,6 +220,35 @@ else
       else grep -qi "prettier.*Failed\|eslint.*Failed" "$T/c6" && ok "with Docker: a badly formatted .ts file is refused by the container checks ($(( $(date +%s) - s ))s, warm)" || bad "with Docker: refused, but not by the frontend checks: $(tail -6 "$T/c6")"; fi
       git reset -q; rm -f frontend/lib/ugly.ts
     else echo "SKIPPED  Part 3.6 (frontend checks in the container): Docker isn't running here -- NOT PROVEN on this machine"; fi
+    # 7. ruff and ruff-format, at the version the scaffold's config pins, are clean on a fresh copy of the scaffold
+    newapp "$T/ruff"; cd "$T/ruff"; git add -A
+    pre-commit run ruff --all-files >"$T/r1" 2>&1; r1=$?; pre-commit run ruff-format --all-files >"$T/r2" 2>&1; r2=$?
+    [ "$r1" = 0 ] && ok "the scaffold passes its own ruff hook (the pinned version, all files, nothing to fix)" || bad "the scaffold fails its ruff hook: $(grep -E '^[a-z].*:[0-9]+:[0-9]+:|Found' "$T/r1" | head -5 | tr '\n' ' ')"
+    [ "$r2" = 0 ] && ok "the scaffold passes its own ruff-format hook" || bad "the scaffold fails ruff-format: $(grep -i 'reformat' "$T/r2" | head -3 | tr '\n' ' ')"
+    cd "$OLDROOT"
+    # 8. /retrofit-it's snapshot, run as written: the project's lint hooks don't stop it, a secret does
+    snap=$(python3 - <<'PY'
+import re
+t = open(".claude/commands/retrofit-it.md", encoding="utf-8").read()
+m = re.search(r"Run it from the app folder:\n\n```bash\n(.*?)\n```", t, re.S)
+print(m.group(1) if m else "")
+PY
+)
+    if [ -z "$snap" ]; then bad "no retrofit snapshot block found to run"; else
+      L="$T/legacy"; rm -rf "$L" "$L.pre-retrofit"; mkdir -p "$L" && cd "$L" && git init -q -b main . && git config user.name t && git config user.email t@example.invalid
+      printf 'repos:\n  - repo: local\n    hooks:\n      - id: always-fails-lint\n        name: a lint check this legacy app fails\n        entry: "false"\n        language: system\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks\n' > .pre-commit-config.yaml
+      echo "x = 1" > app.py; git add -A; SKIP=always-fails-lint git commit -q -m legacy; pre-commit install >/dev/null
+      echo "y = 2" >> app.py
+      out=$(bash -c "$snap" 2>&1)
+      case $out in *"snapshot: tag "*) [ "$(git log -1 --format=%s)" = "Save pre-retrofit state" ] && ok "retrofit snapshot: a lint hook the app fails doesn't stop it (saved with the security hooks only)" || bad "retrofit snapshot: tagged without saving the changes" ;;
+        *) bad "retrofit snapshot: the app's lint hook stopped it: $out" ;; esac
+      git tag -d "$(git tag | head -1)" >/dev/null; rm -rf "$L.pre-retrofit"
+      k=$(key); printf 'TOKEN = "%s"\n' "$k" > keys.py
+      out=$(bash -c "$snap" 2>&1)
+      case $out in *"SNAPSHOT FAILED: "*"password or key"*) printf '%s' "$out" | grep -qF "$k" && bad "retrofit snapshot: the refusal printed the key" || ok "retrofit snapshot: a key in the unsaved changes stops it, with the true line" ;;
+        *) bad "retrofit snapshot: a key didn't stop it, or the line is wrong: $(printf '%s' "$out" | tail -2)" ;; esac
+      cd "$OLDROOT"
+    fi
   fi
   cd "$OLDROOT"
 fi
