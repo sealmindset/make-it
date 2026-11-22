@@ -34,8 +34,10 @@ own = (access.get("tenant") or {}).get("id")
 today = dt.datetime.now(dt.timezone.utc).date()
 tomorrow = (today + dt.timedelta(days=1)).isoformat()
 J = lambda k: json.dumps(cfg.get(k, []))
-ua_or = " or ".join(f'ua startswith "{u}"' for u in cfg.get("user_agent_prefixes", [])) or "false"
-pfx_or = " or ".join(f'ip startswith "{p}"' for p in cfg.get("ip_prefixes", [])) or "false"
+# Quoted and escaped as KQL string literals (json.dumps), like every other IOC value: a " or \ in a
+# prefix would otherwise end the string and break the query in every workspace.
+ua_or = " or ".join(f"ua startswith {json.dumps(u, ensure_ascii=False)}" for u in cfg.get("user_agent_prefixes", [])) or "false"
+pfx_or = " or ".join(f"ip startswith {json.dumps(p, ensure_ascii=False)}" for p in cfg.get("ip_prefixes", [])) or "false"
 LETS = f"""
 let IOC_IPS = dynamic({J('ips')}); let UNCONF_IPS = dynamic({J('unconfirmed_ips')});
 let ASNS = dynamic({J('asns')}); let APPS = dynamic({J('app_ids')}); let OWNERS = dynamic({J('owner_tenants')});

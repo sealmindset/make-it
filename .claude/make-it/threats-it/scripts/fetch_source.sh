@@ -9,12 +9,18 @@ set -eu
 url="$1"; out="$2"; name="$3"
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$out"
-code=$(curl -sSL --compressed -o "$out/$name.html" -w "%{http_code}" \
+# A failed fetch must never leave an earlier run's copy looking like this run's result.
+rm -f "$out/$name.html" "$out/$name.txt"
+code=$(curl -sSL --compressed --max-time 60 -o "$out/$name.html" -w "%{http_code}" \
   -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36" \
   -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-  -H "Accept-Language: en-US,en;q=0.9" "$url" || echo 000)
-bytes=$(wc -c < "$out/$name.html" | tr -d ' ')
-sha=$(shasum -a 256 "$out/$name.html" | cut -d' ' -f1)
+  -H "Accept-Language: en-US,en;q=0.9" "$url") || code=000   # curl already printed 000; `|| echo` made it 000000
+if [ -f "$out/$name.html" ]; then
+  bytes=$(wc -c < "$out/$name.html" | tr -d ' ')
+  sha=$(shasum -a 256 "$out/$name.html" | cut -d' ' -f1)
+else
+  bytes=0; sha=-   # nothing was received: log it, then refuse below
+fi
 printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$code" "$bytes" "$sha" "$url" >> "$out/FETCH-LOG.tsv"
 if [ "$code" -ge 400 ] 2>/dev/null || [ "$code" = "000" ]; then
   echo "REFUSED: HTTP $code for $url (see references/sources.md for fallbacks)" >&2
