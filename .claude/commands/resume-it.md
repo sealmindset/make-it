@@ -459,11 +459,11 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    For each check category, do a targeted scan:
    - **Structure (S01-S15):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11, S12 and S14 all write the same file, `CLAUDE.md`: apply them together, S13 first and S14 last, as one change -- never as separate `/dispatch-it` lanes. S15: an `expert_persona` still in an older form (a plain text value, an empty one, or no field), brought up to date once.
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
-   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
+   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage, and R04's write-route rule: every POST, PUT, PATCH and DELETE route carries `require_permission`, except R04's public list
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
    - **Database (D01-D06):** Check for migrations directory, seed data file, and one Alembic head with no duplicate or dangling revision (D06)
    - **Docker (I01-I07):** Check for docker-compose.yml, entrypoint.sh, 127.0.0.1 in health checks
-   - **Mock Services (M01-M05):** Check for mock-oidc/, seed-mock-services.sh, that the seed script reads its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`) instead of a literal port (M02; an app built before that is fixed from the scaffold's `env_port` lines), and that mock-oidc's app.py can ask for an access code (M05, a WARN: an older copy is compared with the scaffold version it came from first -- the same apart from its return addresses, it is updated with them kept; changed anywhere else, the person sees the differences and picks **Update it** or **Keep mine**, and a copy is kept either way -- so /argo-it can run the practice sign-in on a cluster)
+   - **Mock Services (M01-M05):** Check for mock-oidc/, seed-mock-services.sh, that the seed script reads its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`) instead of a literal port (M02; an app built before that is fixed with the lines M02 quotes), and that mock-oidc's app.py can ask for an access code (M05, a WARN: an older copy is compared with the scaffold version it came from first -- the same apart from its return addresses, it is updated with them kept; changed anywhere else, the person sees the differences and picks **Update it** or **Keep mine**, and a copy is kept either way -- so /argo-it can run the practice sign-in on a cluster)
    - **Activity Logs (L01-L11):** Grep for LogStore/log_store, log middleware, /logs/events endpoint, and the sign-in code putting the user on the request for the log (L09: `request.state.user =` in `get_current_user`), the query-string filter on uvicorn's loggers (L10: `drop_query_strings_from_server_log` in `main.py`), and the trusted-proxy wrap with `--no-proxy-headers` and the frontend's `forwarded-for.mjs` (L11)
    - **Notifications (N01-N08):** Check for notifications table in migrations/schema, /api/notifications route, notification-bell component, notification seed data
    - **File Upload (F01-F08):** Check for upload component, extract-text utility, Docker volume in docker-compose.yml. If pdf-parse is in package.json, verify import uses `pdf-parse/lib/pdf-parse` NOT default import (F03 -- crashes in production Docker)
@@ -894,7 +894,7 @@ The live pass runs only checks that call no paid AI provider and leave nothing i
 Which rows those are is fixed by this table, not decided each time; the rows in the two "Not run
 here" columns are run by /make-it's build-verify Part B, not here.
 
-| Area | Catch-up checks | Files (path contains) | Run here | Not run here: calls the AI provider | Not run here: would leave test records |
+| Area | Catch-up checks | Files (path contains) | Run here | Not run here: needs the AI provider | Not run here: would leave test records |
 |------|-----------------|-----------------------|----------|-------------------------------------|----------------------------------------|
 | Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 | -- | -- |
 | Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06, V07 | -- | -- |
@@ -916,13 +916,16 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
    does. One whose host isn't a compose service name, `localhost` or `127.0.0.1` → start nothing:
    every row of the pass is NOT RUN, with the reason "your settings point at <host>".
-3. **Start it.** Note whether it was already running (`docker compose --profile dev ps`). Then
-   `docker rm -f <project>-live-check 2>/dev/null`: if it printed a name, a leftover
-   changed-setting run was serving the app with a changed setting; add `--force-recreate
-   <backend>` to the next command, and tell the user: "I found a test copy of your app's server
-   left over from an earlier check, and put the normal one back." Then `docker compose --profile
-   dev up -d --build --wait` (it rebuilds what changed; a TLS or certificate error gets /try-it
-   step 1's security-tool ask, as there), then `bash scripts/seed-mock-services.sh`, only
+3. **Start it.** The app counts as already running only when every one of its services in
+   `docker compose --profile dev ps` is up and healthy; anything less (some services up, the
+   backend down) counts as not running. Then `docker rm -f <project>-live-check 2>/dev/null`: if
+   it printed a name, a leftover changed-setting run was serving the app with a changed setting;
+   tell the user: "I found a test copy of your app's server left over from an earlier check, and
+   put the normal one back." Then `docker compose --profile dev up -d --build --wait`, which
+   starts every service (it rebuilds what changed; a TLS or certificate error gets /try-it step
+   1's security-tool ask, as there); only when a leftover was found, also `docker compose
+   --profile dev up -d --wait --force-recreate <backend>`. Then `bash
+   scripts/seed-mock-services.sh`, only
    against this project's own services (make-it step 24: a seed script with a literal port is
    fixed first, check M02). No other ask: starting the app is routine here. If it doesn't
    come up healthy, that is V02 failing, fixed as step 5 says; if it still won't start, the rest
@@ -933,7 +936,8 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    written: the same requests, roles, expected results and fail rules, the changed-setting run
    and its put-back included, and N/A for a feature the app doesn't have. Each row in a "Not run
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
-   "it would leave test records".
+   "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
+   configured, priced AI provider" (their check expects no call).
 5. **Each row's result is PASS, FAIL, NOT RUN with its reason, N/A, or LEFT OUT (your choice).**
    N/A is a row whose feature the app doesn't have: reported, not written to TODO.md. A row
    that belongs to an item in `## Left out by your choice` (read as

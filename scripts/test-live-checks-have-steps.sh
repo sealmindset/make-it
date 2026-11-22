@@ -32,7 +32,7 @@ ERRF="$(mktemp)"; TMPD="$(mktemp -d)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&
 
 BS=.claude/make-it/references/build-standards.md; MK=.claude/commands/make-it.md; RS=.claude/commands/resume-it.md
 RF=.claude/commands/retrofit-it.md; CM=CLAUDE.md
-FILES="$BS $MK $RS $RF $CM"
+FILES="$BS $MK $RS $RF $CM .claude/make-it/scaffolds/fastapi-nextjs/frontend .claude/make-it/scaffolds/nextjs-fullstack/src"
 
 # The 32 must-pass rows whose method is checking the running app (E12-S6 step 0, split by D1). A floor, not the
 # mapping: a row may gain [LIVE]; none of these may lose it.
@@ -865,7 +865,7 @@ if [ -z "${1:-}" ]; then
   check "(control) R04's public list widened to every POST" \
     'opp "$BS" "s/unless it is on the public list: \\\`POST \/api\/auth\/logout\\\` \(it only signs the caller out\)/unless it is a POST/" "R04 makes the write-route rule concrete"'
   check "(control) the browser back to a container with --network host" \
-    'opp "$MK" "s/on\n the host, only when it is already installed there/in a container with --network host/" "browser items use the app"'
+    'opp "$MK" "s/on\nthe host, only when it is already installed there/in a container with --network host/" "browser items use the app"'
   check "(control) a scaffold page with a raw table dropped from 31f's known list" \
     'opp "$MK" "s/ or\n       \\\`src\/app\/\(authenticated\)\/admin\/roles\/page\.tsx\\\` \(nextjs-fullstack\),//" "31f'"'"'s list of known scaffold pages"'
   check "(control) /resume-it says AC12 and ACV02 would call the AI provider" \

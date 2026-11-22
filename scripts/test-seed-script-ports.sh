@@ -71,9 +71,9 @@ if [ -z "${1:-}" ]; then
   check "(control) the .env no longer read (only the default used)" \
     'opp "$NF" "s/\[ -f \"\\\$ROOT_DIR\/\.env\" \]/false/" "$NF: a built copy seeds the .env"'
   check "(control) M02's quoted helper no longer the scaffold's (it stops reading .env)" \
-    'opp "$BS" "s/(\n```bash\nenv_port.*?)\[ -f \"\\\$ROOT_DIR\/\.env\" \]/\$1false/s" "M02 quotes the scaffold"'
+    'opp "$BS" "s/\[ -f \"\\\$ROOT_DIR\/\.env\" \]/false/" "M02 quotes the scaffold"'
   check "(control) M02 back to its old text" \
-    'opp "$BS" "s/ It takes every host port from the same variables.*?literal ports\.//" "check M02 says"'
+    'opp "$BS" "s/ It takes every host port from the same variables.*?above them://" "check M02 says"'
 fi
 
 check "the whole run wrote nothing to stderr" '[ ! -s "$ERRF" ] || { sed "s/^/  stderr: /" "$ERRF"; false; }'

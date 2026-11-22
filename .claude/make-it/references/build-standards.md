@@ -114,7 +114,7 @@ the gap on the next run and suggests the missing patterns as catch-up work.
 
 **R03** [Tier 1, 5*] [FIX] **Scaffold permissions seeded** -- admin.users (read/create/update/delete), admin.roles (read/create/update/delete), admin.settings (read/update), admin.logs (read/delete).
 
-**R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`. Permission check must use the union of all effective roles, not just the primary role.
+**R04** [Tier 1, 5*] [BLOCK] **require_permission middleware** -- Used on ALL route handlers. Never check role strings directly. Pattern: `require_permission(resource, action)`. Permission check must use the union of all effective roles, not just the primary role. Write routes, concretely: every route whose method is POST, PUT, PATCH or DELETE carries `require_permission(...)` (in its signature or its `dependencies=`; `requirePermission` in a Next.js route handler), unless it is on the public list: `POST /api/auth/logout` (it only signs the caller out). A write route without it that isn't on the list is a FAIL naming the route. This is read from the code, so it holds where a live check can't tell: a route whose guard was removed names no permission to test.
 
 **R04a** [Tier 1, 5*] [BLOCK] **Permission names consistent across stack** -- Backend `require_permission()` args, frontend `hasPermission()` args, sidebar nav permissions, quick-search permissions, and seed migration data MUST all use identical resource/action strings. Standard format: `admin.users`/`admin.roles` with actions `read`/`create`/`update`/`delete` (NEVER `view`/`edit`). Domain resources use the resource name directly (e.g., `projects.read`). Cross-reference all five locations after any permission change.
 
@@ -221,7 +221,23 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 **M01** [Tier 1, 5] [FIX] **mock-oidc exists** -- Copied from scaffold as-is (never regenerated). In docker-compose with profile: dev. Internal/external URL split configured. **SaaS auth pattern only -- skip if EasyAuth is selected.**
 
-**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs. It takes every host port from the same variables docker-compose.yml uses (`MOCK_OIDC_PORT`, and `FRONTEND_PORT` or `APP_PORT`, from the environment or the project's `.env`), with the build's port only as the default -- never a literal port in a URL -- so in a worktree or a copy with its own ports it seeds that project's own services. Fix: the scaffold's `env_port` lines in place of the literal ports.
+**M02** [Tier 1, 5] [FIX] **Seed script exists** -- scripts/seed-mock-services.sh registers users (one per role), removes non-app users, updates redirect URIs. It takes every host port from the same variables docker-compose.yml uses (`MOCK_OIDC_PORT`, and `FRONTEND_PORT` or `APP_PORT`, from the environment or the project's `.env`), with the build's port only as the default -- never a literal port in a URL -- so in a worktree or a copy with its own ports it seeds that project's own services. Fix: replace the script's literal-port lines with these (the scaffold's own; a Next.js full-stack app uses `APP_PORT` and `APP_URL` in place of `FRONTEND_PORT` and `FRONTEND_URL`), with the build's ports as the defaults and `ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"` above them:
+
+```bash
+env_port() {  # env_port NAME DEFAULT
+    local v="${!1:-}"
+    if [ -z "$v" ] && [ -f "$ROOT_DIR/.env" ]; then
+        v="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$ROOT_DIR/.env" | tail -1 | cut -d= -f2- \
+            | sed -e 's/[[:space:]]*#.*$//' | tr -d "\"' \r")"
+    fi
+    echo "${v:-$2}"
+}
+MOCK_OIDC_PORT="$(env_port MOCK_OIDC_PORT "[MOCK_OIDC_PORT]")"
+FRONTEND_PORT="$(env_port FRONTEND_PORT "[FRONTEND_PORT]")"
+MOCK_OIDC_URL="http://localhost:${MOCK_OIDC_PORT}"
+CLIENT_ID="mock-oidc-client"
+FRONTEND_URL="http://localhost:${FRONTEND_PORT}"
+```
 
 **M03** [Tier 1, 5] [BLOCK] **Service client ↔ mock contracts** -- Cross-reference client methods with mock route files. Fix endpoint mismatches.
 

@@ -1143,7 +1143,10 @@ Reference: `~/.claude/make-it/references/build-standards.md`
 For Tier 1 (web-app), this includes checks across all categories:
 - **S01-S15**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
-- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
+- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating). R04,
+  concretely: list every route whose method is POST, PUT, PATCH or DELETE (each router file's
+  decorators); each carries `require_permission(...)` unless it is on R04's public list. One that
+  doesn't is a FAIL naming the route.
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
 - **D01-D06**: Database & seed data (migrations, seed users, Alembic syntax, one migration head)
 - **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
@@ -1221,12 +1224,12 @@ never as NOT RUN, and not written to TODO.md. A check that could not run goes in
 RUN with its reason, never as passed. "As User" means signed in as that role's test user, the way
 step 25 signs in. Never print a key or token value: not in a command, a log or the results.
 
-**Browser steps** use the app's own Playwright setup in `e2e/`, run in the Playwright container
-whose version matches `e2e/package.json`'s `@playwright/test`
-(`mcr.microsoft.com/playwright:v<version>-noble`) with `--network host`, so the frontend and the
-sign-in redirects at `localhost` work; nothing is installed on the host. When that can't run (no
-`e2e/`, or the container can't reach the app), the row is NOT RUN with the reason "no browser
-here".
+**Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
+shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
+the host, only when it is already installed there: `cd e2e && npx --no-install playwright
+--version` works and a headless Chromium launches. This build doesn't install it; /try-it's smoke
+test does, later (`npx playwright install chromium`). When it isn't installed or can't launch,
+the item is NOT RUN with the reason "no browser here".
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -1295,9 +1298,9 @@ here".
     docker compose --profile dev up -d 2>&1
     ```
     If the first command printed a name, it removed a leftover changed-setting run: note "Removed
-    a leftover <project>-live-check container" in the results, and start with
-    `docker compose --profile dev up -d --force-recreate <backend>` so the backend gets its
-    network back.
+    a leftover <project>-live-check container" in the results, and after the start above also run
+    `docker compose --profile dev up -d --wait --force-recreate <backend>` so the backend gets its
+    network back. Every other service starts as usual.
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
@@ -1322,19 +1325,27 @@ here".
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
     c. Verify the callback completes and a JWT cookie is set
     d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
-    e. Verify the dashboard loads with content (a browser step, as above)
+    e. In a browser: verify the dashboard loads with content
     f. Test logout (POST to /auth/logout, verify JWT cookie is cleared, verify 401 after)
 
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
     A role with no test user in the mock sign-in seed is an M02 gap (one user per role): add the
-    user to the seed and the database seed, then test that role; it is not skipped.
+    user to `scripts/seed-mock-services.sh` and, for the database, in a new migration -- never an
+    edited one, which a database that already exists would not apply -- then test that role; it
+    is not skipped.
 
 26. **Test every API endpoint (V05):**
     For each API route in the app (with a valid JWT): the routes, their methods, required query
     parameters and request bodies come from `GET /openapi.json`; ids and values come from the seed
     data (a GET of the list first).
-    a. Call the endpoint, as a role allowed to use it
+    a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
+       update, then delete of this step's own test record per resource, its name or title starting
+       `live-check-test-`, never a seed record; a resource with no create route isn't written.
+       Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
+       a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
+       aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
+       name the rest in the results as not exercised.
     b. Verify 2xx response
     c. Verify response is valid JSON with expected structure
     d. Verify list endpoints return NON-EMPTY arrays where the seed data has rows for them. A
@@ -1347,23 +1358,45 @@ here".
     For each page defined in app-context.json (with a valid JWT):
     a. Request the page URL
     b. Verify it loads (200)
-    c. Verify it has meaningful content (not empty tables, not "no data found")
+    c. In a browser: verify it has meaningful content (not empty tables, not "no data found")
 
 28. **Test permission boundaries (V07):**
     For each role, signed in as in step 25, verify:
     a. Can access pages/endpoints they SHOULD access
-    b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
-    c. Write refusals: for each POST, PUT, PATCH and DELETE route in `/openapi.json`, as a role
-       whose `/auth/me` permissions lack the permission the route's `require_permission(resource,
-       action)` names, send the request with an empty JSON body `{}`, and for a route with an id,
-       a random UUID that no record has. Expect: 403 (401 signed out). The permission check runs
-       before the body is checked (FastAPI resolves `require_permission` before body validation),
-       so a refused request writes nothing. Fail: 422 (the request got past a missing guard to
-       validation; nothing was written), 404 (got past it to the lookup), or 2xx (it wrote a
-       record: name the record from the response, delete it as Super Admin through its own
-       route, and if it can't be deleted, put it at the top of TODO.md). Never send a DELETE for
-       an id that exists. In a stack whose permission check doesn't come first, this item is NOT
-       RUN with the reason "writes can't be probed safely here".
+    b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
+       browser) a page that shows a refusal and none of its data or working controls. A page
+       that renders its normal shell with an empty table is a FAIL. On apps built before card
+       E02-S102 that FAIL is expected: report it as "the page isn't guarded, only its data (card
+       E02-S102)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
+       (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
+       signed-out person to the sign-in page).
+    c. Write refusals. The expected answer never comes from the route's own code, which is what
+       is being checked. For each POST, PUT, PATCH and DELETE route in `/openapi.json`, sent to
+       the exact path it declares (trailing slash included) with an empty JSON body `{}`, and an
+       id or slug no record has where the path takes one:
+       - Signed out: expect 401.
+       - As the seeded role with the fewest permissions: map the route to a permission from its
+         path and method: the first path segment after `/api/` (after `/api/admin/`, with
+         `admin.` in front) is the resource, and POST is `create`, PUT or PATCH `update`, DELETE
+         `delete` -- `POST /api/notes/` is `notes.create`, `PUT /api/admin/settings/{key}` is
+         `admin.settings.update`. Look it up in the app's own permission list (its seed, or
+         `app-context.json`'s permission matrix); not there, try `admin.<resource>` (the scaffold
+         guards `/api/users` with `admin.users`). When the role's `/auth/me` permissions don't
+         have it, expect 403. A route whose permission can't be found that way is NOT RUN for
+         that route, named in the results with the reason "no permission matches this route";
+         never skipped silently.
+       A 308 is the frontend's proxy moving a trailing-slash path: follow it with the same method
+       and body (`curl -L`); the answer after it is the result, and a 308 alone is neither.
+       FastAPI checks `require_permission` before the body, so a refused request writes nothing.
+       Fail: 422 (it got past a missing guard to the body check; nothing was written), 404 (past
+       it to the lookup), or 2xx (it wrote a record: name it from the response, delete it as
+       Super Admin through its own route, and if it can't be deleted, put it at the top of
+       TODO.md). Routes that would do something if their guard were missing -- every DELETE, and
+       a path with `run`, `replay`, `test`, `curation`, `statement`, `send`, `email`, `notify`,
+       `messages`, `chat` or `agents` -- get only the signed-out request, and only when their
+       path takes an id or slug (none exists, so nothing runs); R04's file check (Part A) covers
+       them otherwise. In a stack whose permission check doesn't come first, this item is NOT RUN
+       with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
@@ -1381,16 +1414,23 @@ here".
 
 31. **Test DataTable features on every list page (V12):**
     For each page that displays tabular data:
-    a. Fetch the page HTML and verify it contains DataTable markup:
+    a. In a browser: open the page and verify it shows DataTable markup:
        - Pagination text (e.g., "Page 1 of") and page size selector
        - Column header buttons (not plain `<th>` text)
        - Toolbar area with search input and/or filter buttons
-    b. Verify data rows exist (seed data must populate -- no empty "No results" state)
+    b. In a browser: verify data rows exist (seed data must populate -- no empty "No results"
+       state)
     c. Verify the page source imports from `@/components/data-table` (read the page .tsx file)
     d. Verify column definitions use `DataTableColumnHeader` (provides Excel filtering + sorting)
     e. Verify `storageKey` prop is set (enables state persistence)
     f. Grep all page files for raw `<table` usage -- any match outside the DataTable
-       component files themselves is a U06 violation. Fix by replacing with DataTable.
+       component files themselves is a U06 violation. Fix by replacing with DataTable. Until card
+       E02-S103 fixes them, the scaffold's own admin pages have raw tables: a match in
+       `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
+       or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
+       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is reported once as
+       "known, from the scaffold (card E02-S103)", not a FAIL and not fixed. A raw table in any
+       page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
     a. Verify `<ModeToggle />` appears in the authenticated layout header (read the layout file)
