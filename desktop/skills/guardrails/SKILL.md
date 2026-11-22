@@ -46,16 +46,16 @@ each rule comes up here.
    - the static checks in `references/build-standards.md`: files, config, secrets, validation,
      code quality, lint/format/type-check if the tools are available
    - the tests the sandbox can execute, and running a CLI, script, or library directly
-   - `references/build-verify-security.md` Phase 1 (code pattern scan always; semgrep, bandit,
-     and dependency audits only if the tool is present and network access allows) and the
-     Phase 2a AI wiring checks
+   - `references/build-verify-security.md` Phase 1a (the code pattern scan) and the Phase 2a AI
+     wiring checks
 5. **Fix** AUTO-class findings per `references/fix-strategies.md`, then re-run the check that
    found them. For SEMI-AUTO, show the change in plain language before applying it. List MANUAL
    findings for the user.
 6. **Record deferred checks.** A check that needs Docker, a running app or its live endpoints,
    the user's git/GitHub (commits, hooks, CI), or deployment gets listed as **DEFERRED** with
    one line saying why. Never mark such a check as passed or imply it ran. This covers all of
-   `build-standards.md` Live Verification Checks, `build-verify-security.md` Phase 2b, Phase 3
+   `build-standards.md` Live Verification Checks, `build-verify-security.md` Phase 1b (the
+   scanners run only from Docker images), Phase 2b, Phase 3
    rebuilds and Phase 6 (the deep code audit and its fixes need Claude Code), and every Tier 1 container, auth-flow, and health-check item.
 
 **Re-verify on every code change** (`references/guardrails.md` Quality section, item 18a):

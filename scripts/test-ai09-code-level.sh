@@ -191,7 +191,7 @@ if [ -z "${1:-}" ]; then
   check "(control) fails when /nemo-it's use of the app's suite is said with no provider condition (an unlisted sentence), and with the old \"does not use it\" back" \
     'add "$GR" "- 6 test categories" "- /nemo-it runs the app'"'"'s guardrail suite on every scan" && add "$GR" "- 6 test categories" "- /nemo-it does not use the app'"'"'s suite: it has its own" && add "$GOV" "None of these stages" "No attestation is based on the suite in the app."'
   check "(control) fails with \"no AI call\" back, with /nemo-it's 60 made 30, and with \"Part C\" back in the security scan" \
-    'opp "$GR" "s/own checks run no NeMo Guardrails test: check AI09 is code-level\./own checks run no NeMo Guardrails test and make no AI call: check AI09 is code-level./" && opp "$GR" "s/= 60 cases\) before/= 30 cases) before/" && opp "$BVS" "s/Part D runs whatever checks/Part C runs whatever checks/"'
+    'opp "$GR" "s/own checks run no NeMo Guardrails test: check AI09 is code-level\./own checks run no NeMo Guardrails test and make no AI call: check AI09 is code-level./" && opp "$GR" "s/= 60 cases\) before/= 30 cases) before/" && opp "$BVS" "s/Part D provides a/Part C provides a/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \

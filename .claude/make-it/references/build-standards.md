@@ -425,7 +425,7 @@ Also add `ics_ot_integration: true` to app-context.json and include the detected
 
 **Q08** [Tier 0] [FIX] **Secret detection configured (gitleaks)** -- `.gitleaks.toml` exists at project root. gitleaks hook is in `.pre-commit-config.yaml`. Allowlist excludes `.env.example`, `mock-services/`, and test fixtures.
 
-**Q09** [Tier 0] [FIX] **Container scanning configured (Trivy)** -- `trivy.yaml` exists at project root with severity filter (`CRITICAL`, `HIGH`) and `skip-dirs`. This is a configuration file for CI pipelines -- Trivy itself runs in CI, not locally.
+**Q09** [Tier 0] [FIX] **Container scanning configured (Trivy)** -- `trivy.yaml` exists at project root with severity filter (`CRITICAL`, `HIGH`) and `skip-dirs`. This is a configuration file for CI pipelines. The build's own Trivy scan (build-verify Part D, Phase 1b) runs locally on every build from a pinned image, without loading this file, or is recorded as NOT RUN with its reason when it cannot run.
 
 **Q10** [Tier 0] [FIX] **Quality scripts in package.json** -- Frontend `package.json` has all four quality scripts: `lint` (eslint + prettier check), `format` (prettier --write), `format:check` (prettier --check), `type-check` (tsc --noEmit).
 

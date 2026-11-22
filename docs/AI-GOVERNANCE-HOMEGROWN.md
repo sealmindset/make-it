@@ -278,18 +278,18 @@ Build-verify's own checks run no NeMo Guardrails test. Check AI09 confirms in co
 Every application goes through this assessment pipeline before the builder sees it:
 
 ```
-Phase 0: Tool Detection (silent)
-  └─ Detect available tools: semgrep, bandit, trivy, pip-audit, npm
-  └─ Graceful degradation: missing tools skip that scan (never block)
+Phase 0: Scanner Images (silent)
+  └─ Every scanner runs from a pinned container image, whatever is installed
+  └─ A scanner that cannot run is skipped with its reason (never block)
   └─ Code pattern scanning ALWAYS runs (no external tools needed)
 
 Phase 1: Static Security Scan
   ├─ 1a. Code Pattern Scan (always) -- hardcoded secrets, SQL injection,
   │       XSS, insecure deserialization, missing timeouts, verify=False,
   │       external font CDNs, module-level throws
-  ├─ 1b. Semgrep (OWASP Top 10 + security-audit rulesets)
-  ├─ 1c. Bandit (Python-specific security)
-  └─ 1d. Dependency Scan (npm audit + pip-audit + trivy)
+  └─ 1b. One script (security-pass.py), from pinned images: Semgrep (OWASP
+          Top 10 + security-audit rulesets), Bandit (Python), npm audit,
+          pip-audit and Trivy
 
 Phase 2: AI Safety Scan (if AI features present)
   ├─ 2a. 15 safety control wiring checks (code-level)
@@ -353,15 +353,17 @@ Phase 6: Report
 | Tool / Technique | Purpose | Integration Point | Coverage |
 |-----------------|---------|-------------------|----------|
 | **Code Pattern Scanner** (grep-based) | Hardcoded secrets, SQL injection, XSS, insecure deserialization, missing timeouts | Build-verify Part D Phase 1a | Always runs, no external tools needed |
-| **Semgrep** (OWASP Top 10 + security-audit) | SAST -- broad code vulnerability detection | Build-verify Part D Phase 1b | If installed; graceful skip if not |
-| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1c | If installed; Python projects only |
-| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1d | Always available for Node projects |
-| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1d | If installed |
-| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1d | If installed |
+| **Semgrep** (OWASP Top 10 + security-audit) | SAST -- broad code vulnerability detection | Build-verify Part D Phase 1b | Every build, from a pinned image; NOT RUN with its reason when it cannot run |
+| **Bandit** | Python-specific security analysis | Build-verify Part D Phase 1b | Every build, from a pinned image; Python projects only; NOT RUN with its reason when it cannot run |
+| **npm audit** | Node.js dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image, in each folder with a package-lock.json or npm-shrinkwrap.json; NOT RUN with its reason when it cannot run |
+| **pip-audit** | Python dependency vulnerability scanning | Build-verify Part D Phase 1b | Every build, from the pinned Python image (pip-audit 2.9.0 is installed when it starts), on a copy of each requirements file that the script rewrote from parsed lines; NOT RUN with its reason when it cannot run |
+| **Trivy** | Container and filesystem vulnerability scanning | Build-verify Part D Phase 1b | Every build, from a pinned image; NOT RUN with its reason when it cannot run |
 | **NeMo Guardrails** | AI behavioral safety testing (6 categories) | /nemo-it (its own cases and, in a separate block when picked, the app's generated suite), when someone runs it with a live AI provider. Build-verify checks the app's generated suite exists (check AI09) and does not run it | The app's suite is generated for every AI app. A /nemo-it run is recommended, not enforced. With a live AI provider it runs /nemo-it's own cases, and the app's suite when picked, each in its own block |
 | **mock-oidc** | Local OIDC provider for auth testing | Docker dev profile | Every web app with auth |
 | **Build-verify E2E** | Live auth flow, API endpoint, page content, permission boundary testing | Build-verify Part B | Every web app |
 | **AuditGitHub** | Runtime security scanning + automated PR fixes | Post-deploy continuous monitoring | Companion tool |
+
+A scanner in Part D that cannot run on a build (its image cannot be pulled, or there is no network) is recorded as NOT RUN with its reason, never as clean.
 
 ### 7.2 Recommended Additions (Governance Enhancement)
 
@@ -488,7 +490,7 @@ None of these stages' own checks runs a NeMo suite. /nemo-it runs its own 60 or 
 
 | Phase | Timeline | Actions |
 |-------|----------|---------|
-| **Phase 1: Foundation** | Now | Adopt this governance document. Establish /make-it as the standard for homegrown apps. Ensure Semgrep + Bandit installed on all dev machines |
+| **Phase 1: Foundation** | Now | Adopt this governance document. Establish /make-it as the standard for homegrown apps. Ensure every dev machine runs Docker and can pull the pinned scanner images (Part D runs Semgrep, Bandit, Trivy, pip-audit and npm audit from them) |
 | **Phase 2: Secret Scanning** | 30 days | Add Gitleaks to CI/CD pipeline. Scan existing repos for historical secrets |
 | **Phase 3: DAST** | 60 days | Integrate OWASP ZAP into /nemo-it standalone, which runs before /ship-it (ship-it-guide.md, "What make-it runs before /ship-it") |
 | **Phase 4: Supply Chain** | 90 days | Add SBOM generation (Syft). Implement Dependabot/Renovate for automated dependency PRs |

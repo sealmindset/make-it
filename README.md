@@ -968,6 +968,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.13 -- The build's security pass runs from pinned Docker images, through one tested script
+
+The build ran its security scanners from whatever happened to be installed on the computer,
+so two machines could give two answers, and a scanner that was missing could read as clean.
+
+- **One script runs the pass.** `security-pass.py` runs Semgrep, Bandit, npm audit, pip-audit
+  and Trivy from pinned images. Nothing is installed on the computer for it.
+- **A scanner that can't run says so.** It is recorded NOT RUN with its reason, never as clean
+  or as no findings.
+- **pip-audit only sees a file the script wrote.** Each requirements file is rewritten from a
+  strict line grammar; anything outside it makes that file NOT RUN.
+- **Build-verify Part D is pinned whole** against a saved copy, so a change to it is a visible
+  two-file change.
+- **Known limits.** Docker must be running; Windows is refused; /make-it and /resume-it still
+  run two audits on the computer outside Part D for now.
+
 ### v1.71.12 -- The scaffold's quality-gate workflow keeps the branch name out of its shell commands
 
 The workflow every web app gets put the pull request's branch name straight into a shell
