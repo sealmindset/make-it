@@ -1038,6 +1038,21 @@ function Install-MakeItSkills($state) {
         Warn "No CONTENT_MANIFEST in source -- update checks will be version-only."
     }
 
+    # The guard that refuses Claude's `git push --force`: a Claude Code hook in settings.json. The
+    # helper merges (everything in the file stays, a copy is kept before the first change, a second
+    # install adds nothing) and leaves a file it can't read alone. Claude Code runs it with git-bash.
+    $guard = (Join-Path (Join-Path $MAKEIT_DIR "hooks") "no-force-push.sh") -replace '\\', '/'
+    $bashExe = $env:CLAUDE_CODE_GIT_BASH_PATH
+    if (-not $bashExe) { $bashExe = [System.Environment]::GetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", "User") }
+    if (-not $bashExe -or -not (Test-Path -LiteralPath $bashExe)) {
+        Fail "Could not find git-bash (bash.exe), so the guard that stops git push --force is not added. Make sure Git for Windows is installed, then run this installer again."
+    }
+    $guardCmd = "`"$($bashExe -replace '\\', '/')`" `"$guard`""
+    & (Join-Path (Join-Path $MAKEIT_DIR "scripts") "add-no-force-push-hook.ps1") -Path (Join-Path $CLAUDE_DIR "settings.json") -Command $guardCmd
+    if ($LASTEXITCODE -ne 0) {
+        Fail "The skills are installed, but the guard that stops git push --force is not (see the line above)."
+    }
+
     # Clean up temp directory
     if ($tmpDir -and (Test-Path $tmpDir)) {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue

@@ -262,6 +262,22 @@ install_skills() {
 }
 
 # ---------------------------------------------------------------------------
+# The guard that refuses Claude's `git push --force` (a Claude Code hook)
+# ---------------------------------------------------------------------------
+
+# Adds ~/.claude/make-it/hooks/no-force-push.sh to ~/.claude/settings.json as a PreToolUse hook.
+# The helper merges: everything already in the file stays, a copy is kept before the first change,
+# and a second install adds nothing. A file it can't read is left alone, and the install says so.
+install_force_push_guard() {
+  local hook="$MAKEIT_DIR/hooks/no-force-push.sh" q
+  [ -f "$hook" ] || fail "The guard that stops git push --force is missing from this download ($hook)."
+  command -v python3 >/dev/null 2>&1 || fail "Python 3 isn't installed, so I couldn't add the guard that stops git push --force to $CLAUDE_DIR/settings.json. The skills are installed. Install Python 3, then run this installer again."
+  q="'$(printf '%s' "$hook" | sed "s/'/'\\\\''/g")'"
+  python3 -I "$MAKEIT_DIR/scripts/add-no-force-push-hook.py" "$CLAUDE_DIR/settings.json" "bash $q" \
+    || fail "The skills are installed, but the guard that stops git push --force is not (see the line above)."
+}
+
+# ---------------------------------------------------------------------------
 # Report results
 # ---------------------------------------------------------------------------
 
@@ -411,6 +427,7 @@ main() {
 
   # Install
   install_skills
+  install_force_push_guard
 
   # Report
   report
