@@ -90,7 +90,7 @@ c4236b6ac91adde0cf51759e2ee1f892e8a0f2a13a9f5e9ecb8237868aa7263c  make-it/resolv
 5c527990fdfbda059639dc7bf0a9b9f3df0abbdf10b435db0c50d4760f397678  make-it/resolve-it/patterns/protection-dropped-at-job-handoff.md
 4e7f9d881ef6881febde69db75b30b5b84121a4d02742d1238526145d5e02fd4  make-it/resolve-it/patterns/watcher-reads-failure-as-done.md
 3d337436cbbaf7059e36eb47a96ccefea6ff90a769468e455f16720b317a50ed  make-it/resolve-it/writer-prompt.md
-5bd1136ac2413c37cca8852658fee327d194eea520f0e5411ced8d1bb21ee4ff  make-it/scaffolds/fastapi-nextjs/.env.example
+85dbbfa24615780cda2f2332f790d0e08ac287536f71a43e60790a7793f45162  make-it/scaffolds/fastapi-nextjs/.env.example
 68b51059087dcf6e63ab21ca2e140a59ff85acbdd6e698cbdaae9e020e47926a  make-it/scaffolds/fastapi-nextjs/.gitattributes
 5b83b51885b32d0d4dbeca256f5ff062c9e60980c4f8d148a1c7589a7670dacc  make-it/scaffolds/fastapi-nextjs/.github/workflows/quality-gate.yml
 601d813a9bcfbae1573497e741e757fd94bc0c5de3cb9ce0060ed56ebbe7310f  make-it/scaffolds/fastapi-nextjs/.gitignore
@@ -225,10 +225,10 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 07210d274609bc832f3c42c9de6800ab85843beeecf41780b1d0433ff2c0d7c0  make-it/scaffolds/fastapi-nextjs/scripts/precommit-in-container.sh
 9c66da23d70ab4242ffd543293778f7f99acd73870bf57d54534a2b607fa0bc4  make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh
 fd5aa3ab9083f411a71553eb120fb68d016910bb67562ba0b9d39d38dbd4a8b2  make-it/scaffolds/fastapi-nextjs/scripts/watermark-check.sh
-794bdeaa8f1f9c59fd5f338615f6bc79a9ad2d17789e44ebee35a3383f69c416  make-it/scaffolds/fastapi-nextjs/scripts/worktree.sh
+447317e66d5afd557d6f26d66cab52778939f25fb0018f2048735c246fcbc883  make-it/scaffolds/fastapi-nextjs/scripts/worktree.sh
 05105062832af7399ede470e5e8e0564c971ea3f62b17f763653270a02eed25f  make-it/scaffolds/fastapi-nextjs/trivy.yaml
 59eab843fef3e633a1a6b2ef1d46b3753992616c3dcde4e247d0bea637cf0db7  make-it/scaffolds/nextjs-fullstack/.dockerignore
-0711602630c754fceb05c17b07b5a20a200ab338be4e844f3ea6c127df7e117f  make-it/scaffolds/nextjs-fullstack/.env.example
+c491d91532cd3d39af907d595a63ec967a3daf03d1f187b953107b308b1b0c02  make-it/scaffolds/nextjs-fullstack/.env.example
 d7de1e6cf825f9e964c5046e0a71d01b0d47ea2fba8031c4897c23b3d700a9f2  make-it/scaffolds/nextjs-fullstack/.gitignore
 18df9c8755283073bff42ecaa31537142b523a28084ec3871a5c632362e944d2  make-it/scaffolds/nextjs-fullstack/.gitleaks.toml
 b5a4944cbac07d81a3dd6d13e8c42f05fc181d9a0a22f28dcb242e39db616247  make-it/scaffolds/nextjs-fullstack/.pre-commit-config.yaml
@@ -250,7 +250,7 @@ f2a5b4feb025b4f9d6406baed433f4c11fdd979c992b6b241b2c38492de8db92  make-it/scaffo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/nextjs-fullstack/public/.gitkeep
 07210d274609bc832f3c42c9de6800ab85843beeecf41780b1d0433ff2c0d7c0  make-it/scaffolds/nextjs-fullstack/scripts/precommit-in-container.sh
 15dca9d3159d45cad8cf664cee8e5f77bbbdb720e5fac6ccf9683b266758f00a  make-it/scaffolds/nextjs-fullstack/scripts/seed-mock-services.sh
-794bdeaa8f1f9c59fd5f338615f6bc79a9ad2d17789e44ebee35a3383f69c416  make-it/scaffolds/nextjs-fullstack/scripts/worktree.sh
+447317e66d5afd557d6f26d66cab52778939f25fb0018f2048735c246fcbc883  make-it/scaffolds/nextjs-fullstack/scripts/worktree.sh
 6bac92420fc804a207d5bf51cd9df34616669e1c6b56ff02da735e8b61885b65  make-it/scaffolds/nextjs-fullstack/src/app/(authenticated)/admin/roles/page.tsx
 373d679a632af321a5989dcbad0147a8aeecfa2cdaa1f27414a46925f761094c  make-it/scaffolds/nextjs-fullstack/src/app/(authenticated)/admin/settings/page.tsx
 c91f46556b9914f8317160e049ba4812dbe80f39a4e9e83b215d5188236257a9  make-it/scaffolds/nextjs-fullstack/src/app/(authenticated)/admin/users/page.tsx

@@ -32,13 +32,17 @@ offset_for() {
   echo "$(( (sum % 80 + 1) * 100 ))"
 }
 
-# Upsert KEY=VALUE in an env file.
+# Upsert KEY=VALUE in an env file, in place: later lines may expand ${KEY} (DATABASE_URL reads
+# ${DB_PORT}), and dotenv readers expand in file order, so a line moved to the end reads empty.
 set_env() {
   local f="$1" k="$2" v="$3"
   touch "$f"
-  grep -v "^${k}=" "$f" > "${f}.tmp" 2>/dev/null || true
-  mv "${f}.tmp" "$f"
-  printf '%s=%s\n' "$k" "$v" >> "$f"
+  if grep -q "^${k}=" "$f"; then
+    awk -v k="$k" -v v="$v" 'index($0, k "=") == 1 { print k "=" v; next } { print }' "$f" > "${f}.tmp"
+    mv "${f}.tmp" "$f"
+  else
+    printf '%s=%s\n' "$k" "$v" >> "$f"
+  fi
 }
 
 wt_path() {
@@ -64,7 +68,8 @@ cmd_new() {
   fi
 
   local offset; offset="$(offset_for "$branch")"
-  local proj="${SLUG}-$(printf '%s' "$branch" | tr '/ ' '__')"
+  # Compose project names must be lowercase [a-z0-9_-]: feat/COM-123-x -> <slug>-feat_com-123-x
+  local proj; proj="$(printf '%s-%s' "$SLUG" "$branch" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')"
   set_env "$wt/.env" COMPOSE_PROJECT_NAME "$proj"
 
   # Offset every host port that compose exposes via ${VAR:-default}.
