@@ -10538,5 +10538,409 @@ class ArgoItSmallConcernsCases(ArgoItUnsavedCodeCases):
     test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line = None
 
 
+
+class ReviewScannerCases(Base):
+    """Review of ab54f84, scanner findings: 1 (UTF-16 files are text), 3 (Python string prefixes; Kubernetes / Compose
+    `- name: X` / `value: ...` on adjacent lines), 9 (an unreadable file is "couldn't check"; --commit reads the whole
+    range). Values are joined at run time."""
+
+    def test_f1_utf16_files_with_a_byte_order_mark_are_scanned(self):
+        for enc, bom in (('utf-16-le', b'\xff\xfe'), ('utf-16-be', b'\xfe\xff')):
+            for where in ('new', 'saved'):
+                with self.subTest(enc=enc, where=where):
+                    v = fake('ps1' + enc[-2:] + where)
+                    r = self.fresh()
+                    r.branch()
+                    r.write('deploy.ps1', bom + ('# deploy\r\n$env:DB_' + 'PASSWORD = "%s"\r\n' % v).encode(enc))
+                    if where == 'saved':
+                        r.commit('deploy script')
+                        self.check(r.scan(), saved=['deploy.ps1:2'], secrets=[v])
+                    else:
+                        self.check(r.scan(), new=['deploy.ps1:2'], secrets=[v])
+
+    def test_f1_control_a_utf16_file_without_a_secret_is_clean(self):  # control
+        r = self.fresh()
+        r.write('notes.ps1', b'\xff\xfe' + '# just notes\r\nWrite-Host "hello"\r\n'.encode('utf-16-le'))
+        self.check(r.scan())
+
+    def test_f3_python_string_prefixes_are_literals(self):
+        for pre in ('r', 'b', 'u', 'f', 'rb', 'Br', 'F'):
+            with self.subTest(prefix=pre):
+                v = fake('prefix' + pre)
+                r = self.fresh()
+                r.write('settings.py', 'SECRET_' + 'KEY = %s"%s"\n' % (pre, v))
+                self.check(r.scan(), new=['settings.py:1'], secrets=[v])
+        v = fake('fstring')
+        r = self.fresh()
+        r.write('db.py', 'connect(pass' + 'word=f"%s")\n' % v)
+        self.check(r.scan(), new=['db.py:1'], secrets=[v])
+
+    def test_f3_a_name_and_its_value_on_adjacent_lines(self):
+        for q in ('', '"', "'"):
+            with self.subTest(quote=q):
+                v = fake('k8sadj' + str(len(q)))
+                r = self.fresh()
+                r.write('env/dev/backend.yaml', 'env:\n  - name: LOG_LEVEL\n    value: info\n  - name: DB_' + 'PASSWORD\n'
+                        '    value: %s%s%s\n' % (q, v, q))
+                self.check(r.scan(), new=['env/dev/backend.yaml:5'], secrets=[v])
+
+    def test_f3_controls_adjacent_lines_that_are_not_a_secret(self):  # controls
+        r = self.fresh()
+        r.write('a.yaml', 'env:\n  - name: LOG_' + 'LEVEL\n    value: verbose-debugging\n  - name: DB_' + 'PASSWORD\n'
+                '    valueFrom:\n      secretKeyRef:\n        name: app-db\n        key: password\n'
+                '  - name: API_' + 'TOKEN\n    value: ${API_TOKEN}\n')
+        self.check(r.scan())
+
+    def test_f9_an_unreadable_new_file_is_couldnt_check(self):
+        if hasattr(os, 'geteuid') and os.geteuid() == 0:
+            self.skipTest('root reads a mode-000 file')
+        v = fake('unreadable')
+        r = self.fresh()
+        r.write('locked.py', kv('API_' + 'KEY', v))
+        os.chmod(r.path('locked.py'), 0)
+        self.addCleanup(os.chmod, r.path('locked.py'), 0o644)
+        res = r.scan()
+        self.assertEqual(res.code, 2, 'an unreadable file read as clean: %r' % res.lines)
+        self.no_leak(res, [v])
+
+    def test_f9_commit_reads_every_unsent_commit_it_reaches(self):
+        v = fake('rangeparent')
+        r = self.fresh()
+        r.branch()
+        r.write('a.py', kv('API_' + 'KEY', v))
+        r.commit('the key, two commits back')
+        r.write('b.md', '# notes\n')
+        r.commit('a clean commit on top')
+        head = r.git('rev-parse', 'HEAD').strip().decode()
+        self.check(r.scan(args=['--repo', r.work, '--commit', head]), saved=['a.py:1'], secrets=[v])
+
+
+class ReviewUnsavedCodeCases(ArgoItUnsavedCodeCases):
+    """Review of ab54f84, findings 4 and 8 on the unsaved-code check and the .gitattributes block: names with a space or
+    a non-ASCII letter; keep-out files are never advised to be saved; the .gitattributes block only in a make-it
+    project."""
+
+    test_1_unsaved_code_stops_before_the_seal_naming_how_many_and_the_first_two = None
+    test_2_untracked_look_alikes_are_unsaved_code_and_stop_the_send = None
+    test_3_what_is_not_unsaved_code_goes_on = None
+    test_4_not_a_make_it_project_no_check = None
+    test_5_the_check_comes_before_the_seal_and_its_stop_is_one_true_line = None
+
+    def test_f4_markdown_names_with_a_space_or_accent_are_not_unsaved_code(self):
+        for shell in ('bash', 'zsh'):
+            for sub in ('', 'web/'):
+                with self.subTest(shell=shell, sub=sub):
+                    r = self.fresh()
+                    self._project(r, sub)
+                    r.write(sub + 'my notes.md', 'a\n')
+                    r.write(sub + 'café.MD', 'b\n')
+                    self.assertEqual(self._check(r, shell, sub=sub), (0, []))
+
+    def test_f4_code_names_with_a_space_or_accent_are_shown_as_they_are(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._project(r)
+                r.write('my code.py', 'a = 1\n')
+                r.write('café.py', 'b = 2\n')
+                code, out = self._check(r, shell)
+                self.assertEqual(out[:2], ['UNSAVED CODE', '2'], out)
+                self.assertEqual(sorted(out[2:]), sorted(['my code.py', 'café.py']))
+
+    def test_f8_a_keep_out_file_is_never_advised_to_be_saved(self):
+        for shell in ('bash', 'zsh'):
+            for name in ('server.pem', 'data/app.db', '.env.production'):
+                with self.subTest(shell=shell, name=name):
+                    r = self.fresh()
+                    self._project(r)
+                    r.write(name, 'x\n')
+                    code, out = self._check(r, shell)
+                    self.assertEqual(out[:3], ['UNSAVED CODE', '1', name], out)
+                    self.assertIn('keep-out: ' + name, out)
+        flat = re.sub(r'\s+', ' ', self._phase())
+        i = flat.index('`UNSAVED CODE`')
+        rule = flat[i:flat.index('**2. Check whether the deploy branch', i)]
+        self.assertRegex(rule, r'keep-out:', "the stop has no rule for a keep-out file")
+        self.assertRegex(rule, r'(?i)should never be saved with (?:your|the) code',
+                         "the stop doesn't say a keep-out file should never be saved")
+
+    def test_f8_the_keep_out_list_is_the_scanners(self):
+        mod = RegistryFilesCases._scanner()
+        code = self._unsaved_block()[2]
+        self.assertIn('keep-out', code, 'the unsaved-code check has no keep-out list')
+        for p in [x.decode() for x in mod.KEEP_OUT]:
+            self.assertIn(p.split('/')[-1], code, 'the keep-out check misses %s' % p)
+        self.assertIn('.aws/credentials', code)
+
+    def test_f8_the_gitattributes_block_runs_only_in_a_make_it_project(self):
+        g = ArgoItGitattributesContentCases('test_1_seal_lines_left_from_an_earlier_run_are_listed_and_sent')
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                r.write('.gitattributes', '*.png binary\n')
+                r.commit('not a make-it project')
+                r.append('.gitattributes', '*.jpg binary\n' + g.SEAL_LINES)
+                self._prep(r)
+                cp = subprocess.run([shell, '-c', self._seal_list()[2]], cwd=r.work, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=60)
+                self.assertEqual((cp.returncode, cp.stdout.decode().split()), (0, []))
+
+    def test_f9_the_check_runs_before_the_seal_by_running_the_blocks(self):
+        """PHASE 5 step 1's blocks, run in order in a project with unsaved code: the run stops at the unsaved-code
+        check, and the seal list (which reads what the seal wrote) never runs."""
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                self._project(r)
+                r.write('lib/new.py', 'z = 3\n')
+                for rel, t in self.SEAL.items():
+                    r.write(rel, t)
+                self._prep(r)
+                p = self._phase()
+                a, b = re.search(r'^\*\*1\. ', p, re.M).start(), re.search(r'^\*\*2\. ', p, re.M).start()
+                ran = []
+                for f in [f for f in self._fences(p) if a < f[0] < b]:
+                    code = self._files_filled(f[2], sorted(self.GENERATED))
+                    cp = subprocess.run([shell, '-c', code], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        timeout=60)
+                    ran.append((f[2], cp.stdout.decode()))
+                    if cp.returncode:
+                        break
+                self.assertTrue(ran and 'UNSAVED CODE' in ran[-1][1].splitlines(), ran)
+                self.assertFalse([c for c, _ in ran if '.make-it/ledger' in c], 'the seal list ran before the stop')
+
+
+class ReviewOriginCases(_RedeployCallA, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5,
+                        _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend,
+                        Base):
+    """Review of ab54f84, findings 6 and 8: the split-origin check compares host and owner/repository (git's own
+    insteadOf rewriting applied), so HTTPS reads with SSH sends, or a `.git`-only difference, go ahead; no origin and
+    no git each get their own true line; new messages don't say "GitHub" for any host; the first deploy's failed read
+    doesn't open with what reached GitHub when nothing was sent."""
+
+    def _split_lines(self):
+        out = []
+        for c in (self._step_block(self._phase(), 2)[2], '\n'.join(
+                ArgoItRedeployReadsGitHubFirstCases._step1_5b(self))):
+            ls = [l for l in c.splitlines() if 'SPLIT ORIGIN' in l]
+            self.assertEqual(len(ls), 1)
+            out.append(ls[0])
+        return out
+
+    def _split(self, setup):
+        res = []
+        for line in self._split_lines():
+            r = self.fresh()
+            r.git('remote', 'set-url', 'origin', 'https://github.com/acme/app.git')
+            for args in setup:
+                r.git(*args)
+            cp = subprocess.run(['bash', '-c', line], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            res.append('SPLIT ORIGIN' in cp.stdout.decode())
+        return res
+
+    def test_f6_the_same_repository_by_another_address_is_not_split(self):
+        cases = {'pushInsteadOf ssh': [('config', 'url.git@github.com:.pushInsteadOf', 'https://github.com/')],
+                 '.git only': [('remote', 'set-url', '--push', 'origin', 'https://github.com/acme/app')],
+                 'a trailing slash': [('remote', 'set-url', '--push', 'origin', 'https://github.com/acme/app/')],
+                 'ssh:// with a user': [('remote', 'set-url', '--push', 'origin', 'ssh://git@github.com/acme/app.git')]}
+        for what, setup in cases.items():
+            with self.subTest(what=what):
+                self.assertEqual(self._split(setup), [False, False], what)
+
+    def test_f6_another_repository_or_host_is_still_split(self):
+        cases = {'another repository': [('remote', 'set-url', '--push', 'origin', 'git@github.com:acme/fork.git')],
+                 'another owner': [('remote', 'set-url', '--push', 'origin', 'https://github.com/someone/app.git')],
+                 'another host': [('remote', 'set-url', '--push', 'origin', 'https://gitlab.com/acme/app.git')]}
+        for what, setup in cases.items():
+            with self.subTest(what=what):
+                self.assertEqual(self._split(setup), [True, True], what)
+
+    def test_f8_no_origin_has_its_own_line_on_both_paths(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh(remote=False)
+                self._prep(r)
+                for name, code in (('PHASE 5 step 2', self._fill(self._step_block(self._phase(), 2)[2], ['x'])),
+                                   ('PHASE 5b step 1', '\n'.join(ArgoItRedeployReadsGitHubFirstCases._step1_5b(self)))):
+                    cp = subprocess.run([shell, '-c', code], cwd=r.work, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    out = cp.stdout.decode().splitlines()
+                    self.assertIn('NO ORIGIN', out, name)
+                    self.assertNotIn('FETCH FAILED', out, name)
+        for sec in (self._phase(), self._phase5b()):
+            qs = self._told(sec, 'NO ORIGIN')
+            self.assertTrue(any(re.search(self.SENT_NONE, q) and not re.search(r'GitHub|fork', q) for q in qs), qs)
+
+    def test_f8_no_git_has_its_own_line(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                exe = shutil.which(shell)
+                with tempfile.TemporaryDirectory() as td:
+                    for code in ('\n'.join(ArgoItRedeployReadsGitHubFirstCases._step1_5b(self)),
+                                 ArgoItWiringCases('test_old_inline_scan_is_gone')._block()):
+                        cp = subprocess.run([exe, '-c', code], cwd=td, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                            env={'PATH': os.path.join(td, 'none'), 'HOME': td})
+                        self.assertIn('NO GIT', cp.stdout.decode().splitlines())
+        qs = self._told(self._phase5b(), 'NO GIT')
+        self.assertTrue(any(re.search(self.SENT_NONE, q) and re.search(r'(?i)\bgit\b', q) for q in qs), qs)
+        self.assertRegex(re.sub(r'\s+', ' ', ArgoItWiringCases('test_old_inline_scan_is_gone')._section()), r'`NO GIT`')
+
+    def test_f8_new_messages_name_no_host(self):
+        for q in self._told(self._phase5b(), 'FETCH FAILED') + self._told(self._phase5b(), 'NOT A REPO'):
+            self.assertNotIn('GitHub', q.split('e.g.')[0], 'a redeploy message says GitHub for any host: %r' % q)
+        sec = re.sub(r'\s+', ' ', ArgoItWiringCases('test_old_inline_scan_is_gone')._section())
+        i = sec.index('The block printed `FETCH FAILED`')
+        self.assertNotIn('GitHub', sec[i:i + 120].split('e.g.')[0])
+
+    def test_f8_the_first_deploys_failed_read_starts_with_what_happened(self):
+        for q in self._told(self._phase(), 'FETCH FAILED'):
+            self.assertTrue(q.startswith("I couldn't reach "), q[:80])
+
+
+class ReviewRedeployCases(_RedeployCallA, _FirstSendAdv3, _FirstSendFix7, _FirstSendAdv2, _FirstSendFix6,
+                          _FirstSendFix5, _FirstSendFix4, _FirstSendFix3, _FirstSendFix2, _FirstSendAdv1,
+                          _FirstSendFix1, _FirstSend, Base):
+    """Review of ab54f84, findings 2, 7 and 8 on the redeploy: step 4 checks the exact commit it made (a pre-commit
+    hook runs after 3e) and pushes that id; it sends only what the ask named; argo-it's pushes never send submodule
+    commits; commit messages aren't scanned, and the rules say so; the first deploy's re-asks restart at the seal."""
+
+    def _run5b(self, r, shell, after_step1=None):
+        p = self._phase5b()
+        heads = [(m.start(), m.group(1)) for m in re.finditer(r'^\*\*(\d[a-e]?)\. ', p, re.M)]
+        h1, h4 = [a for a, h in heads if h == '1'][0], [a for a, h in heads if h == '4'][0]
+        fences = [f for f in self._fences(p) if f[0] > h1]
+        last = next(i for i, f in enumerate(fences) if f[0] > h4)
+        out, done = [], False
+        for f in fences[:last + 1]:
+            step = [h for at, h in heads if at < f[0]][-1]
+            if step in ('3a', '3b', '3c', '3d'):
+                continue
+            if step != '1' and not done:
+                done = True
+                if after_step1:
+                    after_step1()
+            code = f[2].replace('{current_branch}', 'main').replace('{deploy_branch}', self.DEPLOY)
+            cp = subprocess.run([shell, '-c', code.replace(INSTALLED, SCRIPT)], cwd=r.work, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=180)
+            out.append((step, cp))
+            marks = [l for l in cp.stdout.decode().splitlines() if re.fullmatch(self.MARK_LINE, l)]
+            if marks or (cp.returncode and step != '3e'):
+                return out, (marks[-1] if marks else None)
+            if step == '3e' and cp.returncode:
+                return out, '3e'
+        return out, None
+
+    def test_f2_a_hook_that_adds_a_secret_at_the_save_never_sends_it(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                v = fake('hookadded' + shell)
+                r = self.fresh()
+                hooks = os.path.join(r.root, 'hooks')
+                os.makedirs(hooks)
+                with open(os.path.join(hooks, 'pre-commit'), 'w') as f:
+                    f.write("#!/bin/sh\nprintf 'API_%s = \"%s\"\\n' > gen.py\ngit add gen.py\n" % ('KEY', v))
+                os.chmod(os.path.join(hooks, 'pre-commit'), 0o755)
+                r.append('app.py', 'x = 1\n')
+                self._prep(r, hooks)
+                before = self._sent_refs(r)
+                out, mark = self._run5b(r, shell)
+                self.assertFalse(_b(v) in self._sent_objects(r), 'the key a hook added at the save reached GitHub')
+                self.assertEqual(self._sent_refs(r), before, 'GitHub changed')
+                self.assertTrue(mark, 'step 4 went on: %r' % [(s, c.stdout[-200:]) for s, c in out])
+                self.assertIn('gen.py:1', out[-1][1].stdout.decode().splitlines())
+                qs = self._told(self._phase5b(), mark)
+                self.assertTrue(any(re.search(r"(?i)\bsaved\b[^.]{0,40}\bon this computer\b", q)
+                                    and re.search(r"(?i)\b(?:didn't|did not|haven't|not) sen[dt]\b", q)
+                                    and not re.search(r"(?i)haven't saved", q) for q in qs),
+                                "the stop doesn't say, truly, that the save is here and nothing was sent: %r" % qs)
+
+    def test_f2_control_a_clean_redeploy_sends_the_checked_commit(self):  # control
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                r.append('app.py', 'x = 1\n')
+                self._prep(r)
+                out, mark = self._run5b(r, shell)
+                self.assertIsNone(mark, [(s, c.stdout[-300:]) for s, c in out])
+                self.assertEqual(self._ref(r, 'main'), self._head(r))
+
+    def test_f7_a_commit_made_after_the_ask_is_not_sent(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                r = self.fresh()
+                r.append('app.py', 'x = 1\n')
+                self._prep(r)
+                before = self._sent_refs(r)
+
+                def late():
+                    r.write('late.py', 'late = 1\n')
+                    r.git('add', 'late.py')
+                    r.git('commit', '-q', '-m', 'made after the ask')
+                out, mark = self._run5b(r, shell, late)
+                self.assertEqual(self._sent_refs(r), before, 'a commit the ask never named was sent')
+                self.assertEqual(mark, 'CHANGED SINCE THE ASK')
+                self.assertEqual(r.git('log', '-1', '--format=%s').decode().strip(), 'made after the ask',
+                                 'step 4 saved on top of a change the ask never named')
+                qs = self._told(self._phase5b(), 'CHANGED SINCE THE ASK')
+                self.assertTrue(any(re.search(self.SENT_NONE, q) and '/argo-it' in q for q in qs), qs)
+
+    def test_f7_the_first_deploys_re_asks_restart_at_the_seal(self):
+        flat = re.sub(r'\s+', ' ', self._phase())
+        for mark in ('CHANGED SINCE THE ASK', 'SAVED SINCE THE CHECK'):
+            i = flat.index('If it prints `%s`' % mark)
+            rule = flat[i:i + 600]
+            self.assertRegex(rule, r'(?i)back to step 1\b', '%s: the re-ask does not start again at step 1' % mark)
+            self.assertRegex(rule, r'(?i)\bseal\b', '%s: the re-ask does not take the seal again' % mark)
+
+    def test_f8_argo_its_pushes_never_send_submodule_commits(self):
+        for sec in (self._phase(), self._phase5b()):
+            for f in self._fences(sec):
+                for l in f[2].splitlines():
+                    if re.search(r'^\s*[^#]*\bgit\s+push\b', l):
+                        self.assertIn('--recurse-submodules=no', l, l)
+
+    def test_f8_the_rules_say_commit_messages_are_not_checked(self):
+        doc = ArgoItWiringCases('test_old_inline_scan_is_gone')._doc()
+        rules = doc[doc.index('**Pre-push self-review rules'):]
+        rules = re.sub(r'\s+', ' ', rules[:rules.index('</guardrails>')])
+        self.assertRegex(rules, r'(?i)(?:save|commit) messages? (?:is|are) never checked')
+
+
+class ReviewTextCases(ArgoItWiringCases):
+    """Review of ab54f84, findings 8 (a real backslash in a shown path is escaped) and 10 (the crash-looping row asks
+    before a change beyond 3a's safe fixes)."""
+
+    def test_f8_a_real_backslash_in_a_name_is_escaped(self):
+        v = fake('backslash')
+        r = self.fresh()
+        r.write('a\\x41.py', kv('API_' + 'KEY', v))
+        self.check(r.scan(), new=['a\\x5cx41.py:1'], secrets=[v])
+
+    def test_f10_crash_looping_asks_before_a_change_beyond_the_safe_fixes(self):
+        doc = self._doc()
+        i = doc.index('<step name="post-deploy-troubleshoot">')
+        sec = doc[i:doc.index('</step>', i)]
+        row = [l for l in sec.splitlines() if l.startswith('| Pod crash-looping')][0]
+        self.assertRegex(row, r"(?i)3a's safe fixes", 'the row does not limit what it changes on its own')
+        self.assertRegex(row, r'(?i)ask first|asks? before', 'the row does not ask before another change')
+        j = sec.index('**Crash-looping fix')
+        ask = sec[j:sec.index('\n\n**', j + 5) if '\n\n**' in sec[j + 5:] else len(sec)]
+        opts = re.findall(r'(?m)^- \*\*([^*]+)\*\*', ask)
+        self.assertEqual(len(opts), 2, opts)
+        self.assertRegex(opts[0], r'^Change \[file\]$')
+        self.assertRegex(opts[1], r'^Leave it$')
+        flat = re.sub(r'\s+', ' ', ask)
+        for what, rx in (('the evidence', r'(?i)logs show'), ('what changes', r'(?i)I.d change \[file\]'),
+                         ('the undo', r'(?i)put the file back'), ('the one thing to check', r'(?i)the one thing to check'),
+                         ('a select', r'(?i)plain yes isn.t an answer'), ('nothing sent', r'(?i)not saved or sent')):
+            self.assertRegex(flat, rx, 'the crash-looping ask lacks %s' % what)
+
+
 if __name__ == '__main__':
     unittest.main()
