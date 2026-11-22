@@ -101,8 +101,11 @@ every route below that changes the app.
 5. An older value (plain text, empty, or no field) is not re-checked here: catch-up check S15
    brings it up to the record's shape once.
 
-Working as the project specialist while building is card S5; this block only keeps the record
-current.
+While it builds, /resume-it works as the project specialist, the way /make-it does: every specialist
+the `expert_persona` field names, the primary leading, with no task specialist of its own (the
+reference's "Builders"). Every sub-agent it briefs for this work, through Subagent-Driven
+Development or /dispatch-it, is handed the same project specialist plus the specialist its step
+needs; it works as both, instead of inferring a specialist of its own.
 BLOCK
 IFS= read -r -d '' S15 <<'BLOCK' || true
 **S15** [Tier 0] [FIX] **Project specialist record** -- `.make-it/app-context.json` holds `expert_persona` as the record `references/expert-personas.md` describes (`primary`, `added`, `set_by`, `set_at`). An older value -- a plain text value, an empty one, or no field -- fails. Fix, once, at /resume-it's catch-up: work the record out by the reference's rule from `app-context.json`, with `set_by` `"/resume-it"` and `set_at` today's date, write it in place of the older value, and say one plain line to the user with the same line in `CHANGELOG.md` (for a plain text value that named a specialist, the line says what it was). A value the reference reads as no record is migrated the same way. The fix runs once: after it the check passes.
