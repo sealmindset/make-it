@@ -1226,10 +1226,9 @@ step 25 signs in. Never print a key or token value: not in a command, a log or t
 
 **Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
 shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
-the host, only when it is already installed there: `cd e2e && npx --no-install playwright
---version` works and a headless Chromium launches. This build doesn't install it; /try-it's smoke
-test does, later (`npx playwright install chromium`). When it isn't installed or can't launch,
-the item is NOT RUN with the reason "no browser here".
+the host, installed once by step 22b. When step 22b couldn't install it or it can't launch, the
+item is NOT RUN with the reason "no browser here" and the install's reason, never FAIL, and the
+build goes on.
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -1304,6 +1303,22 @@ the item is NOT RUN with the reason "no browser here".
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
+
+22b. **Install the browser for the browser items (once, as /try-it's smoke test does):**
+    ```bash
+    cd e2e
+    if npx --no-install playwright --version >/dev/null 2>&1 &&
+       node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
+    then echo "browser ready"   # already installed: nothing is downloaded
+    else npm install && npx playwright install chromium   # the app's own Playwright, then Chromium
+    fi
+    ```
+    Then run the `node -e` launch line again. It works → the browser items run. It fails (the
+    install failed, Node.js or npm isn't on this computer, or Chromium won't start) → every
+    browser item is NOT RUN with the reason "no browser here: [the install's reason]", never
+    FAIL, and the build goes on. Only when it downloads, tell the user: "Downloading a test
+    browser (Chromium, about 150 MB, once) so I can check your app's pages the way a person sees
+    them." Nothing is asked.
 
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.

@@ -934,7 +934,10 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
 4. **Run each row in "Run here"** for every touched area, plus V02 and V03, with the step that
    names it in /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is
    written: the same requests, roles, expected results and fail rules, the changed-setting run
-   and its put-back included, and N/A for a feature the app doesn't have. Each row in a "Not run
+   and its put-back included, and N/A for a feature the app doesn't have. Browser items use the
+   app's `e2e/` Playwright only when it is already there (a build's step 22b installs it); the
+   live pass never installs it, and without it they are NOT RUN with the reason "no browser
+   here". Each row in a "Not run
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
    "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
    configured, priced AI provider" (their check expects no call).
