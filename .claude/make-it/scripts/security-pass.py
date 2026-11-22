@@ -11,7 +11,7 @@ Reports go to a private folder, ~/.cache/make-it-security/<project>/<run>/, with
 Anything printed that came from the project or a tool is JSON-quoted: data, never a line of its own.
 Exit: 0 the pass completed (whatever the lines say); 2 it could not do its job. `audit-check` exits with the
 checker's own code. Standard library only. Everything in the project is read as data, never run here.
-Not for Windows yet (E10-S13): it exits 2 there.
+Not for Windows yet: it exits 2 there.
 """
 import hashlib
 import json
@@ -149,7 +149,7 @@ def refused(text):
 def private_dir(path, uid=None):
     """Make (mode 0700) or accept a folder only if it is a real folder, this user's, and no one else's to read."""
     if not hasattr(os, "getuid"):
-        raise PassError("this script does not run on Windows yet (E10-S13)")
+        raise PassError("this script does not run on Windows yet")
     uid = os.getuid() if uid is None else uid
     try:
         os.mkdir(path, 0o700)
