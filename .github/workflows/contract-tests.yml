@@ -40,9 +40,10 @@ jobs:
           python -m pip install --quiet "claude-agent-sdk==0.2.186"
       # test-git-guards.sh makes real commits through the scaffold's pre-commit hooks (it fetches them from
       # GitHub); test-no-force-push.sh runs install.ps1's settings helper under pwsh, which the runner has.
-      # Both fail here, in CI, when their tool is missing, instead of skipping.
+      # Both fail here, in CI, when their tool is missing, instead of skipping. pre-commit is pinned here, and
+      # only here: bump this line (and nothing else) to move CI to a newer pre-commit.
       - name: Install pre-commit
-        run: python -m pip install --quiet pre-commit
+        run: python -m pip install --quiet "pre-commit==4.4.0"
       - name: Run every scripts/test-*.sh
         env:
           REQUIRE_SCAFFOLD_PYTEST: "1"
