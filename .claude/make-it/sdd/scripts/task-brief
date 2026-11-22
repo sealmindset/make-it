@@ -18,6 +18,9 @@ set -euo pipefail
 
 PLAN="${1:?usage: task-brief PLAN_FILE N}"
 N="${2:?usage: task-brief PLAN_FILE N}"
+# N goes into an awk regex and a file name, so it must be a task number: `1|.*` would match
+# every heading and copy the whole plan, and `../x` would write outside the briefs folder.
+[[ $N =~ ^[0-9]+$ ]] || { echo "N must be a task number, got: $N" >&2; exit 2; }
 [ -f "$PLAN" ] || { echo "plan not found: $PLAN" >&2; exit 1; }
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || dirname "$PLAN")"
