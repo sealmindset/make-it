@@ -6,7 +6,8 @@
 #   - .claude/commands/retrofit-it.md: its opening specialist block (from "**Adopt the specialist persona before
 #     retrofitting" up to the reference's import line), and Discovery step 7 (from "**7. Project specialist (SILENT"
 #     up to "</step>"), its code-evidence table included. Compared with the text below after every run of whitespace
-#     is folded to one space, so rewrapping a line is not a change.
+#     is folded within each unit (a paragraph, list item, heading, table row or code line, with its indentation), so
+#     rewrapping is not a change but joining two units or re-indenting one is.
 #   - Three lines outside the blocks, each as a whole sentence: Clarification's "never one of them", Foundation's
 #     write, and Part E's.
 #   - Step 7's place: in Discovery, after the stack compatibility assessment, before Gap Analysis.
@@ -41,51 +42,76 @@ flat() { tr '\n' ' ' | tr -s ' ' | sed -E 's/^ +//; s/ +$//'; }
 has() { flat < "$1" | gq -F -- "$2" || { echo "  missing in $1: $2"; false; }; }
 # section FILE START [END]: from the line matching START (included) to the line before END (or the end of the file)
 section() { awk -v a="$2" -v b="${3:-}" 'on && b != "" && $0 ~ b {on = 0} $0 ~ a {on = 1} on' "$1"; }
+# pin LABEL ACTUAL WANT [DROP]: the two texts are equal unit by unit. A unit is a paragraph, a list item, a heading,
+# a quote line, one table row, or one line inside a code fence; it keeps the indentation of its first line, and the
+# whitespace inside it is folded (so rewrapping a paragraph is not a change, but joining two table rows, joining two
+# list items or re-indenting a block is). Units starting with DROP are left out of both.
 pin() {
-  local a w; a="$(printf '%s' "$2" | flat)"; w="$(printf '%s' "$3" | flat)"
-  [ -n "$w" ] || { echo "  $1: the expected block is empty"; return 1; }
-  [ "$a" = "$w" ] && return 0
-  python3 -I -c 'import sys
-a, w = sys.argv[1], sys.argv[2]
-i = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
-print(f"  {sys.argv[3]} differs at character {i}:\n    file: ...{a[max(0, i - 60):i + 100]!r}\n    pin:  ...{w[max(0, i - 60):i + 100]!r}")' "$a" "$w" "$1"
-  return 1
+  python3 -I -c '
+import re, sys
+def norm(text, drop):
+    units, cur, fence = [], None, False
+    for ln in text.split("\n"):
+        s, ind = ln.strip(), len(ln) - len(ln.lstrip(" "))
+        if s.startswith("```"):
+            if cur: units.append(cur); cur = None
+            units.append([ind, s]); fence = not fence; continue
+        if fence: units.append([ind, ln.rstrip()]); continue
+        if not s:
+            if cur: units.append(cur); cur = None
+            continue
+        if cur is None or re.match(r"(\||#|> |[-*+] |\d+\. )", s):
+            if cur: units.append(cur)
+            cur = [ind, s]
+            if s.startswith("|"): units.append(cur); cur = None
+        else:
+            cur[1] += " " + s
+    if cur: units.append(cur)
+    return [str(i) + "|" + " ".join(t.split()) for i, t in units if not (drop and re.fullmatch(drop, " ".join(t.split())))]
+label, a, w, drop = sys.argv[1], norm(sys.argv[2], sys.argv[4]), norm(sys.argv[3], sys.argv[4]), sys.argv[4]
+if not w: print(f"  {label}: the expected block is empty"); sys.exit(1)
+if a == w: sys.exit(0)
+k = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
+fa = a[k] if k < len(a) else "(none)"; fw = w[k] if k < len(w) else "(none)"
+print("  " + label + " differs at unit " + str(k + 1) + ":\n    file: " + fa[:220] + "\n    pin:  " + fw[:220])
+sys.exit(1)' "$1" "$2" "$3" "${4:-}"
 }
 
 # 1. the pinned blocks and lines
-read -r -d '' WANT_TOP <<'BLOCK' || true
+IFS= read -r -d '' WANT_TOP <<'BLOCK' || true
 **Adopt the specialist persona before retrofitting — do NOT work as a generalist.** Its task
 specialist is the **software architect** — preserve original intent, phased change, risk register;
 don't break behavior while bolting on foundations. /retrofit-it is also one of the three writers
 of the project specialist: Discovery step 7 records it in `expert_persona` from the code, by the
 reference's rule. The two stay apart: the architect is the role this skill works in, and the
-record is the project's. Once the record is worked out (Discovery step 7), it works as the
-architect, held to the checks and output standard of every specialist in the record as well.
-Selected automatically; no user prompt. See `~/.claude/make-it/references/expert-personas.md`
-(imported below).
+specialist record is the project's. Once the specialist record is worked out (Discovery step 7), it
+works as the architect, held to the checks and output standard of every specialist in the record
+as well. Selected automatically; no user prompt. See
+`~/.claude/make-it/references/expert-personas.md` (imported below).
 BLOCK
-read -r -d '' WANT_STEP <<'BLOCK' || true
+IFS= read -r -d '' WANT_STEP <<'BLOCK' || true
 **7. Project specialist (SILENT -- no user question):**
 
 Set `project_type` from the code, by the Project Type Classification table in
 `templates/app-context.md` (a browser UI with its own backend is `web-app`, a backend with no UI
 that serves other systems is `api-service`, and so on). If the code fits no row, `project_type`
-stays empty, no record is written (the reference's rule), and TODO.md gets one line saying why.
+stays empty and no specialist record is written (the reference's rule); the run's first write of
+`app-context.json` adds one TODO.md line saying why.
 
 Then record the project specialist in `expert_persona` by the reference's rule (its floor row,
 filled in from `stack` as the reference says, and rule 2 in its order), as /make-it's Design step
 does, with `set_by` `"/retrofit-it"` and `set_at` the date of this run (YYYY-MM-DD). Every
-retrofitted app gets a record, a low-risk one its floor. The record is never a plain text value and
-never a generalist. What differs from /make-it is where the signals come from: the code, not an
-interview.
+retrofitted app gets a specialist record, a low-risk one its floor. The specialist record is never a
+plain text value and never a generalist. What differs from /make-it is where the signals come
+from: the code, not an interview.
 
 | Signal (rule 2) | Fires when the code shows |
 |---|---|
-| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data of the people the app serves (a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records) |
+| Security | a payments SDK (Stripe, Braintree, Adyen, PayPal) or card fields; personal data the app holds about people beyond its own sign-in accounts (customers, patients, contacts: a name with an email, phone, address, date of birth or government ID); health data (diagnoses, medications, patient records). A users table that only holds the app's own sign-in accounts does not fire it. |
 | Data | tenant or organisation scoping (`tenant_id` or `org_id` columns, per-tenant filters, row-level security), or data at scale (partitioned tables, bulk-load jobs) |
 | Reliability / platform | public sign-up or self-registration, pages or APIs meant for people outside the organisation, or an uptime promise (an SLA) written in the repo |
 | AI | an AI SDK behind more than 10 distinct prompts or agents, or prompts stored where non-developers edit them |
-| Variant | what its definition file names under "Project specialist signals", when `app-context.json` already names the variant |
+| Variant | what its definition file declares under "Project specialist signals", at the rank it declares, when `app-context.json` already names the variant |
 
 Each signal is written `code: <what was found, and where>`; the floor's is
 `project_type: <value> (the floor)`. Where the code cannot tell whether a signal fires (for
@@ -94,24 +120,26 @@ specialist and mark that signal `"unconfirmed": true`. This is never a clarifyin
 does not count against Phase 3's 3-5 questions.
 
 The retrofit's own role (the software architect, its task specialist) is never written into
-`expert_persona`: the record comes from the signals and the floor only.
+`expert_persona`: the specialist record comes from the signals and the floor only.
 
-If `app-context.json` already holds a record (a second retrofit, or an app /make-it built),
-compare it with the new one as the reference's "Same record or a different one" says: the same
-specialists keep it as it is, even when its signals are worded from an interview; different
-specialists write the new one. When the new one is written over a record, the one plain line (e.g.
-"Your app now gets a security specialist because its code takes card payments.") goes in the
-report of the step that writes it, and into `CHANGELOG.md`, which that step adds if the app has
-none. A value the reference reads as no record (its "Reading an older value") is not a record:
-write the new one and say nothing.
+If `app-context.json` already holds a specialist record (a second retrofit, or an app /make-it
+built), compare it with the new one as the reference's "Same record or a different one" says: with
+the same specialists only the signals are brought up to date, silently, even when the old ones were
+worded from an interview; different specialists write the new one. When the new one is written over
+a specialist record, the one plain line (e.g. "Your app now gets a security specialist because its
+code takes card payments.") goes in the report of the step that writes it, and into
+`CHANGELOG.md`, which that step adds if the app has none. A value the reference reads as no record
+(its "Reading an older value") is not a specialist record: write the new one and say nothing.
 
-**When it is written.** Nothing is written before the plan is approved. The record goes into the
-run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and in a
-phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
+**When it is written.** Nothing is written before the plan is approved. The specialist record goes
+into the run's first write of `app-context.json`: step 1 (Foundation) in a single-pass retrofit and
+in a phased retrofit's first step, or step 12b in an AI-accounting-only run. It describes the app as
 Discovery found it, not the foundations the retrofit adds, so a phased retrofit stopped after any
-step already has its full record. Part E's final write of `app-context.json` keeps it as it is.
+step already has its full specialist record. Part E's final write of `app-context.json` keeps it as
+it is.
 
-Apart from the line for a replaced record, nothing here is shown to the user or asked of them.
+Apart from the line for a replaced specialist record, nothing here is shown to the user or asked of
+them.
 BLOCK
 check "retrofit-it.md's opening specialist block is exactly the pinned text" \
   'pin "opening block" "$(section "$RF" "^[*][*]Adopt the specialist persona before retrofitting" "^@~/[.]claude/make-it/references/expert-personas[.]md$")" "$WANT_TOP"'
@@ -159,12 +187,20 @@ def reads_as_record(v):
     if isinstance(v, str): return v.strip().lower() not in ("", "generalist", "none")
     return isinstance(v, dict) and bool(v.get("primary", {}).get("specialist"))
 def as_record(v): return {"primary": {"specialist": v, "signals": []}, "added": []} if isinstance(v, str) else v
-def specialists(r): return [r["primary"]["specialist"]] + [a["specialist"] for a in r["added"]]
-def retrofit(existing, profile, today):
+RANK = {n: k for k, n in order}
+def rank(entry):  # by rank (D7, G): the floor by its project_type, a rule 2 specialist by its kind
+    for g in entry["signals"]:
+        m = re.match(r"project_type: (\S+) \(the floor\)", g["signal"])
+        if m: return ("floor", m.group(1))
+    return (RANK.get(entry["specialist"], "other:" + entry["specialist"]),)
+def specialists(r): return [rank(e) for e in [r["primary"]] + r["added"]]
+def retrofit(existing, profile, today):  # the reference's "Same record or a different one" (D7, D9)
     new = derive(profile, today)
     if not reads_as_record(existing): return new, False
     if specialists(as_record(existing)) != specialists(new): return new, True
-    return existing, False  # the same specialists: kept as it is (no unconfirmed signal to settle in these cases)
+    kept = copy.deepcopy(existing)  # names, set_by and set_at kept; the signal lists brought up to date, silently
+    for old, cur in zip([kept["primary"]] + kept["added"], [new["primary"]] + new["added"]): old["signals"] = cur["signals"]
+    return kept, False
 FLOOR = {"specialist": "Senior full-stack engineer of Flask + React",
          "signals": [{"signal": "project_type: web-app (the floor)", "unconfirmed": False}]}
 P = lambda **s: {"project_type": "web-app", "stack": "Flask + React", "signals": s}
@@ -185,10 +221,16 @@ for name, (profile, want) in (("a low-risk internal app", LOW), ("code shows car
     if got != want: fail(f"{name}:\n    got  {json.dumps(got)}\n    want {json.dumps(want)}")
     if re.search(r"architect", json.dumps(got), re.I): fail(f"{name}: the architect is in the record")
     print(f"  {name}: {json.dumps(got)}")
+SIGNIN = P()  # D8: the code shows only a users table of the app's own sign-in accounts, so Security does not fire
+if derive(SIGNIN, "2026-11-21") != LOW[1]: fail("D8: a users-table-only app does not record the floor")
+print("  D8, a users-table-only app: the floor")
 made = {"primary": {"specialist": "Application security engineer", "signals": [{"signal": "features: card payments", "unconfirmed": False}]},
-        "added": [{"specialist": "SRE", "signals": [{"signal": "users.internal_or_external: external", "unconfirmed": False}]}, FLOOR],
+        "added": [{"specialist": "SRE", "signals": [{"signal": "users.internal_or_external: external", "unconfirmed": False}]},
+                  {"specialist": "Senior full-stack engineer of FastAPI + Next.js", "signals": [{"signal": "project_type: web-app (the floor)", "unconfirmed": False}]}],
         "set_by": "/make-it", "set_at": "2026-10-01"}
-for name, existing, want, said in (("an app /make-it built, the same specialists, signals from an interview", made, made, False),
+made_now = copy.deepcopy(made)
+for old, cur in zip([made_now["primary"]] + made_now["added"], [PAY[1]["primary"]] + PAY[1]["added"]): old["signals"] = cur["signals"]
+for name, existing, want, said in (("an app /make-it built, the same specialists (floor spelled for another stack), signals from an interview", made, made_now, False),
                                    ("a different record (the low-risk one)", LOW[1], PAY[1], True),
                                    ("the template's empty record", {"primary": {"specialist": "", "signals": []}, "added": [], "set_by": "", "set_at": ""}, PAY[1], False)):
     rec, line = retrofit(existing, PAY[0], "2026-11-21")
@@ -196,7 +238,7 @@ for name, existing, want, said in (("an app /make-it built, the same specialists
     print(f"  existing record, {name}: {'one line said' if said else 'nothing said'}")
 PY
 }
-check "paper check (the test's own derivation; no retrofit runs): three records and three existing-record results" 'paper'
+check "paper check (the test's own derivation; no retrofit runs): three records, the users-table-only app, and three existing-record results" 'paper'
 
 # 3. controls (this repo only), each with its expected result
 if [ -z "${1:-}" ]; then
@@ -211,16 +253,19 @@ if [ -z "${1:-}" ]; then
   check "(control, D5) a harmless sentence added inside the opening block fails" 'add "$RF" "Selected automatically; no user prompt." " This keeps things tidy."'
   check "(control, D5) a harmless sentence added inside step 7 fails" 'add "$RF" "the code, not an interview." " This keeps things tidy."'
   check "(control, D5) a harmless sentence added outside the pinned blocks passes" 'passes "$RF" "If stack has issues but is workable, note concerns but proceed." "If stack has issues but is workable, note concerns but proceed. (Tidy.)"'
-  check "(control) fails when the record is written as a plain string" 'fails "$RF" "The record is never a plain text value and never a generalist." "Record the specialist as a plain text value."'
+  check "(control) fails when the record is written as a plain string" 'fails "$RF" "The specialist record is never a plain text value and never a generalist." "Record the specialist as a plain text value."'
   check "(control) fails with set_by wrong (/make-it)" 'fails "$RF" "with \`set_by\` \`\"/retrofit-it\"\`" "with \`set_by\` \`\"/make-it\"\`"'
   check "(control) fails when an unclear signal is recorded as confirmed" 'fails "$RF" "mark that signal \`\"unconfirmed\": true\`." "record it as confirmed."'
   check "(control) fails when a clarifying question is added for the specialist" 'fails "$RF" "**Maximum 3-5 questions. Never more.**" "6. **If personal data is unclear:** \"Does your app store personal data about your users?\"\n\n**Maximum 3-5 questions. Never more.**"'
-  check "(control) fails when the architect is recorded as the project specialist" 'fails "$RF" "is never written into \`expert_persona\`: the record comes from the signals and the floor only." "is recorded as the primary, the project specialist."'
+  check "(control) fails when the architect is recorded as the project specialist" 'fails "$RF" "is never written into \`expert_persona\`: the specialist record comes from the signals and the floor only." "is recorded as the primary, the project specialist."'
   check "(control) fails when the opening block re-infers again" 'fails "$RF" "Selected automatically; no user prompt." "Auto-selected from \`app-context.json\` + this skill; no user prompt."'
-  check "(control) fails when the floor is skipped for a low-risk app" 'fails "$RF" "Every retrofitted app gets a record, a low-risk one its floor." "A low-risk app gets no record."'
+  check "(control) fails when the floor is skipped for a low-risk app" 'fails "$RF" "Every retrofitted app gets a specialist record, a low-risk one its floor." "A low-risk app gets no record."'
   check "(control) fails when an existing record is overwritten silently" 'add "$RF" "write the new one and say nothing." " A record with different specialists is replaced without a line."'
-  check "(control) fails when the phased-mode rule is reversed" 'fails "$RF" "The record goes into the run'\''s first write of \`app-context.json\`:" "In a phased retrofit the record is written only at the end, in Part E:"'
+  check "(control) fails when the phased-mode rule is reversed" 'fails "$RF" "The specialist record goes into the run'\''s first write of \`app-context.json\`:" "In a phased retrofit the record is written only at the end, in Part E:"'
   check "(control N5-style) fails: an added sentence that refreshes set_at on a kept record" 'add "$RF" "write the new one and say nothing." " Refresh \`set_at\` even when the record is kept."'
+  check "(control, D8) fails: the Security row fires on a users table again" 'fails "$RF" " A users table that only holds the app'\''s own sign-in accounts does not fire it." ""'
+  check "(control, E) fails: the unknown-type TODO line written during Discovery" 'fails "$RF" "; the run'\''s first write of \`app-context.json\` adds one TODO.md line saying why." ", and TODO.md gets one line saying why."'
+  check "(control, F) fails: step 7 says \"the record\" again" 'fails "$RF" "Every retrofitted app gets a specialist record" "Every retrofitted app gets a record"'
   check "(control) the paper check fails when the evidence table drops a row (AI)" 'd="$(copy)"; perl -0pi -e "s/^\| AI \| an AI SDK[^\n]*\n//m" "$d/$RF"; ! bash "$SELF" "$d" >/dev/null 2>&1'
   check "(control) the paper check fails when the reference puts data first" 'd="$(copy)"; perl -0pi -e "s/1\. Security: /1. Data: /; s/2\. Data: /2. Security: /" "$d/$REF"; ! bash "$SELF" "$d" >/dev/null 2>&1'
 fi

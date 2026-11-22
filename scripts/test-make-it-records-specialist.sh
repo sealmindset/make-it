@@ -7,7 +7,10 @@
 #     "**Build the app-context internally."; and the two paragraphs that brief /make-it's own sub-agents (Build
 #     Phase B's Subagent-Driven Development paragraph, and the fix cycle's parallel-dispatch paragraph). Compared with
 #     the text below after every run of whitespace is folded to one space, so rewrapping a line is not a change.
-#   - .claude/make-it/variants/_template.md: the "Project specialist signals" line, whole.
+#   - .claude/make-it/variants/_template.md: the "Project specialist signals" line, whole; and Build step g's
+#     sentence that carries the specialist line into CHANGELOG.md.
+#   Compared unit by unit (a paragraph, a list item, a heading, a table row, a code line; with the indentation of its
+#   first line; whitespace inside a unit folded): rewrapping is not a change, joining two list items is.
 #   - The Design block's place: after the stack is chosen, before app-context.json is written.
 # WHAT IS NOT PINNED: the rest of make-it.md and of the variant template. The one ban kept guards text outside the
 #   pinned blocks: the user doc 01-make-it.md no longer says the AI picks the one specialist the app "needs most".
@@ -39,20 +42,43 @@ D1=.claude/make-it/confluence-docs/01-make-it.md
 flat() { tr '\n' ' ' | tr -s ' ' | sed -E 's/^ +//; s/ +$//'; }
 # section FILE START [END]: from the line matching START (included) to the line before END (or the end of the file)
 section() { awk -v a="$2" -v b="${3:-}" 'on && b != "" && $0 ~ b {on = 0} $0 ~ a {on = 1} on' "$1"; }
-# pin LABEL ACTUAL WANT: the two texts are equal once whitespace is folded; on a difference, show the first one
+# pin LABEL ACTUAL WANT [DROP]: the two texts are equal unit by unit. A unit is a paragraph, a list item, a heading,
+# a quote line, one table row, or one line inside a code fence; it keeps the indentation of its first line, and the
+# whitespace inside it is folded (so rewrapping a paragraph is not a change, but joining two table rows, joining two
+# list items or re-indenting a block is). Units starting with DROP are left out of both.
 pin() {
-  local a w; a="$(printf '%s' "$2" | flat)"; w="$(printf '%s' "$3" | flat)"
-  [ -n "$w" ] || { echo "  $1: the expected block is empty"; return 1; }
-  [ "$a" = "$w" ] && return 0
-  python3 -I -c 'import sys
-a, w = sys.argv[1], sys.argv[2]
-i = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
-print(f"  {sys.argv[3]} differs at character {i}:\n    file: ...{a[max(0, i - 60):i + 100]!r}\n    pin:  ...{w[max(0, i - 60):i + 100]!r}")' "$a" "$w" "$1"
-  return 1
+  python3 -I -c '
+import re, sys
+def norm(text, drop):
+    units, cur, fence = [], None, False
+    for ln in text.split("\n"):
+        s, ind = ln.strip(), len(ln) - len(ln.lstrip(" "))
+        if s.startswith("```"):
+            if cur: units.append(cur); cur = None
+            units.append([ind, s]); fence = not fence; continue
+        if fence: units.append([ind, ln.rstrip()]); continue
+        if not s:
+            if cur: units.append(cur); cur = None
+            continue
+        if cur is None or re.match(r"(\||#|> |[-*+] |\d+\. )", s):
+            if cur: units.append(cur)
+            cur = [ind, s]
+            if s.startswith("|"): units.append(cur); cur = None
+        else:
+            cur[1] += " " + s
+    if cur: units.append(cur)
+    return [str(i) + "|" + " ".join(t.split()) for i, t in units if not (drop and re.fullmatch(drop, " ".join(t.split())))]
+label, a, w, drop = sys.argv[1], norm(sys.argv[2], sys.argv[4]), norm(sys.argv[3], sys.argv[4]), sys.argv[4]
+if not w: print(f"  {label}: the expected block is empty"); sys.exit(1)
+if a == w: sys.exit(0)
+k = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
+fa = a[k] if k < len(a) else "(none)"; fw = w[k] if k < len(w) else "(none)"
+print("  " + label + " differs at unit " + str(k + 1) + ":\n    file: " + fa[:220] + "\n    pin:  " + fw[:220])
+sys.exit(1)' "$1" "$2" "$3" "${4:-}"
 }
 
 # 1. the pinned blocks
-read -r -d '' WANT_STEP <<'BLOCK' || true
+IFS= read -r -d '' WANT_STEP <<'BLOCK' || true
 **Project specialist (SILENT -- no user question):**
 
 Reference `references/expert-personas.md`. Every project records its project specialist in
@@ -64,28 +90,29 @@ chosen:
    reference says. Its signal is `project_type: <value> (the floor)`.
 2. Check the signals of the reference's rule 2, in its order, and build the record by its "The
    order decides the primary" paragraph. In app-context they are carried by: security --
-   `compliance`, `purpose`, `features`; data -- `multi_tenancy.needed` and the answers; reliability
-   -- `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named;
-   AI -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
-   `variant_config` fields its definition file names.
+   `compliance`, `purpose`, `features` (personal data as rule 2 defines it, not the sign-in
+   accounts every app has); data -- `multi_tenancy.needed` and the answers; reliability --
+   `users.internal_or_external`, `users.estimated_count`, and an uptime promise the user named; AI
+   -- `ai_features.usage_level` and `ai_features.who_edits_prompts`; a variant -- the
+   `variant_config` fields its definition file names, at the rank it declares.
 3. Each signal is written `<field>: <value>`, and one the user did not state (a guess or a smart
    default, such as a rough user count) is marked `"unconfirmed": true`.
 4. `set_by` is `"/make-it"` and `set_at` is the date of this Design (YYYY-MM-DD).
 5. If `app-context.json` already holds a record (a returning run), compare it with the new one as
-   the reference's "Same record or a different one" says: the same specialists keep it as it is;
-   different specialists write the new one. When the new one is written over a record, the one plain
-   line (e.g. "Your app now gets a security specialist because it takes card payments.") goes in
-   the plain-English summary's sentence on what departs from the standard setup, and into
-   `CHANGELOG.md`: now if the file exists, otherwise in the initial entry Build step g writes. A
-   value the reference reads as no record (its "Reading an older value") is not a record: write the
-   new one and say nothing.
+   the reference's "Same record or a different one" says: with the same specialists only the
+   signals are brought up to date, silently; different specialists write the new one. When the new
+   one is written over a record, the one plain line (e.g. "Your app now gets a security specialist
+   because it takes card payments.") goes in the plain-English summary's sentence on what departs
+   from the standard setup, and into `CHANGELOG.md`: now if the file exists, otherwise in the
+   initial entry Build step g writes. A value the reference reads as no record (its "Reading an
+   older value") is not a record: write the new one and say nothing.
 
 The record is never a plain text value and never a generalist. /make-it builds and reviews in the
-role of every specialist in the record, and hands the record to every sub-agent it briefs. This is
-a build-quality lever, not a staffing recommendation. Apart from the line in step 5, nothing here
-is shown to the user, and nothing is asked of them.
+role of every specialist in the record, the primary leading, and hands the record to every
+sub-agent it briefs. This is a build-quality lever, not a staffing recommendation. Apart from the
+line in step 5, nothing here is shown to the user, and nothing is asked of them.
 BLOCK
-read -r -d '' WANT_SDD <<'BLOCK' || true
+IFS= read -r -d '' WANT_SDD <<'BLOCK' || true
 When the app-specific work is sizable (several independent domains/features), execute it via
 Subagent-Driven Development (`/subagent-it`, see `subagent-driven-development.md`): treat these
 steps as the plan, dispatch a fresh implementer subagent per step + per-step review + a final
@@ -94,7 +121,7 @@ Brief each implementer and reviewer subagent with the project specialist recorde
 `expert_persona` at Design plus the specialist its step needs (a data engineer for the migration,
 say); it works as both, instead of inferring a specialist of its own.
 BLOCK
-read -r -d '' WANT_FIX <<'BLOCK' || true
+IFS= read -r -d '' WANT_FIX <<'BLOCK' || true
 If several failures are INDEPENDENT (different files/subsystems/root causes), fix them in
 parallel instead of sequentially: dispatch one agent per domain (`/dispatch-it`, see
 `parallel-dispatch.md`), isolate writers in their own worktrees, then re-run the FULL suite
@@ -102,7 +129,7 @@ once and integrate. Keep related failures together (find the shared cause first)
 agent with the project specialist recorded in `expert_persona` plus the specialist its failure
 needs; it works as both, instead of inferring a specialist of its own.
 BLOCK
-VS='- **Project specialist signals (optional):** a `variant_config` value that adds a specialist, written as `` `variant_config.[field]` is [value] -> [specialist] ``, with that specialist'"'"'s checks and output standard. Its rank is the reference'"'"'s rule 2, item 5: after the AI signal and before the floor, unless it is really a security, data, reliability or AI signal, which takes that signal'"'"'s rank. /make-it, /retrofit-it and /resume-it apply it like any other signal.'
+VS='- **Project specialist signals (optional):** one line per signal, written as `` `variant_config.[field]` is [value] -> [specialist], rank: [security | data | reliability | AI | after AI, before the floor] ``, with that specialist'"'"'s checks and output standard. Writers copy the declared rank and never judge it; /make-it, /retrofit-it and /resume-it apply the signal like any other.'
 check "make-it.md's Design step block is exactly the pinned text" \
   'pin "Design step" "$(section "$MK" "^[*][*]Project specialist [(]SILENT" "^[*][*]Build the app-context internally")" "$WANT_STEP"'
 check "make-it.md's Subagent-Driven Development brief paragraph is exactly the pinned text" \
@@ -110,6 +137,8 @@ check "make-it.md's Subagent-Driven Development brief paragraph is exactly the p
 check "make-it.md's parallel fix brief paragraph is exactly the pinned text" \
   'pin "fix-cycle brief" "$(section "$MK" "^If several failures are INDEPENDENT" "^$")" "$WANT_FIX"'
 check "the variant template's \"Project specialist signals\" line is exactly the pinned text, once" '[ "$(grep -cxF -- "$VS" "$VT")" = 1 ]'
+check "Build step g carries the specialist line Design may need to write" \
+  'flat < "$MK" | gq -F "g. **Create CHANGELOG.md** with initial entry (carrying the specialist line from Design step 5 when Design wrote a new record over an older one),"'
 check "the Design block sits after the stack is chosen and before app-context.json is written" \
   '[ "$(grep -n "^- Stack selection:" "$MK" | cut -d: -f1)" -lt "$(grep -n "^\*\*Project specialist (SILENT" "$MK" | cut -d: -f1)" ] &&
    [ "$(grep -n "^\*\*Project specialist (SILENT" "$MK" | cut -d: -f1)" -lt "$(grep -n "^\*\*Build the app-context internally" "$MK" | cut -d: -f1)" ]'
@@ -149,17 +178,19 @@ def reads_as_record(v):
     if isinstance(v, str): return v.strip().lower() not in ("", "generalist", "none")
     return isinstance(v, dict) and bool(v.get("primary", {}).get("specialist"))
 def as_record(v): return {"primary": {"specialist": v, "signals": []}, "added": []} if isinstance(v, str) else v
-def specialists(r): return [r["primary"]["specialist"]] + [a["specialist"] for a in r["added"]]
-def design(existing, ctx, guessed, today):  # step 5 and the reference's "Same record or a different one"
+RANK = {n: k for k, n in order}
+def rank(entry):  # by rank (D7, G): the floor by its project_type, a rule 2 specialist by its kind
+    for g in entry["signals"]:
+        m = re.match(r"project_type: (\S+) \(the floor\)", g["signal"])
+        if m: return ("floor", m.group(1))
+    return (RANK.get(entry["specialist"], "other:" + entry["specialist"]),)
+def specialists(r): return [rank(e) for e in [r["primary"]] + r["added"]]
+def design(existing, ctx, guessed, today):  # step 5 and the reference's "Same record or a different one" (D7, D9)
     new = derive(ctx, guessed, today)
     if not reads_as_record(existing): return new, False
     if specialists(as_record(existing)) != specialists(new): return new, True
-    kept = copy.deepcopy(existing)
-    if isinstance(kept, dict):  # the one edit: an unconfirmed signal the new evidence settles
-        now = {g["signal"]: g["unconfirmed"] for s in [new["primary"]] + new["added"] for g in s["signals"]}
-        for s in [kept["primary"]] + kept["added"]:
-            s["signals"] = [dict(g, unconfirmed=False) if g["unconfirmed"] and now.get(g["signal"]) is False else g
-                            for g in s["signals"] if not (g["unconfirmed"] and g["signal"] not in now)]
+    kept = copy.deepcopy(existing)  # names, set_by and set_at kept; the signal lists brought up to date, silently
+    for old, cur in zip([kept["primary"]] + kept["added"], [new["primary"]] + new["added"]): old["signals"] = cur["signals"]
     return kept, False
 FLOOR = {"specialist": "Senior full-stack engineer of FastAPI + Next.js",
          "signals": [{"signal": "project_type: web-app (the floor)", "unconfirmed": False}]}
@@ -186,14 +217,24 @@ for name, (ctx, guessed, want) in (("a low-risk internal web app", LOW), ("card 
     got = derive(ctx, guessed, "2026-11-21")
     if got != want: fail(f"{name}:\n    got  {json.dumps(got)}\n    want {json.dumps(want)}")
     print(f"  {name}: {json.dumps(got)}")
+SIGNIN = (base(purpose="lend equipment to staff", features=["staff sign in with their name and email", "equipment list"]), [],
+          {"primary": FLOOR, "added": [], "set_by": "/make-it", "set_at": "2026-11-21"})
+got = derive(SIGNIN[0], [], "2026-11-21")
+if got != SIGNIN[2]: fail(f"D8, sign-in accounts only: got {json.dumps(got)}")
+print("  D8, an app whose only personal data is its sign-in accounts: the floor")
 older = copy.deepcopy(PAY[2]); older["set_at"] = "2026-10-01"
 reworded = copy.deepcopy(older); reworded["set_by"] = "/retrofit-it"
 reworded["primary"]["signals"] = [{"signal": "code: Stripe SDK in requirements.txt", "unconfirmed": False}]
+reworded_now = copy.deepcopy(reworded); reworded_now["primary"]["signals"] = PAY[2]["primary"]["signals"]
 confirmed = copy.deepcopy(older); confirmed["added"][0]["signals"][1]["unconfirmed"] = False
+extra = copy.deepcopy(older); extra["primary"]["signals"].append({"signal": "features: stored customer addresses", "unconfirmed": False})
+spelled = copy.deepcopy(older); spelled["added"][1]["specialist"] = "Senior full-stack engineer of Next.js 15"
 CASES = [  # (name, existing, guessed now, want record, want a line said)
   ("the same record, older date", older, ["users.estimated_count"], older, False),
-  ("the same specialists, signals worded by /retrofit-it", reworded, ["users.estimated_count"], reworded, False),
+  ("the same specialists, signals worded by /retrofit-it", reworded, ["users.estimated_count"], reworded_now, False),
   ("the same specialists, the guessed user count now stated", older, [], confirmed, False),
+  ("the same specialists, a signal that is gone (B)", extra, ["users.estimated_count"], older, False),
+  ("the same specialists, the floor spelled \"Next.js 15\" (G)", spelled, ["users.estimated_count"], spelled, False),
   ("different specialists (the low-risk record)", LOW[2], ["users.estimated_count"], PAY[2], True),
   ("an empty string", "", ["users.estimated_count"], PAY[2], False),
   ("the template's empty record", {"primary": {"specialist": "", "signals": []}, "added": [], "set_by": "", "set_at": ""}, ["users.estimated_count"], PAY[2], False),
@@ -205,7 +246,7 @@ for name, existing, guessed, want, said in CASES:
     print(f"  returning run, {name}: {'one line said' if said else 'nothing said'}")
 PY
 }
-check "paper check (the test's own derivation; no build runs): three records and eight returning-run results" 'paper'
+check "paper check (the test's own derivation; no build runs): three records, the sign-in-only app, and ten returning-run results" 'paper'
 
 # 3. controls (this repo only), each with its expected result
 if [ -z "${1:-}" ]; then
@@ -227,14 +268,18 @@ if [ -z "${1:-}" ]; then
   check "(control N5) fails: an unsettled project_type uses the web-app floor" 'add "$MK" "$STEP5" " If \`project_type\` is not settled yet, use the web-app floor."'
   check "(control N5) fails: an internal app never counts the security signal" 'add "$MK" "$STEP5" " An internal app never counts the security signal."'
   check "(control N5) fails: a smart default counts as stated" 'add "$MK" "$STEP5" " A smart default counts as stated."'
-  check "(control N1) fails: a variant signal marked security goes first, added to step 2" 'add "$MK" "the \`variant_config\` fields its definition file names." " A variant signal marked \"security\" goes first instead."'
+  check "(control N1) fails: a variant signal marked security goes first, added to step 2" 'add "$MK" "at the rank it declares." " A variant signal marked \"security\" goes first instead."'
   check "(control N4) fails: \"A reviewer that disagrees updates the record.\" in the Phase B brief" 'add "$MK" "Stay sequential on shared files." " A reviewer that disagrees updates the record."'
   check "(control) fails when the step writes a plain string again" 'fails "$MK" "The record is never a plain text value and never a generalist." "Record the specialist as a plain text value."'
   check "(control) fails with set_by dropped" 'fails "$MK" "4. \`set_by\` is \`\"/make-it\"\` and \`set_at\` is the date of this Design (YYYY-MM-DD)." ""'
   check "(control) fails when the step asks the user a question" 'add "$MK" "$STEP5" " Ask the user: \"Which expert should build this?\""'
   check "(control) fails when the step moves before the stack is chosen" \
     'd="$(copy)"; perl -0pi -e "my \$b; s/(\*\*Project specialist \(SILENT.*?\n)(?=\*\*Build the app-context)/\$b = \$1; q()/se; s/(\*\*For everything else)/\$b\$1/" "$d/$MK"; ! cmp -s "$MK" "$d/$MK" && ! bash "$SELF" "$d" >/dev/null 2>&1'
-  check "(control) fails when the variant template line drops its rank" 'fails "$VT" "Its rank is the reference'\''s rule 2, item 5: after the AI signal and before the floor, unless it is really a security, data, reliability or AI signal, which takes that signal'\''s rank. " ""'
+  check "(control) fails when the variant template line drops its rank" 'fails "$VT" ", rank: [security | data | reliability | AI | after AI, before the floor]" ""'
+  JOIN32='s/\n   3\. Each signal is written/ Each signal is written/'
+  check "(control, H) fails: step 3 joined into step 2" 'd="$(copy)"; perl -0pi -e "$JOIN32" "$d/$MK"; ! cmp -s "$MK" "$d/$MK" && ! bash "$SELF" "$d" >/dev/null 2>&1'
+  check "(control, D9) fails: kept specialists get a new set_at" 'add "$MK" "$STEP5" " A kept record gets today'\''s \`set_at\`."'
+  check "(control) fails: Build step g drops the specialist line" 'fails "$MK" " (carrying the specialist line from Design step 5 when Design wrote a new record over an older one)" ""'
   check "(control) the paper check fails when the reference renames the reliability specialist" 'fails "$REF" "→ **SRE**" "→ **Reliability engineer**"'
 fi
 

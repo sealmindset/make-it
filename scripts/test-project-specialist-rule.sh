@@ -3,29 +3,26 @@
 # Fix rounds 1 and 2 (owner decisions D1-D7, review findings F1-F11 and N1-N12, 2026-11-21) are folded in.
 #
 # WHAT IS PINNED (D5: whole blocks, so an added, removed or changed sentence fails until this test is updated too):
-#   - references/expert-personas.md, two blocks: from "## One project specialist" up to "## The persona directive"
-#     (the rule, the floor table and how it is filled in, each project specialist's checks, the record and its
-#     example, reading older values), and from "## Auto-inference rules" to the end of the file (rules 1-4 with
-#     rule 2's order and the variant rank, how a skill invokes this). Compared with the text below after every run
-#     of whitespace is folded to one space, so rewrapping a line is not a change.
-#   - templates/app-context.md: the expert_persona object in its JSON, and its field-table row, both whole.
-# WHAT IS NOT PINNED: the reference's opening lines (the import list is checked separately), the persona directive
-#   and the persona catalog; the rest of the template. Text there is unguarded except by the structural checks below
-#   and one ban that guards text outside the pinned blocks: the old "cached hint / re-infer each run / stay
-#   generalist" wording in the reference, the template, every command file and every user doc.
-# STRUCTURAL CHECKS: the import list names exactly the command files that import the reference; the floor table has
-#   one row per project_type and the template's project_type table has one row per floor, both ways; the template's
-#   and the example's JSON parse as the record (one expert_persona key per file, never a text value, no generalist).
-# THE WRITE GUARD: no file but the writers' own pinned step blocks tells the AI to write expert_persona. Scanned:
-#   every command file, every text file under .claude/make-it/ except scaffolds/ (app code), this reference and the
-#   template, every file under desktop/skills/, and CLAUDE.md. Exempt: only /make-it's Design step block and
-#   /retrofit-it's two blocks (its opening block and Discovery step 7); the rest of make-it.md, retrofit-it.md and
-#   resume-it.md is scanned. A unit (sentence, list item, table cell or code line) naming expert_persona with a write
-#   verb is a write; so is any line with "expert_persona": (a JSON key, inline or not) or expert_persona = (jq or
-#   code). "set by" / "recorded by" / "written by" / "updated by" / "re-checked by" naming one of the three writers
-#   as a word is provenance, not a write. The <expert_persona> tag several skills carry is a block, not the field.
-# A tripwire, not a proof. It cannot catch: a write with a verb not in WRITE; a write split across two sentences; a
-# write in a file outside the scanned set; whether a skill really does what the reference says.
+#   - references/expert-personas.md, the WHOLE file but its import list (which the import check guards).
+#   - templates/app-context.md: the expert_persona object in its JSON, and its field-table row.
+#   Compared unit by unit: a unit is a paragraph, a list item, a heading, a quote line, one table row, or one line in
+#   a code fence, with the indentation of its first line; whitespace inside a unit is folded. Rewrapping a paragraph
+#   is not a change; joining two table rows or two list items, or re-indenting a block, is.
+# WHAT IS NOT PINNED: the rest of the template. One ban guards text outside the pinned blocks: the old "cached hint /
+#   re-infer each run / stay generalist" wording in the template, every command file and every user doc.
+# STRUCTURAL CHECKS: the import list names exactly the command files that import the reference; the floor table and
+#   the template's project_type table name the same types, both ways; the template's and the example's JSON parse as
+#   the record; every variant definition file is a rule input: specialist wording in it is only allowed on its
+#   "Project specialist signals" lines, and each such line declares a rank.
+# THE WRITE GUARD IS A TRIPWIRE, NOT THE PROTECTION (the pinned blocks are). It scans every command file, every text
+#   file under .claude/make-it/ except scaffolds/ (app code), this reference and the template, every file under
+#   desktop/skills/, and CLAUDE.md, minus the writers' own pinned blocks (/make-it's Design step, /retrofit-it's
+#   opening block and Discovery step 7). A unit naming expert_persona with a write word is a write; so is any line
+#   with "expert_persona": or expert_persona =. Honest reads are let through: "the `expert_persona` record",
+#   "no `expert_persona` set", "if `expert_persona` changed", "the specialist(s) recorded in `expert_persona`", and
+#   provenance naming one of the three writers ("set by /make-it"). Known gaps, on purpose: a write with a word not
+#   in the list ("becomes the new `expert_persona`", "Swap the primary in `expert_persona`"); a write split across
+#   two sentences; a write in a file outside the scanned set.
 # Usage: test-project-specialist-rule.sh [ROOT]. With no ROOT it checks this repo, then runs the controls below on
 # edited copies (each with its expected result).
 set -euo pipefail
@@ -54,20 +51,60 @@ fi
 flat() { tr '\n' ' ' | tr -s ' ' | sed -E 's/^ +//; s/ +$//'; }
 # section FILE START [END]: from the line matching START (included) to the line before END (or the end of the file)
 section() { awk -v a="$2" -v b="${3:-}" 'on && b != "" && $0 ~ b {on = 0} $0 ~ a {on = 1} on' "$1"; }
-# pin LABEL ACTUAL WANT: the two texts are equal once whitespace is folded; on a difference, show the first one
+# pin LABEL ACTUAL WANT [DROP]: the two texts are equal unit by unit. A unit is a paragraph, a list item, a heading,
+# a quote line, one table row, or one line inside a code fence; it keeps the indentation of its first line, and the
+# whitespace inside it is folded (so rewrapping a paragraph is not a change, but joining two table rows, joining two
+# list items or re-indenting a block is). A unit that DROP (a regex) matches whole is left out of both.
 pin() {
-  local a w; a="$(printf '%s' "$2" | flat)"; w="$(printf '%s' "$3" | flat)"
-  [ -n "$w" ] || { echo "  $1: the expected block is empty"; return 1; }
-  [ "$a" = "$w" ] && return 0
-  python3 -I -c 'import sys
-a, w = sys.argv[1], sys.argv[2]
-i = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
-print(f"  {sys.argv[3]} differs at character {i}:\n    file: ...{a[max(0, i - 60):i + 100]!r}\n    pin:  ...{w[max(0, i - 60):i + 100]!r}")' "$a" "$w" "$1"
-  return 1
+  python3 -I -c '
+import re, sys
+def norm(text, drop):
+    units, cur, fence = [], None, False
+    for ln in text.split("\n"):
+        s, ind = ln.strip(), len(ln) - len(ln.lstrip(" "))
+        if s.startswith("```"):
+            if cur: units.append(cur); cur = None
+            units.append([ind, s]); fence = not fence; continue
+        if fence: units.append([ind, ln.rstrip()]); continue
+        if not s:
+            if cur: units.append(cur); cur = None
+            continue
+        if cur is None or re.match(r"(\||#|> |[-*+] |\d+\. )", s):
+            if cur: units.append(cur)
+            cur = [ind, s]
+            if s.startswith("|"): units.append(cur); cur = None
+        else:
+            cur[1] += " " + s
+    if cur: units.append(cur)
+    return [str(i) + "|" + " ".join(t.split()) for i, t in units if not (drop and re.fullmatch(drop, " ".join(t.split())))]
+label, a, w, drop = sys.argv[1], norm(sys.argv[2], sys.argv[4]), norm(sys.argv[3], sys.argv[4]), sys.argv[4]
+if not w: print(f"  {label}: the expected block is empty"); sys.exit(1)
+if a == w: sys.exit(0)
+k = next((k for k in range(min(len(a), len(w))) if a[k] != w[k]), min(len(a), len(w)))
+fa = a[k] if k < len(a) else "(none)"; fw = w[k] if k < len(w) else "(none)"
+print("  " + label + " differs at unit " + str(k + 1) + ":\n    file: " + fa[:220] + "\n    pin:  " + fw[:220])
+sys.exit(1)' "$1" "$2" "$3" "${4:-}"
 }
 
 # 1. the reference's two rule blocks and the template's record, whole
-read -r -d '' WANT_R1 <<'BLOCK' || true
+IFS= read -r -d '' WANT_REF <<'BLOCK' || true
+# Expert Personas Reference
+
+Before it changes or judges code, **the AI stops being a generalist and works as a named specialist.**
+Role-prompting is a proven quality lever: an assistant told to work *as* a domain expert brings that
+expert's mental model, spots what a generalist skips, and produces output to the expert's standard.
+
+This is **not** a staffing recommendation (it never suggests hiring a human). It changes how the AI
+*thinks and works* on the task at hand.
+
+Selection is **automatic and silent**: no user question. The only thing a skill says about it is
+the one line a writer says when it replaces a record.
+
+Imported by `make-it`, `retrofit-it`, `debug-it`, `nemo-it`, `fix-it`, `argo-it`, `resolve-it`,
+`dispatch-it` and `subagent-it`.
+
+---
+
 ## One project specialist
 
 Using a specialist and recording one are two separate jobs.
@@ -80,20 +117,24 @@ Using a specialist and recording one are two separate jobs.
   `/retrofit-it` records it when it builds `app-context.json` from an existing app, and `/resume-it`
   re-checks it when the project's scope changes (below). No other skill writes it.
 - **What changes it.** The project's scope changes when its signals change: a signal added, a signal
-  removed, or an unconfirmed signal confirmed or disproved. The writer then works the record out
-  again by the same rule, so it can go up or down, never below the floor.
-- **Same record or a different one.** Two records are the same when they name the same specialists:
-  the same primary and the same added ones, in the same order. The signals' wording does not count.
-  A writer that finds the same specialists keeps the existing record exactly as it is, signals and
-  dates included, and says nothing. The one edit it makes there is to an unconfirmed signal the new
-  evidence settles: a confirmed one loses its `"unconfirmed": true`, and a disproved one is removed.
+  removed, an unconfirmed signal confirmed or disproved, or `project_type` becomes set. The writer
+  then works the record out again by the same rule, so it can go up or down, never below the floor.
+- **Same record or a different one.** Two records name the same specialists when they have the same
+  ranks (security, data, reliability, AI, a variant's, the floor) in the same order, with the floor
+  for the same `project_type`. How a specialist's name is spelled out does not count. With the same
+  specialists a writer keeps their names, `set_by` and `set_at` as they are, because the
+  specialists did not change, and keeps the signal list current without saying anything: it drops
+  signals that are gone, adds new ones, and settles unconfirmed ones (a confirmed one loses its
+  `"unconfirmed": true`, a disproved one is removed). A re-check that changes nothing writes nothing.
 - **No overwrite without saying so.** No skill overwrites the project specialist without saying so.
-  A writer that finds different specialists writes the new record, with its own `set_by` and
+  Overwriting means changing who is named: the primary or the added specialists. A writer that finds
+  different specialists writes the new record, with its own `set_by` and
   `set_at`, and says so the same way every writer does: one plain line to the user and the same line
   in `CHANGELOG.md`; it asks nothing. The `CHANGELOG.md` line is the history. Each writer's step
   says when its line is said and written.
 - **Builders.** `/make-it` and `/resume-it` build the app: they work as the project specialist, the
-  whole record, and add no task specialist of their own.
+  whole record, and add no task specialist of their own. When the record names several specialists,
+  the primary leads and the work is held to the checks and output standard of every one.
 - **Who reads it.** Every other skill that changes or judges code reads the project specialist, then
   adds the specialist its own task needs, the way `/resolve-it` does. For a run, the task specialist
   leads the work and is held to the checks and output standard of every specialist in the record as
@@ -185,8 +226,33 @@ is empty, and no field at all are each read as no record. A reader never rewrite
 `/resume-it` brings the app up to this shape.
 
 ---
-BLOCK
-read -r -d '' WANT_R2 <<'BLOCK' || true
+
+## The persona directive
+
+Once a persona is selected, the AI operates under this frame for the duration of the work:
+
+> You are a **[persona]**. Bring **[mental model]**. A generalist would **[blind spot]** — you do
+> not. Hold the work to this standard: **[output standard]**. Think and act as this expert until the
+> task is complete.
+
+---
+
+## Persona catalog
+
+| Active skill / work | Persona the AI adopts | Mental model it brings | Generalist blind spot it avoids | Output standard |
+|--------------------|----------------------|------------------------|--------------------------------|-----------------|
+| `debug-it` (flaky / slow / prod bug) | SRE / performance engineer | thinks in races, GC pauses, N+1, resource limits, timing | patches the symptom, adds a retry, calls it fixed | root cause proven, regression test, runbook note |
+| `nemo-it` + `fix-it` (auth / data / AI safety) | Application security engineer | attacker mindset, threat-models before touching code | works the findings list, no threat model | threat model, fix + compensating control, attestation-grade rationale |
+| `argo-it` (deploy, real traffic) | Platform / DevOps + SRE | blast radius, SLOs, rollback, failure modes | ships manifests, no alerts or rollback path | runbook, SLOs, alert rules, tested rollback |
+| `retrofit-it` (legacy, high risk) | Software architect | preserve original intent, phased change, risk register | breaks behavior while bolting on features | migration plan, risk register, phased rollout |
+| `dispatch-it` / `subagent-it` (each agent launched on app code; the coordinator adopts none) | the project specialist plus the one *its* task needs | per-task expert focus | one generalist voice across unrelated domains | each worker meets its domain's standard |
+
+Personas are archetypes; several may apply. Which specialist is the project's primary is decided by
+the order in rule 2, not by this table. How a skill's task specialist works with the project
+specialist in a run is in "Who reads it" above.
+
+---
+
 ## Auto-inference rules
 
 The project specialist comes from the `app-context.json` signals, applied by the three writers; the
@@ -197,7 +263,9 @@ task specialist comes from the active skill.
 2. **Signals set the project specialist.** Only the three writers apply these, when they record or
    re-check `expert_persona`; every other skill reads the record instead. In order:
    1. Security: payments, personal data (PII) or health data (PHI) in `compliance`, `purpose` or
-      `features` → **Application security engineer**.
+      `features` → **Application security engineer**. Personal data means data the app holds about
+      people beyond its own sign-in accounts (customers, patients, contacts and the like); the name
+      and email of the app's own users, kept for sign-in, do not count.
    2. Data: `multi_tenancy.needed == true`, or the answers describe data at scale → **Data engineer /
       DBA**.
    3. Reliability / platform: `users.internal_or_external == "external"`, `users.estimated_count` in
@@ -206,9 +274,10 @@ task specialist comes from the active skill.
       from the answers.
    4. AI: `ai_features.usage_level == "heavy"`, or `ai_features.who_edits_prompts` is not
       `developers` → **AI / prompt engineer**.
-   5. Variant: a signal the app's variant names in its definition file under "Project specialist
-      signals" → **the specialist it names**. A variant signal that is really a security, data,
-      reliability or AI signal takes that signal's rank instead.
+   5. Variant: a signal the app's variant declares in its definition file under "Project specialist
+      signals" → **the specialist it names**, at the rank the file declares next to it (security,
+      data, reliability, AI, or after AI and before the floor). Writers copy the declared rank; they
+      never judge it.
    6. The floor for the `project_type`.
 
    **The order decides the primary.** The highest specialist in this order that applies is primary;
@@ -243,7 +312,7 @@ Near the top of its work, the skill:
 
 The persona shapes *how* the work is done. It never blocks, never gates, never recommends hiring.
 BLOCK
-read -r -d '' WANT_TJ <<'BLOCK' || true
+IFS= read -r -d '' WANT_TJ <<'BLOCK' || true
   "expert_persona": {
     "primary": { "specialist": "", "signals": [] },
     "added": [],
@@ -252,10 +321,8 @@ read -r -d '' WANT_TJ <<'BLOCK' || true
   },
 BLOCK
 TROW='| expert_persona | /make-it (Design), /retrofit-it, /resume-it (on a scope change) | The project specialist record (see `references/expert-personas.md`): `primary` and `added` specialists, each with the `signals` that led to it (a signal can be `"unconfirmed": true`), and `set_by` / `set_at`. No other skill writes it. An older plain text value that names a specialist is read as the primary; a text value naming none ("generalist", "none" or empty) or a record with an empty `primary.specialist` means no record. |'
-check "the reference's rule block (One project specialist ... The record) is exactly the pinned text" \
-  'pin "rule block 1" "$(section "$REF" "^## One project specialist$" "^## The persona directive$")" "$WANT_R1"'
-check "the reference's rule block (Auto-inference rules ... the end) is exactly the pinned text" \
-  'pin "rule block 2" "$(section "$REF" "^## Auto-inference rules$")" "$WANT_R2"'
+check "the whole reference (but its import list) is exactly the pinned text" \
+  'pin "the reference" "$(cat "$REF")" "$WANT_REF" "Imported by (\`[a-z-]+\`(, | and ))*\`[a-z-]+\`[.]"'
 check "the template's expert_persona object is exactly the pinned text" \
   'pin "template record" "$(section "$TPL" "^  \"expert_persona\": [{]$" "^  \"skipped_guardrails\"")" "$WANT_TJ"'
 check "the template's field row is exactly the pinned text, once" '[ "$(grep -cxF -- "$TROW" "$TPL")" = 1 ]'
@@ -309,6 +376,17 @@ PY
 check "the template's JSON holds expert_persona once, as the record" 'shape "$TPL" ""'
 check "the reference's worked example is that record, filled in, set by a writer, floor included, an unconfirmed signal" 'shape "$REF" "## The record" example'
 
+# every variant definition file is a rule input
+variants() {
+  local f m=0
+  for f in .claude/make-it/variants/*.md; do
+    case "$(basename "$f")" in registry.md) continue ;; esac
+    if grep -viE '^- \*\*Project specialist signals' "$f" | gq -iE 'specialist|expert_persona'; then echo "  $f: specialist wording outside its Project specialist signals lines"; m=1; fi
+    if grep -iE '^- \*\*Project specialist signals' "$f" | gq -viE 'rank'; then echo "  $f: a Project specialist signals line declares no rank"; m=1; fi
+  done; [ "$m" = 0 ]
+}
+check "every variant file: specialist wording only on its Project specialist signals lines, each declaring a rank" 'variants'
+
 # 3. the one ban kept: it guards text OUTSIDE the pinned blocks
 OLD='cached (default )?hint|re-infer(s|red)? (per|each|every) run|skills re-infer|cache, don.t trust|stays? (a )?(fast |competent )?generalist|generalist is the right|do \*?not\*? force a persona|expert_persona \| [^|]*any skill'
 check "(ban outside the pinned blocks) no reference, template, command or user doc keeps the old wording" \
@@ -321,9 +399,11 @@ import re, sys
 WRITE = re.compile(r"\b(record|records|recording|write|writes|writing|written|store|stores|storing|stored|cache|caches|caching|"
                    r"save|saves|saving|saved|update|updates|updating|updated|overwrite|overwrites|overwriting|populate|populates|"
                    r"fill in|fills in|set|sets|setting|change|changes|changing|changed|migrate|migrates|put|puts|putting|replace|"
-                   r"replaces|replacing|replaced|assign|assigns|assigned|edit|edits|editing|edited|add|adds|adding|added|append|"
+                   r"replaces|replacing|replaced|assign|assigns|assigned|recorded|edit|edits|editing|edited|add|adds|adding|added|append|"
                    r"appends|appending|appended|persist|persists|persisting|persisted|rewrite|rewrites|rewriting|rewrote|rewritten)\b", re.I)
 PROV = re.compile(r"\b(set|recorded|written|updated|re-checked) by `?/?(make-it|retrofit-it|resume-it)`?(?=[\s.,;:)]|$)", re.I)
+HONEST = [re.compile(r"`?expert_persona`? records?\b", re.I), re.compile(r"\bno `?expert_persona`? set\b", re.I),
+          re.compile(r"\bif `?expert_persona`? (has )?changed\b", re.I), re.compile(r"\bspecialists? recorded in `?expert_persona`?", re.I)]
 CODE = re.compile(r'"expert_persona"\s*:|\bexpert_persona\s*=')
 # each writer's own pinned blocks: (file suffix, start line regex, end line regex) -- removed before the scan
 EXEMPT = [("/commands/make-it.md", r"^\*\*Project specialist \(SILENT", r"^\*\*Build the app-context internally"),
@@ -357,6 +437,7 @@ for path in sys.argv[1:]:
         if CODE.search(ln): hits.append(f"{path}: code line: {ln.strip()[:160]}")
     for u in units(lines):
         u2 = PROV.sub("", re.sub(r"</?expert_persona>", "", u))
+        for honest in HONEST: u2 = honest.sub("expert_persona", u2)
         if "expert_persona" in u2 and WRITE.search(u2): hits.append(f"{path}: {u[:180]}")
 for h in hits: print("  writes the field: " + h)
 sys.exit(1 if hits else 0)
@@ -377,15 +458,39 @@ if [ -z "${1:-}" ]; then
   DBG=.claude/commands/debug-it.md
   check "(control) the unchanged copy passes" 'd="$(copy)"; bash "$SELF" "$d" >/dev/null 2>&1'
   # D5: whole blocks -- one harmless sentence inside each pinned block fails; outside, it passes
-  check "(control, D5) a harmless sentence added inside rule block 1 fails" 'add "$REF" "Using a specialist and recording one are two separate jobs." " This keeps things tidy."'
-  check "(control, D5) a harmless sentence added inside rule block 2 fails" 'add "$REF" "Near the top of its work, the skill:" " (This list is short.)"'
+  check "(control, D5) a harmless sentence added inside the rule fails" 'add "$REF" "Using a specialist and recording one are two separate jobs." " This keeps things tidy."'
+  check "(control, D5) a harmless sentence added inside \"How a skill invokes this\" fails" 'add "$REF" "Near the top of its work, the skill:" " (This list is short.)"'
+  check "(control, H) fails: a sentence in the catalog (\"the catalog row wins\")" 'add "$REF" "Personas are archetypes; several may apply." " When this table and rule 2 disagree, the catalog row wins."'
+  check "(control, H) fails: the intro calls the rule sections kept for history" 'add "$REF" "It changes how the AI" " (The rule sections below are kept for history.)"'
+  check "(control, H) fails: a second \"short form\" section" 'fails "$REF" "## The persona directive" "## Project specialist, short form\n\nThe primary is whatever the active skill likes.\n\n## The persona directive"'
+  pfails() { local d; d="$(copy)"; perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! bash "$SELF" "$d" >/dev/null 2>&1; }
+  JOIN='s/(\| Senior full-stack engineer of its stack \|)\n(\| `api-service`)/$1 $2/'
+  INDENT='s/^   5\. Variant:/         5. Variant:/m'
+  UNINDENT='s/^   (\*\*The order decides the primary\.\*\*)/$1/m'
+  check "(control, H) fails: two table rows joined into one line" 'pfails "$REF" "$JOIN"'
+  check "(control, H) fails: rule 2 item 5 indented into a code block" 'pfails "$REF" "$INDENT"'
+  check "(control, H) fails: \"The order decides the primary\" un-indented out of rule 2" 'pfails "$REF" "$UNINDENT"'
+  check "(control, E) fails: the project_type trigger dropped" 'fails "$REF" ", or \`project_type\` becomes set." "."'
+  check "(control, D8) fails: sign-in accounts count as personal data again" 'fails "$REF" "the name and email of the app'"'"'s own users, kept for sign-in, do not count." "the name and email of the app'"'"'s own users count too."'
+  check "(control, D9) fails: kept specialists rewrite set_at" 'fails "$REF" "keeps their names, \`set_by\` and \`set_at\` as they are" "keeps their names as they are, rewrites \`set_at\`"'
+  check "(control, C) fails: writers judge a variant signal's rank" 'fails "$REF" "Writers copy the declared rank; they never judge it." "Writers judge the rank."'
+  check "(control, G) fails: names compared as text" 'fails "$REF" "How a specialist'"'"'s name is spelled out does not count." "The names must match word for word."'
+  check "(control, C) fails: variants/mobile.md declares its specialist primary above every base signal" 'fails .claude/make-it/variants/mobile.md "" "\nIts specialist is primary, above every base signal.\n"'
+  check "(control, C) fails: a variant signal line with no declared rank" 'fails .claude/make-it/variants/mobile.md "" "\n- **Project specialist signals:** \`variant_config.offline_support\` is full-sync -> Data engineer / DBA\n"'
+  check "(control, C) passes: a variant signal line with a declared rank" 'passes .claude/make-it/variants/mobile.md "" "\n- **Project specialist signals:** \`variant_config.offline_support\` is full-sync -> Data engineer / DBA, rank: data\n"'
+  check "(control, D) fails: \"The persona you chose is then recorded in \`expert_persona\`.\"" 'add "$DBG" "</expert_persona>" "\n\nThe persona you chose is then recorded in \`expert_persona\`."'
+  check "(control, D) fails: \"Update the \`expert_persona\` record\"" 'add "$DBG" "</expert_persona>" "\n\nUpdate the \`expert_persona\` record with your role."'
+  check "(control, D) passes: \"Read the \`expert_persona\` record\"" 'passes "$DBG" "</expert_persona>" "</expert_persona>\n\nRead the \`expert_persona\` record before you start."'
+  check "(control, D) passes: \"With no \`expert_persona\` set\"" 'passes "$DBG" "</expert_persona>" "</expert_persona>\n\nWith no \`expert_persona\` set, work as the task specialist alone."'
+  check "(control, D) passes: \"If \`expert_persona\` changed since your last run\"" 'passes "$DBG" "</expert_persona>" "</expert_persona>\n\nIf \`expert_persona\` changed since your last run, say nothing."'
   check "(control, D5) a harmless key added inside the template's record fails" 'add "$TPL" "    \"set_at\": \"\"" ",\n    \"note\": \"\""'
-  check "(control, D5) a harmless sentence added outside the pinned blocks (the catalog) passes" 'passes "$REF" "Personas are archetypes; several may apply." "Personas are archetypes; several may apply. This keeps things tidy."'
+  OV=.claude/make-it/confluence-docs/00-make-it-framework-overview.md
+  check "(control, D5) a harmless sentence added outside the pinned blocks (the overview doc) passes" 'passes "$OV" "" "\nThis keeps things tidy.\n"'
   # N8: honest sentences outside the pinned blocks now pass
-  check "(control, N8) passes: \"\`/demo-it\` and \`/wrap-it\` use no specialist at all.\" (outside the blocks)" \
-    'passes "$REF" "\`dispatch-it\` and \`subagent-it\`." "\`dispatch-it\` and \`subagent-it\`. \`/demo-it\` and \`/wrap-it\` use no specialist at all."'
-  check "(control, N8) passes: \"No approval is needed.\" (outside the blocks)" 'passes "$REF" "no user question." "no user question. No approval is needed."'
-  check "(control, N8) passes: an unrelated \"quietly\" (outside the blocks)" 'passes "$REF" "Personas are archetypes;" "Personas work quietly. Personas are archetypes;"'
+  check "(control, N8) passes: \"\`/demo-it\` and \`/wrap-it\` use no specialist at all.\" (outside the pinned blocks)" 'passes "$OV" "" "\n\`/demo-it\` and \`/wrap-it\` use no specialist at all.\n"'
+  check "(control, H) fails: a sentence appended to the import list paragraph" 'add "$REF" "\`dispatch-it\` and \`subagent-it\`." " \`/demo-it\` writes the record too."'
+  check "(control, N8) passes: \"No approval is needed.\" (outside the pinned blocks)" 'passes "$OV" "" "\nNo approval is needed.\n"'
+  check "(control, N8) passes: an unrelated \"quietly\" (outside the pinned blocks)" 'passes "$OV" "" "\nThe specialist works quietly.\n"'
   # the 15 reversals from the first review (inside the blocks they fail by the pin; in other files by the guard)
   check "(control R1) fails: a skill may re-infer" 'add "$REF" "No other skill writes it." " A skill may re-infer the project specialist from the signals whenever they look different."'
   check "(control R2) fails: other skills recompute it" 'add "$REF" "No other skill writes it." " Other skills recompute it from the signals on each run and use their result instead."'
