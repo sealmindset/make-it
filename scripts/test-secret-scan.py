@@ -11004,5 +11004,233 @@ class ReviewRound2Cases(ArgoItUnsavedCodeCases):
                          [True, True])
 
 
+
+# Task 5: the troubleshooting blocks and asks, pinned whole
+T5_CTX = '''c=$(python3 -I -c 'import json; print((json.load(open(".make-it/app-context.json")).get("deployment") or {}).get("k8s_context") or "")' 2>/dev/null)'''
+
+T5_READ = '''# The app's own cluster, as setup recorded it (deployment.k8s_context); none recorded: no command here reads one
+''' + T5_CTX + '''
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
+# Read only, on that cluster by name: the running version, then the one the last build sent
+kubectl --context "$c" get pods -n {namespace} -o jsonpath='{.items[*].spec.containers[*].image}'
+grep 'image:' env/dev/{service}.yaml
+'''
+
+T5_CHECK = '''# Before the ask: a restart may only reach the app's own cluster, so this computer must point at it now
+''' + T5_CTX + '''
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
+'''
+
+T5_RESTART = '''# Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
+''' + T5_CTX + '''
+[ -n "$c" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] || { echo "OTHER CLUSTER"; exit 1; }
+kubectl --context "$c" rollout restart deployment/{service} -n {namespace}
+'''
+
+T5_RERUN = '''# Only after the user picked "Rebuild {hostname}": the last build of this project, run again
+gh run rerun {run_id}
+'''
+
+T5_LOGS = '''# Read only, on the app's own cluster by name: what the running version printed last
+''' + T5_CTX + '''
+[ -n "$c" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
+kubectl --context "$c" logs -n {namespace} deploy/{service} --tail=100
+'''
+
+T5_RESTART_ASK = '''"Your app at {hostname} is still running an older version than the last one built and sent: [the
+evidence, in plain words -- e.g. 'the running version came from Tuesday's build; the latest is from
+today']. I can restart it on [the app's cluster name] -- the group of servers it runs on -- so it
+picks up the latest version. Anyone using {hostname} right now is interrupted for about 30 seconds
+while it restarts. There's nothing to undo: a restart only starts your app again on the version
+already sent, and your code and data don't change. The one thing to check: is anyone in the middle
+of something on {hostname} right now?
+
+- **Restart {hostname}** -- restart it now on [the app's cluster name]
+- **Not now** -- I change nothing"'''
+
+T5_REBUILD_ASK = '''"The last build of your app didn't finish handing the latest version to the deployment system:
+[the evidence, in plain words]. I can run that build again: it builds the last version you sent and
+hands it over, and [the app's cluster name / the servers your app runs on] picks it up within a few
+minutes. Anyone using {hostname} may be interrupted for about 30 seconds when the new version
+starts. There's nothing to undo: it sends the same version again, and your code and data don't
+change. The one thing to check: is anyone in the middle of something on {hostname} right now?
+
+- **Rebuild {hostname}** -- run the last build again now
+- **Not now** -- I change nothing"'''
+
+
+class ArgoItRestartAsksCases(Base):
+    """Plan Task 5 (owner's go, 2026-11-21): troubleshooting never restarts the running app or re-runs its build on its
+    own. Diagnosing only reads, on the app's own cluster by name (`--context`, from `deployment.k8s_context`, which
+    setup records). One select before a restart or a rebuild; never on another cluster or an unknown one, where the
+    Argo CD click steps are given instead. The blocks and the two asks are pinned whole; then they are run under bash
+    and zsh with a fake kubectl and gh on PATH."""
+
+    CTX = T5_CTX
+    READ = T5_READ
+    CHECK = T5_CHECK
+    RESTART = T5_RESTART
+    RERUN = T5_RERUN
+    LOGS = T5_LOGS
+    RESTART_ASK = T5_RESTART_ASK
+    REBUILD_ASK = T5_REBUILD_ASK
+
+    def _doc(self):
+        return ArgoItWiringCases('test_old_inline_scan_is_gone')._doc()
+
+    def _section(self, doc=None):
+        doc = doc or self._doc()
+        i = doc.index('<step name="post-deploy-troubleshoot">')
+        return doc[i:doc.index('</step>', i)]
+
+    def _fences(self, sec):
+        return re.findall(r'(?ms)^```bash\n(.*?)^```', sec)
+
+    # --- pinned whole ----------------------------------------------------------------------------------------------
+    def test_1_the_blocks_are_pinned_whole(self):
+        fs = self._fences(self._section())
+        for name in ('READ', 'CHECK', 'RESTART', 'RERUN', 'LOGS'):
+            self.assertIn(getattr(self, name), fs, '5c has no block exactly as %s' % name)
+
+    def test_2_the_asks_are_pinned_whole(self):
+        sec = self._section()
+        for name in ('RESTART_ASK', 'REBUILD_ASK'):
+            self.assertIn(getattr(self, name), sec, '5c has no %s exactly as pinned' % name)
+            ask = getattr(self, name)
+            self.assertNotRegex(ask, r'(?i)\b(pod|container|image|rollout|kubectl)\b', 'a NEVER-say word in %s' % name)
+
+    def test_3_no_restart_or_rerun_outside_its_block(self):
+        sec = self._section()
+        for f in self._fences(sec):
+            if f not in (self.RESTART, self.RERUN):
+                self.assertNotRegex(f, r'rollout\s+restart|run\s+rerun', 'a restart or rerun outside its block: %r' % f)
+        flat = re.sub(r'\s+', ' ', re.sub(r'(?ms)^```bash\n.*?^```', '', sec))
+        self.assertNotRegex(flat, r'`kubectl[^`]*rollout restart[^`]*`|`gh run rerun[^`]*`(?![^|]{0,40}only)',
+                            'a restart or rerun named as an action outside its pick')
+
+    def test_4_every_kubectl_names_the_cluster(self):
+        for f in self._fences(self._section()):
+            for l in f.splitlines():
+                if re.search(r'^\s*[^#]*\bkubectl\s', l) and 'config current-context' not in l and 'command -v' not in l:
+                    self.assertIn('--context', l, l)
+
+    def test_5_the_rows_and_the_rules_ask_first(self):
+        sec = self._section()
+        rows = [l for l in sec.splitlines() if l.startswith(('| Pod running old image', '| Deploy branch not updated'))]
+        self.assertEqual(len(rows), 3, rows)
+        for row in rows:
+            auto = row.split('|')[2].strip()
+            self.assertNotRegex(auto, r'^(?:Yes|Maybe)\b', 'a restart or rebuild row still auto-fixes: %r' % row)
+        doc = self._doc()
+        self.assertNotIn("don't ask the user to click around Argo", doc)
+        rules = doc[doc.index('**Post-deploy troubleshooting rules (PHASE 5c):**'):]
+        rules = re.sub(r'\s+', ' ', rules[:rules.index('\n\n')])
+        self.assertRegex(rules, r'(?i)only after the user picks Restart \{hostname\} or Rebuild \{hostname\}')
+        self.assertRegex(rules, r"(?i)another cluster[^.]{0,120}Argo CD")
+
+    def test_6_setup_records_the_apps_cluster(self):
+        doc = self._doc()
+        i = doc.index('<step name="setup">')
+        setup = re.sub(r'\s+', ' ', doc[i:doc.index('</step>', i)])
+        self.assertRegex(setup, r'deployment\.k8s_context', "setup doesn't record the app's cluster")
+        self.assertRegex(setup, r'(?i)\*\*None of these / not sure\*\*', "the cluster pick has no way out")
+        self.assertRegex(setup, r'(?i)local', "setup offers local clusters as the app's")
+
+    def test_7_the_stops_and_not_now_are_true_lines(self):
+        sec = self._section()
+        flat = re.sub(r'\s+', ' ', sec)
+        for mark, rx in (('CLUSTER UNKNOWN', r"I won't restart your app from here: I have no record of which cluster"),
+                         ('OTHER CLUSTER', r"I won't restart your app from here: this computer is set to work with")):
+            i = flat.index('`%s`' % mark)
+            self.assertRegex(flat[i:i + 700], rx, mark)
+            self.assertRegex(flat[i:i + 700], r'(?i)Argo CD', '%s gives no Argo CD steps' % mark)
+        self.assertRegex(flat, r"(?i)Not now., a dismissed ask, or any other answer changes nothing")
+        self.assertIn("I haven't changed anything. When it suits you, run /argo-it again and pick Restart {hostname}.",
+                      flat)
+
+    # --- run under bash and zsh, with a fake kubectl and gh --------------------------------------------------------
+    def _env(self, td, ctx):
+        bin_ = os.path.join(td, 'bin')
+        os.makedirs(bin_, exist_ok=True)
+        log = os.path.join(td, 'calls.log')
+        for tool in ('kubectl', 'gh'):
+            with open(os.path.join(bin_, tool), 'w') as f:
+                f.write('#!/bin/sh\necho "%s $*" >> "%s"\ncase "$*" in\n  *"config current-context"*) printf '
+                        "'%%s\\n' \"$FAKE_CTX\";;\n  *\"get pods\"*) echo reg/app:old;;\nesac\n" % (tool, log))
+            os.chmod(os.path.join(bin_, tool), 0o755)
+        return log, dict(os.environ, PATH=bin_ + os.pathsep + os.environ['PATH'], FAKE_CTX=ctx)
+
+    def _run(self, code, cwd, env, shell):
+        code = (code.replace('{namespace}', 'acme').replace('{service}', 'backend').replace('{hostname}', 'acme.example')
+                .replace('{run_id}', '42').replace('{deploy_branch}', 'deploy-nonprod').replace('{current_branch}', 'main'))
+        return subprocess.run([shutil.which(shell), '-c', code], cwd=cwd, env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=60)
+
+    def _project(self, td, recorded):
+        os.makedirs(os.path.join(td, '.make-it'))
+        with open(os.path.join(td, '.make-it', 'app-context.json'), 'w') as f:
+            f.write('{"deployment": {"k8s_context": "acme-prod-eu"}}\n' if recorded else '{"deployment": {}}\n')
+        os.makedirs(os.path.join(td, 'env', 'dev'))
+        with open(os.path.join(td, 'env', 'dev', 'backend.yaml'), 'w') as f:
+            f.write('image: reg/app:new\n')
+
+    def _calls(self, log):
+        return open(log).read().splitlines() if os.path.exists(log) else []
+
+    def test_8_nothing_restarts_or_reruns_before_the_pick(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                need_shell(shell)
+                with tempfile.TemporaryDirectory() as td:
+                    self._project(td, True)
+                    log, env = self._env(td, 'acme-prod-eu')
+                    for f in self._fences(self._section()):
+                        if f not in (self.RESTART, self.RERUN):
+                            self._run(f, td, env, shell)
+                    calls = self._calls(log)
+                    self.assertFalse([c for c in calls if 'rollout restart' in c or 'run rerun' in c], calls)
+                    reads = [c for c in calls if c.startswith('kubectl ') and 'config current-context' not in c]
+                    self.assertTrue(reads, 'no read of the cluster ran: %r' % calls)
+                    for c in reads:
+                        self.assertIn('--context acme-prod-eu', c, c)
+
+    def test_9_the_pick_restarts_on_the_apps_cluster_only(self):
+        for shell in ('bash', 'zsh'):
+            for now, recorded, ok in (('acme-prod-eu', True, True), ('someone-elses', True, False),
+                                      ('', True, False), ('acme-prod-eu', False, False)):
+                with self.subTest(shell=shell, now=now, recorded=recorded):
+                    need_shell(shell)
+                    with tempfile.TemporaryDirectory() as td:
+                        self._project(td, recorded)
+                        log, env = self._env(td, now)
+                        check = self._run(self.CHECK, td, env, shell)
+                        self.assertEqual(check.returncode == 0, ok, check.stdout)
+                        cp = self._run(self.RESTART, td, env, shell)
+                        restarts = [c for c in self._calls(log) if 'rollout restart' in c]
+                        if ok:
+                            self.assertEqual(restarts, ['kubectl --context acme-prod-eu rollout restart '
+                                                        'deployment/backend -n acme'])
+                        else:
+                            self.assertEqual(restarts, [], 'a restart on %r' % now)
+                            self.assertIn(b'CLUSTER UNKNOWN' if not recorded else b'OTHER CLUSTER',
+                                          check.stdout)
+
+    def test_10_controls_each_old_form_fails_these_checks(self):  # controls
+        old_line = 'kubectl rollout restart deployment/{service} -n {namespace} 2>/dev/null'
+        self.assertNotIn('--context', old_line)
+        self.assertRegex(old_line, r'rollout\s+restart')
+        old_row = '| Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |'
+        self.assertRegex(old_row.split('|')[2].strip(), r'^(?:Yes|Maybe)\b')
+        old_rule = "- If kubectl is available, use `kubectl rollout restart` -- don't ask the user to click around Argo"
+        self.assertIn("don't ask the user to click around Argo", old_rule)
+        sec = self._section()
+        for cut in ("[the app's cluster name] -- the group of servers it runs on -- ", 'interrupted for about 30 seconds'):
+            self.assertIn(cut, self.RESTART_ASK)
+            self.assertNotIn(self.RESTART_ASK.replace(cut, ''), sec, 'the ask without %r passes' % cut)
+        self.assertNotIn(self.RESTART.replace('--context "$c" ', ''), self._fences(sec))
+
+
 if __name__ == '__main__':
     unittest.main()
