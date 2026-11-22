@@ -768,7 +768,9 @@ def scan(root, cleared, projects=None):
             with open(path, "rb") as f:
                 raw = f.read()
             hashes[rel] = hashlib.sha256(raw).hexdigest()
-            gitsha[rel] = hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
+            # git's own name for the file (git names blobs by SHA-1), used only to match git's records in
+            # stale_copies. Cleared files are matched by the SHA-256 above, never by this.
+            gitsha[rel] = hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
             report["checked"] += 1
             if not is_py:
                 found[rel].extend(check_config(base, raw))
