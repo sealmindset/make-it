@@ -22,7 +22,8 @@
 # "command" key on, or the whole input when there is none): a push with any force sign in it is
 # refused; anything else is let through. The installers also set "onFailure": "block" (Claude Code
 # 2.1.295 and later), so a hook that can't start or crashes blocks the call instead of letting it
-# through.
+# through. If the hook file is gone (make-it removed), the command the installers write runs
+# nothing and lets every command through: removing make-it turns the guard off, never the shell.
 #
 # Exit 0 = allowed. Exit 2 = refused (Claude Code gives Claude the message and doesn't run it).
 # The reading is done in awk: bash's own string loops slow down with the square of a long command.

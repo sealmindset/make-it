@@ -193,7 +193,8 @@ curl -fsSL https://raw.githubusercontent.com/sealmindset/make-it/main/install.sh
 On Windows (PowerShell): `$env:MAKEIT_FORCE_PUSH_GUARD = "remove"; irm https://raw.githubusercontent.com/sealmindset/make-it/main/install.ps1 | iex`
 
 Once removed (that way, or by deleting it from `settings.json` yourself), later updates leave it
-out. To add it back, run the same command with `--add-force-push-guard` (on Windows, `"add"`).
+out. Deleting make-it's folder (`~/.claude/make-it`) also turns the guard off, so Claude's commands
+keep working. To add it back, run the same command with `--add-force-push-guard` (on Windows, `"add"`).
 
 ---
 

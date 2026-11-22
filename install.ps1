@@ -1051,7 +1051,11 @@ function Install-MakeItSkills($state) {
     if (-not $bashExe -or -not (Test-Path -LiteralPath $bashExe)) {
         Fail "Could not find git-bash (bash.exe), so the guard that stops git push --force is not added. Make sure Git for Windows is installed, then run this installer again."
     }
-    $guardCmd = "`"$($bashExe -replace '\\', '/')`" `"$guard`""
+    # Runs the hook only while its file is there: removing make-it turns the guard off instead of
+    # blocking every command; any other failure of the hook still blocks (onFailure: block). Each
+    # path is single-quoted for git-bash, so a space, a quote or a $ in it is kept as it is.
+    $sq = { param($t) "'" + ($t -replace "'", "'\''") + "'" }
+    $guardCmd = (& $sq ($bashExe -replace '\\', '/')) + ' -c ''[ -f "$0" ] || exit 0; exec "$BASH" "$0"'' ' + (& $sq $guard)
     $guardMode = if ($env:MAKEIT_FORCE_PUSH_GUARD -in @("add", "remove")) { $env:MAKEIT_FORCE_PUSH_GUARD } else { "auto" }
     $guardOut = & (Join-Path (Join-Path $MAKEIT_DIR "scripts") "add-no-force-push-hook.ps1") -Path (Join-Path $CLAUDE_DIR "settings.json") `
         -Command $guardCmd -HookFile (Join-Path (Join-Path $MAKEIT_DIR "hooks") "no-force-push.sh") `

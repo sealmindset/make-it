@@ -296,7 +296,10 @@ install_force_push_guard() {
     return 0
   fi
   q="'$(printf '%s' "$hook" | sed "s/'/'\\\\''/g")'"
-  out="$(python3 -I "$MAKEIT_DIR/scripts/add-no-force-push-hook.py" "$CLAUDE_DIR/settings.json" "bash $q" \
+  # Runs the hook only while its file is there: removing make-it turns the guard off instead of
+  # blocking every command; any other failure of the hook still blocks (onFailure: block).
+  out="$(python3 -I "$MAKEIT_DIR/scripts/add-no-force-push-hook.py" "$CLAUDE_DIR/settings.json" \
+    "bash -c '[ -f \"\$0\" ] || exit 0; exec \"\$BASH\" \"\$0\"' $q" \
     "$hook" "$MAKEIT_DIR/force-push-guard.state" "$mode")" \
     || fail "The skills are installed, but the guard that stops git push --force is not changed (see the line above)."
   ok "$out"
