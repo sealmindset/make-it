@@ -738,8 +738,6 @@ the manifests automatically.
 # final newline), then unstage them in case any is tracked. :(top,...) = from the repo root, so
 # a nested repo's pre-staged files stay out too. If the save fails, stop here: nothing is sent.
 fail() { echo "SAVE FAILED: $1"; exit 1; }
-# Only what the step-2 ask named: the commit it was shown on and the saves GitHub didn't have (step 1 kept them)
-[ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked" 2>/dev/null)" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
 grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
 for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
          '.git-credentials' '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
@@ -751,6 +749,8 @@ done
   ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/.git-credentials' \
   ':(top,glob)**/*credentials*.json' ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' \
   ':(top,glob)**/*.db' ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
+# Only what the step-2 ask named: the commit it was shown on and the saves GitHub didn't have (step 1 kept them)
+[ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked" 2>/dev/null)" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
 git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
 s=$(git rev-parse HEAD) || fail "could not read the save"
 
@@ -2430,7 +2430,7 @@ If the block prints `SAVE FAILED`, stop -- nothing was sent. Tell the user: "I c
 setup files I made, so nothing was sent. [the reason, in plain words, as PHASE 5b step 4 gives
 it]" If it prints `SAVED SINCE THE CHECK`, nothing was saved or sent: something was saved after
 the check (a change the user saved between the check and this block, say), so go back to step 1
--- run its unsaved-code check and the seal again, on what is there now -- then run step 2 and 2b
+-- run its unsaved-code check and the seal again, on what is there now -- then run step 2, run 2b
 again, and show the step-3 ask again before anything is sent, naming what is new. If it
 prints `FETCH FAILED`, GitHub couldn't be read, so nothing was saved or sent: stop, and tell the
 user step 2's message for `FETCH FAILED`.
