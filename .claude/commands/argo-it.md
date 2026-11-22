@@ -329,16 +329,21 @@ The user just wants their changes deployed. Keep it simple and non-technical.
 **1. Check for uncommitted changes, after reading what GitHub has:**
 
 ```bash
-# Only a project git keeps track of can be checked or sent
-git rev-parse --git-dir >/dev/null 2>&1 || { echo "NOT A REPO"; exit 1; }
-# The same lines as PHASE 5 step 2: one address for sends and reads, then everything GitHub has, read into
-# argo-it's own names (refs/argo-it/gh/...), never the user's branches, remote-tracking refs or tags
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || { echo "SPLIT ORIGIN"; exit 1; }
+# Git itself, and a project it keeps track of and trusts, before anything is read
+command -v git >/dev/null 2>&1 || { echo "NO GIT"; exit 1; }
+e=$(git rev-parse --git-dir 2>&1 >/dev/null) || { case "$e" in (*safe.directory*) echo "NOT TRUSTED";; (*) echo "NOT A REPO";; esac; exit 1; }
+# The same lines as PHASE 5 step 2: an online home, the same one for sends and reads (the host and owner/repository;
+# git's insteadOf rewriting applied), then everything it has, read into argo-it's own names (refs/argo-it/gh/...),
+# never the user's branches, remote-tracking refs or tags
+git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
 git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 git status --short
 git log --oneline HEAD --not --glob='refs/argo-it/gh/*'          # saved changes GitHub doesn't have yet
 git rev-list --count HEAD --not --glob='refs/argo-it/gh/*'       # M for "[M saved changes not sent yet]"
+# What the ask names, kept for step 4: this commit and the saves GitHub doesn't have
+{ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; } > "$(git rev-parse --git-dir)/argo-it-asked"
 ```
 
 "Not sent" counts only what GitHub holds now: a commit GitHub has on any branch, or only through a
@@ -352,11 +357,31 @@ it reads them from, and I only send to the same place I read from. What to do ne
 set up the fork, or remove the separate sending address, then run /argo-it again."
 
 If the block prints `FETCH FAILED`, stop -- don't show the step-2 ask: without a current copy of
-what GitHub holds, the count of changes not sent yet would be a guess. Tell the user:
+what the code's online home holds, the count of changes not sent yet would be a guess. Tell the
+user, naming the place by the host in the project's address:
 
-"I couldn't reach GitHub to see what's already there, so I haven't saved or sent anything. [the
-reason, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] What to do next:
-[the fix], then run /argo-it again."
+"I couldn't reach your code's online home ([the host from the project's address, e.g. github.com])
+to see what's already there, so I haven't saved or sent anything. [the reason, in plain words --
+e.g. 'Git can't sign in there from this computer'] What to do next: [the fix], then run /argo-it
+again."
+
+If the block prints `NO ORIGIN`, stop -- don't show the step-2 ask. Tell the user:
+
+"I haven't saved or sent anything: this project has no online copy set up, so there's nowhere to
+send it. What to do next: ask your DevOps team to connect the project to its online home, then run
+/argo-it again."
+
+If the block prints `NO GIT`, stop -- don't show the step-2 ask. Tell the user:
+
+"I haven't saved or sent anything: Git, the tool that saves and sends your code, isn't installed on
+this computer, so I can't check or send anything. What to do next: install Git (git-scm.com), then
+run /argo-it again."
+
+If the block prints `NOT TRUSTED`, stop -- don't show the step-2 ask. Tell the user:
+
+"I haven't saved or sent anything: Git won't work in this folder because it belongs to another
+account on this computer. What to do next: ask your DevOps team to mark the folder as safe for
+Git, then run /argo-it again."
 
 If the block prints `NOT A REPO`, stop -- don't show the step-2 ask. Tell the user:
 
@@ -473,8 +498,9 @@ Never show raw Python tracebacks.
 
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
-# Only a project git keeps track of can be checked (exit 2 = couldn't check)
-git rev-parse --git-dir >/dev/null 2>&1 || { echo "NOT A REPO"; exit 2; }
+# Git itself, and a project it keeps track of and trusts, or it can't check (exit 2)
+command -v git >/dev/null 2>&1 || { echo "NO GIT"; exit 2; }
+e=$(git rev-parse --git-dir 2>&1 >/dev/null) || { case "$e" in (*safe.directory*) echo "NOT TRUSTED";; (*) echo "NOT A REPO";; esac; exit 2; }
 # Read everything GitHub has again, right before the scan, with step 1's lines (PHASE 5 step 2's): every branch and
 # tag into argo-it's own names (refs/argo-it/gh/...); in a shallow clone, all the history first. A failed read prints
 # FETCH FAILED and stops the block before the scan: without it, what GitHub already has can't be told.
@@ -516,10 +542,14 @@ Run it from the project root with a 120-second timeout, then read the result:
   The script not found -- "The tool that does this check is missing. Type /make-it update, then
   run /argo-it again." `git --version` older than 2.25 -- "This check needs a newer version of
   Git (2.25 or later). Update Git, then run /argo-it again." A timeout -- "The check took too
-  long to finish." The block printed `NOT A REPO` -- "This folder isn't a project that Git keeps
+  long to finish." The block printed `NO GIT` -- "Git, the tool that saves and sends your code,
+  isn't installed on this computer. Install it (git-scm.com), then run /argo-it again." The block
+  printed `NOT TRUSTED` -- "Git won't work in this folder because it belongs to another account on
+  this computer. Ask your DevOps team to mark it as safe for Git, then run /argo-it again." The block
+  printed `NOT A REPO` -- "This folder isn't a project that Git keeps
   track of, so there's nothing here I can check. Open your project's own folder, then run
-  /argo-it again." The block printed `FETCH FAILED` -- "I couldn't reach GitHub to see what's
-  already there. [why, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] Fix
+  /argo-it again." The block printed `FETCH FAILED` -- "I couldn't reach your code's online home
+  ([the host from the project's address], e.g. github.com) to see what's already there. [why, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] Fix
   that, then run /argo-it again." Anything else -- "The check stopped before it finished." For a
   timeout and anything else, add: "Run /argo-it again; if it happens again, ask your DevOps team
   for help."
@@ -708,6 +738,8 @@ the manifests automatically.
 # final newline), then unstage them in case any is tracked. :(top,...) = from the repo root, so
 # a nested repo's pre-staged files stay out too. If the save fails, stop here: nothing is sent.
 fail() { echo "SAVE FAILED: $1"; exit 1; }
+# Only what the step-2 ask named: the commit it was shown on and the saves GitHub didn't have (step 1 kept them)
+[ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$(git rev-parse --git-dir)/argo-it-asked" 2>/dev/null)" ] || { echo "CHANGED SINCE THE ASK"; exit 3; }
 grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
 for p in '*.pem' '*.key' 'id_rsa*' 'id_ed25519*' 'id_ecdsa*' 'id_dsa*' '*.keychain*' '.aws/credentials' '.netrc' \
          '.git-credentials' '*credentials*.json' '*service-account*.json' '*.sqlite*' '*.db' '*.db-*' '*.p12' '*.pfx'; do
@@ -720,10 +752,21 @@ done
   ':(top,glob)**/*credentials*.json' ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' \
   ':(top,glob)**/*.db' ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
 git diff --cached --quiet || git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"
+s=$(git rev-parse HEAD) || fail "could not read the save"
 
-# Push current branch -- CI takes over from here
-git push origin {current_branch}
+# Send exactly that save, by its id (never a submodule's commits) -- CI takes over from here
+git push origin "${s}:refs/heads/{current_branch}" --recurse-submodules=no
 ```
+
+**If the block prints `CHANGED SINCE THE ASK`, stop here -- nothing was saved or sent.** A save was
+made, undone or pulled, or another branch was switched to, after the step-2 ask, so this send would
+hold something the ask didn't name. Tell the user:
+
+"I haven't saved or sent anything: your project changed after I asked you (a new save, or a switch
+to another branch), and I only send what I named. What to do next: run /argo-it again, and I'll ask
+about what's there now."
+
+
 
 **If the block prints `SAVE FAILED`, stop here -- nothing was sent.** Tell the user plainly:
 "I couldn't save your changes, so nothing was sent and nothing is deploying. [the reason, in
@@ -874,9 +917,26 @@ Common issues and plain-language translations:
 | Deploy branch not updated | Maybe | Re-run the CI workflow: `gh run rerun {run_id}` |
 | Pod running old image | Yes (if kubectl) | `kubectl rollout restart deployment/{service} -n {namespace}` |
 | Pod running old image | Guide (if no kubectl) | Walk user through Argo CD UI pod delete |
-| Pod crash-looping | Maybe | Read the logs; if the cause is clear, fix the code and leave the fix unsaved. Tell the user: "I found why your app keeps stopping ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the cause isn't clear, tell the user what you saw, in plain words, and change nothing. |
+| Pod crash-looping | Maybe | Read the logs. If the cause is clear and one of 3a's safe fixes covers it (formatting, imports), make that fix and leave it unsaved; if the fix needs any other change to the code, ask first (the crash-looping ask below) and touch nothing until the user picks the change. Tell the user: "I found why your app keeps stopping ([what was wrong, in plain words]) and fixed it in [file]; nothing is sent yet -- I'll ask before sending it." Then go to PHASE 5b (redeploy) from its step 1: its step 4 saves and sends the fix only after the user picks "Update {hostname}". If the cause isn't clear, tell the user what you saw, in plain words, and change nothing. |
 | Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
 | Missing K8s secrets | No | Tell user: "Your app needs some settings that your DevOps team hasn't added yet. Share ONBOARDING-K8S.md with them." |
+
+**Crash-looping fix (the ask before a change beyond 3a's safe fixes):** argo-it changes the app's
+code on its own only for 3a's safe fixes, so any other fix is active confirmation, per the approval
+block: the user picks the change by name, a plain yes isn't an answer. Fill every bracket from the
+logs and the file; never show raw log lines.
+
+"I found why your app keeps stopping: [what is wrong, in plain words] -- its logs show [the
+evidence, in plain words]. To fix it I'd change [file]: [what changes, in one line]. The change
+stays in your files, not saved or sent, until you pick Update {hostname} in the next step, and until
+then I can put the file back as it was. The one thing to check: is [file] one you're in the middle
+of editing?
+
+- **Change [file]** -- I make this fix, then ask before sending it
+- **Leave it** -- I change nothing and stop here"
+
+Wait for the pick. On 'Leave it', change nothing and stop. On 'Change [file]', make exactly that
+change, leave it unsaved, and go on as the row says.
 
 **Communication rules (same as always):**
 - NEVER say: pod, container, image, SHA, digest, rollout, kubectl, CrashLoopBackOff
@@ -2056,16 +2116,29 @@ u=$(git status --porcelain=v1 -z --untracked-files=all --no-renames -- . | tr '\
   for g in {generated_files}; do [ "$f" = "$g" ] && continue 2; done
   printf '%s\n' "$f"
 done)
-[ -z "$u" ] || { echo "UNSAVED CODE"; printf '%s\n' "$u" | wc -l | tr -d ' '; printf '%s\n' "$u" | sed -n '1,2p'; exit 1; }
+[ -z "$u" ] || {
+  echo "UNSAVED CODE"; printf '%s\n' "$u" | wc -l | tr -d ' '; printf '%s\n' "$u" | sed -n '1,2p'
+  # The first one on step 4's keep-out list (the scanner's own list): it must not be saved with the code
+  printf '%s\n' "$u" | while IFS= read -r f; do
+    case "/$f" in (*/.aws/credentials) printf 'keep-out: %s\n' "$f"; continue;; esac
+    case "${f##*/}" in (.env.example) ;; (.env*|*.pem|*.key|id_rsa*|id_ed25519*|id_ecdsa*|id_dsa*|*.keychain*|.netrc|\
+      .git-credentials|*credentials*.json|*service-account*.json|*.sqlite*|*.db|*.db-*|*.p12|*.pfx) printf 'keep-out: %s\n' "$f";; esac
+  done | sed -n 1p
+  exit 1; }
 ```
 
 If it prints `UNSAVED CODE`, stop -- don't run the seal and don't show the step-3 ask; the seal
 writes nothing, and nothing is saved or sent. The line after it is how many files hold unsaved code, then the first one or
-two, by path from the project folder. Tell the user, naming paths only, never what is in them:
+two, by path from the project folder, then, if one of them is on step 4's keep-out list (keys,
+certificates, settings files, local databases), a `keep-out:` line naming the first such file.
+Tell the user, naming paths only, never what is in them:
 
 "I haven't saved or sent anything: [N] [file in your project has / files in your project have]
 changes that aren't saved yet ([the first path][, [the second path]][, and others -- only if N is
-3 or more]). What to do next: save your changes, or run /wrap-it, then run /argo-it again."
+3 or more]).[ only if a `keep-out:` line was printed: [the path after `keep-out:`] holds keys or
+private data that should never be saved with your code: move it out of your project folder, or ask
+your DevOps team to have it left out.] What to do next: save your changes[ only if a `keep-out:`
+line was printed: -- all but that file], or run /wrap-it, then run /argo-it again."
 
 Then run the seal step now, before step 2: it writes its files beside argo-it's, and the check and
 the save on 'Send it' must both see them. The seal's files count as argo-it's files: one save holds
@@ -2081,7 +2154,7 @@ done
 git ls-files --others -- .make-it/ledger/ | sed -n -E '/^\.make-it\/ledger\/[0-9]{4,}-[0-9a-f]{12}\.json$/p'
 # .gitattributes too, when its only unsaved difference from the saved version is the seal's own lines (watermark.py's
 # header and four lines, added this run or an earlier one); those lines with any other change, a blank line too: stop
-if [ -f .gitattributes ] && [ -n "$(git status --porcelain -- .gitattributes)" ]; then
+if [ -f .make-it/app-context.json ] && [ -f .gitattributes ] && [ -n "$(git status --porcelain -- .gitattributes)" ]; then
   o="$(git rev-parse --git-dir)/argo-it-gitattributes-saved"
   git show HEAD:./.gitattributes > "$o" 2>/dev/null || : > "$o"
   k=$(awk -v f="$o" 'BEGIN { s["# make-it seal"]=1; s["* -text"]=1; s["MAKE-IT.md merge=union"]=1
@@ -2116,8 +2189,11 @@ block keeps the branch the ask will be shown on in a file too, so a branch name 
 into a command. `{generated_files}` are argo-it's files, by name, as Option 1 lists them. Then:
 
 ```bash
-# Sends go where reads come from, or argo-it stops here, before reading anything: one address for both
-[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || { echo "SPLIT ORIGIN"; exit 1; }
+# An online home to send to, and sends go where reads come from, or argo-it stops here, before reading anything:
+# the same host and owner/repository both ways (git's insteadOf rewriting applied; the scheme, a user@, a trailing
+# .git or / don't count)
+git remote get-url origin >/dev/null 2>&1 || { echo "NO ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { echo "SPLIT ORIGIN"; exit 1; }
 # Read everything GitHub has -- every branch and tag -- into argo-it's own names (refs/argo-it/gh/...), never the
 # user's branches, remote-tracking refs or tags; in a shallow clone, all the history first, so what GitHub has is exact
 [ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
@@ -2134,6 +2210,13 @@ i="$(git rev-parse --absolute-git-dir)/argo-it-index"; rm -f "$i"
 rm -f "$i"
 git log --oneline HEAD --not --glob='refs/argo-it/gh/*'   # step 3 names each saved change listed here but argo-it's own
 ```
+
+If the block prints `NO ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent.
+Tell the user:
+
+"I haven't saved or sent anything: this project has no online copy set up, so there's nowhere to
+send your setup. What to do next: ask your DevOps team to connect the project to its online home,
+then run /argo-it again."
 
 If the block prints `SPLIT ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent,
 and GitHub hasn't been read: this project sends changes to a different address than it reads
@@ -2156,10 +2239,10 @@ nothing listed. If the block prints `FETCH FAILED`, stop -- don't show the step-
 sent: without a current copy of what GitHub holds, 2b can't tell what was already sent. Tell the
 user:
 
-"I couldn't tell what reached GitHub: I couldn't reach it to see what's already there [if
-argo-it's files are already saved here (`git ls-files` lists them and `git status` shows them
-unchanged): -- the setup files I made are saved on this computer, and nothing more was sent this
-time / otherwise: , so I haven't saved or sent anything]. [the reason, in plain words -- e.g. 'Git
+"I couldn't reach GitHub to see what's already there[if argo-it's files are already saved here
+(`git ls-files` lists them and `git status` shows them unchanged): , so I couldn't tell what reached
+GitHub -- the setup files I made are saved on this computer, and nothing more was sent this time /
+otherwise: , so I haven't saved or sent anything]. [the reason, in plain words -- e.g. 'Git
 can't sign in to GitHub on this computer'] What to do next: [the fix], then run /argo-it again."
 
 **2b. Secret check on what step 4 will send** -- the same check as PHASE 5b step 3e, run after
@@ -2291,7 +2374,8 @@ to another branch:
 ```
 
 If it prints `CHANGED SINCE THE ASK`, nothing was saved or sent: the branch changed (a save, a pull
-or an undone save), or another branch was switched to, after the ask, so run step 2 and 2b again,
+or an undone save), or another branch was switched to, after the ask, so go back to step 1 -- run
+its unsaved-code check and the seal again, on what is there now -- then run step 2 and 2b again,
 then show the step-3 ask again, naming what is new -- never send a change the ask didn't name.
 Otherwise build argo-it's save of its files, one by one -- `{generated_files}` = the path of every
 file this run generated (each manifest under `{manifest_dir}/dev/` and `{manifest_dir}/prod/`, the
@@ -2345,8 +2429,9 @@ echo "$s"
 If the block prints `SAVE FAILED`, stop -- nothing was sent. Tell the user: "I couldn't save the
 setup files I made, so nothing was sent. [the reason, in plain words, as PHASE 5b step 4 gives
 it]" If it prints `SAVED SINCE THE CHECK`, nothing was saved or sent: something was saved after
-the check (a change the user saved between the check and this block, say), so go back to step 2,
-run 2b again, and show the step-3 ask again before anything is sent, naming what is new. If it
+the check (a change the user saved between the check and this block, say), so go back to step 1
+-- run its unsaved-code check and the seal again, on what is there now -- then run step 2 and 2b
+again, and show the step-3 ask again before anything is sent, naming what is new. If it
 prints `FETCH FAILED`, GitHub couldn't be read, so nothing was saved or sent: stop, and tell the
 user step 2's message for `FETCH FAILED`.
 
@@ -2400,11 +2485,11 @@ move() {
 out=$(git ls-remote --exit-code --heads origin "refs/heads/$d"); case $? in 0|2) ;; *) echo "FETCH FAILED"; exit 1;; esac
 found=$(printf '%s\n' "$out" | awk -v r="refs/heads/$d" '$2 == r')
 if [ -z "$found" ]; then
-  git push origin "{saved_head}:refs/heads/$d" || { echo "PUSH 1 FAILED"; exit 1; }
-  git push origin "{saved_head}:refs/heads/$b" || { move; echo "PUSH 2 FAILED"; exit 1; }
+  git push origin "{saved_head}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
+  git push origin "{saved_head}:refs/heads/$b" --recurse-submodules=no || { move; echo "PUSH 2 FAILED"; exit 1; }
 else
   # A push that reports a failure may still have reached GitHub: then move the branch here to it too
-  git push origin "{saved_head}:refs/heads/$b" || {
+  git push origin "{saved_head}:refs/heads/$b" --recurse-submodules=no || {
     # only an exact refs/heads/<branch> line holding the save counts; a failed read moves nothing, and the
     # read after the send decides what the user hears
     gl=$(git ls-remote --heads origin "refs/heads/$b")
@@ -2964,6 +3049,7 @@ existing pattern.
 
 **Pre-push self-review rules (PHASE 5b redeploy):**
 - Self-review runs silently BEFORE every commit+push in the fast-path redeploy
+- Save messages are never checked for secrets -- only the lines a change adds are: a value typed into a save's message is sent with it
 - Troubleshooting (PHASE 5c) never commits, pushes or sends on its own: a fix it makes stays unsaved, and every send from it goes through PHASE 5b from its step 1 (the checks, the read of GitHub, the "Update {hostname}" pick, 3a-3e, then step 4's save and send)
 - The user NEVER sees linter names, tool output, or raw error messages
 - Auto-fix only what's safe (3a's safe automatic fixes -- formatting, imports -- and auto-add untracked migrations), and list each file 3a changed before saving; secrets move only through the 3e gate (`secret-scan.py`; anything but a clean exit 0 or 1 sends nothing) -- the user picks which
