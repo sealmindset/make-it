@@ -988,6 +988,26 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.16 -- The git guards are switched on, and the scaffold's secret scan really scans
+
+Every app shipped with checks that run before each save, but nothing switched them on. And
+the scaffold's secret scan had no rules, so it found nothing, in the hook and in the app's CI.
+
+- **The hooks are on.** The build installs them and requires them (Q12 is now must-pass);
+  /resume-it's catch-up installs them in apps built earlier. A skill that saves for you
+  refuses when they are off.
+- **The secret scan has rules.** The scaffold's gitleaks config now uses gitleaks' defaults,
+  and no longer skips `tests/` or `mock-services/` (Q08).
+- **New projects work on a branch called `work`.** The main copy stays clean until you ship.
+  Catch-up moves an older app there too.
+- **A guard refuses Claude's `git push --force`** in every project on the computer;
+  `--force-with-lease` still works. The installer says so, backs up your settings first,
+  and a guard you remove stays removed.
+- **Lint checks run in the app's container** and are skipped, with a line saying so, when
+  Docker isn't available. The security checks never skip.
+- **Known limits.** Not yet proven on Windows or in a full build. The first ship of a new
+  project needs the main copy pushed once by hand.
+
 ### v1.71.15 -- /argo-it's secret check is a tested script, and nothing is sent or restarted without your pick
 
 /argo-it looked for passwords and keys with a pattern written into its instructions, and
