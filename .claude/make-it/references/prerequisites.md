@@ -86,6 +86,16 @@ brew install --cask rancher
 - Windows: `winget install --id Microsoft.VisualStudioCode` or download from https://code.visualstudio.com
 - Linux: Download from https://code.visualstudio.com or use your distribution's package manager
 
+### 6. pre-commit
+
+**Why needed:** Runs the project's checks before every save: gitleaks' scan for passwords and keys, and `no-commit-to-branch`, which stops a save straight to `main`. /make-it switches them on in every build (check Q12), and the skills that save for the user save nothing while they are off.
+**How to check:** `pre-commit --version 2>/dev/null`
+**What to tell the user it is:** "pre-commit -- runs your project's checks before every save: a scan for passwords and keys, and a stop on saving straight to the main copy"
+**If missing:** it is a Quick Fix, offered in preflight's one install ask with the other missing tools (a pick: install it, walk them through it, or their company's way), never installed without it.
+- macOS: `brew install pre-commit`
+- Windows: `py -m pip install --user pre-commit`
+- Linux: `pipx install pre-commit` or `python3 -m pip install --user pre-commit`
+
 ---
 
 ## Enterprise Prerequisites (Optional)
@@ -196,6 +206,7 @@ Run these checks automatically without asking the user:
 - GitHub CLI installed and authenticated? `gh auth status 2>/dev/null`
 - Claude Code running? (implicit -- they're here)
 - VS Code installed? `code --version 2>/dev/null`
+- pre-commit installed? `pre-commit --version 2>/dev/null`
 
 ### 2. Cloud CLI check (conditional)
 
@@ -227,7 +238,7 @@ Group findings into actionable categories:
 **Quick fixes:**
 - Tools missing but can be installed now
 - Offer to guide installation
-- Examples: Docker, GitHub CLI, VS Code
+- Examples: Docker, GitHub CLI, VS Code, pre-commit
 
 **Blockers:**
 - Access requests needed (VPN, admin rights, cloud access, GitHub org access)

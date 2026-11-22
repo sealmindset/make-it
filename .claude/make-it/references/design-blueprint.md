@@ -3015,7 +3015,7 @@ Every scaffolded app ships with linting, formatting, type checking, secret detec
 | prettier | local | TS/JS format violations |
 | gitleaks | gitleaks | Leaked secrets, tokens, passwords |
 
-**Graceful degradation:** If `pre-commit` is not installed on the user's machine, hooks don't run. Noted in TODO.md as a setup step. CI catches issues regardless.
+**Required, not optional:** `pre-commit` is a preflight tool, and /make-it switches the hooks on right after the build's first save (check Q12 [BLOCK]). The skills that save for the user save nothing while they are off (`git-operations.md`, Before any save). CI runs its own checks regardless.
 
 ### 15d. Secret Detection (gitleaks)
 

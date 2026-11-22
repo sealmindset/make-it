@@ -575,6 +575,18 @@ file (.env) pointing at it. Then run /retrofit-it again."
 [If Very High: **fresh build** -- help migrate per error-handling; nothing below runs.
 **Step-by-step upgrade** -- continue below with the items they included.]
 
+**Before the snapshot, the hooks (Q12):** when the app has its own repo and a
+`.pre-commit-config.yaml`, run the hook check (`git-operations.md`, Before any save). On `HOOKS
+OFF`, switch the hooks on the way /resume-it's catch-up does (Q12: `pre-commit install` and its one
+plain line, preflight's install pick first when `pre-commit` is missing), then run the check again.
+Still `HOOKS OFF`: stop here, before any change, and tell the user: "I haven't changed or saved
+anything: the checks this project runs before every save (a scan for passwords and keys, and a stop
+on saving straight to the main copy) are switched off on this computer. [when `pre-commit install`
+failed: the reason, in plain words / otherwise: Run /retrofit-it again and pick Install when I ask
+about pre-commit.]" A folder that wasn't under git yet gets the same step right after the
+snapshot, before Phase 5: its snapshot is its first save, the one `pre-commit install` follows (as
+in /make-it step 41c).
+
 **After they pick, make the snapshot if there is none yet** (a re-run keeps the earlier one, as
 the ask said). **Own repo** (the app folder is the top of its repo): first save their unsaved
 changes (every run, as announced above, with .env files, key, certificate and credential files
@@ -1278,7 +1290,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **AI01-AI30**: AI features (if ai_features.needed = true; AI30 runs on every app)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)
 - **WM01-WM07**: Build record and seal (`~/.claude/make-it/references/watermark.md`), written after Part D
-- **Q01-Q16**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit)
+- **Q01-Q16**: Code quality (Q14, the dead-code upkeep reminder, is N/A right after a retrofit; Q12 is switched on the way /resume-it's catch-up does it, with its one plain line)
 
 For each failing check (left-out items: skipped, see above):
 - `[FIX]` items: auto-fix immediately
