@@ -224,9 +224,10 @@ so two worktrees never share one. In this order:
     3. Wait at most 60 seconds, reading `docker inspect -f '{{.State.Status}} {{.State.ExitCode}}'
        <run>` and the backend's health URL once a second, then run the check.
     4. **Put it back, always** -- whether the check passed, failed, was cut off or errored:
-       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait <backend>`. Write in
-       the results that the normal backend is back and healthy; if it isn't, fix that before any
-       other check.
+       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait <backend>`, then one
+       request through the app's frontend that reaches the backend. Write in the results that the
+       normal backend is back, healthy and reached through the frontend; if it isn't, fix that
+       before any other check.
     Never edit `.env` for it, and never leave `<run>` behind. "The AI address unreachable" means
     `http://127.0.0.1:9` in the setting the provider reads: `AZURE_AI_FOUNDRY_ENDPOINT`
     (anthropic_foundry), `ANTHROPIC_BASE_URL` (anthropic, read by the Anthropic SDK),
