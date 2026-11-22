@@ -11006,16 +11006,16 @@ class ReviewRound2Cases(ArgoItUnsavedCodeCases):
 
 
 # Task 5: the troubleshooting blocks and asks, pinned whole
-T5_CTX = '''c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
+T5_CTX = r'''c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
 v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
 # A server address, compared without a trailing / and with its scheme and host in small letters
 low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }'''
 
-T5_NAMES = '''# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
+T5_NAMES = r'''# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
 ns='{namespace}'; svc='{service}'
 printf '%s\n' "$ns" "$svc" | grep -vqxE '[a-z0-9]([-a-z0-9]*[a-z0-9])?' && { echo "BAD NAME"; exit 1; }'''
 
-T5_SAME = '''[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ]'''
+T5_SAME = r'''[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ]'''
 
 T5_READ = '''# The app's own cluster, as setup recorded it (deployment.k8s_context, and its server address deployment.k8s_server)
 ''' + T5_NAMES + '''

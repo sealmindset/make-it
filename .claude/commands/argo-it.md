@@ -421,7 +421,9 @@ container, manifest, kubectl, namespace, pod, or any other technical term.
 
 **3. Pre-push self-review (silent -- user never sees this):**
 
-Every file 3a, 3b, 3c or a 3e move changes, write its path (from the repo's top folder, as `git
+Every file 3a changes (and any other file 3b, 3c or a 3e move changes that isn't one of argo-it's
+own: `.gitignore`, `ONBOARDING-K8S.md`, the workflow and the manifests count as touched by name),
+write its path (from the repo's top folder, as `git
 status` prints it), one per line, to `$(git rev-parse --git-dir)/argo-it-touched` with your file
 tool: step 4 sends only the paths the ask counted and these.
 
@@ -748,9 +750,13 @@ the manifests automatically.
 # Only what the step-2 ask named, before anything is staged: the commit it was shown on, the saves the online copy
 # didn't have, and no path with a change that wasn't there then (unless 3a, 3b, 3c or a 3e move changed it)
 g="$(git rev-parse --git-dir)"
+# argo-it's own files count as touched by name: .gitignore, ONBOARDING-K8S.md, the workflow, and the manifests in a
+# folder whose kustomization.yaml is saved
+own() { case "${1##*/}" in (.gitignore|ONBOARDING-K8S.md|build-and-deploy.yml) return 0;; esac
+  d=${1%/*}; [ "$d" != "$1" ] && git ls-files --error-unmatch -- ":(top)$d/kustomization.yaml" >/dev/null 2>&1; }
 [ -f "$g/argo-it-asked-paths" ] && [ -f "$g/argo-it-touched" ] &&
   [ "$({ git rev-parse HEAD; git rev-list HEAD --not --glob='refs/argo-it/gh/*'; })" = "$(cat "$g/argo-it-asked" 2>/dev/null)" ] &&
-  [ -z "$(git status --porcelain=v1 -z --untracked-files=all --no-renames | tr '\0' '\n' | cut -c4- | grep -vxF -f "$g/argo-it-asked-paths" | grep -vxF -f "$g/argo-it-touched")" ] ||
+  [ -z "$(git status --porcelain=v1 -z --untracked-files=all --no-renames | tr '\0' '\n' | cut -c4- | grep -vxF -f "$g/argo-it-asked-paths" | grep -vxF -f "$g/argo-it-touched" | while IFS= read -r f; do own "$f" || printf '%s\n' "$f"; done)" ] ||
   { echo "CHANGED SINCE THE ASK"; exit 3; }
 fail() { echo "SAVE FAILED: $1"; exit 1; }
 grep -qxF '.env*' .gitignore 2>/dev/null || printf '\n.env*\n!.env.example\n' >> .gitignore
@@ -764,8 +770,12 @@ done
   ':(top,glob)**/.aws/credentials' ':(top,glob)**/.netrc' ':(top,glob)**/.git-credentials' \
   ':(top,glob)**/*credentials*.json' ':(top,glob)**/*service-account*.json' ':(top,glob)**/*.sqlite*' \
   ':(top,glob)**/*.db' ':(top,glob)**/*.db-*' ':(top,glob)**/*.p12' ':(top,glob)**/*.pfx'; } || fail "could not stage the changes"
-made=; git diff --cached --quiet || { git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"; made=1; }
-s=$(git rev-parse HEAD) || fail "could not read the save"
+made=; p=$(git rev-parse HEAD) || fail "could not read the branch"
+git diff --cached --quiet || { git commit -m "Deploy: [brief description of changes]" || fail "could not save the changes"; made=1; }
+# The save is the first commit after p, never one a hook added on top of it
+s=$p; [ -z "$made" ] || s=$(git rev-list --reverse --ancestry-path "$p..HEAD" | head -1)
+[ -n "$s" ] || fail "could not read the save"
+[ "$(git rev-parse HEAD)" = "$s" ] || { echo "SAVE ADDED MORE"; exit 1; }
 # What is sent, checked against what the online copy has: a hook that runs on save can add or change files after 3e.
 # Labels and file:line only, never a value. Anything but a clean exit 0 sends nothing; a save made here stays here.
 python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit "$s" || { if [ -n "$made" ]; then echo "SAVE NOT SENT"; else echo "NOT SENT"; fi; exit 1; }
@@ -784,6 +794,15 @@ it after my first check, such as a step your project runs whenever changes are s
 couldn't check that save for secrets]. What to do next: [with hits: take the value out of [file]
 and ask your DevOps team to help remove it from your saved history before anything is sent /
 otherwise: run /argo-it again; if it happens again, ask your DevOps team for help]."
+
+**If the block prints `SAVE ADDED MORE`, stop here -- the save is made on this computer, and nothing
+was sent.** Something your project runs after each save (a hook) added another save on top of
+argo-it's, which the ask never named. Tell the user:
+
+"I saved your changes on this computer, but I didn't send them: a step your project runs after each
+save added another save on top of mine, and I only send what I named. What to do next: look at that
+extra save (ask your DevOps team if you're not sure what made it), then run /argo-it again -- I'll
+check it and name it before anything is sent."
 
 **If the block prints `NOT SENT`, stop here -- step 4 had nothing new to save, and nothing was
 sent.** Read the check's output above that line as for `SAVE NOT SENT`. Tell the user:
@@ -912,15 +931,26 @@ project root:
 
 ```bash
 # The app's own cluster, as setup recorded it (deployment.k8s_context, and its server address deployment.k8s_server)
+# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
+ns='{namespace}'; svc='{service}'
+printf '%s\n' "$ns" "$svc" | grep -vqxE '[a-z0-9]([-a-z0-9]*[a-z0-9])?' && { echo "BAD NAME"; exit 1; }
 c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
 v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+# A server address, compared without a trailing / and with its scheme and host in small letters
+low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }
 [ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo "NO KUBECTL"; exit 1; }
 # Read only, and only while this computer points at that cluster, by its name and its server address
-[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "NOT ITS CLUSTER"; exit 1; }
-kubectl --context "$c" get pods -n "{namespace}" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
-grep 'image:' "env/dev/{service}.yaml"
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ] || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" get pods -n "$ns" -o jsonpath='{.items[*].spec.containers[*].image}' || { echo "READ FAILED"; exit 1; }
+grep 'image:' "env/dev/$svc.yaml"
 ```
+
+If it prints `BAD NAME` (here or in any block below): run nothing more. Tell the user:
+
+"I won't look at or restart your app from here: its deployment settings name it in a way I won't
+pass to a command ([the name, in plain words]). What to do next: ask your DevOps team to check the
+app's name and namespace in its deployment files, then run /argo-it again."
 
 If it prints `NO KUBECTL`: tell the user to ask their DevOps team to restart the app, or guide them
 through the Argo CD steps (step 3 above).
@@ -929,8 +959,7 @@ If it prints `NO CLUSTER RECORD`: read nothing and offer nothing. Tell the user,
 Argo CD steps:
 
 "I can't look at your running app from here: I have no record of which cluster (the group of
-servers) {hostname} runs on. To let me check it from this computer, ask me to record its cluster:
-I'll show you the clusters this computer knows. Here's how to check it in Argo CD instead:"
+servers) {hostname} runs on. [if this computer knows a cluster that isn't a local one: To let me check it from this computer, ask me to record its cluster: I'll show you the clusters this computer knows. / otherwise: This computer only knows local clusters, so there's none to record yet: once your DevOps team gives you access to the cluster {hostname} runs on, ask me to record it.] Here's how to check it in Argo CD instead:"
 
 If it prints `NOT ITS CLUSTER`: read nothing and offer nothing. Tell the user, then give step 3's
 Argo CD steps:
@@ -952,17 +981,17 @@ it is older, check the cluster before anything is offered:
 # Before the ask: a restart may only reach the app's own cluster, so this computer must point at it, by name and address
 c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
 v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+# A server address, compared without a trailing / and with its scheme and host in small letters
+low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }
 [ -n "$c" ] && [ -n "$v" ] || { echo "CLUSTER UNKNOWN"; exit 1; }
-[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "OTHER CLUSTER"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ] || { echo "OTHER CLUSTER"; exit 1; }
 ```
 
 If it prints `CLUSTER UNKNOWN`: never restart and never ask. Tell the user, then give step 3's Argo
 CD steps:
 
 "I won't restart your app from here: I have no record of which cluster (the group of servers)
-{hostname} runs on, so I can't be sure I'd restart the right one. To let me restart it from this
-computer, ask me to record its cluster: I'll show you the clusters this computer knows. Here's how
-to restart it in Argo CD instead:"
+{hostname} runs on, so I can't be sure I'd restart the right one. [if this computer knows a cluster that isn't a local one: To let me restart it from this computer, ask me to record its cluster: I'll show you the clusters this computer knows. / otherwise: This computer only knows local clusters, so there's none to record yet: once your DevOps team gives you access to the cluster {hostname} runs on, ask me to record it.] Here's how to restart it in Argo CD instead:"
 
 If it prints `OTHER CLUSTER`: never restart and never ask. Tell the user, then give step 3's Argo CD
 steps:
@@ -993,10 +1022,15 @@ again and pick Restart {hostname}." Only on 'Restart {hostname}', run, from the 
 
 ```bash
 # Only after the user picked "Restart {hostname}": on the app's own cluster, checked again right before
+# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
+ns='{namespace}'; svc='{service}'
+printf '%s\n' "$ns" "$svc" | grep -vqxE '[a-z0-9]([-a-z0-9]*[a-z0-9])?' && { echo "BAD NAME"; exit 1; }
 c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
 v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
-[ -n "$c" ] && [ -n "$v" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "OTHER CLUSTER"; exit 1; }
-kubectl --context "$c" rollout restart "deployment/{service}" -n "{namespace}"
+# A server address, compared without a trailing / and with its scheme and host in small letters
+low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }
+[ -n "$c" ] && [ -n "$v" ] && [ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ] || { echo "OTHER CLUSTER"; exit 1; }
+kubectl --context "$c" rollout restart "deployment/$svc" -n "$ns"
 ```
 
 If it prints `OTHER CLUSTER` (this computer moved to another cluster since the ask), nothing was
@@ -1008,11 +1042,16 @@ This means the new image deployed but has a runtime issue. Check pod logs:
 
 ```bash
 # Read only, on the app's own cluster by name and address: what the running version printed last
+# The app's namespace and name, as plain Kubernetes names only: never anything a shell would run
+ns='{namespace}'; svc='{service}'
+printf '%s\n' "$ns" "$svc" | grep -vqxE '[a-z0-9]([-a-z0-9]*[a-z0-9])?' && { echo "BAD NAME"; exit 1; }
 c=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_context") or "")' 2>/dev/null)
 v=$(python3 -I -c 'import json; d=json.load(open(".make-it/app-context.json")).get("deployment") or {}; print(d.get("k8s_server") or "")' 2>/dev/null)
+# A server address, compared without a trailing / and with its scheme and host in small letters
+low() { awk '{ sub(/\/+$/, ""); i = index($0, "://"); if (!i) { print; next }; r = substr($0, i + 3); j = index(r, "/"); h = j ? substr(r, 1, j - 1) : r; print tolower(substr($0, 1, i + 2) h) (j ? substr(r, j) : "") }'; }
 [ -n "$c" ] && [ -n "$v" ] || { echo "NO CLUSTER RECORD"; exit 1; }
-[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)" = "$v" ] || { echo "NOT ITS CLUSTER"; exit 1; }
-kubectl --context "$c" logs -n "{namespace}" "deploy/{service}" --tail=100 || { echo "READ FAILED"; exit 1; }
+[ "$(kubectl config current-context 2>/dev/null)" = "$c" ] && [ "$(kubectl config view --minify --context "$c" -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null | low)" = "$(printf '%s\n' "$v" | low)" ] || { echo "NOT ITS CLUSTER"; exit 1; }
+kubectl --context "$c" logs -n "$ns" "deploy/$svc" --tail=100 || { echo "READ FAILED"; exit 1; }
 ```
 
 Common issues and plain-language translations:
@@ -1039,9 +1078,10 @@ Common issues and plain-language translations:
 | Database connection issue | No | Tell user to check with DevOps (secret might be wrong) |
 | Missing K8s secrets | No | Tell user: "Your app needs some settings that your DevOps team hasn't added yet. Share ONBOARDING-K8S.md with them." |
 
-**Recording the app's cluster:** if the user asks to record the app's cluster, run setup's
-**Cluster** pick (PHASE 1 step 2) and save what they pick, its name and its server address; change
-nothing else. Nothing in troubleshooting asks this on its own.
+**Recording the app's cluster:** if the user asks to record the app's cluster while this computer
+knows only local clusters, there's no pick to show: say so in one line, and that their DevOps team
+can give them access to the app's cluster. Otherwise run setup's **Cluster** pick (PHASE 1 step 2)
+and save what they pick, its name and its server address; change nothing else. Nothing in troubleshooting asks this on its own.
 
 **Crash-looping fix (the ask before a change beyond 3a's safe fixes):** argo-it changes the app's
 code on its own only for 3a's safe fixes, so any other fix is active confirmation, per the approval
