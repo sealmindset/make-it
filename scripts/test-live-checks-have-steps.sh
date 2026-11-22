@@ -891,7 +891,7 @@ if [ -z "${1:-}" ]; then
   check "(control) R04's public list widened to every POST" \
     'opp "$BS" "s/unless it is on the public list: \\\`POST \/api\/auth\/logout\\\` \(it only signs the caller out\)/unless it is a POST/" "R04 makes the write-route rule concrete"'
   check "(control) the browser back to a container with --network host" \
-    'opp "$MK" "s/on\nthe host, only when it is already installed there/in a container with --network host/" "browser items use the app"'
+    'opp "$MK" "s/on\nthe host, installed once by step 22b/in a container with --network host/" "browser items use the app"'
   check "(control) a scaffold page with a raw table dropped from 31f's known list" \
     'opp "$MK" "s/ or\n       \\\`src\/app\/\(authenticated\)\/admin\/roles\/page\.tsx\\\` \(nextjs-fullstack\),//" "31f'"'"'s list of known scaffold pages"'
   check "(control) /resume-it says AC12 and ACV02 would call the AI provider" \
