@@ -326,13 +326,43 @@ to deploy them. Do NOT explain the infrastructure -- just deploy.
 **This step runs when /argo-it detects that K8s manifests and CI are already set up.**
 The user just wants their changes deployed. Keep it simple and non-technical.
 
-**1. Check for uncommitted changes:**
+**1. Check for uncommitted changes, after reading what GitHub has:**
 
 ```bash
+# Only a project git keeps track of can be checked or sent
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "NOT A REPO"; exit 1; }
+# The same lines as PHASE 5 step 2: one address for sends and reads, then everything GitHub has, read into
+# argo-it's own names (refs/argo-it/gh/...), never the user's branches, remote-tracking refs or tags
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || { echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
+git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 git status --short
-git log --oneline HEAD --not --remotes          # saved changes not sent yet (works on a never-pushed branch too)
-git rev-list --count HEAD --not --remotes       # M for "[M saved changes not sent yet]"
+git log --oneline HEAD --not --glob='refs/argo-it/gh/*'          # saved changes GitHub doesn't have yet
+git rev-list --count HEAD --not --glob='refs/argo-it/gh/*'       # M for "[M saved changes not sent yet]"
 ```
+
+"Not sent" counts only what GitHub holds now: a commit GitHub has on any branch, or only through a
+tag, is already sent, so M is never a guess.
+
+If the block prints `SPLIT ORIGIN`, stop -- don't show the step-2 ask. Tell the user, as PHASE 5
+does:
+
+"I haven't saved or sent anything: this project is set to send changes to a different place than
+it reads them from, and I only send to the same place I read from. What to do next: ask whoever
+set up the fork, or remove the separate sending address, then run /argo-it again."
+
+If the block prints `FETCH FAILED`, stop -- don't show the step-2 ask: without a current copy of
+what GitHub holds, the count of changes not sent yet would be a guess. Tell the user:
+
+"I couldn't reach GitHub to see what's already there, so I haven't saved or sent anything. [the
+reason, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] What to do next:
+[the fix], then run /argo-it again."
+
+If the block prints `NOT A REPO`, stop -- don't show the step-2 ask. Tell the user:
+
+"I haven't saved or sent anything: this folder isn't a project that Git keeps track of, so there's
+nothing here I can check or send. What to do next: open your project's own folder, then run
+/argo-it again."
 
 **2. Tell the user what will happen in PLAIN LANGUAGE, and get the go:**
 
@@ -443,11 +473,13 @@ Never show raw Python tracebacks.
 
 **3e. Secret leak scan on what step 4 will send:**
 ```bash
-# First read everything GitHub has, exactly as PHASE 5 step 2 does: every branch and tag into argo-it's own names
-# (refs/argo-it/gh/...), never the user's branches, remote-tracking refs or tags; in a shallow clone, all the history
-# first. A failed read is "couldn't check" (exit 2): without it, what GitHub already has can't be told.
-[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 2; }
-git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 2; }
+# Only a project git keeps track of can be checked (exit 2 = couldn't check)
+git rev-parse --git-dir >/dev/null 2>&1 || { echo "NOT A REPO"; exit 2; }
+# Read everything GitHub has again, right before the scan, with step 1's lines (PHASE 5 step 2's): every branch and
+# tag into argo-it's own names (refs/argo-it/gh/...); in a shallow clone, all the history first. A failed read prints
+# FETCH FAILED and stops the block before the scan: without it, what GitHub already has can't be told.
+[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { echo "FETCH FAILED"; exit 1; }
+git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { echo "FETCH FAILED"; exit 1; }
 # Scans what step 4 will send, under three labels: == unsaved edits == and == new files ==
 # (as step 4 will stage them), then == saved, not sent == (every commit GitHub doesn't have: none of
 # refs/argo-it/gh/ reaches it). Each hit is printed under its label as file:line -- never a value or
@@ -484,7 +516,9 @@ Run it from the project root with a 120-second timeout, then read the result:
   The script not found -- "The tool that does this check is missing. Type /make-it update, then
   run /argo-it again." `git --version` older than 2.25 -- "This check needs a newer version of
   Git (2.25 or later). Update Git, then run /argo-it again." A timeout -- "The check took too
-  long to finish." The block printed `FETCH FAILED` -- "I couldn't reach GitHub to see what's
+  long to finish." The block printed `NOT A REPO` -- "This folder isn't a project that Git keeps
+  track of, so there's nothing here I can check. Open your project's own folder, then run
+  /argo-it again." The block printed `FETCH FAILED` -- "I couldn't reach GitHub to see what's
   already there. [why, in plain words -- e.g. 'Git can't sign in to GitHub on this computer'] Fix
   that, then run /argo-it again." Anything else -- "The check stopped before it finished." For a
   timeout and anything else, add: "Run /argo-it again; if it happens again, ask your DevOps team
