@@ -12300,7 +12300,15 @@ class ArgoItSetupBranchRound2Cases(_SetupBranch, _SealFiles, _FirstSendAdv3, _Fi
             self.assertNotRegex(q, r'(?i)\bgit\b|send your app to GitHub first with /ship-it', '%s: %r' % (mark, q))
 
     # --- 1b. the AHEAD -> ship -> squash -> APART loop: brought level here --------------------------------------------
-    def test_2a_after_a_ship_is_squash_merged_the_next_run_brings_work_level_and_reaches_the_ask(self):
+    def _resume_it_level(self):
+        """/resume-it's own "Bring `work` level after a ship" block, as git-operations.md writes it."""
+        with open(os.path.join(ROOT, '.claude', 'make-it', 'references', 'git-operations.md')) as f:
+            t = f.read()
+        k = t.index('**Bring `work` level after a ship.**')
+        return re.search(r'```bash\n(.*?)```', t[k:], re.S).group(1)
+
+    def test_2a_after_a_ship_is_squash_merged_the_run_stops_and_its_advice_resume_it_then_argo_it_reaches_the_ask(self):
+        # review of 10606ee: /argo-it never brings `work` level itself; the stop's advice (/resume-it, then /argo-it) works
         for shell in ('bash', 'zsh'):
             with self.subTest(shell=shell):
                 r = self.fresh()
@@ -12308,18 +12316,21 @@ class ArgoItSetupBranchRound2Cases(_SetupBranch, _SealFiles, _FirstSendAdv3, _Fi
                 r.append('app.py', 'feature = 1\n')
                 r.commit('my feature')
                 r.git('push', '-q', 'origin', 'work')  # /ship-it sends `work`
-                before = self._sent_refs(r)
                 st = self._flow(r, shell, self._gen(r))
                 self.assertEqual(st['failed'], 'AHEAD OF GITHUB', '%r %r' % (st['stopped'], st['failed']))
-                self.assertEqual(self._sent_refs(r), before)
                 squashed = self._squash_on_origin(r)  # the ship is accepted (squash-merged), the branch deleted
-                st = self._flow(r, shell, self._gen(r), picks=())
-                self.assertIsNotNone(st['ask'], 'after an accepted ship the run still stops: %r %r'
+                here = self._head(r)
+                st = self._flow(r, shell, self._gen(r))
+                self.assertEqual(st['failed'], 'APART FROM GITHUB', '%r %r' % (st['stopped'], st['failed']))
+                self.assertEqual(self._head(r), here, '/argo-it moved `work`')
+                need_shell(shell)  # the advice: start with /resume-it (its block holds `^{tree}`, so it is run directly)
+                cp = subprocess.run([shell, '-c', self._resume_it_level()], cwd=r.work, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=120)
+                self.assertIn('BROUGHT LEVEL', cp.stdout.decode().splitlines(), cp.stdout + cp.stderr)
+                self.assertEqual(self._head(r), squashed)
+                st = self._flow(r, shell, self._gen(r), picks=())  # then run /argo-it again
+                self.assertIsNotNone(st['ask'], 'after /resume-it the run still stops: %r %r'
                                      % (st['stopped'], st['failed']))
-                out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs'])
-                self.assertIn('level: brought', out.splitlines())
-                self.assertEqual(r.git('rev-parse', 'work').decode().strip(), squashed, '`work` is not level')
-                self.assertEqual(r.git('branch', '--show-current').decode().strip(), 'work')
 
     def test_2b_work_with_unshipped_saves_is_never_moved(self):
         for shell in ('bash', 'zsh'):
@@ -12340,7 +12351,10 @@ class ArgoItSetupBranchRound2Cases(_SetupBranch, _SealFiles, _FirstSendAdv3, _Fi
             i = flat.find('If it prints `%s`' % mark)
             q = re.search(r'"(I[^"]{20,})"', flat[i:i + 2000]).group(1)
             self.assertIn('/resume-it', q, mark)
-        self.assertIn("Your shipped changes are in the main copy now, so your working copy is up to date with it.", flat)
+            self.assertNotRegex(q, r'(?i)your last ship', '%s assumes the user shipped something: %r' % (mark, q))
+        i = flat.find('If it prints `BEHIND GITHUB`')
+        self.assertRegex(flat[i:i + 2000], r"someone else's", 'BEHIND says nothing of a change made by someone else')
+        self.assertNotIn('Your shipped changes are in the main copy now', flat, 'a bring-level line is left')
 
     # --- 2. the deploy branch never takes .github/ ------------------------------------------------------------------------
     def _mirror_body(self, t=None):
@@ -12636,6 +12650,233 @@ class ArgoItSetupBranchRound2Cases(_SetupBranch, _SealFiles, _FirstSendAdv3, _Fi
         for gone in ('in a repo with no commits yet', 'saved from last time', '[ "{checked_head}" = HEAD ]',
                      'commit-tree -m "Add K8s'):
             self.assertNotIn(gone, p, 'unreachable text is still there: %r' % gone)
+
+
+# ArgoItSetupBranchRound2Cases' helpers (not its tests), for the round below.
+_SetupBranch2 = type('_SetupBranch2', (object,), {k: v for k, v in ArgoItSetupBranchRound2Cases.__dict__.items()
+                                                  if not k.startswith(('test', '__'))})
+
+
+class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _FirstSendAdv3, _FirstSendFix7,
+                                   _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5, _FirstSendFix4, _FirstSendFix3,
+                                   _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend, Base):
+    """E12-S1, the re-review of 10606ee: /argo-it moves no branch here (the bring-level step is gone); a set-up from
+    before the marker line counts as accepted; every stop after the files are made leaves the folder as the run found
+    it -- a saved file the run changed goes back, a file that was there before the run is never taken; the create-only
+    lease matters when argo-it/setup already sits at an ancestor; the guide no longer shows a workflow that can't
+    work; the "a copy of them is already on GitHub" bracket is true where it is reached."""
+
+    OLD_ONB = '# Kubernetes Deployment -- demo\n\n## What was generated\n'  # v1.71.15 and earlier: no marker line
+
+    def _snap(self, r, shell):
+        """PHASE 0 step 9's list of what the folder holds before the run, run as written."""
+        doc = ArgoItWiringCases._doc(self)
+        p0 = doc[doc.find('<!-- PHASE 0: DISCOVER'):doc.find('<!-- PHASE 5b: REDEPLOY')]
+        code = [f for f in re.findall(r'```bash\n(.*?)```', p0, re.S) if 'argo-it-before' in f][0]
+        self.assertEqual(self._run_block(r, shell, code).returncode, 0)
+
+    def _step7(self):
+        p = self._phase()
+        i = p.find("**7. Take this run's files back**")
+        self.assertNotEqual(i, -1, 'PHASE 5 has no step 7')
+        return re.search(r'```bash\n(.*?)```', p[i:], re.S).group(1)
+
+    def _refs(self, r):
+        """Every local branch, tag and remote-tracking ref, HEAD, and the index -- what no step of the set-up may move."""
+        return (r.git('for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/tags', 'refs/remotes'),
+                subprocess.run(GIT + ['symbolic-ref', '-q', 'HEAD'], cwd=r.work, stdout=subprocess.PIPE).stdout,
+                r.git('rev-parse', '-q', '--verify', 'HEAD'), r.git('ls-files', '-s'))
+
+    # --- 1. no branch here moves ---------------------------------------------------------------------------------------
+    def test_1a_no_step_of_the_first_set_up_moves_resets_or_fast_forwards_a_local_branch_or_the_index(self):
+        for shell in ('bash', 'zsh'):
+            for case in self.CASES + ('behind on work', 'apart on work after a ship', 'a successful send'):
+                with self.subTest(shell=shell, case=case):
+                    if case == 'behind on work':
+                        r = self.fresh()
+                        r.git('checkout', '-q', '-b', 'work')
+                        self._theirs_on_origin(r, shell)
+                        mark = 'BEHIND GITHUB'
+                    elif case == 'apart on work after a ship':
+                        r = self.fresh()
+                        r.git('checkout', '-q', '-b', 'work')
+                        r.append('app.py', 'feature = 1\n')
+                        r.commit('my feature')
+                        r.git('push', '-q', 'origin', 'work')
+                        self._squash_on_origin(r)
+                        mark = 'APART FROM GITHUB'
+                    elif case == 'a successful send':
+                        r, mark = self.fresh(), None
+                    else:
+                        r, mark = self._stop_case(shell, case)
+                    r.write('staged.txt', 'staged\n')
+                    r.git('add', '--', 'staged.txt')  # the user's staged change: it stays staged
+                    self._prep(r)
+                    before = self._refs(r)
+                    st = self._flow(r, shell, self._gen(r, extra=self._made()))
+                    if mark:
+                        self.assertEqual(st['failed'], mark, '%r %r' % (st['stopped'], st['failed']))
+                    else:
+                        self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                        self.assertTrue(r.git('rev-parse', 'refs/argo-it/setup').strip())  # the one ref it keeps
+                    self.assertEqual(self._refs(r), before, 'a local ref, HEAD or the index changed')
+
+    def test_1b_no_bring_level_is_left_in_the_first_set_up(self):
+        doc = ArgoItWiringCases._doc(self)
+        p0 = doc[doc.find('<!-- PHASE 0: DISCOVER'):doc.find('<!-- PHASE 5b: REDEPLOY')]
+        for t in (p0, self._phase()):
+            for gone in ('merge -q --ff-only', 'reset -q --keep', 'merge-tree', 'level: brought'):
+                self.assertNotIn(gone, t)
+        self.assertIn('never moves, resets or fast-forwards a branch here', self._flat(p0))
+
+    # --- 2. a set-up from before the marker line ------------------------------------------------------------------------
+    def test_2_an_old_style_set_up_counts_as_accepted_and_a_hand_written_file_does_not(self):
+        for shell in ('bash', 'zsh'):
+            for case, onb, mark in (('v1.71.15 set-up, no marker line', self.OLD_ONB, 'SET UP ALREADY'),
+                                    ('a hand-written file', '# How we onboard\n', None)):
+                with self.subTest(shell=shell, case=case):
+                    r = self.fresh()
+                    r.write('ONBOARDING-K8S.md', onb)
+                    r.write('.github/workflows/build-and-deploy.yml', 'name: build-and-deploy\non: push\n')
+                    r.commit('a set-up')
+                    r.push()
+                    before = self._sent_refs(r)
+                    st = self._flow(r, shell, self._gen(r), picks=())
+                    if mark:
+                        self.assertEqual(st['failed'], mark, '%r %r' % (st['stopped'], st['failed']))
+                    else:
+                        self.assertIsNotNone(st['ask'], '%r %r' % (st['stopped'], st['failed']))
+                    self.assertEqual(self._sent_refs(r), before)
+
+    # --- 3. every stop after the files are made leaves the folder as the run found it -----------------------------------
+    def test_3a_a_saved_file_the_run_changed_goes_back_and_one_with_unsaved_edits_is_left_and_named(self):
+        for shell in ('bash', 'zsh'):
+            for edited in (False, True):
+                with self.subTest(shell=shell, unsaved_edits_before_the_run=edited):
+                    r = self.fresh()
+                    r.write('ONBOARDING-K8S.md', '# our notes\n')
+                    r.commit('our onboarding notes')
+                    r.push()
+                    self._theirs_on_origin(r, shell)  # a stop: behind
+                    if edited:
+                        r.append('ONBOARDING-K8S.md', 'my unsaved line\n')
+                    self._prep(r)
+                    self._snap(r, shell)
+                    was = self._status(r)
+                    st = self._flow(r, shell, self._gen(r))  # generation overwrites the saved file
+                    self.assertEqual(st['failed'], 'BEHIND GITHUB')
+                    out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs']).splitlines()
+                    if edited:
+                        self.assertIn('kept: ONBOARDING-K8S.md', out, 'the file with unsaved edits is not named')
+                    else:
+                        self.assertEqual(self._status(r), was, 'the folder is not as the run found it')
+                        with open(r.path('ONBOARDING-K8S.md')) as f:
+                            self.assertEqual(f.read(), '# our notes\n', 'the saved file the run changed is not back')
+
+    def test_3b_a_copy_left_by_an_earlier_not_now_is_never_taken(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r, mark = self._stop_case(shell, 'behind')
+                self._gen(r)  # an earlier run's "Not now": the same bytes, left in the folder by the user's choice
+                self._prep(r)
+                self._snap(r, shell)
+                was = self._status(r)
+                st = self._flow(r, shell, self._gen(r))
+                self.assertEqual(st['failed'], mark)
+                self.assertEqual(self._status(r), was, "the earlier run's copies were taken")
+                self.assertTrue(all(os.path.exists(r.path(f)) for f in self.GENERATED))
+
+    def test_3c_the_unsaved_code_stop_and_2b_s_stops_leave_the_folder_as_the_run_found_it(self):
+        for shell in ('bash', 'zsh'):
+            for case in ('unsaved code', "2b: a key in argo-it's file"):
+                with self.subTest(shell=shell, stop=case):
+                    r = self.fresh()
+                    r.write('.make-it/app-context.json', '{}\n')
+                    r.write('lib/util.py', 'x = 1\n')
+                    r.commit('a make-it project')
+                    r.push()
+                    if case == 'unsaved code':
+                        r.append('lib/util.py', 'y = 2\n')
+                    self._prep(r)
+                    self._snap(r, shell)
+                    was = self._status(r)
+                    extra = self._keyed(fake('three' + shell)) if 'key' in case else {}
+                    st = self._flow(r, shell, self._gen(r, extra=extra))
+                    if case == 'unsaved code':
+                        self.assertEqual(st['failed'], 'UNSAVED CODE', '%r %r' % (st['stopped'], st['failed']))
+                    else:
+                        self.assertEqual(st['stopped'], 'a hit counts', '%r %r' % (st['stopped'], st['failed']))
+                        self._run_block(r, shell, self._step7())  # 2b's stop: take this run's files back (step 7)
+                    self.assertEqual(self._status(r), was, 'after the %s stop the folder is not as the run found it'
+                                     % case)
+        flat = self._flat(re.sub(self.FENCE, ' ', self._phase(), flags=re.M | re.S))
+        for where in ("Take this run's files back (step 7), then stop -- steps 3 and later don't run",
+                      "nothing is sent. Take this run's files back (step 7).",
+                      "If the block prints `NO ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent. Take "
+                      "this run's files back (step 7).",
+                      "Add the seal's files to the record (the block below) and take this run's files back (step 7)."):
+            self.assertIn(where, flat)
+
+    def test_3d_the_take_back_is_the_same_lines_everywhere(self):
+        p = self._phase()
+        backs = [re.search(r'(?ms)^back\(\) \{.*?\n  done < "\$rec"; rm -f "\$rec"; \}', f[2]).group(0)
+                 for f in self._fences(p) if 'back() {' in f[2]]
+        self.assertEqual(len(backs), 3, 'the take-back is not in the unsaved-code stop, step 1 and step 7')
+        self.assertEqual(len(set(backs)), 1, 'the three take-backs differ')
+
+    # --- 4. the lease, where a plain push would fast-forward ------------------------------------------------------------
+    def _lease_case(self, r, shell):
+        start = self._head(r)
+        return self._flow(r, shell, self._gen(r), before_push=lambda: self._origin(
+            r, 'update-ref', 'refs/heads/argo-it/setup', start))  # argo-it/setup appears at an ancestor of the save
+
+    def test_4_an_argo_it_setup_at_an_ancestor_is_never_fast_forwarded_and_the_mutant_without_the_lease_is_caught(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                start = self._head(r)
+                st = self._lease_case(r, shell)
+                self.assertEqual(st['failed'], 'PUSH 2 FAILED', '%r %r' % (st['stopped'], st['failed']))
+                self.assertEqual(self._ref(r, 'argo-it/setup'), start, 'argo-it/setup was overwritten')
+                told = ' '.join(self._told_all(self._sec1(), ['PUSH 2 FAILED']))
+                self.assertRegex(told, r'only the copy the deployment system watches')
+            with self.subTest(shell=shell, mutant='no lease'):  # control: without the lease the same case overwrites
+                r = self.fresh()
+                p = self._phase()
+                self.assertIn('git push --force-with-lease=refs/heads/argo-it/setup: "$u"', p)
+                mutated = p.replace('git push --force-with-lease=refs/heads/argo-it/setup: "$u"', 'git push "$u"')
+                self._phase = lambda: mutated
+                st = self._lease_case(r, shell)
+                del self._phase
+                self.assertEqual(self._ref(r, 'argo-it/setup'), st['saved'], 'the mutant without the lease did not '
+                                 'fast-forward argo-it/setup, so this test could not catch it')
+
+    # --- 5. the guide shows no workflow that can't work -----------------------------------------------------------------
+    def test_5_the_guide_points_to_the_template_instead_of_a_workflow_that_cannot_work(self):
+        with open(os.path.join(ROOT, 'docs', 'ARGO-IT-GUIDE.md')) as f:
+            g = f.read()
+        i = g.index('### Example: Generated CI Workflow')
+        sec = g[i:g.index('\n### ', i + 10) if '\n### ' in g[i + 10:] else len(g)]
+        self.assertNotIn('docker/metadata-action', sec, 'the guide still shows a metadata step without its inputs')
+        self.assertIn('.claude/commands/argo-it.md', sec)
+
+    # --- 6. the "copy already on GitHub" bracket is true where it is reached --------------------------------------------
+    def test_6_a_leftover_deploy_branch_holding_exactly_this_set_up_reaches_the_bracket_and_it_is_true(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                old = self._object_commit(r, self._head(r), self.GENERATED)  # a v1.71.15 first send, on the deploy copy
+                r.git('push', '-q', 'origin', old + ':refs/heads/' + self.DEPLOY)
+                st = self._flow(r, shell, self._gen(r), picks=())
+                self.assertIsNotNone(st['ask'], '%r %r' % (st['stopped'], st['failed']))
+                two = [cp.stdout.decode() for code, cp in st['outputs'] if 'git log --oneline' in code][-1]
+                tree = [l.split()[1] for l in two.splitlines() if l.startswith('tree ')][0]
+                self.assertEqual(self._origin(r, 'rev-parse', old + '^{tree}').decode().strip(), tree,
+                                 'the bracket\'s condition is not met: no GitHub line holds this set-up')
+                for f in self.GENERATED:  # "they aren't saved here yet": true
+                    self.assertIn('?? ' + f, st['ask']['status'].splitlines())
+                ask = self._flat(self._ask_text(self._phase()))
+                self.assertIn("a copy of them is already on GitHub from last time, but they aren't saved here yet", ask)
 
 
 if __name__ == '__main__':
