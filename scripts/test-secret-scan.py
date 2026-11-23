@@ -12673,7 +12673,9 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
         doc = ArgoItWiringCases._doc(self)
         p0 = doc[doc.find('<!-- PHASE 0: DISCOVER'):doc.find('<!-- PHASE 5b: REDEPLOY')]
         code = [f for f in re.findall(r'```bash\n(.*?)```', p0, re.S) if 'argo-it-before' in f][0]
-        self.assertEqual(self._run_block(r, shell, code).returncode, 0)
+        cp = self._run_block(r, shell, code.replace('{manifest_dir}', 'env'))
+        self.assertEqual(cp.returncode, 0, cp.stderr)
+        return cp
 
     def _step7(self):
         p = self._phase()
@@ -12775,8 +12777,11 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
                     st = self._flow(r, shell, self._gen(r))  # generation overwrites the saved file
                     self.assertEqual(st['failed'], 'BEHIND GITHUB')
                     out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs']).splitlines()
-                    if edited:
-                        self.assertIn('kept: ONBOARDING-K8S.md', out, 'the file with unsaved edits is not named')
+                    if edited:  # review of 93646ba: the person's unsaved edits come back exactly (was: left, and named)
+                        self.assertIn('restored: ONBOARDING-K8S.md', out, 'the file with unsaved edits is not put back')
+                        with open(r.path('ONBOARDING-K8S.md')) as f:
+                            self.assertEqual(f.read(), '# our notes\nmy unsaved line\n')
+                        self.assertEqual(self._status(r), was, 'the folder is not as the run found it')
                     else:
                         self.assertEqual(self._status(r), was, 'the folder is not as the run found it')
                         with open(r.path('ONBOARDING-K8S.md')) as f:
@@ -12827,11 +12832,13 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
             self.assertIn(where, flat)
 
     def test_3d_the_take_back_is_the_same_lines_everywhere(self):
-        p = self._phase()
-        backs = [re.search(r'(?ms)^back\(\) \{.*?\n  done < "\$rec"; rm -f "\$rec"; \}', f[2]).group(0)
-                 for f in self._fences(p) if 'back() {' in f[2]]
-        self.assertEqual(len(backs), 3, 'the take-back is not in the unsaved-code stop, step 1 and step 7')
-        self.assertEqual(len(set(backs)), 1, 'the three take-backs differ')
+        # review of 93646ba: the take-back now also puts the person's own versions back (`yours`), and runs in PHASE 0
+        # (a dead run's copies), the unsaved-code stop, step 1, step 7, Not now and the tidy after the send
+        doc = ArgoItWiringCases._doc(self)
+        blocks = [b for b in re.findall(r'```bash\n(.*?)```', doc, re.S) if 'yours() {' in b]
+        pairs = [re.search(r'(?ms)^# The person.s own versions.*?^  yours; \}', b).group(0) for b in blocks]
+        self.assertEqual(len(pairs), 6, 'the take-back is missing somewhere: %d copies' % len(pairs))
+        self.assertEqual(len(set(pairs)), 1, 'the take-backs differ')
 
     # --- 4. the lease, where a plain push would fast-forward ------------------------------------------------------------
     def _lease_case(self, r, shell):
@@ -12928,6 +12935,148 @@ class ArgoItSetupBranchRound4Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
             near = self._flat(doc[m.start():m.start() + 300])
             self.assertRegex(near, r"(?i)the time limit of the tool that runs the command", 'a timeout with no way to '
                              'set it on a Mac: %r' % near)
+
+
+class ArgoItSetupBranchRound5Cases(_SetupBranch2, _SetupBranch, _SealFiles, _FirstSendAdv3, _FirstSendFix7,
+                                   _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5, _FirstSendFix4, _FirstSendFix3,
+                                   _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend, Base):
+    """E12-S1, the final check of 93646ba: generation never loses a person's own file at a path /argo-it writes. PHASE 0
+    keeps a copy (in .git, mode 0700, path kept) of each one with unsaved edits, untracked, or ignored; every stop, Not
+    now and the tidy after a send put it back exactly (bytes and mode); a dead run's copies go back first on the next
+    run and are never overwritten; the ask names the files it would replace; an ignored file gets a real hash."""
+
+    _snap = ArgoItSetupBranchRound3Cases.__dict__['_snap']
+    _step7 = ArgoItSetupBranchRound3Cases.__dict__['_step7']
+    MINE = 'resources:\n  - my-own.yaml   # my unsaved edit\n'
+    REL = 'env/dev/kustomization.yaml'
+
+    def _mine_tracked(self, r, make_it=False):
+        """argo-it's path env/dev/kustomization.yaml, saved and sent, then an unsaved edit of the person's, mode 0755."""
+        if make_it:
+            r.write('.make-it/app-context.json', '{}\n')
+            r.write('lib/util.py', 'x = 1\n')
+        r.write(self.REL, 'resources: []\n')
+        r.commit('our own kustomization')
+        r.push()
+        r.write(self.REL, self.MINE)
+        os.chmod(r.path(self.REL), 0o755)
+
+    def _is_mine(self, r, rel=None, mode=0o755, text=None):
+        rel = rel or self.REL
+        with open(r.path(rel)) as f:
+            self.assertEqual(f.read(), text or self.MINE, "the person's own %s is not back exactly" % rel)
+        self.assertEqual(os.stat(r.path(rel)).st_mode & 0o777, mode, 'its mode is not back')
+        self.assertFalse(os.path.exists(os.path.join(r.work, '.git', 'argo-it-kept')), 'the copies folder stays')
+
+    def test_1_an_unsaved_edit_at_a_generated_path_comes_back_exactly_after_every_stop_and_not_now(self):
+        for shell in ('bash', 'zsh'):
+            for case in ('behind', 'unsaved code', "2b: a key in argo-it's file", 'waiting', 'Not now'):
+                with self.subTest(shell=shell, case=case):
+                    r = self.fresh()
+                    self._mine_tracked(r, make_it=case == 'unsaved code')
+                    if case == 'behind':
+                        self._theirs_on_origin(r, shell)
+                    elif case == 'unsaved code':
+                        r.append('lib/util.py', 'y = 2\n')
+                    elif case == 'waiting':
+                        r.git('push', '-q', 'origin', 'main:refs/heads/argo-it/setup')
+                    self._prep(r)
+                    self._snap(r, shell)
+                    kd = os.path.join(r.work, '.git', 'argo-it-kept')
+                    self.assertEqual(os.stat(kd).st_mode & 0o777, 0o700, 'the copies folder is not 0700')
+                    was = self._status(r)
+                    extra = self._keyed(fake('five' + shell)) if 'key' in case else {}
+                    st = self._flow(r, shell, self._gen(r, extra=extra), picks=(4,) if case == 'Not now' else (1,))
+                    if "2b" in case:
+                        self.assertEqual(st['stopped'], 'a hit counts', '%r %r' % (st['stopped'], st['failed']))
+                        self._run_block(r, shell, self._step7())
+                    elif case == 'Not now':
+                        self.assertIn(('pick', 4), st['trace'])
+                    else:
+                        self.assertTrue(st['failed'], st['trace'])
+                    self._is_mine(r)
+                    if case != 'Not now':
+                        self.assertEqual(self._status(r), was, 'the folder is not as the run found it')
+
+    def test_2_an_untracked_file_of_the_person_s_at_a_generated_path_comes_back_exactly(self):
+        for shell in ('bash', 'zsh'):
+            for case in ('behind', 'Not now'):
+                with self.subTest(shell=shell, case=case):
+                    r = self.fresh()
+                    if case == 'behind':
+                        self._theirs_on_origin(r, shell)
+                    r.write('ONBOARDING-K8S.md', '# my own notes\n')
+                    self._prep(r)
+                    self._snap(r, shell)
+                    st = self._flow(r, shell, self._gen(r), picks=(4,) if case == 'Not now' else (1,))
+                    self._is_mine(r, 'ONBOARDING-K8S.md', 0o644, '# my own notes\n')
+
+    def test_3_after_a_send_the_set_up_s_version_is_sent_and_the_person_s_is_back_in_the_folder_unsaved(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._mine_tracked(r)
+                self._prep(r)
+                self._snap(r, shell)
+                st = self._flow(r, shell, self._gen(r))
+                self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
+                sent = self._sent_refs(r)['refs/heads/argo-it/setup']
+                self.assertEqual(self._origin(r, 'show', '%s:%s' % (sent, self.REL)).decode(), self.GENERATED[self.REL],
+                                 "the set-up's version is not what was sent")
+                self._is_mine(r)
+                self.assertIn(' M ' + self.REL, r.git('status', '--porcelain').decode().splitlines(), 'it is not unsaved')
+                out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs']).splitlines()
+                self.assertIn('restored: ' + self.REL, out)
+        flat = self._flat(re.sub(self.FENCE, ' ', self._phase(), flags=re.M | re.S))
+        self.assertIn("is / are] back in your folder exactly as you had [it / them], unsaved -- the proposed change "
+                      "holds the set-up's version", flat)
+
+    def test_4_a_dead_run_s_copies_go_back_first_on_the_next_run_and_are_never_overwritten(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                self._mine_tracked(r)
+                self._prep(r)
+                self._snap(r, shell)
+                self._gen(r)  # the run makes its files over the person's, then dies: no stop, no take-back
+                cp = self._snap(r, shell)  # the next run
+                self.assertIn('restored: ' + self.REL, cp.stdout.decode().splitlines())
+                with open(r.path(self.REL)) as f:
+                    self.assertEqual(f.read(), self.MINE)
+                with open(os.path.join(r.work, '.git', 'argo-it-kept', self.REL)) as f:
+                    self.assertEqual(f.read(), self.MINE, 'the new copy is not the person\'s own version')
+
+    def test_5_an_ignored_file_at_a_generated_path_gets_a_real_hash_and_is_never_misnamed(self):
+        for shell in ('bash', 'zsh'):
+            with self.subTest(shell=shell):
+                r = self.fresh()
+                r.write('.gitignore', 'ONBOARDING-K8S.md\n')
+                r.commit('ignore the onboarding notes')
+                r.push()
+                r.write('ONBOARDING-K8S.md', self.GENERATED['ONBOARDING-K8S.md'])  # identical to what the run writes
+                self._theirs_on_origin(r, shell)
+                self._prep(r)
+                self._snap(r, shell)
+                with open(os.path.join(r.work, '.git', 'argo-it-before')) as f:
+                    lines = f.read().splitlines()
+                h = r.git('hash-object', 'ONBOARDING-K8S.md').decode().strip()
+                self.assertIn('%s ONBOARDING-K8S.md' % h, lines, 'the ignored file has no real hash: %r' % lines)
+                st = self._flow(r, shell, self._gen(r))
+                out = '\n'.join(cp.stdout.decode() for code, cp in st['outputs']).splitlines()
+                self.assertFalse([l for l in out if l.endswith(' ONBOARDING-K8S.md') and
+                                  l.split(':')[0] in ('kept', 'left', 'restored')], out)
+                self.assertTrue(os.path.exists(r.path('ONBOARDING-K8S.md')))
+
+    def test_6_the_ask_names_the_files_it_would_replace_and_each_stop_sentence_is_true_for_its_kind(self):
+        p = self._phase()
+        ask = self._flat(self._ask_text(p))
+        self.assertIn("I'd replace your own [each path after a `yours:` line, joined by and] with the set-up's version; "
+                      "your version is kept and put back if you pick Not now or anything stops", ask)
+        flat = self._flat(re.sub(self.FENCE, ' ', p, flags=re.M | re.S))
+        for t in ("changed after I made [it / them], so I left [it / them] there",
+                  "[was / were] yours, and I've put [it / them] back exactly as you had [it / them]",
+                  "[was / were] already in your folder before this run, so I left [it / them] as [it is / they are]"):
+            self.assertIn(t, flat)
 
 
 if __name__ == '__main__':
