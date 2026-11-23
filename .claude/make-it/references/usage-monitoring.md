@@ -49,11 +49,13 @@ What each part does:
 - `OTEL_METRICS_INCLUDE_REPOSITORY` adds the repository's identity (`vcs.*`, taken from its
   `origin` remote) to every metric and event. Needs Claude Code v2.1.269 or later.
 - `OTEL_METRICS_INCLUDE_VERSION` adds the Claude Code version (`app.version`).
-- The five content flags are set to `"0"`. Each is off by default; the documentation names `0` as
-  an off value for each of them. Setting them in managed settings stops people turning them on in
-  their own settings files or shell: a managed value wins over the same variable there. Left
-  unset, a person could turn one on in their shell or user settings, and the content would go to
-  your collector. `OTEL_LOG_RAW_API_BODIES` matters most: it sends whole conversations.
+- The block locks all five content settings off with `"0"`, raw bodies included. Each is off by
+  default; the documentation names `0` as an off value for each of them. A managed value wins over
+  the same variable in a person's settings files or shell, so nobody can turn them on there.
+- Raw bodies are locked, not left unset, because an unset value can be switched on from a person's
+  own shell or user settings, which would send full prompts, replies and code to your collector.
+  An organization that later needs content for an investigation makes that a deliberate change to
+  the managed settings, by an administrator, and updates the notice to its people first.
 - The limits of that lock, as the documentation gives them:
   - When the Claude Desktop app or a self-hosted environment runner starts a session, the launch
     environment it builds wins over settings files, and Desktop lets people save their own
@@ -204,6 +206,10 @@ and feature-flag fetching for those people.
 
 ## 5. What it tells you about make-it
 
+> **What changed from what you may have been told.** Skill names are sent by default on the cost and token counters; only the `skill_activated` event hides them.
+> So the reporting does show which make-it command a person ran, and what it cost. Section
+> "Removing the command names" below says how to drop them if you don't want that.
+
 **Which make-it skill ran.** Which make-it skill ran, and what it cost, is sent by default. The
 cost and token counters and the `api_request` event carry the name of the skill active for each
 request, and for skills a person installs themselves the name is sent as it is (the documentation:
@@ -223,19 +229,79 @@ A skill name is not proof of make-it: anyone's own command with the same name lo
 it as a count of commands by that name. You don't need `OTEL_LOG_TOOL_DETAILS` for any of this;
 leave it off.
 
-**Who has make-it switched on.** Three partial answers:
+### Removing the command names
 
-- **The skill names on the cost counters**: a person shows up once they run a make-it command, and
-  a name can collide with someone's own command.
-- **`plugin_id_hash`**, for plugin installs only. A `plugin_loaded` event is sent once per enabled
-  plugin at the start of every session. For a plugin outside Anthropic's official marketplace the
-  name reads `third-party`, but it carries a `plugin_id_hash`: a fixed hash of the plugin's name
-  and marketplace, the same for the same plugin from the same marketplace on every machine.
-  Calibrate it once (below). A plugin synced from claude.ai is hashed with the marketplace name
-  claude.ai reports, or `synced`, so calibrate on a machine that gets make-it the way your people
-  do (before v2.1.246 the synced hash was computed differently). The standard install is not a
-  plugin: in the v2.1.330 run, 15 `plugin_loaded` events arrived and none was make-it.
-- **The repositories**: which ones carry make-it's records (section 11).
+If your organization doesn't want per-person, per-command data, remove it at your own collector.
+
+**In Claude Code itself.** The documentation names no setting for this (checked 23 November 2026).
+The attribute controls it lists are `OTEL_METRICS_INCLUDE_SESSION_ID`,
+`OTEL_METRICS_INCLUDE_VERSION`, `OTEL_METRICS_INCLUDE_ACCOUNT_UUID`,
+`OTEL_METRICS_INCLUDE_ENTRYPOINT`, `OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES` and
+`OTEL_METRICS_INCLUDE_REPOSITORY`; none covers `skill.name`. The person's identity is the same
+story: `OTEL_METRICS_INCLUDE_ACCOUNT_UUID=false` drops the account IDs, but `user.email` is "Always
+included when available", and for it the documentation says: "work with your telemetry backend to
+filter or redact this field".
+
+**At your collector (the dependable route).** Add an attribute-removal step to the collector's
+metrics and logs pipelines that deletes `skill.name`. It sits on the cost and token metrics and on
+the `api_request`, `api_error` and `api_refusal` events. With the OpenTelemetry Collector's
+attributes processor, that step is:
+
+```yaml
+processors:
+  attributes/drop-skill-name:
+    actions:
+      - key: skill.name
+        action: delete
+```
+
+and `attributes/drop-skill-name` goes in the `processors` list of both pipelines. The syntax is from
+the processor's own README in the `opentelemetry-collector-contrib` repository (checked 23 November
+2026), which also says two things to know: the processor "has been superseded by the transform
+processor", and removing a data point attribute "has the potential to create an identity conflict
+since the Attributes processor does not perform any re-aggregation of the data points", so cost
+points that differed only by skill now look alike; sum them in your backend. Other collectors have
+an equivalent step; use whichever yours has.
+
+What you lose: cost and tokens per make-it command. Sessions, cost per person and per repository
+stay. Then the notice to your people must match what you keep: section 10 has both versions of the
+sentence.
+
+### Who has make-it
+
+One question at a time:
+
+| Question | What answers it | How complete | Its limit |
+|---|---|---|---|
+| Who has make-it installed, and which version | The file `~/.claude/make-it/VERSION` (`%USERPROFILE%\.claude\make-it\VERSION` on Windows), read by your device-management tool with `make-it-installed.sh` or `make-it-installed.ps1` (below) | Every account you run it against, used or not | Per user account; a person can delete, edit or copy the file; says nothing about use |
+| Who loaded make-it in a session | `plugin_loaded` and its `plugin_id_hash` | Exact, per session, for plugin installs | The standard install is not a plugin, so it is absent there (observed: 15 `plugin_loaded` events, none make-it). The `make-it-desktop` plugin ships six skills (`guardrails`, `make-it`, `debug-it`, `nemo-it`, `handoff`, `safety`), not the full set |
+| Who ran which command, and what it cost | `skill.name` on the cost and token counters and `api_request` | Every run on a machine with the reporting on | A name can collide with someone's own command; a plugin from outside the official marketplace reads `third-party`; gone if you drop it at the collector |
+| Which repositories were built with make-it | The adoption scan (section 11) | Every repository the scanning account can read | Presence, not validity; default branch only; the search limits in `adoption-scan.md` |
+| Which sealing steps changed an app | The ledger in each repository, read by the scan | One entry per make-it run that changed code | A run that changed no code leaves no entry; it can't say who ran it |
+
+**Installed, per machine.** make-it's installer writes its version to one file on every install and
+update: `~/.claude/make-it/VERSION` on macOS and Linux (`install.sh`, which sets it at line 24 and
+writes it at lines 236-240, after replacing the whole `~/.claude/make-it` folder at lines 228-230),
+and `%USERPROFILE%\.claude\make-it\VERSION` on Windows (`install.ps1`, lines 43-46 and 1018-1022).
+The skills themselves go to `~/.claude/commands/`. Neither installer has an uninstall step: removing
+make-it means deleting those folders, and the file goes with them.
+
+Have your device-management tool read that file as an inventory item (a custom attribute, extension
+attribute or detection script). make-it ships a read-only check for it:
+
+```bash
+sh "$HOME/.claude/make-it/scripts/make-it-installed.sh" /Users/<person>
+```
+
+```powershell
+powershell -NoProfile -File make-it-installed.ps1 -HomeDir C:\Users\<person>
+```
+
+Each prints `make-it <version>` or `make-it not installed` and exits 0 either way. It reads that one
+file, prints only letters, digits, `.`, `+` and `-` from it, changes nothing and contacts nothing.
+Copy it into your tool rather than running it from a person's own folder. A device-management
+script usually runs as root or SYSTEM, whose home folder is not the person's: run it per user, or
+point it at each profile folder on the machine.
 
 **Activity in the repositories make-it built.** Every metric and event carries the repository's
 `vcs.*` identity. Join that with the list of repositories that carry make-it's records and you have
@@ -244,7 +310,13 @@ repositories that use Claude Code without make-it.
 
 ### Calibrating `plugin_id_hash`, once
 
-Only if people get make-it as a plugin. Do this one time, in one shell, on your own machine, before
+Only if people get make-it as a plugin. A `plugin_loaded` event is sent once per enabled plugin at
+the start of every session. For a plugin outside Anthropic's official marketplace the name reads
+`third-party`, but the event carries a `plugin_id_hash`: a fixed hash of the plugin's name and
+marketplace, the same for the same plugin from the same marketplace on every machine. A plugin
+synced from claude.ai is hashed with the marketplace name claude.ai reports, or `synced`, so
+calibrate on a machine that gets make-it the way your people do (before v2.1.246 the synced hash
+was computed differently). Do this one time, in one shell, on your own machine, before
 the managed policy reaches it (a managed value replaces the same variable from your shell, so on a
 managed machine these settings would be overridden). It sends nothing to a collector: in `-p` mode
 the console exporter writes every record to standard output (observed on v2.1.330), which this
@@ -388,6 +460,13 @@ to.
 > `<link to the table>`. Questions: `<contact>`.
 
 If you turn on `OTEL_RESOURCE_INCLUDE_HOST`, add "the name and ID of your computer" to it.
+
+**Publish the sentence that is true for you.** If your collector keeps the command names (the
+default), keep the make-it sentence above. If you remove `skill.name` at your collector (section 5,
+"Removing the command names"), replace it with this one, and drop "including the name of each
+make-it command or other skill you run, such as `/resume-it`, with its cost" from the list:
+
+> make-it adds no reporting of its own, and we remove the name of each command you run before the data is stored.
 
 **The full list** (the rows of section 4, in plain words; "observed" means observed with the
 console exporter on Claude Code v2.1.330, with every content flag off):
