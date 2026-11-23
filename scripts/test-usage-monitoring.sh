@@ -272,7 +272,7 @@ else
 fi
 check "the inventory checks changed nothing they read" '[ "$(snap)" = "$before" ] && [ ! -e x ]'
 check "the inventory checks contact nothing (no network command in either)" \
-  '! gq -iE "curl|wget|Invoke-WebRequest|Invoke-RestMethod|nc |ssh|http" "$IS" "$IP"'
+  '! cat "$IS" "$IP" | gq -iE "curl|wget|Invoke-WebRequest|Invoke-RestMethod|nc |ssh|http"'
 
 # the whole run's stderr: a helper error or a bad regex must not read as a pass
 exec 2>&4
