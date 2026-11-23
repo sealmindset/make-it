@@ -78,6 +78,7 @@ S_AGG='The transform processor deletes the key and adds the look-alike points to
 S_NOT_RUN='Not run against a live collector: test it in your own pipeline before you rely on the numbers.'
 S_UNINSTALL="Removing make-it means deleting \`~/.claude/make-it\` and the make-it command files the installer copied into \`~/.claude/commands/\`; other files there are the person's own."
 S_ROW_CHANGE='also change that row of the full list to "The model, the tokens and the cost of each request"'
+S_READ_FIRST="A file there that is not on that list, or whose hash differs, is not the installed release's copy: read it before deleting it."
 S_INV_SAYS='prints `make-it <version>` only when the first line of a regular file (not a symlink) looks like a version'
 S_NO_SETTING='The documentation names no setting for this (checked 23 November 2026).'
 S_DROP_YAML='delete_key(datapoint.attributes, "skill.name")'
@@ -115,6 +116,7 @@ check "section 5 says the collector step was not run live" 'in_section "$G" "$H_
 check "section 5 shows the transform delete and the aggregation" 'in_section "$G" "$H_MAKEIT" "delete_key(datapoint.attributes, \"skill.name\")" && in_section "$G" "$H_MAKEIT" "aggregate_on_attributes(\"sum\")" && in_section "$G" "$H_MAKEIT" "delete_key(log.attributes, \"skill.name\")"'
 check "section 5 no longer advises summing look-alike points in the backend" '! in_section "$G" "$H_MAKEIT" "sum them in your backend"'
 check "section 5 says removing make-it spares the person's own commands" 'in_section "$G" "$H_MAKEIT" "$S_UNINSTALL"'
+check "section 5 says to read an unlisted command file before deleting it" 'in_section "$G" "$H_MAKEIT" "$S_READ_FIRST"'
 check "section 5 says what the inventory check prints, exactly" 'in_section "$G" "$H_MAKEIT" "$S_INV_SAYS"'
 check "section 11 uses the scan page's term, seal history" '! in_section "$G" "$H_ADOPT" "ledger"'
 check "the notice tells an organization that removes names to change the full-list row" 'in_section "$G" "$H_NOTICE" "$S_ROW_CHANGE"'
@@ -146,6 +148,7 @@ ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_R
 ctl "what changed reversed"         's/Skill names are sent by default on the cost/Skill names are not sent by default on the cost/' 'in_section "$C" "$H_MAKEIT" "$S_CHANGED"'
 ctl "the Desktop plugin said to be the full set" 's/not the full set/the full set/' 'in_section "$C" "$H_MAKEIT" "$S_NOT_FULL"'
 ctl "the uninstall deletes the person's commands" "s/other files there are the person's own/delete the whole folder/" 'in_section "$C" "$H_MAKEIT" "$S_UNINSTALL"'
+ctl "unlisted command files deleted unread" 's/read it(\s+)before(\s+)deleting it\./delete$1it./' 'in_section "$C" "$H_MAKEIT" "$S_READ_FIRST"'
 ctl "the collector step said to be tested live" 's/Not run against a live collector:/Run against a live collector:/' 'in_section "$C" "$H_MAKEIT" "$S_NOT_RUN"'
 ctl "a client-side setting claimed" 's/The documentation names no setting for this/The documentation names a setting for this/' 'in_section "$C" "$H_MAKEIT" "$S_NO_SETTING"'
 ctl "the collector step removed"    's/delete_key\(datapoint\.attributes/keep_key(datapoint.attributes/' 'in_section "$C" "$H_MAKEIT" "$S_DROP_YAML"'
@@ -283,6 +286,8 @@ mkh home7; { printf '1.2.'; head -c 300 /dev/zero | tr '\0' 9; printf '\n'; } > 
 mkdir -p "$T/real-make-it" "$T/home8/.claude"; printf '1.71.18\n' > "$T/real-make-it/VERSION"; ln -s "$T/real-make-it" "$T/home8/.claude/make-it"
 mkh home9; mkdir "$T/home9/.claude/make-it/VERSION"
 mkh home10; printf '1.72.0-rc.1\n' > "$T/home10/.claude/make-it/VERSION"
+printf '9.9.9\n' > "$T/version-shaped"; mkh home11; ln -s "$T/version-shaped" "$T/home11/.claude/make-it/VERSION"
+mkh home12; printf '1.2 .3\n' > "$T/home12/.claude/make-it/VERSION"
 snap() {  # path, mtime and size of everything under the temp root and the folder the test runs from (its own stderr
           # file excepted); Python, so it reads the same on macOS and Linux
   python3 -I -c 'import os,sys
@@ -307,9 +312,27 @@ for R in $runners; do
   check "$R: a symlinked make-it folder (dev-link.sh) is still read" '[ "$(inv $R home8)" = "make-it 1.71.18" ]'
   check "$R: a VERSION that is a folder reads as unreadable" '[ "$(inv $R home9)" = "$UNREAD" ]'
   check "$R: a pre-release version is printed" '[ "$(inv $R home10)" = "make-it 1.72.0-rc.1" ]'
+  check "$R: a symlinked VERSION is refused even when its target is version-shaped" '[ "$(inv $R home11)" = "$UNREAD" ]'
+  check "$R: a space inside the line is not removed (only the ends are trimmed)" '[ "$(inv $R home12)" = "$UNREAD" ]'
 done
 check "sh: with no argument it reads \$HOME" '[ "$(HOME="$T/home1" sh "$IS")" = "make-it 1.71.18" ]'
 check "the inventory checks changed nothing under the temp root or the folder they ran from" '[ "$(snap)" = "$before" ] && [ ! -e x ]'
+no_writes() {  # comments dropped; the one stderr redirection the .sh has, 2>/dev/null, allowed; any other write refused
+  python3 -I - "$@" <<'PY2'
+import re, sys
+for p in sys.argv[1:]:
+    code = "\n".join(l for l in open(p, encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#"))
+    code = code.replace("2>/dev/null", "")
+    if re.search(r">|\b(touch|rm|mv|cp|tee)\b|Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Copy-Item|Move-Item", code, re.I):
+        sys.exit(1)
+PY2
+}
+check "the inventory scripts hold no writing construct (only 2>/dev/null, which is there)" \
+  'no_writes "$IS" "$IP" && gq -F "2>/dev/null" "$IS"'
+cp "$IS" "$T/write.sh"; printf 'echo x > /tmp/elsewhere\n' >> "$T/write.sh"
+cp "$IP" "$T/write.ps1"; printf 'Set-Content -Path C:\\x -Value 1\n' >> "$T/write.ps1"
+check "control: a copy of the .sh with one added write is caught" '! no_writes "$T/write.sh"'
+check "control: a copy of the .ps1 with one added write is caught" '! no_writes "$T/write.ps1"'
 check "the inventory checks contact nothing (no network command in either)" \
   '! cat "$IS" "$IP" | gq -iE "curl|wget|Invoke-WebRequest|Invoke-RestMethod|nc |ssh|http"'
 
