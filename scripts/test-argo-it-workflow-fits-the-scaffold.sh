@@ -61,6 +61,10 @@ def envmap(svc):
     return e
 SERVICES = [n for n, s in compose.items() if s.get("build") and not n.startswith("mock-") and "dev" not in (s.get("profiles") or [])]
 DB_SERVICES = [n for n in SERVICES if "DATABASE_URL" in envmap(compose[n])]
+# The practice sign-in (E12-S15 task 3): when the text builds mock-oidc's image too, the model builds it, as its
+# compose service, last (it gets no smoke test: no DATABASE_URL)
+if "plus `mock-oidc` when the practice sign-in was picked" in re.sub(r"\s+", " ", phase) and "mock-oidc" in compose:
+    SERVICES.append("mock-oidc")
 CTX = {}
 for n in SERVICES:
     b = compose[n]["build"]

@@ -51,6 +51,10 @@ jobs:
       # test-argo-it-workflow-fits-the-scaffold.sh reads docker-compose.yml and the workflow it fills with PyYAML.
       - name: Install PyYAML
         run: python -m pip install --quiet "pyyaml==6.0.2"
+      # test-argo-it-signin-on-the-cluster.sh runs the scaffold's own mock-oidc: it needs the backend's packages
+      # (installed above) and cryptography, at the version mock-oidc pins.
+      - name: Install mock-oidc's cryptography
+        run: python -m pip install --quiet "cryptography==50.0.1"
       - name: Run every scripts/test-*.sh
         env:
           REQUIRE_SCAFFOLD_PYTEST: "1"
