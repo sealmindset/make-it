@@ -6,11 +6,13 @@ Usage:  render-managed-settings.py SETTINGS.json --out DIR [--allow-content-flag
 Checks, before anything is written:
   - the file is well-formed JSON whose top level is an object, with no key given twice and no null value
     (a macOS plist can't hold one);
-  - no placeholder such as <collector-host> or <ingest-token> is left unfilled;
+  - no placeholder such as <collector-host> or <the person's email> is left unfilled (any <...> in a key or a
+    value is refused, so a value that holds "<" and later ">" is refused too);
   - no content flag is switched on (OTEL_LOG_USER_PROMPTS, OTEL_LOG_ASSISTANT_RESPONSES, OTEL_LOG_TOOL_DETAILS,
-    OTEL_LOG_TOOL_CONTENT, OTEL_LOG_RAW_API_BODIES: anything but "0" or unset), unless
+    OTEL_LOG_TOOL_CONTENT, OTEL_LOG_RAW_API_BODIES: present with any value but "0"), unless
     --allow-content-flags says the organization has decided to collect that content.
-Then writes, into DIR (created if missing, files readable by their owner only, because they hold the token):
+Then writes, into DIR (created if missing, files readable by their owner only, because they hold the token; DIR and
+each target must not be a symlink, and an existing regular file of the same name is replaced by a new one):
   com.anthropic.claudecode.plist  the payload for the com.anthropic.claudecode managed preferences domain
   ClaudeCode-Settings.reg         the JSON as the Settings value under HKLM\\SOFTWARE\\Policies\\ClaudeCode
 
@@ -28,7 +30,7 @@ import sys
 
 CONTENT_FLAGS = ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS",
                  "OTEL_LOG_TOOL_CONTENT", "OTEL_LOG_RAW_API_BODIES")
-PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z0-9_.-]*>")
+PLACEHOLDER = re.compile(r"<[^<>\n]{1,80}>")  # any <...> form, spaces and apostrophes included
 PLIST_NAME = "com.anthropic.claudecode.plist"
 REG_NAME = "ClaudeCode-Settings.reg"
 
@@ -67,7 +69,7 @@ def content_flags_on(settings):
     env = settings.get("env")
     if not isinstance(env, dict):
         return []
-    return [f"env.{k}" for k in CONTENT_FLAGS if k in env and env[k] not in ("0", "")]
+    return [f"env.{k}" for k in CONTENT_FLAGS if k in env and env[k] != "0"]
 
 
 def check(raw, allow_content):
@@ -102,9 +104,22 @@ def reg_text(settings):
             f'"Settings"="{value}"\r\n')
 
 
+class Unsafe(Exception):
+    pass
+
+
 def write_private(path, data):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    """A new owner-only file: never through a symlink, never keeping an old file's mode."""
+    if os.path.islink(path):
+        raise Unsafe(f"{path} is a symlink")
+    if os.path.lexists(path):
+        if not os.path.isfile(path):
+            raise Unsafe(f"{path} exists and is not a regular file")
+        os.unlink(path)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "wb") as f:
+        if hasattr(os, "fchmod"):
+            os.fchmod(f.fileno(), 0o600)
         f.write(data)
 
 
@@ -134,9 +149,17 @@ def main(argv):
         print(f"{a.settings}: refused: a value can't be written to a plist", file=sys.stderr)
         return 1
     try:
+        if os.path.islink(a.out.rstrip("/\\") or a.out):
+            raise Unsafe(f"{a.out} is a symlink")
         os.makedirs(a.out, exist_ok=True)
+        for name in (PLIST_NAME, REG_NAME):  # check both before writing either
+            if os.path.islink(os.path.join(a.out, name)):
+                raise Unsafe(f"{os.path.join(a.out, name)} is a symlink")
         write_private(os.path.join(a.out, PLIST_NAME), plist)
         write_private(os.path.join(a.out, REG_NAME), reg_text(settings).encode("utf-16"))
+    except Unsafe as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 1
     except OSError as e:
         print(f"could not write to {a.out}: {type(e).__name__}", file=sys.stderr)
         return 2
