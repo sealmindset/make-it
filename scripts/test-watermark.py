@@ -5,6 +5,7 @@ The build record (.make-it/manifest.json) is a claim; `verify` is the proof. Eve
 throwaway app from the real scaffold, so the real protected list and the real CONTENT_MANIFEST are
 what is checked. Exit codes: 0 pass, 1 fail, 3 a security file changed and needs review.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -544,6 +545,65 @@ class Verify(Base):
         r = self.verify(reseal=False)
         self.assertEqual(r.returncode, 1)
         self.assertIn("release", r.stdout.lower())
+
+    def other_make_it(self, version=None):
+        """Another distribution of make-it: the real scaffolds and lists, a CONTENT_MANIFEST with one more
+        line (so another digest), and this release's VERSION unless `version` is given."""
+        fw = os.path.join(self.tmp, "other-make-it")
+        os.makedirs(fw)
+        for d in ("watermark", "scaffolds"):
+            os.symlink(os.path.join(FW, d), os.path.join(fw, d))
+        with open(os.path.join(ROOT, "CONTENT_MANIFEST")) as f:
+            manifest = f.read()
+        with open(os.path.join(fw, "CONTENT_MANIFEST"), "w") as f:
+            f.write(manifest + "0" * 64 + "  make-it/an-own-patch.md\n")
+        with open(os.path.join(ROOT, "VERSION")) as f:
+            mine = f.read().strip()
+        with open(os.path.join(fw, "VERSION"), "w") as f:
+            f.write((version or mine) + "\n")
+        return fw, mine
+
+    def test_same_version_other_content_says_the_content_differs(self):
+        # sealed by one build, checked by another with the same VERSION: the numbers alone can't show it
+        self.write()
+        fw, version = self.other_make_it()
+        r = run("verify", "--app", self.app, "--framework", fw)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+        self.assertEqual(len(fails), 1, r.stdout)
+        line = fails[0]
+        self.assertNotIn(f"record: {version}, check: {version}", line)  # the old message's contradiction
+        self.assertIn(f"same version number ({version})", line)
+        self.assertIn("different content", line)
+        self.assertIn("different distribution of make-it", line)
+        self.assertIn("watermark.md", line)
+        mine = self.record()["framework"]["content_manifest_sha256"][:12]
+        with open(os.path.join(fw, "CONTENT_MANIFEST"), "rb") as f:
+            theirs = hashlib.sha256(f.read()).hexdigest()[:12]
+        self.assertNotEqual(mine, theirs)
+        self.assertIn(f"record: {mine}, check: {theirs}", line)
+        j = json.loads(run("verify", "--app", self.app, "--framework", fw, "--json").stdout)
+        self.assertEqual((j["result"], len(j["fails"])), ("fail", 1))
+
+    def test_another_version_still_names_both_versions(self):
+        self.write()
+        fw, version = self.other_make_it("9.9.9")
+        r = run("verify", "--app", self.app, "--framework", fw)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+        self.assertEqual(fails, ["FAIL  The build record names a different make-it release than the one it is "
+                                 f"checked against (record: {version}, check: 9.9.9)."])
+
+    def test_a_record_with_no_content_digest_says_so(self):
+        self.write()
+        rec = self.record()
+        del rec["framework"]["content_manifest_sha256"]
+        with open(self.p(".make-it/manifest.json"), "w") as f:
+            json.dump(rec, f)
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("does not say which make-it content built it", r.stdout)
+        self.assertNotIn("names a different make-it release than the one", r.stdout)
 
     def test_a_record_that_names_another_scaffold_does_not_skip_the_hashes(self):
         # claiming "no scaffold" in the record must not switch the file check off
