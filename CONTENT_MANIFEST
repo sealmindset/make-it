@@ -1,4 +1,4 @@
-2027525b77cc587b65bcaca2997d457101dc5cbac13b18fe72e1e321658b01f0  commands/argo-it.md
+3622f859f37680363e6ddbd25bfc5b360e5ebc431dfd85c661cf2c355131e3b2  commands/argo-it.md
 82cadf37441e60cf0037e0621210aadc68f12304ce16a9e645ea5a06dff3cf07  commands/backlog-it.md
 aa893b942a32ddba98e10ba1f084c07965465355587607f650d5b338942e9a2d  commands/clear-it.md
 9c6652a5d5e0fd7baa6b7ea8595309eabbc9bfedf75962b639d1ebd36da0b510  commands/deadcode-it.md
@@ -31,7 +31,7 @@ a7daa6fe8f53a303677d5b6ed982fa25145281e61a9db799535b856d118fbdeb  make-it/backlo
 78e4c0517484655f6e9aad625236a404bf5e08ae0234ad92e0d8e4631826c114  make-it/confluence-docs/04-try-it.md
 127f86a007da54c955f8e9089c822da03ee8de11dc650596855bf5b398a7d96e  make-it/confluence-docs/05-demo-it.md
 f5a3a1ae0c1f460d78340bd328a5c90b4e9fc8a7aa6ba963756857769b52c789  make-it/confluence-docs/06-ship-it.md
-3cfe0de010613649343b5d2a1bf46d5425e6e005e5fd706b3e9ce4e7a82d26da  make-it/confluence-docs/07-argo-it.md
+74636f162a60b35fc2f0d6fd0458231091eb2e9674877911c20731eb4c6787e0  make-it/confluence-docs/07-argo-it.md
 072d2ca8246588ffdf77fca56d4edcd42bbfadead7c5203a5aca88d590b84f73  make-it/confluence-docs/08-nemo-it.md
 f6cf8ff7a259c92a8cf346f9cde0bfbb38d46eb3742dabb3701364af807ece4b  make-it/confluence-docs/09-fix-it.md
 b39d8610679204a95441028b4cb8b53de8ed2e561e02c43a8a9df28fc3eebbb4  make-it/confluence-docs/10-debug-it.md

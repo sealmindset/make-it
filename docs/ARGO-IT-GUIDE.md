@@ -16,7 +16,7 @@ This guide explains what `/argo-it` produces, what it expects from your cluster,
 - Generates Kustomize manifests for dev and prod (`env/dev/`, `env/prod/`)
 - Generates a CI workflow for building and pushing container images
 - Generates `ONBOARDING-K8S.md` with manual setup steps
-- Offers to push and merge to the deploy branch
+- Offers to send the set-up for review: its own branch, `argo-it/setup`, and one pull request into the main version (nothing builds or deploys until it's accepted)
 
 **What it does NOT do:**
 - Modify Docker Compose files, or change how your app behaves (before sending an update it may apply the linters' safe automatic fixes -- formatting, imports -- and it lists each file it changed)
@@ -74,8 +74,9 @@ sequenceDiagram
 
     Note over AI: Phase 3: Deploy
     AI->>User: "What would you like to do?"
-    User->>AI: "Push and merge"
-    AI->>Repo: git push + merge to deploy branch
+    User->>AI: "Send it for review"
+    AI->>Repo: push argo-it/setup + open one pull request
+    User->>Repo: Reviewer accepts the pull request
 
     Note over Repo,K8s: GitOps flow
     Argo->>Repo: Detects change on deploy branch
