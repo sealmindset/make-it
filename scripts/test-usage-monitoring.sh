@@ -44,7 +44,7 @@ PY
 }
 pinned() { flat < "$1" | grep -qF -- "$2"; }
 in_section() {  # $1 file, $2 exact "## " heading, $3 text that must be inside that section
-  awk -v h="$2" '/^## /{on=($0==h)} on' "$1" | flat | grep -qF -- "$3"; }
+  awk -v h="$2" '/^## /{on=($0==h)} on' "$1" | sed 's/^> \{0,1\}//' | flat | grep -qF -- "$3"; }
 content_on_only_in_calibration() {  # tool details on only under the calibration heading; prompts/raw bodies never on
   ! gq -E 'OTEL_LOG_USER_PROMPTS(=|": ")"?1|OTEL_LOG_RAW_API_BODIES(=|": ")"?[^0"]' "$1" || return 1
   ! awk '/^#/{cal=($0 ~ /^### Calibrating `plugin_id_hash`, once/)} !cal && /OTEL_LOG_TOOL_DETAILS(=|": ")"?1/' "$1" | gq . || return 1
@@ -65,7 +65,11 @@ S_BEFORE_AFTER='Proving value, like time saved, needs a before-and-after measure
 H_NOTICE='## 10. A notice for your people'
 S_NOTICE="It does not record what you type, Claude's replies, your code or files, or the commands Claude runs."
 H_ADOPT='## 11. Counting adoption across your repositories'
-S_ADOPT="Per-skill counts come from both: the usage reporting shows who ran which command, when, and what it cost; the ledger in each repository shows which sealing steps changed which app."
+S_ADOPT="Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran which command (a plugin from outside the official marketplace shows \`third-party\`), when, and what it cost; the ledger in each repository shows which sealing steps changed which app."
+S_WHO='This reporting goes only to our own collector at `<collector-host>`, and only `<who can see it>` can read it.'
+S_OFF='We have set Claude Code so that this content stays off.'
+S_NOR='Nor does it record the paths of the files Claude reads or edits.'
+S_3PNAME='For a make-it plugin from outside the official marketplace, such as the `make-it-desktop` plugin, the counters show `third-party` instead.'
 S_NOTICE_MAKEIT="make-it adds no reporting of its own, but its commands run inside Claude Code, so the name of each make-it command you run is recorded with its cost."
 S_NOTICE_PLAN='your Claude plan'
 H_CAL='### Calibrating `plugin_id_hash`, once'
@@ -82,6 +86,10 @@ done
 check "the notice section says what is not recorded" 'in_section "$G" "$H_NOTICE" "$S_NOTICE"'
 check "the notice says make-it's command names are recorded with their cost" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
 check "the notice names the Claude plan" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_PLAN"'
+check "the notice says who can see it" 'in_section "$G" "$H_NOTICE" "$S_WHO"'
+check "the notice says the content stays off" 'in_section "$G" "$H_NOTICE" "$S_OFF"'
+check "the notice says file paths are not recorded" 'in_section "$G" "$H_NOTICE" "$S_NOR"'
+check "the guide says a third-party plugin shows third-party on the counters" 'pinned "$G" "$S_3PNAME"'
 check "the adoption section says per-skill counts come from both sources" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
 check "the adoption section does not claim adoption-scan.md exists on this branch" \
   '[ -f .claude/make-it/references/adoption-scan.md ] || ! in_section "$G" "$H_ADOPT" "adoption-scan.md"'
@@ -105,6 +113,10 @@ ctl "the skill event said to name it" 's/event does not name it:/event names it:
 ctl "a skill name said to be proof" 's/A skill name is not proof of make-it/A skill name is proof of make-it/' 'pinned "$C" "$S_COLLIDE"'
 ctl "the observation unlabelled"   's/observed(\s+)with(\s+)the(\s+)console/noticed$1with$2the$3console/gi' 'pinned "$C" "$S_OBSERVED"'
 ctl "notice hides make-it command names" 's/so the name of each make-it command you run is recorded with its cost\./so nothing about make-it is recorded./' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
+ctl "anyone may read it"            's/and only `<who can see it>` can(\s+>?\s*)read it\./and anyone may$1read it./' 'in_section "$C" "$H_NOTICE" "$S_WHO"'
+ctl "we may turn this content on"   's/so that this content(\s+>?\s*)stays off\./so that we may turn this content$1on./' 'in_section "$C" "$H_NOTICE" "$S_OFF"'
+ctl "file paths recorded"           's/Nor does it record the paths/It records the paths/' 'in_section "$C" "$H_NOTICE" "$S_NOR"'
+ctl "third-party plugin shows the real name" 's/the counters(\s+)show `third-party` instead\./the counters$1show the real name./' 'pinned "$C" "$S_3PNAME"'
 ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
