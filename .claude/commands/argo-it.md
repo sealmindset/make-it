@@ -2644,10 +2644,10 @@ The app won't start until this Secret exists.
 | PRACTICE_ACCESS_CODE | The code testers type before they can sign in (16+ characters; without it the practice sign-in won't start) | Generate (below) |
 
 ```bash
-# Generated values go straight into the Secret: they are never typed, so never in your shell history
+# Generated values go straight into the Secret: they are never typed, so never in your shell history (bash)
 kubectl create secret generic {app}-oidc-dev -n {namespace} \
-  --from-literal=OIDC_CLIENT_SECRET="$(openssl rand -hex 32)" \
-  --from-literal=PRACTICE_ACCESS_CODE="$(openssl rand -hex 12)"
+  --from-file=OIDC_CLIENT_SECRET=<(openssl rand -hex 32 | tr -d '\n') \
+  --from-file=PRACTICE_ACCESS_CODE=<(openssl rand -hex 12 | tr -d '\n')
 # Read the access code when you hand it to your testers -- out of band (in person, or your team's
 # password manager), never in a ticket, chat or email:
 kubectl get secret {app}-oidc-dev -n {namespace} -o jsonpath='{.data.PRACTICE_ACCESS_CODE}' | base64 -d; echo
