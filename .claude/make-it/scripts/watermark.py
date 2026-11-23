@@ -831,10 +831,10 @@ def check(app, fw, opts):
             fails.append("The build record does not say which make-it content built it (it has no content digest). "
                          "Run /resume-it in this project, then push again.")
         else:
-            fails.append(f"The build record and the make-it it is checked against have the same version number ({fw.version}) "
-                         f"but different content (record: {clean(recorded, 12)}, check: {fw.digest[:12]}): the app was "
-                         "built by a different distribution of make-it. Check it against the make-it build that sealed it "
-                         "(see watermark.md, \"Checking against your own build of make-it\").")
+            fails.append(f"The version numbers are the same ({fw.version}) but the content differs "
+                         f"(record: {clean(recorded, 12)}, check: {fw.digest[:12]}): it was sealed by another build of "
+                         "make-it, or the record was edited. If your organization ships its own build of make-it, "
+                         "check it against that reviewed build (see watermark.md, \"Checking against your own build of make-it\").")
     old_files = rec.get("security_files") if isinstance(rec.get("security_files"), list) else []
     noted = {e.get("path"): clean(e.get("note") or "") for e in old_files
              if isinstance(e, dict) and isinstance(e.get("path"), str)}
