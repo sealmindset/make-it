@@ -418,13 +418,24 @@ check("the report says app-context.json was left changed, and names its keys", "
 for label, phrase in (("ONBOARDING: the admin routes", "Its admin routes are reachable only inside the cluster"),
                       ("ONBOARDING: the code out of band", "when you hand it to your testers -- out of band"),
                       ("ONBOARDING: never in a ticket", "never in a ticket, chat or email"),
-                      ("ONBOARDING: no value in history", '--from-literal=PRACTICE_ACCESS_CODE="$(openssl rand -hex 12)"'),
+                      ("ONBOARDING: no value in history", "--from-file=PRACTICE_ACCESS_CODE=<(openssl rand -hex 12 | tr -d '\\n')"),
                       ("ONBOARDING: the organisation's Secret", "kubectl create secret generic {app}-oidc-{env} -n {namespace}"),
                       ("ONBOARDING: the test address only for the organisation's sign-in", "only when the test copy uses your organisation's sign-in too"),
                       ("ONBOARDING: pull access follows the registry", "--docker-server={registry_host}"),
                       ("ONBOARDING: the app won't start without the Secret", "The app won't start until this Secret exists.")):
     says(label, phrase)
 check("ONBOARDING no longer hard-codes ghcr.io for pull access", "--docker-server=ghcr.io" not in doc)
+# ONBOARDING's sign-in commands, as generated, must pass the skill's own secret check (PHASE 5 scans every
+# generated file: a hit there stops the send). Found by the bed run: `SECRET="$(...)"` read as a secret.
+onb = doc.split('<step name="generate-onboarding">', 1)[-1].split("</step>", 1)[0]
+cmds = "\n".join(re.findall(r"```bash\n(.*?)```", onb.split("**{app}-oidc-{env}:**", 1)[-1].split("**Option A", 1)[0], re.S))
+d = tempfile.mkdtemp()
+subprocess.run(["git", "init", "-q"], cwd=d)
+open(os.path.join(d, "ONBOARDING-K8S.md"), "w").write(fill(cmds))
+r = subprocess.run([sys.executable, "-I", os.path.join(root, ".claude/make-it/scripts/secret-scan.py")], cwd=d, capture_output=True, text=True)
+shutil.rmtree(d, ignore_errors=True)
+check("ONBOARDING's sign-in commands pass the skill's own secret check (else the send stops on its own file)",
+      cmds.strip() and r.returncode == 0, r.stdout[-300:])
 
 # ======================================================================= one reading only
 for label, phrase in (("{app}", "`{app}` -- the app's short name"), ("{compose_service}", "`{compose_service}` -- a Compose service's own name"),
