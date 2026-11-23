@@ -21,7 +21,7 @@ if [ ! -e "$f" ] && [ ! -L "$f" ]; then
 fi
 v=""
 if [ -f "$f" ] && [ ! -L "$f" ]; then
-  v="$(dd if="$f" bs=256 count=1 2>/dev/null | head -n 1 | tr -d '\r\t ')"
+  v="$(dd if="$f" bs=256 count=1 2>/dev/null | head -n 1 | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
 fi
 if [ "${#v}" -le 64 ] && printf '%s\n' "$v" | grep -Eq '^[0-9]+(\.[0-9]+){1,3}([-+][0-9A-Za-z.]+)?$'; then
   echo "make-it $v"

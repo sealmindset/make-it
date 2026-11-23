@@ -307,7 +307,7 @@ cbbd7d67b20ee7ef62dcc779b2d29cc52d4b9d00cf41d141d9b1c505cc1f42f1  make-it/script
 878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
 928cd5d828e802661bfdf62fe523ca4ce3317a60948fabb5c771a9ce7c1e8307  make-it/scripts/hostile-code-check.py
 e9a667944cff69c90e65cfc0e59ecd459a4d93082aac60caa8e393687afab3cf  make-it/scripts/make-it-installed.ps1
-af22db168c7954ca52df5cfdb2f68a03ae897d19b56bbed4149b7658e6bf1571  make-it/scripts/make-it-installed.sh
+08f066fb72590dd0351f722738aea5035f78c4c32be30163c8177f3abb824566  make-it/scripts/make-it-installed.sh
 6f5afe5e546cc0ff93b229258f24385fe5c5a487d32c4fbc017d9ab00aca502c  make-it/scripts/render-managed-settings.py
 2de72ad7e80c2113fe51207518ceb0e88792e7c4826127f667512e09c805e22a  make-it/scripts/secret-scan.py
 b275721b60dce639437b11f3e176c5325d07a7f691267b248523bb634ab4ca8c  make-it/scripts/security-pass.py
