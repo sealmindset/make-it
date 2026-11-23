@@ -88,6 +88,13 @@ if "graphql" in args:
                    "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization."} \
                 if lf["kind"] == "sso" else {"path": ["repositoryOwner", "repositories"],
                                              "message": "Something went wrong while executing your query. This may be the result of a timeout"}
+            if lf["kind"] == "error_with_list":
+                chunk = fx["repos"][start:start + page]
+                nodes = [{"name": r["name"], "nameWithOwner": own["login"] + "/" + r["name"], "isArchived": r["isArchived"],
+                          "isFork": r["isFork"]} for r in chunk]
+                reply(200, {"data": {"repositoryOwner": {"__typename": own["type"], "login": own["login"], "repositories": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": nodes}}},
+                    "errors": [{"path": ["repositoryOwner", "repositories"], "message": "Something went wrong"}]}, code=1)
             reply(200, {"data": {"repositoryOwner": {"__typename": own["type"], "login": own["login"], "repositories": None}},
                         "errors": [err]}, {"X-GitHub-SSO": "required; url=https://github.com/orgs/example-org/sso?authorization_request=x"}
                   if lf["kind"] == "sso" else None, code=1)
@@ -719,6 +726,68 @@ class FixRound(Base):
         self.assertEqual((six["ma1_readable"], six["ma1_version"], six["ma1_note"]), (False, None, "too large to read here"))
         self.assertEqual((six["ma2_ledger_entries"], six["ma2_too_large"], six["ma2_unreadable"], six["ma2_skills"]), (1, 1, 0, {}))
         self.assertIn("too large to read here", out)
+
+
+class Partial(Base):
+    """Second re-check: a search that failed or was capped marks every row partial, never "complete"."""
+
+    def rows(self):
+        with open(os.path.join(self.last_out, "adoption-scan.csv"), newline="") as f:
+            return list(csv.DictReader(f))
+
+    def test_a_capped_search_marks_every_row_partial(self):
+        self.fx["code_total"] = 5000
+        code, out, data, _ = self.scan("--limit", "3")  # three repositories that all scan cleanly
+        self.assertEqual(code, 3)
+        self.assertIn("code search was capped", out)
+        self.assertTrue(data["partial"] and any("code search was capped" in n for n in data["partial"]))
+        self.assertIsNone(data["incomplete"])
+        self.assertTrue(all(r["scan_status"].startswith("partial: code search capped") for r in self.rows()))
+        self.assertIn("may be missing some", out)
+
+    def test_a_failed_search_marks_every_row_partial(self):
+        self.fx["failures"] = {"commits": [{"status": 403}] * 10}
+        code, _, data, _ = self.scan("--limit", "3", "--trailers")
+        self.assertEqual(code, 3)
+        self.assertTrue(all(r["scan_status"].startswith("partial: commit search failed") for r in self.rows()))
+        self.assertTrue(data["partial"])
+
+    def test_a_clean_run_is_complete(self):
+        code, out, data, _ = self.scan("--limit", "3")
+        self.assertEqual(code, 0)
+        self.assertIsNone(data["partial"])
+        self.assertTrue(all(r["scan_status"] == "complete" for r in self.rows()))
+        self.assertNotIn("may be missing some", out)
+
+
+class ListingRecovers(Base):
+    def listing_firsts(self):
+        return [int(re.search(r"first: (\d+)", self.query(c)).group(1)) for c in self.calls()
+                if "graphql" in c and "repositoryOwner" in self.query(c)]
+
+    def test_failures_spread_through_a_long_listing_do_not_add_up(self):
+        self.env["STUB_LIST_PAGE"] = "2"
+        self.fx["listing_fail"] = {str(i): {"kind": "timeout", "times": 1} for i in (2, 4, 6, 8)}
+        code, out, data, _ = self.scan()
+        self.assertIsNone(data["incomplete"], out)
+        self.assertEqual(len(data["repositories"]), 11)
+        firsts = self.listing_firsts()
+        self.assertEqual(firsts[-1], 100)  # the page size grows back after successful pages
+        self.assertIn(25, firsts)
+
+    def test_an_answer_with_errors_and_a_list_is_an_error(self):
+        self.fx["listing_fail"] = {"0": {"kind": "error_with_list"}}
+        code, out, data, _ = self.scan()
+        self.assertEqual(code, 4)
+        self.assertEqual(data["repositories"], [])  # the list beside the error is not trusted
+        self.assertGreater(len(self.listing_firsts()), 1)
+
+    def test_a_reason_never_ends_in_two_full_stops(self):
+        self.env["STUB_EXIT"] = "1"
+        code, out, _, _ = self.scan()
+        self.assertEqual(code, 4)
+        self.assertIn("network", out)
+        self.assertNotIn("..", out)
 
 
 if __name__ == "__main__":
