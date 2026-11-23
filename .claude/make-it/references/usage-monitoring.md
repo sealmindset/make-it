@@ -206,7 +206,7 @@ and feature-flag fetching for those people.
 
 ## 5. What it tells you about make-it
 
-> **What changed from what you may have been told.** Skill names are sent by default on the cost and token counters; only the `skill_activated` event hides them.
+> **What changed from what you may have been told.** Skill names are sent by default on the cost and token counters and the `api_request`, `api_error` and `api_refusal` events; only the `skill_activated` and `user_prompt` events hide them.
 > So the reporting does show which make-it command a person ran, and what it cost. Section
 > "Removing the command names" below says how to drop them if you don't want that.
 
@@ -242,26 +242,41 @@ story: `OTEL_METRICS_INCLUDE_ACCOUNT_UUID=false` drops the account IDs, but `use
 included when available", and for it the documentation says: "work with your telemetry backend to
 filter or redact this field".
 
-**At your collector (the dependable route).** Add an attribute-removal step to the collector's
-metrics and logs pipelines that deletes `skill.name`. It sits on the cost and token metrics and on
-the `api_request`, `api_error` and `api_refusal` events. With the OpenTelemetry Collector's
-attributes processor, that step is:
+**At your collector (the dependable route).** Delete `skill.name` in your collector's metrics and
+logs pipelines. It travels on the `claude_code.cost.usage` and `claude_code.token.usage` metrics and
+on the `api_request`, `api_error` and `api_refusal` events.
+
+Deleting the key alone is not enough for the two metrics. Points that differed only by skill then
+look alike, and many backends overwrite or reject look-alike points instead of adding them, which
+would undercount cost without telling you. The OpenTelemetry Collector's attributes processor would
+delete the key but leave those look-alike points (its README: it "has been superseded by the
+transform processor", and removing a data point attribute "has the potential to create an identity
+conflict"). The transform processor deletes the key and adds the look-alike points together. Its
+configuration:
 
 ```yaml
 processors:
-  attributes/drop-skill-name:
-    actions:
-      - key: skill.name
-        action: delete
+  transform/drop-skill-name:
+    error_mode: ignore
+    metric_statements:
+      - statements:
+          - delete_key(datapoint.attributes, "skill.name")
+      - statements:
+          - aggregate_on_attributes("sum") where metric.name == "claude_code.cost.usage" or metric.name == "claude_code.token.usage"
+    log_statements:
+      - delete_key(log.attributes, "skill.name")
 ```
 
-and `attributes/drop-skill-name` goes in the `processors` list of both pipelines. The syntax is from
-the processor's own README in the `opentelemetry-collector-contrib` repository (checked 23 November
-2026), which also says two things to know: the processor "has been superseded by the transform
-processor", and removing a data point attribute "has the potential to create an identity conflict
-since the Attributes processor does not perform any re-aggregation of the data points", so cost
-points that differed only by skill now look alike; sum them in your backend. Other collectors have
-an equivalent step; use whichever yours has.
+Then add `transform/drop-skill-name` to the `processors` list of both pipelines. The metric
+statements delete the key from every data point and add up the points of the two metrics that now
+share the same attributes; the log statement deletes it from every event, which covers
+`api_request`, `api_error` and `api_refusal`. Every line was checked against the transform
+processor's README and the OTTL function reference in the `opentelemetry-collector-contrib`
+repository (main branch, 23 November 2026; latest release then v0.165.1). The two metric steps are
+in separate groups because the README says a statement on `datapoint` paths and a metric-only
+function such as `aggregate_on_attributes` can't be parsed in one group. The aggregation adds the
+points that arrive together in one export. Not run against a live collector: test it in your own pipeline before you rely on the numbers. Other collectors have an equivalent
+step; use whichever yours has.
 
 What you lose: cost and tokens per make-it command. Sessions, cost per person and per repository
 stay. Then the notice to your people must match what you keep: section 10 has both versions of the
@@ -273,33 +288,46 @@ One question at a time:
 
 | Question | What answers it | How complete | Its limit |
 |---|---|---|---|
-| Who has make-it installed, and which version | The file `~/.claude/make-it/VERSION` (`%USERPROFILE%\.claude\make-it\VERSION` on Windows), read by your device-management tool with `make-it-installed.sh` or `make-it-installed.ps1` (below) | Every account you run it against, used or not | Per user account; a person can delete, edit or copy the file; says nothing about use |
+| Who has make-it installed, and which version | The file `~/.claude/make-it/VERSION` (`%USERPROFILE%\.claude\make-it\VERSION` on Windows), read by your device-management tool with `make-it-installed.sh` or `make-it-installed.ps1` (below) | Every account you run it against, used or not | Per user account; a person can delete, edit or copy the file; says nothing about use; does not see the `make-it-desktop` plugin or a `dev-link.sh` developer machine (no `VERSION` file there) |
 | Who loaded make-it in a session | `plugin_loaded` and its `plugin_id_hash` | Exact, per session, for plugin installs | The standard install is not a plugin, so it is absent there (observed: 15 `plugin_loaded` events, none make-it). The `make-it-desktop` plugin ships six skills (`guardrails`, `make-it`, `debug-it`, `nemo-it`, `handoff`, `safety`), not the full set |
 | Who ran which command, and what it cost | `skill.name` on the cost and token counters and `api_request` | Every run on a machine with the reporting on | A name can collide with someone's own command; a plugin from outside the official marketplace reads `third-party`; gone if you drop it at the collector |
 | Which repositories were built with make-it | The adoption scan (section 11) | Every repository the scanning account can read | Presence, not validity; default branch only; the search limits in `adoption-scan.md` |
-| Which sealing steps changed an app | The ledger in each repository, read by the scan | One entry per make-it run that changed code | A run that changed no code leaves no entry; it can't say who ran it |
+| Which sealing steps changed an app | The seal history in each repository (`.make-it/ledger/`), read by the scan | One entry per make-it run that changed code | A run that changed no code leaves no entry; it can't say who ran it |
 
 **Installed, per machine.** make-it's installer writes its version to one file on every install and
 update: `~/.claude/make-it/VERSION` on macOS and Linux (`install.sh`, which sets it at line 24 and
 writes it at lines 236-240, after replacing the whole `~/.claude/make-it` folder at lines 228-230),
 and `%USERPROFILE%\.claude\make-it\VERSION` on Windows (`install.ps1`, lines 43-46 and 1018-1022).
-The skills themselves go to `~/.claude/commands/`. Neither installer has an uninstall step: removing
-make-it means deleting those folders, and the file goes with them.
+The skills themselves go to `~/.claude/commands/`, one file per make-it command (`install.sh` lines
+195-205, `install.ps1` line 976). Neither installer has an uninstall step. Removing make-it means deleting `~/.claude/make-it` and the make-it command files the installer copied into `~/.claude/commands/`; other files there are the person's own.
+`VERSION` goes with the first. Neither installer records a list of the files it copied, but each
+copies the release's `CONTENT_MANIFEST` to `~/.claude/make-it/CONTENT_MANIFEST` (`install.sh` lines
+246-247, `install.ps1` lines 1030-1032), and its `commands/` lines name every command file of that
+release with its SHA-256. A file there that is not on that list, or whose hash differs, is not the
+installed release's copy: read it before deleting it.
 
 Have your device-management tool read that file as an inventory item (a custom attribute, extension
 attribute or detection script). make-it ships a read-only check for it:
 
 ```bash
-sh "$HOME/.claude/make-it/scripts/make-it-installed.sh" /Users/<person>
+sh make-it-installed.sh /Users/<person>
 ```
 
 ```powershell
-powershell -NoProfile -File make-it-installed.ps1 -HomeDir C:\Users\<person>
+powershell -NoProfile -ExecutionPolicy Bypass -File make-it-installed.ps1 -HomeDir C:\Users\<person>
 ```
 
-Each prints `make-it <version>` or `make-it not installed` and exits 0 either way. It reads that one
-file, prints only letters, digits, `.`, `+` and `-` from it, changes nothing and contacts nothing.
-Copy it into your tool rather than running it from a person's own folder. A device-management
+Copy the script into your tool and run that copy, not one from a person's own folder. The home
+folder is the only argument, and it is used only to build the path to `VERSION`. Windows PowerShell
+5.1's default execution policy may block `-File` without `-ExecutionPolicy Bypass` (not run on
+Windows PowerShell 5.1; the tests run it with PowerShell 7).
+
+Each prints `make-it <version>` only when the first line of a regular file (not a symlink) looks like a version, such as `1.71.18` or
+`1.72.0-rc.1` (every make-it `VERSION` so far has been three numbers, such as `1.71.18`). If
+something named `VERSION` is there but is a symlink, a folder, unreadable, or holds anything else, it
+prints `make-it installed (version unreadable)`, so a planted line never reaches your console. With
+nothing there it prints `make-it not installed`. It reads at most the first 256 bytes, exits 0
+every time, changes nothing and contacts nothing. A device-management
 script usually runs as root or SYSTEM, whose home folder is not the person's: run it per user, or
 point it at each profile folder on the machine.
 
@@ -464,7 +492,7 @@ If you turn on `OTEL_RESOURCE_INCLUDE_HOST`, add "the name and ID of your comput
 **Publish the sentence that is true for you.** If your collector keeps the command names (the
 default), keep the make-it sentence above. If you remove `skill.name` at your collector (section 5,
 "Removing the command names"), replace it with this one, and drop "including the name of each
-make-it command or other skill you run, such as `/resume-it`, with its cost" from the list:
+make-it command or other skill you run, such as `/resume-it`, with its cost" from the list, and also change that row of the full list to "The model, the tokens and the cost of each request":
 
 > make-it adds no reporting of its own, and we remove the name of each command you run before the data is stored.
 
@@ -493,7 +521,7 @@ console exporter on Claude Code v2.1.330, with every content flag off):
 
 Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran
 which command (a plugin from outside the official marketplace shows `third-party`), when, and what
-it cost; the ledger in each repository shows which sealing steps changed which app.
+it cost; the seal history in each repository shows which sealing steps changed which app.
 
 What the scan answers that the reporting cannot: which repositories were built with make-it,
 including ones nobody has opened since the reporting was switched on, and which sealing steps
