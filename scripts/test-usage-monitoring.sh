@@ -124,7 +124,7 @@ ctl "anyone may read it"            's/and only `<who can see it>` can(\s+>?\s*)
 ctl "we may turn this content on"   's/content(\s+>?\s*)stays(\s+>?\s*)off\./content$1we may turn$2on./' 'in_section "$C" "$H_NOTICE" "$S_OFF"'
 ctl "file paths recorded"           's/Nor does it record the paths/It records the paths/' 'in_section "$C" "$H_NOTICE" "$S_NOR"'
 ctl "third-party plugin shows the real name" 's/the counters(\s+)show `third-party` instead\./the counters$1show the real name./' 'pinned "$C" "$S_3PNAME"'
-ctl "the scan link dropped"         's/The adoption scan is described in \[`adoption-scan\.md`\]\(adoption-scan\.md\)\./The adoption scan is described elsewhere./' 'in_section "$C" "$H_ADOPT" "$S_LINK"'
+ctl "the scan link dropped"         's/The adoption scan is described(\s+)in \[/The adoption scan is not$1in [/' 'in_section "$C" "$H_ADOPT" "$S_LINK"'
 ctl "the scan said to know who ran it" 's/What the scan answers that the reporting cannot:/What the scan and the reporting both answer:/' 'in_section "$C" "$H_ADOPT" "$S_SCAN_ONLY"'
 ctl "the reporting said to know nothing" 's/who ran which command, when, and what it cost\./nothing about commands./' 'in_section "$C" "$H_ADOPT" "$S_REPORT_ONLY"'
 ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
