@@ -317,12 +317,24 @@ to deploy them. Do NOT explain the infrastructure -- just deploy.
 
 **9. A first set-up: check where it would start, before anything is made.** When step 8 doesn't skip
 to PHASE 5b, this run is a first set-up. Before PHASE 1 asks anything, and before anything is
-generated or sealed, from the project root: remove argo-it's record of what an earlier run made
-(`rm -f "$(git rev-parse --git-dir)/argo-it-made"`), then run PHASE 5 step 1's check of where the
-set-up would start (its block that asks GitHub `git ls-remote --symref origin HEAD`). If it prints a
-line PHASE 5 has a rule for, use that rule's message and stop: nothing has been generated, sealed,
-saved or sent, and the folder is exactly as it was. If it prints `level: brought`, say PHASE 5's
-line for it and go on.
+generated or sealed, from the project root: list what the folder holds now, and remove argo-it's
+record of what an earlier run made (`rm -f "$(git rev-parse --git-dir)/argo-it-made"` is in it):
+
+```bash
+# What the folder holds before this run makes anything: every path git lists as changed, new or ignored (from the
+# repo's top), with what it holds now (`-` for an ignored file) -- a stop later never takes a file that was already there
+g="$(git rev-parse --git-dir)"; rm -f "$g/argo-it-made"; top=$(git rev-parse --show-toplevel)
+git -C "$top" status --porcelain=v1 -z --untracked-files=all --ignored --no-renames | tr '\0' '\n' | while IFS= read -r l; do
+  f=${l#???}
+  case "$l" in ('!!'*) h=-;; (*) h=$(git -C "$top" hash-object -- "$f" 2>/dev/null) || h=-;; esac
+  printf '%s %s\n' "$h" "$f"
+done > "$g/argo-it-before"
+```
+
+Then run PHASE 5 step 1's check of where the set-up would start (its block that asks GitHub
+`git ls-remote --symref origin HEAD`). If it prints a line PHASE 5 has a rule for, use that rule's
+message and stop: nothing has been generated, sealed, saved or sent, and the folder is exactly as it
+was. /argo-it never moves, resets or fast-forwards a branch here.
 
 </step>
 
@@ -2335,17 +2347,16 @@ build argo-it's save of its files by name (no branch moves, and a save that hold
 argo-it's files is never sent), check exactly that save, and send it by its id -- the same order
 as PHASE 5b, where 3e checks before step 4 saves.
 
-First keep a record of what this run made, from the project root (`{generated_files}` are argo-it's
-own files from this run, by exact name): a stop before the seal takes back only these copies, and
-only while each is exactly as it was made.
+First keep a record of what this run made or changed, from the project root (`{generated_files}` are
+argo-it's own files from this run, by exact name): a stop takes back only these, and only while each
+is exactly as this run left it -- never a file that was there before the run (PHASE 0 step 9's list).
 
 ```bash
-# What this run made: each of argo-it's files that isn't saved, with what it holds now -- the first time it is seen this
-# run only, so a copy changed later (by the user, say) is never taken for one argo-it made
+# What this run made or changed: each of argo-it's files, with what it holds now -- the first time it is seen this run
+# only, so a copy changed later (by the user, say) is never taken for one argo-it made
 rec="$(git rev-parse --git-dir)/argo-it-made"; touch "$rec"
 for f in {generated_files}; do
   [ -f "$f" ] || continue
-  ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || continue
   awk -v f="$f" 'substr($0, index($0, " ") + 1) == f { n = 1 } END { exit !n }' "$rec" ||
     printf '%s %s\n' "$(git hash-object -- "$f")" "$f" >> "$rec"
 done
@@ -2366,6 +2377,19 @@ its step 4 saves the user's own changes and sends them with the update.)
 # Unsaved code: each path git status lists in the project folder that the seal fingerprints, except argo-it's own
 # files (and .gitattributes when its change holds the seal's lines). Not a make-it project: nothing to seal or check
 [ -f .make-it/app-context.json ] || exit 0
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
+# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
+# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
+  while IFS=' ' read -r h f; do
+    [ -e "$f" ] || continue
+    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+    now=$(git hash-object -- "$f" 2>/dev/null)
+    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
+    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+  done < "$rec"; rm -f "$rec"; }
 pre=$(git rev-parse --show-prefix 2>/dev/null)
 # .gitattributes: unsaved code when its unsaved change holds no seal line (the seal list's rule takes the rest)
 k=none
@@ -2395,13 +2419,15 @@ done)
     case "${f##*/}" in (.env.example) ;; (.env*|*.pem|*.key|id_rsa*|id_ed25519*|id_ecdsa*|id_dsa*|*.keychain*|.netrc|\
       .git-credentials|*credentials*.json|*service-account*.json|*.sqlite*|*.db|*.db-*|*.p12|*.pfx) printf 'keep-out: %s\n' "$f";; esac
   done
+  back
   exit 1; }
 ```
 
 If it prints `UNSAVED CODE`, stop -- don't run the seal and don't show the step-3 ask; the seal
 writes nothing, and nothing is saved or sent. The line after it is how many files hold unsaved code, then the first one or
 two, by path from the project folder, then a `keep-out:` line for every one of them on step 4's
-keep-out list (keys, certificates, settings files, local databases).
+keep-out list (keys, certificates, settings files, local databases), then a `kept:` line for each of
+argo-it's files it couldn't take back (step 1's check below says what to add to the message).
 Tell the user, naming paths only, never what is in them:
 
 "I haven't saved or sent anything: [N] [file in your project has / files in your project have]
@@ -2419,13 +2445,18 @@ from the code here, so the code here must be exactly that version: then the prop
 only argo-it's files and the seal's, and the seal describes what it lands on.
 
 ```bash
-# Before a stop here: take back out of the folder each file this run made that is still exactly as made (the record
-# above; never a saved file, never one changed since -- that one stays, and is named), so the folder is as it was
-back() { rec="$(git rev-parse --git-dir)/argo-it-made"; [ -f "$rec" ] || return 0
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
+# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
+# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
   while IFS=' ' read -r h f; do
-    if [ -f "$f" ] && [ "$(git hash-object -- "$f")" = "$h" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
-      rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac
-    elif [ -e "$f" ]; then printf 'kept: %s\n' "$f"; fi
+    [ -e "$f" ] || continue
+    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+    now=$(git hash-object -- "$f" 2>/dev/null)
+    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
+    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
   done < "$rec"; rm -f "$rec"; }
 # An online home, the same one for sends and reads (as step 2), then everything GitHub has, into argo-it's own names
 git remote get-url origin >/dev/null 2>&1 || { back; echo "NO ORIGIN"; exit 1; }
@@ -2440,26 +2471,19 @@ git check-ref-format --branch "$d" >/dev/null 2>&1 || { back; echo "MAIN NAME UN
 m=$(git rev-parse -q --verify "refs/argo-it/gh/heads/$d") || { back; echo "NO MAIN VERSION"; exit 1; }
 [ "$d" != work ] || { back; echo "WORK ONLINE AS MAIN"; exit 1; }
 printf '%s\n' "$d" > "$(git rev-parse --git-dir)/argo-it-default-branch"
-# A set-up already accepted: GitHub's main version holds argo-it's workflow and its onboarding notes with argo-it's line
+# A set-up already accepted: GitHub's main version holds argo-it's workflow and its onboarding notes -- with argo-it's
+# line, or (a set-up from before that line) the heading argo-it's notes have always started with
 if git cat-file -e "${m}:./.github/workflows/build-and-deploy.yml" 2>/dev/null &&
-  git show "${m}:./ONBOARDING-K8S.md" 2>/dev/null | awk -v l='<!-- argo-it set-up: this line marks the set-up /argo-it made; keep it -->' '$0 == l { n = 1 } END { exit !n }'; then
+  git show "${m}:./ONBOARDING-K8S.md" 2>/dev/null | awk -v l='<!-- argo-it set-up: this line marks the set-up /argo-it made; keep it -->' '$0 == l || /^# Kubernetes Deployment -- / { n = 1 } END { exit !n }'; then
   back; echo "SET UP ALREADY"; exit 1
 fi
 # A set-up already on GitHub, waiting for review
 ! git rev-parse -q --verify refs/argo-it/gh/heads/argo-it/setup >/dev/null || { back; echo "SETUP WAITING"; exit 1; }
-# The code here against that version. On `work`, first bring it level when every save it holds is already in that
-# version (a ship accepted) -- git-operations.md's "Bring `work` level after a ship", read from argo-it's own copy of
-# GitHub (so no ref of the user's but `work` moves); --ff-only and --keep refuse rather than overwrite unsaved work
+# The code here against that version -- only read: no branch here is ever moved, reset or brought level
 pos() { h=$(git rev-parse -q --verify HEAD) || { echo BEHIND; return; }; [ "$h" != "$m" ] || { echo LEVEL; return; }
   if git merge-base --is-ancestor "$h" "$m"; then echo BEHIND; elif git merge-base --is-ancestor "$m" "$h"; then echo AHEAD
   else echo APART; fi; }
 w=$(pos)
-if [ "$w" != LEVEL ] && [ "$(git branch --show-current)" = work ]; then
-  if git merge-base --is-ancestor work "$m"; then git merge -q --ff-only "$m" >/dev/null 2>&1
-  elif [ "$(git merge-tree --write-tree "$m" work 2>/dev/null | sed -n 1p)" = "$(git rev-parse "${m}:")" ]; then
-    git reset -q --keep "$m" >/dev/null 2>&1; fi
-  w=$(pos); [ "$w" != LEVEL ] || echo "level: brought"
-fi
 case "$w" in
   (LEVEL) exit 0;;
   (BEHIND) back; echo "BEHIND GITHUB";;
@@ -2469,13 +2493,13 @@ esac
 exit 1
 ```
 
-When it prints nothing, or only `level: brought`, the code here is GitHub's main version: go on to
-the seal. If it prints `level: brought`, say: "Your shipped changes are in the main copy now, so your
-working copy is up to date with it." Every other line it prints is a stop: don't run the seal and
+When it prints nothing, the code here is GitHub's main version: go on to the seal. Every line it
+prints is a stop: don't run the seal and
 don't show the step-3 ask; the seal writes nothing, and nothing is saved or sent. For no online
 home, a split origin or a failed read, use step 2's own stop and its message. Name the main
 version's branch from the file the block wrote (`argo-it-default-branch`), never a guess. On a stop
-in PHASE 5 (not PHASE 0's, where nothing was made yet), add to the message, right after its first
+in PHASE 5 (not PHASE 0's, where nothing was made yet) -- this one, the unsaved-code stop, and every
+stop after it that takes the files back (step 7) -- add to the message, right after its first
 sentence, in these words: I've taken the set-up files I made this time back out of your folder. And,
 only if `kept:` lines were printed: [each path after a `kept:` line, joined by and] [was / were]
 changed after I made [it / them], so I left [it / them] there.
@@ -2515,13 +2539,14 @@ is accepted, start with /resume-it (it brings your working copy level with the m
 /argo-it again."
 
 If it prints `BEHIND GITHUB`, the main version on GitHub has saves the code here doesn't have (or
-the project here has no saves yet). Tell the user:
+the project here has no saves yet) -- someone else's, or the user's own accepted ship. Tell the user:
 
 "I haven't saved or sent anything: the main version on GitHub has changes your project here doesn't
-have yet, and your set-up has to start from exactly that version. What to do next: get the latest
-of the main version from GitHub into your project, without sending anything -- on a working copy,
-/resume-it does this once your last ship is accepted; otherwise ask your DevOps team how -- then run
-/argo-it again."
+have yet (someone else's, or ones of yours that were accepted), and your set-up has to start from
+exactly that version. What to do next: if your project keeps its saves on a working copy ('work'),
+start with /resume-it -- it brings your working copy up to date with the main copy; otherwise ask
+your DevOps team how to get the latest of the main version into your project without sending
+anything. Then run /argo-it again."
 
 If it prints `APART FROM GITHUB`, the code here and the main version on GitHub have each changed
 since they were last the same. Tell the user:
@@ -2533,8 +2558,8 @@ What to do next: if you've shipped these changes and the ship was accepted, star
 it to be accepted first. Then run /argo-it again."
 
 If it prints `SET UP ALREADY`, the main version on GitHub already holds argo-it's workflow and its
-onboarding notes with argo-it's own line: a set-up was accepted before, so this isn't a first
-set-up. Tell the user:
+onboarding notes (with argo-it's own line, or the heading argo-it's notes have always started with):
+a set-up was accepted before, so this isn't a first set-up. Tell the user:
 
 "I haven't saved or sent anything: your set-up is already in the main version of your project on
 GitHub, so there's no first set-up to send. What to do next: get the latest of the main version
@@ -2593,6 +2618,7 @@ fi
 ```
 
 If it prints `GITATTRIBUTES MIXED`, stop -- don't show the step-3 ask; nothing is saved or sent.
+Add the seal's files to the record (the block below) and take this run's files back (step 7).
 `.gitattributes` holds the seal's own lines next to another unsaved change, and argo-it doesn't
 guess which lines to save. Tell the user:
 
@@ -2600,6 +2626,20 @@ guess which lines to save. Tell the user:
 besides the lines the make-it record I add to your project puts there, and I won't save the two
 together. What to do next: save or undo your own change to .gitattributes, then run /argo-it
 again."
+
+Otherwise add the seal's files to the record, so a later stop takes them back too
+(`{generated_files}` = argo-it's files and each seal file the list printed, as Option 1 names them):
+
+```bash
+# What this run made or changed: each of argo-it's files, with what it holds now -- the first time it is seen this run
+# only, so a copy changed later (by the user, say) is never taken for one argo-it made
+rec="$(git rev-parse --git-dir)/argo-it-made"; touch "$rec"
+for f in {generated_files}; do
+  [ -f "$f" ] || continue
+  awk -v f="$f" 'substr($0, index($0, " ") + 1) == f { n = 1 } END { exit !n }' "$rec" ||
+    printf '%s %s\n' "$(git hash-object -- "$f")" "$f" >> "$rec"
+done
+```
 
 **2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
 it' in step 4, after the user's go; nothing leaves the machine before the ask). First remember
@@ -2634,7 +2674,7 @@ git log --oneline HEAD --not --glob='refs/argo-it/gh/*'   # step 3 names each sa
 ```
 
 If the block prints `NO ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent.
-Tell the user:
+Take this run's files back (step 7). Tell the user:
 
 "I haven't saved or sent anything: this project has no online copy set up, so there's nowhere to
 send your setup. What to do next: ask your DevOps team to connect the project to its online home,
@@ -2644,8 +2684,8 @@ The two addresses are compared by host and owner/repository, so `https://`, `git
 a port after `ssh://host`, a trailing `/` or `.git` don't count; two addresses that differ in capital
 letters alone still count as different, since not every host treats them as one.
 
-If the block prints `SPLIT ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent,
-and GitHub hasn't been read: this project sends changes to a different address than it reads
+If the block prints `SPLIT ORIGIN`, stop -- don't show the step-3 ask; nothing is saved or sent
+(take this run's files back: step 7), and GitHub hasn't been read: this project sends changes to a different address than it reads
 them from, so nothing argo-it reads could tell it what its send would reach. Tell the user:
 
 "I haven't saved or sent anything: this project is set to send changes to a different place than
@@ -2691,7 +2731,7 @@ files only. Name each hit only by its file and line number; nothing from a hit's
 anything you tell the user, and never open a hit's file here.
 
 - **Anything else** (any result 3e's third bullet covers): STOP -- don't show the step-3 ask;
-  nothing is sent. Tell the user:
+  nothing is sent. Take this run's files back (step 7). Tell the user:
 
   "I couldn't check your changes for secrets, so I haven't saved or sent anything. [the reason
   and what to do, in plain words, as 3e gives them]"
@@ -2724,8 +2764,8 @@ service your project gets its code libraries from or publishes them to -- in a p
 instead: only if a hit is in a `.npmrc`, `.pypirc` or `.yarnrc.yml` file], and if this value has
 already been shared or used anywhere, have it changed too]."
 
-Then stop -- steps 3 and later don't run. Both of 2b's stops hold whatever the user says: never
-send past either one.
+Take this run's files back (step 7), then stop -- steps 3 and later don't run. Both of 2b's stops
+hold whatever the user says: never send past either one.
 
 **If no hit counts** -- none under `== saved, not sent ==`, none in a file the save on 'Send it'
 will save and none with an escaped path (exit 0 or exit 1, with the three labels each once, in
@@ -2900,10 +2940,13 @@ m="$(cat "$(git rev-parse --git-dir)/argo-it-default-branch")"
 mh=$(git ls-remote --heads origin "refs/heads/$m") || { echo "FETCH FAILED"; exit 1; }
 mh=$(printf '%s\n' "$mh" | awk -v r="refs/heads/$m" '$2 == r {print $1}')
 [ -n "$mh" ] && [ "$mh" = "{checked_head}" ] || { echo "NOT ON MAIN VERSION"; exit 3; }
+# Sent to origin's own address (the one step 2 found the same for sends and reads), so git keeps no copy of these two
+# branches here: no ref of the user's changes
+u=$(git remote get-url --push origin) || { echo "FETCH FAILED"; exit 1; }
 if [ -z "$found" ]; then
-  git push origin "${mh}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
+  git push "$u" "${mh}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
 fi
-[ "$on" = "{saved_head}" ] || git push --force-with-lease=refs/heads/argo-it/setup: origin "{saved_head}:refs/heads/argo-it/setup" --recurse-submodules=no || { echo "PUSH 2 FAILED"; exit 1; }
+[ "$on" = "{saved_head}" ] || git push --force-with-lease=refs/heads/argo-it/setup: "$u" "{saved_head}:refs/heads/argo-it/setup" --recurse-submodules=no || { echo "PUSH 2 FAILED"; exit 1; }
 ```
 
 If the block prints `FETCH FAILED`, its read of GitHub failed before the first push, so it pushed
@@ -3061,6 +3104,31 @@ couldn't unpack the set-up waiting for review on this computer, so I didn't try 
 sent. What to do next: run /argo-it again." If the try shows something to fix in the set-up, tell
 the user what, in plain words: the fix goes to the reviewer, in the proposed change -- argo-it
 sends nothing more while it's open.
+
+**7. Take this run's files back** -- after a stop past step 1's check (step 2's, `GITATTRIBUTES
+MIXED`, 2b's), from the project root, with the same lines step 1's check uses, so the folder is as
+the run found it:
+
+```bash
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
+# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
+# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
+  while IFS=' ' read -r h f; do
+    [ -e "$f" ] || continue
+    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+    now=$(git hash-object -- "$f" 2>/dev/null)
+    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
+    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+  done < "$rec"; rm -f "$rec"; }
+back
+```
+
+Each `kept:` line it prints is one of argo-it's files it left: one that was there before the run and
+that the run changed, or one changed since the run made it. Add step 1's sentences to the stop's
+message.
 
 </step>
 

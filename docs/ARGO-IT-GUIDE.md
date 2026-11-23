@@ -205,88 +205,22 @@ For clusters using standard Kubernetes Ingress (nginx, ALB), it generates the ap
 
 ### Example: Generated CI Workflow
 
-The generated `build-and-deploy.yml` handles the **full pipeline** from source push through to Argo CD deploy:
-
-```yaml
-name: Build and Deploy
-
-on:
-  push:
-    branches-ignore: [deploy-nonprod, deploy-prod, 'argo-it/**']   # Prevent infinite loop; the set-up waiting for review deploys nothing
-  pull_request:
-
-permissions:
-  contents: write     # Push to deploy branch
-  packages: write     # Push to container registry
-
-concurrency:
-  group: deploy-nonprod
-  cancel-in-progress: false    # Don't cancel in-progress deploys
-
-jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    if: github.ref_name != 'deploy-nonprod'   # Guard against infinite loop
-    steps:
-      # --- Setup ---
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # --- Build + Push ---
-      - uses: docker/metadata-action@v5     # Compute image tags (sha, branch, latest)
-        id: meta
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          push: ${{ github.event_name != 'pull_request' }}   # Push only on non-PR
-          tags: ${{ steps.meta.outputs.tags }}   # includes sha-<7>, the exact version this run deploys
-
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-
-      # --- Deploy (non-PR only) ---
-      - if: github.event_name != 'pull_request'
-        uses: actions/checkout@v4
-        with:
-          ref: deploy-nonprod
-          path: deploy
-
-      - if: github.event_name != 'pull_request'
-        run: |
-          # Mirror source → deploy branch
-          # (.github/ never goes to the deploy branch: the run's own token may not change workflow files)
-          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' ./ deploy/
-          cd deploy
-          # Patch image tags in K8s manifests: the sha- tag this same run built
-          TAG="sha-${GITHUB_SHA::7}"
-          yq -i ".spec.template.spec.containers[0].image = \"ghcr.io/your-org/my-app/backend:${TAG}\"" env/dev/backend.yaml
-          yq -i ".spec.template.spec.containers[0].image = \"ghcr.io/your-org/my-app/frontend:${TAG}\"" env/dev/frontend.yaml
-          # Commit and push (triggers Argo CD sync)
-          git config user.name "ci-bot"
-          git config user.email "ci@noreply"
-          git add -A
-          git diff --staged --quiet || git commit -m "deploy: $(git -C .. rev-parse --short HEAD)"
-          git push origin deploy-nonprod
-```
+The workflow /argo-it writes is the template in `.claude/commands/argo-it.md` (PHASE 3); read it there, in full,
+rather than a shortened copy here. In short: every push builds and publishes the app's images, tagged with the
+commit's own `sha-` tag; the run then mirrors the project (except `.git` and `.github/`) to the deploy branch and
+points its dev manifests at that exact tag; pull requests build only, and pushes to `argo-it/**` run nothing.
 
 **Key design decisions in the generated workflow:**
 
 | Decision | Why |
 |----------|-----|
-| `branches-ignore: [deploy-*]` | Prevents deploy branch push from re-triggering CI (infinite loop) |
+| The job skips the deploy branch (`if: github.ref_name != '{deploy_branch}'`) | Prevents the deploy branch's own push from re-triggering CI (infinite loop) |
+| Pushes to `argo-it/**` run nothing | The set-up waiting for review builds and deploys nothing |
 | `contents: write` permission | Needed to push to deploy branch |
 | `concurrency` with `cancel-in-progress: false` | Prevents parallel deploys that could corrupt the deploy branch |
 | PR builds don't push | PRs are validation gates — no image push, no deploy branch edits |
-| `rsync` mirror | Deploy branch gets full source (not just manifests) — enables Argo CD to reference any file |
+| The deploy tag is the run's own `sha-` tag | The deploy runs exactly the version that run built |
+| `rsync` mirror, without `.github/` | Deploy branch gets the full source (not just manifests); the run's own token may not change workflow files |
 | `yq` for tag patching | YAML-safe editing (not sed/grep) — preserves comments and structure |
 | `ci-bot` commit | Distinguishes automated commits from human ones |
 
