@@ -1,5 +1,9 @@
 # Counting adoption across your repositories (the adoption scan)
 
+**Where this fits.** This is the detail behind the section "Counting adoption across your
+repositories" of the usage-monitoring guide (`usage-monitoring.md`). That guide covers Claude Code's
+own usage reporting; this page covers the scan of your repositories.
+
 For administrators. One read-only script sorts every repository in a GitHub organisation into one
 class: built with make-it, using Claude Code without make-it, or neither. It also counts the make-it
 steps recorded in each project's seal history. It sends nothing anywhere but GitHub's own API, and
@@ -27,13 +31,21 @@ python3 -I "$HOME/.claude/make-it/scripts/adoption-scan.py" --org <your-org>
 | `--ci-pattern <text>` | The text a workflow's `uses:` line holds when it calls your organisation's reusable CI, for example `your-org/shared-ci/.github/workflows/build.yml`. The scan records the ref after `@` (MA4). |
 | `--out <folder>` | Where to write the results. Default: a new folder named for the date and time, in the current folder. |
 
-**Exit codes.** 0: every repository was scanned. 3: it finished, but some repositories could not be
-scanned or a search failed (the summary says which part). 2: it could not scan at all (gh missing or
-signed out, no such organisation, an output folder it refused, a bad option).
+**Exit codes.**
+- 0: every repository was scanned.
+- 3: it finished, but some repositories could not be scanned, or a search failed or was capped. The
+  summary says which part.
+- 4: **INCOMPLETE.** The listing stopped part-way (single sign-on, or GitHub kept failing), or GitHub's
+  rate limit held through every wait. The counts cover only part of the repositories. The summary
+  starts with `INCOMPLETE:` and the reason, the JSON's `incomplete` field holds it, and every CSV row's
+  `scan_status` says so. Fix the cause and run it again.
+- 2: it could not scan at all. gh is missing or signed out, its sign-in lacks a scope, there is no
+  such organisation, it refused the output folder, or an option was wrong. Each has its own message.
 
 **How long.** A run over a few thousand repositories takes about a quarter of an hour at the default
 page size. A run over 30 repositories with `--trailers` took about a minute and a half, most of it
-the commit search's pages, which are paced to GitHub's search limit.
+the commit search's pages, which are paced to GitHub's search limit. A wait for GitHub's rate limit
+is printed as it starts, and no single wait is longer than an hour.
 
 ## What it looks for (signals)
 
@@ -44,40 +56,45 @@ Default branches only. Each repository is read with GitHub's GraphQL API by path
 |---|---|---|
 | **MA0** decision file | make-it's record of the app's decisions. Every make-it version writes it, so it finds apps built before the build record existed. | `.make-it/app-context.json`, `app-context.json` at the root, `.make-it-state.md`, and one code search for `app-context.json` anywhere in the organisation |
 | **MA1** build record | Written by make-it's seal. The scan reads its make-it version, project type and scaffold. | `.make-it/manifest.json` |
-| **MA2** seal history | One entry per make-it run that changed code. Counted per skill, with the latest date and the make-it versions seen. An entry it cannot read (damaged, oddly named, too big) is counted but not broken down. | `.make-it/ledger/` |
+| **MA2** seal history | One entry per make-it run that changed code. Counted per skill, with the latest date and the make-it versions seen. An entry it cannot read is counted but not broken down, as "too large to read here" or as damaged (oddly named, not JSON, not a seal entry). | `.make-it/ledger/` |
 | **MA3** readable seal | Whether the file exists. Not whether it is right. | `MAKE-IT.md` |
-| **MA4** reusable CI | Workflows whose text holds your `--ci-pattern`, and the ref they call it at. | `.github/workflows/*.yml`, `*.yaml` |
+| **MA4** reusable CI | Workflow lines that hold your `--ci-pattern`, and the ref they call it at. A line that starts with `#` is a comment and is skipped; a pattern after `#` on a line of code is still counted (the scan has no YAML parser). | `.github/workflows/*.yml`, `*.yaml` |
 | **MA5** /ship-it requests | Pull requests labelled `ship-it-managed`: how many, and the newest. | Pull requests |
 | **MA6** Claude Code files | Claude Code's project files. | `CLAUDE.md`, `.claude/` |
 | **MA7** Claude commits | Commits with a `Co-Authored-By: Claude` trailer (`--trailers` only). | One commit search |
 
 ## The classes
 
-Each repository gets exactly one:
+Each repository gets exactly one. A file signal counts only when the path is the right kind of
+thing: a file for the decision file, build record, `MAKE-IT.md` and `CLAUDE.md`; a folder for
+`.claude/` and the seal history.
 
 | Class | Means |
 |---|---|
 | **make-it** | It has a build record (MA1). |
 | **make-it, no build record** | It has the decision file, a seal history or `MAKE-IT.md`, but no build record. Usually an app built with an older make-it. |
 | **Claude Code, no make-it** | Claude Code's files or Claude commit trailers, and nothing from make-it. |
-| **no signal** | None of the above was found. |
+| **no signal** | None of the above was found. A repository with only /ship-it requests (MA5) or only a call to your reusable CI (MA4) is here too: those two are reported, but they do not decide the class. |
 | **not scanned** | GitHub would not answer for it, even on its own. It is never counted as "no signal": run the scan again later. |
 
 **Why the decision file matters.** A scan that looks only for the build record finds nothing in an
 organisation whose apps predate it: the build record is recent, and older apps carry only the
-decision file. MA0 is what finds them, and the summary says how many were found that way.
+decision file. MA0 is what finds them. The summary says how many of the "make-it, no build record"
+repositories were found by the decision file, and how many by a seal history or `MAKE-IT.md` alone.
 
-Archived repositories are scanned and listed apart. They are left out of every count.
+Archived repositories are scanned and left out of every count. The summary gives how many; their
+names are in the files.
 
 ## What you get
 
-A summary on screen, in plain words: the count in each class; how many repositories carry a build
+A summary on screen, in plain words, with counts only (no repository names, since a screen ends up in
+transcripts and CI logs): the count in each class; how many repositories carry a build
 record, a seal history and `MAKE-IT.md`; make-it steps from the seal histories per skill; CI callers
 by ref; /ship-it repositories and requests; trailer counts; how many could not be scanned; how long
 it took. And two files in the output folder, one row per repository: `adoption-scan.json` and
 `adoption-scan.csv`.
 
-**Keep the files internal.** They list the organisation's repository names. The scan writes them
+**Keep the files internal.** They list the repository names. The scan writes them
 only into the folder you choose (or its new dated folder), readable only by you, never over an
 existing file, and it refuses a folder inside a git project unless git ignores it, so a commit can't
 publish them by accident. In the CSV, a cell that starts with `=`, `+`, `-` or `@` gets a leading `'`,
@@ -88,14 +105,25 @@ so a spreadsheet never runs it as a formula.
 - **Whether a seal is intact.** Presence is not validity. The scan never checks a seal and never says
   one is intact: `watermark.py verify` does that, in each repository's merge gate
   (`watermark.md` section 3).
-- **Anything off the default branch.** Work on other branches is not seen; nor is GitHub's code
-  search, which also skips files of 384 KB or more.
+- **Repositories the signed-in person cannot see.** Private repositories that account has no access to
+  are simply absent: they are not listed, and not counted anywhere.
+- **Anything off the default branch.** Work on other branches is not seen, by the scan or by GitHub's
+  code search.
+- **Every decision file the code search could find.** GitHub's code search returns at most 1,000
+  results and covers at most 4,000 repositories, skips files of 384 KB or more, and does not search
+  archived repositories or most forks. When GitHub reports more matches than it returned, the summary
+  says the search was capped and that "no signal" may then include make-it apps whose only sign is a
+  decision file outside `.make-it/` and the root. The 4,000-repository limit is not reported by
+  GitHub, so a very large organisation should assume it applies.
 - **Every Claude commit.** GitHub's search returns at most 1,000 results, so the trailer count is a
   lower bound, and the summary says so. A trailer can also be typed by hand or removed.
-- **Who ran make-it, or when, beyond the seal history's dates.** For people and activity, see
-  Claude Code's own usage reporting (the usage-monitoring guide).
+- **Who ran which command, and what it cost.** The seal history's counts say which sealing steps
+  changed which app, from the code's own history, for every app, whether or not usage reporting was
+  on. For who ran which command and what it cost, see the usage-monitoring guide.
 - **A `ship-it-managed` label that was never added.** MA5 counts labels, so a team that doesn't label
   its requests shows none.
+- **make-it from /ship-it or CI alone.** A repository whose only signs are /ship-it requests or a call
+  to your reusable CI stays "no signal": they are counted in their own lines, not in the class.
 
 ## Read-only, and how that is enforced
 
@@ -121,9 +149,14 @@ Check your sign-in with `gh auth status`; its "Token scopes" line lists what `gh
 - **`read:org`** gives read-only access to organisation membership. `gh` asks for it by default
   (the `gh auth login` manual lists `repo`, `read:org` and `gist` as the minimum for a token).
 - A public-only scan works with less, but private repositories then go uncounted.
-- Not checked: whether an organisation that enforces SAML single sign-on needs the `gh` sign-in
-  authorised for it first, and whether a fine-grained, read-only token used through `gh` covers every
-  query. Try `--limit 5` first.
+- **Single sign-on.** When GitHub says an organisation's SAML single sign-on blocks the sign-in, the
+  scan stops, marks the run INCOMPLETE and says so plainly: authorise `gh` for that organisation (run
+  `gh auth refresh` and approve the organisation, or authorise the GitHub CLI under your GitHub
+  settings, Applications), then run it again. The scan recognises GitHub's `X-GitHub-SSO` header and
+  SAML errors; the authorisation steps were not tried against a real SAML organisation.
+- **A missing scope** is named, with the command that adds it (`gh auth refresh -s <scope>`).
+- Not checked: whether a fine-grained, read-only token used through `gh` covers every query. Try
+  `--limit 5` first.
 
 Sources (checked 2026-11-22):
 https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps,
@@ -139,12 +172,21 @@ Checked on 2026-11-22 against GitHub's documentation:
   https://docs.github.com/en/rest/search/search
 - **Secondary limits:** a limited answer is a 403 or 429. The scan waits for `retry-after` if given,
   or until `x-ratelimit-reset` if nothing is left, or else at least a minute, then longer, and gives
-  up after four tries (that part is then reported, never read as empty).
+  up after four tries. No single wait is longer than an hour, and every wait of 30 seconds or more is
+  printed with its reason. Once GitHub's GraphQL limit has held through every wait, the scan asks
+  nothing more of it: the remaining repositories are "not scanned" (reason: rate limit) and the run
+  is INCOMPLETE. A search that gives up is reported as failed, never read as empty.
   https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 - **GraphQL:** 5,000 points an hour for a user; a request that takes more than 10 seconds is stopped
   (a 502 or 504), and a query over its resource limits returns partial results with an error. The
   scan then halves the page and tries again, down to one repository; one that still fails is "not
-  scanned". When fewer than 50 points are left it waits for the reset.
+  scanned". When fewer than 50 points are left it waits for the reset (at most an hour, and says so).
+  An answer larger than 64 MB is abandoned while it is being read, and the page shrinks.
+- **Code search coverage:** "The REST API will find up to 4,000 repositories that match your filters
+  and return results from those repositories." (search API page). The legacy code-search syntax page,
+  which applies to that API, adds: "Forks with fewer stars than the parent repository or no commits
+  are not indexed for code search." and "Archived repositories are not searchable."
+  https://docs.github.com/en/search-github/searching-on-github/searching-code
   https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api
 
 ## Not proven

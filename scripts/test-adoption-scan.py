@@ -283,7 +283,7 @@ class Signals(Base):
         self.assertEqual(one["ma2_latest"], "2026-10-02")
         self.assertEqual(one["ma2_versions"], ["1.70.0", "1.71.16"])
         ten = self.by_repo(data)["app-ten"]
-        self.assertEqual((ten["ma2_ledger_entries"], ten["ma2_unreadable"]), (3, 2))  # truncated; a bad skill name
+        self.assertEqual((ten["ma2_ledger_entries"], ten["ma2_unreadable"], ten["ma2_too_large"]), (3, 1, 1))  # a bad skill name; truncated
         self.assertEqual(ten["ma2_skills"], {"fix-it": 1})
         self.assertRegex(out, r"could not be read")
 
@@ -301,7 +301,7 @@ class Signals(Base):
         six = self.by_repo(data)["app-six"]
         self.assertTrue(six["ma1_build_record"])
         self.assertFalse(six["ma1_readable"])
-        self.assertEqual((six["ma2_ledger_entries"], six["ma2_unreadable"]), (3, 3))
+        self.assertEqual((six["ma2_ledger_entries"], six["ma2_unreadable"], six["ma2_too_large"]), (3, 2, 1))
         self.assertEqual(six["class"], "make-it")
 
     def test_the_commit_search_note_says_it_is_a_lower_bound(self):
