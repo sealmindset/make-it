@@ -477,35 +477,58 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **Code Quality (Q01-Q16):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs; Q14 is the dead-code upkeep reminder: it runs no tools and writes nothing, just reads the dates in `docs/DELETION_LOG.md` (`deadcode.md` §8); Q16 (a [BLOCK] check, so a must-do update): no `${{ }}` expression in a step's `run:` or `script:` text in `.github/workflows/`
    - **Hooks on (Q12):** when `.pre-commit-config.yaml` exists and the hook check (`git-operations.md`, Before any save) prints `HOOKS OFF`: if `pre-commit` is installed, run `pre-commit install` now -- routine, no ask -- and say one line: "I switched on the checks your project runs before every save: a scan for passwords and keys, and a stop on saving straight to the main copy." If `pre-commit` isn't installed, ask preflight's install pick for it (`make-it.md` preflight, the one ask for missing tools), then switch the hooks on the same way. If `pre-commit install` fails, say why in plain words (another tool already manages this project's git hooks, for example) and that the checks stay off. Once they are on, if the project is on its default branch, run "Move to `work`" (`git-operations.md`, The branch) and say its line. Q12 never goes in the gaps list or its ask.
-   - **The secret scan's version (Q08):** when `.pre-commit-config.yaml` exists, run this in the project -- routine, no ask. It changes only the `rev` of the hook built from `gitleaks/gitleaks` (id `gitleaks`), and only when it is older than `v8.24.0`, to the scaffolds' `v8.29.1`; every other line, a customised `entry` or `args` included, stays byte for byte:
+   - **The secret scan's version (Q08):** when `.pre-commit-config.yaml` exists, run this in the project -- routine, no ask. It changes only the `rev` of the hook built from `gitleaks/gitleaks` (id `gitleaks`), and only when it is older than `v8.24.0`, to the scaffolds' `v8.29.1`; every other line, a customised `entry` or `args` included, stays byte for byte. It changes nothing while an update of the branch is unfinished, while the file has the person's own unsaved changes, on `main`/`master`, or while the hooks are off. It sets the new version up before saving, then saves that one file alone, with the hooks on (never `--no-verify`), on the branch the project is on; when the set-up or the save fails, it puts the old line back exactly and saves nothing, so the next session tries again:
      ```bash
-     [ -f .pre-commit-config.yaml ] || exit 0
-     r=$(python3 - <<'PY'
-     import re
-     p = ".pre-commit-config.yaml"; b = open(p, "rb").read(); lines = b.decode("utf-8").splitlines(keepends=True)
-     out, blk = [], None   # blk: [rev line index, rev value, hook ids]
+     f=.pre-commit-config.yaml; [ -e "$f" ] || [ -L "$f" ] || exit 0
+     g=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+     # read only: what the file pins; the raised copy waits beside git's own files until every check below passes
+     r=$(python3 - "$f" "$g/gitleaks-raise.new" 2>/dev/null <<'PY'
+     import re, sys
+     p, new = sys.argv[1], sys.argv[2]
+     lines = open(p, "rb").read().decode("utf-8").splitlines(keepends=True)
+     url = r"github\.com/(gitleaks|zricethezav)/gitleaks(\.git)?"
+     out, blk, seen = [], None, False   # blk: [rev line index, rev value, hook ids]
      def done(k):
-         if k and "gitleaks" in k[2]:
-             v = k[1].strip("'\"")
-             m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", v)
-             if not m: out.append("REV UNKNOWN " + v)
-             elif (int(m[1]), int(m[2])) < (8, 24):
-                 i = k[0]; lines[i] = lines[i].replace(v, "v8.29.1", 1); out.append("RAISED %s v8.29.1" % v)
+         global seen
+         if not k or k[0] is None: return
+         seen = True
+         if "gitleaks" not in k[2]: return
+         v = k[1].strip("'\"")
+         m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", v)
+         if not m: out.append("REV UNKNOWN " + v)
+         elif (int(m[1]), int(m[2])) < (8, 24):
+             i = k[0]; lines[i] = lines[i].replace(v, "v8.29.1", 1); out.append("OLD " + v)
      for i, l in enumerate(lines):
-         if re.match(r"\s*-\s*repo:", l):
-             done(blk); blk = [None, "", []] if re.search(r"github\.com/(gitleaks|zricethezav)/gitleaks(\.git)?['\"]?\s*$", l) else None
-         elif blk is not None and blk[0] is None and (m := re.match(r"\s*rev:\s*(\S+)", l)): blk[0], blk[1] = i, m[1]
-         elif blk is not None and (m := re.match(r"\s*-\s*id:\s*(\S+)", l)): blk[2].append(m[1].strip("'\""))
+         code = l.split(" #")[0]
+         if re.match(r"\s*-\s*repo:", code):
+             done(blk); blk = [None, "", []] if re.search(url + r"['\"]?\s*$", code) else None
+         elif blk is not None and blk[0] is None and (m := re.match(r"\s*rev:\s*(\S+)\s*$", code)): blk[0], blk[1] = i, m[1]
+         elif blk is not None and (m := re.match(r"\s*-\s*id:\s*(\S+)\s*$", code)): blk[2].append(m[1].strip("'\""))
      done(blk)
+     if not seen and any(re.search(url, l.split(" #")[0]) for l in lines): out.append("LEFT AS IS form")
      if any(re.match(r"\s*-\s*id:\s*['\"]?gitleaks-(system|docker)\b", l) for l in lines): out.append("SYSTEM GITLEAKS")
-     if any(o.startswith("RAISED") for o in out): open(p, "wb").write("".join(lines).encode("utf-8"))
+     if any(o.startswith("OLD ") for o in out): open(new, "wb").write("".join(lines).encode("utf-8"))
      print("\n".join(out))
      PY
-     ) || exit 0
-     [ -n "$r" ] && echo "$r"
-     case $r in *RAISED*) pre-commit install-hooks >/dev/null 2>&1 || echo "SETUP FAILED" ;; esac
+     ) || r="LEFT AS IS form"
+     printf '%s\n' "$r" | grep -v '^OLD \|^$'
+     old=$(printf '%s\n' "$r" | sed -n 's/^OLD //p'); [ -n "$old" ] || exit 0
+     n="$g/gitleaks-raise.new"; why=""; hk="$(git rev-parse --git-path hooks/pre-commit)"
+     if [ -L "$f" ]; then why=symlink
+     elif [ ! -w "$f" ]; then why=read-only
+     elif [ -e "$g/MERGE_HEAD" ] || [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ]; then why=unfinished
+     elif [ -n "$(git status --porcelain -- "$f")" ]; then why=unsaved
+     elif case $(git branch --show-current) in main|master) true ;; *) false ;; esac; then why=default-branch
+     elif ! { [ -x "$hk" ] && grep -qs 'File generated by pre-commit' "$hk"; }; then why=hooks-off
+     fi
+     [ -z "$why" ] || { rm -f "$n"; echo "NOT RAISED $old $why"; exit 0; }
+     cp "$f" "$g/gitleaks-raise.old" && cat "$n" > "$f" && rm -f "$n"
+     put_back() { cat "$g/gitleaks-raise.old" > "$f"; rm -f "$g/gitleaks-raise.old"; echo "NOT RAISED $old $1"; exit 0; }
+     pre-commit install-hooks >/dev/null 2>&1 || put_back setup-failed
+     git commit -q -m "Update gitleaks to v8.29.1 (the scan for passwords and keys)" -- "$f" >"$g/gitleaks-raise.log" 2>&1 || put_back save-refused
+     rm -f "$g/gitleaks-raise.old" "$g/gitleaks-raise.log"; echo "RAISED $old v8.29.1"
      ```
-     On `RAISED [old] v8.29.1`, say one line: "I updated your project's scan for passwords and keys (gitleaks [old] to v8.29.1): the old version can crash on some newer Intel computers, and then every save is refused." On `SETUP FAILED` after it, add: "It couldn't be set up on this computer yet, so saves will say the checking tool couldn't be set up until it can be downloaded and built." On `REV UNKNOWN [rev]`: "Your project's scan for passwords and keys is pinned to [rev], which I can't compare with the version that fixed a crash on some newer Intel computers (8.24.0), so I left it as it is; a developer can check it." On `SYSTEM GITLEAKS`: "Your project's scan for passwords and keys uses a gitleaks installed on this computer or in Docker, which I don't update; a developer should make sure it is version 8.24.0 or later, because older ones can crash on some newer Intel computers." Never in the gaps list or its ask.
+     Say one line for what it printed, and nothing when it printed nothing. `RAISED [old] v8.29.1`: "I updated your project's scan for passwords and keys (gitleaks [old] to v8.29.1) and saved that one change: the old version can crash on some newer Intel computers, and then every save is refused." `NOT RAISED [old] setup-failed`: "I tried to update your project's scan for passwords and keys and couldn't set the new version up on this computer, so I left it as it was; I'll try again next time." `NOT RAISED [old] save-refused`: "I tried to update your project's scan for passwords and keys, but the save was refused, so I left it as it was; I'll try again next time." `NOT RAISED [old] unfinished`: the unfinished-update line (top of this skill). `NOT RAISED [old] unsaved`: "Your project's scan for passwords and keys needs an update (gitleaks [old] can crash on some newer Intel computers), but its settings file has changes of yours that aren't saved, so I left it alone; once they're saved or undone, I'll update it next time." `NOT RAISED [old] default-branch`: "Your project's scan for passwords and keys needs an update (gitleaks [old] can crash on some newer Intel computers); I'll make it once your saves go on a working copy instead of the main copy." `NOT RAISED [old] hooks-off`: nothing more (the Q12 line above already says the checks are off; the update waits for them). `NOT RAISED [old] symlink` / `read-only`, and `LEFT AS IS form`: "Your project's scan for passwords and keys needs a developer to check it: [its settings file is a link to another file / its settings file can't be written / it is written in a form I don't change automatically], so I left it as it is. gitleaks should be 8.24.0 or later, because older ones can crash on some newer Intel computers." `REV UNKNOWN [rev]`: "Your project's scan for passwords and keys is pinned to [rev], which I can't compare with the version that fixed a crash on some newer Intel computers (8.24.0), so I left it as it is; a developer can check it." `SYSTEM GITLEAKS`: "Your project's scan for passwords and keys uses a gitleaks installed on this computer or in Docker, which I don't update; a developer should make sure it is version 8.24.0 or later, because older ones can crash on some newer Intel computers." Never in the gaps list or its ask.
    - **AI (AI01-AI30):** Only if AI features detected, except AI30, which runs on every app -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), a text-only Claude-subscription provider (AI29: read `lib/ai/providers/claude_agent.py`; an app built before the check fails it and is fixed from the scaffold's copy), no model training, fine-tuning or retrieval unless the app's left-out record names AI30 (AI30: run its two scans), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Build record and seal (WM01-WM07):** Check the project is sealed and the seal matches the code (an app built before the seal existed gets its first one at the end of this session), that the app reports its stamp to admins, and that its quality-gate workflow has the `watermark` job. Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).

@@ -645,8 +645,11 @@ else
       hs=$(sed -n 's/^- hook id: //p' "$log"); h=$(printf '%s\n' "$hs" | head -1)
       s=$(printf '%s\n' "$hs" | grep -iE 'leak|hog|secret|private-key|credential' | head -1)
       # a key only when the scan names one (git-operations.md, A crash is not a finding); never "no leaks found"
-      found=$(grep -cE '^RuleID:|leaks found: [1-9]|[1-9][0-9]* leaks found in partial scan|Found (un)?verified result|Private key found|Potential secrets about to be committed' "$log")
-      env=$(sed -n 's/^\[INFO\] Installing environment for \(.*\)\.$/\1/p' "$log" | tail -1)
+      # ...counted only inside the secret hooks' own output: a header line ends a hook's part, "- hook id:" starts one
+      found=$(awk '/\.\.\.\.+.*(Passed|Failed|Skipped)$/ {h=""} /^- hook id: / {h=$4} h ~ /leak|hog|secret|private-key|credential/' "$log" |
+        grep -cE '^RuleID:|leaks found: [1-9]|[1-9][0-9]* leaks found in partial scan|Found (un)?verified result|Private key found|Potential secrets about to be committed')
+      # the scanner pre-commit was fetching (no network) or installing when it stopped
+      env=$(sed -nE 's/^\[INFO\] (Initializing|Installing) environment for (.*)\.$/\2/p' "$log" | tail -1)
       grep -q '^An unexpected error has occurred' "$log" && setup=1 || setup=0; rm -f "$log"
       [ -n "$s" ] && [ "$found" -gt 0 ] && fail "what looks like a password or key is in your unsaved changes"
       [ -n "$s" ] && fail "the scan for passwords and keys stopped without a result I can read"
