@@ -238,19 +238,25 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # --- Build + Push ---
-      - uses: docker/metadata-action@v5     # Compute image tags (sha, branch, latest)
-        id: meta
+      - uses: docker/metadata-action@v5     # One per service: its own image name, sha-<short>, branch
+        id: meta-backend
+      - uses: docker/metadata-action@v5
+        id: meta-frontend
+      # (a migration-chain check runs here, before anything is built)
       - uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: ./backend                 # each service's own build context from docker-compose.yml
           push: ${{ github.event_name != 'pull_request' }}   # Push only on non-PR
-          tags: ghcr.io/your-org/my-app/backend:dev-latest
+          tags: ${{ steps.meta-backend.outputs.tags }}
 
       - uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/your-org/my-app/frontend:dev-latest
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+
+      # (then: the deploy tag is set to sha-<short>, and a smoke test starts the version just pushed beside a
+      #  throwaway database and waits for its health check)
 
       # --- Deploy (non-PR only) ---
       - if: github.event_name != 'pull_request'
@@ -261,12 +267,12 @@ jobs:
 
       - if: github.event_name != 'pull_request'
         run: |
-          # Mirror source → deploy branch
-          rsync -a --delete --exclude='.git' --exclude='deploy' ./ deploy/
-          # Patch image tags in K8s manifests
+          # Mirror source → deploy branch (never .github/: the built-in token may not push workflow files)
+          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' ./ deploy/
+          # Patch image tags in K8s manifests: the version this run built
           cd deploy
-          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/backend:dev-latest"' env/dev/backend.yaml
-          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/frontend:dev-latest"' env/dev/frontend.yaml
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/backend:sha-'"${GITHUB_SHA::7}"'"' env/dev/backend.yaml
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/frontend:sha-'"${GITHUB_SHA::7}"'"' env/dev/frontend.yaml
           # Commit and push (triggers Argo CD sync)
           git config user.name "ci-bot"
           git config user.email "ci@noreply"
@@ -285,6 +291,8 @@ jobs:
 | PR builds don't push | PRs are validation gates — no image push, no deploy branch edits |
 | `rsync` mirror | Deploy branch gets full source (not just manifests) — enables Argo CD to reference any file |
 | `yq` for tag patching | YAML-safe editing (not sed/grep) — preserves comments and structure |
+| Deploy tag `sha-<short>` | The cluster runs exactly the version this run built and pushed, on every branch; a moving tag like `dev-latest` can name an image the run never built |
+| Smoke test after the push | Starts the published version with its own start command beside a throwaway database: a failing migration or a broken start stops the run before the deploy branch changes |
 | `ci-bot` commit | Distinguishes automated commits from human ones |
 
 ---
