@@ -547,7 +547,7 @@ python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*'
 What the online copy already has is what argo-it's own names (`refs/argo-it/gh/`) reach, as in PHASE 5
 step 2: a commit it holds on any branch, or only through a tag, is never "saved, not sent".
 
-Run it from the project root with a 120-second timeout, then read the result:
+Run it from the project root with a 120-second timeout (set as the time limit of the tool that runs the command: macOS has no `timeout` program), then read the result:
 - **Exit 0**, the three labels each once, in that order, and nothing else: no secrets found;
   3e passes.
 - **Exit 1**, the three labels each once, in that order, and every other line a hit: the gate
@@ -2721,7 +2721,7 @@ takes them in by name:
 python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --also {generated_files}
 ```
 
-Run it from the project root with a 120-second timeout, and read the result exactly as 3e does.
+Run it from the project root with a 120-second timeout (set as the time limit of the tool that runs the command: macOS has no `timeout` program), and read the result exactly as 3e does.
 A hit counts here when it sits under `== saved, not sent ==`, or when it is in a file the save on
 'Send it' will save (one of argo-it's generated files, by its path from the repo's top folder),
 whatever its label. A hit whose path holds `\xNN` or `\uXXXX` counts too, whatever its label: its
@@ -2915,7 +2915,7 @@ argo-it's files, on no branch yet -- the one commit the push sends. Check exactl
 python3 ~/.claude/make-it/scripts/secret-scan.py --sent 'refs/argo-it/gh/*' --commit {saved_head}
 ```
 
-Run it from the project root with a 120-second timeout, and read it as 3e reads a result; every
+Run it from the project root with a 120-second timeout (set as the time limit of the tool that runs the command: macOS has no `timeout` program), and read it as 3e reads a result; every
 hit it prints sits under `== saved, not sent ==`. Any hit, or any result 3e's third bullet covers,
 stops here with nothing sent: use 2b's stop as written, reading a hit in one of argo-it's files as
 one in a file argo-it generated, not in a change you already saved. If no hit counts, send
@@ -3001,7 +3001,7 @@ for f in {generated_files}; do
   [ -e "$f" ] || continue
   if [ "$(git hash-object -- "$f")" = "$(git rev-parse -q --verify "${w}:./$f")" ]; then
     if git cat-file -e "HEAD:./$f" 2>/dev/null; then git restore --source=HEAD --worktree -- "$f"
-    elif ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then rm -f -- "$f"; rmdir -p -- "${f%/*}" 2>/dev/null
+    elif ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac
     else printf 'kept: %s\n' "$f"; fi
   else printf 'kept: %s\n' "$f"; fi
 done
