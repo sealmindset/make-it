@@ -28,7 +28,7 @@ DOC="${1:-$root/.claude/commands/argo-it.md}"
 SCAFFOLD="$root/.claude/make-it/scaffolds/fastapi-nextjs"
 ERRF="$(mktemp)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&4; rm -f "$ERRF"' EXIT
 fail=0
-python3 - "$DOC" "$SCAFFOLD" <<'PY' || fail=1
+python3 -I - "$DOC" "$SCAFFOLD" <<'PY' || fail=1
 import os, re, shlex, shutil, subprocess, sys, tempfile
 try:
     import yaml
@@ -436,6 +436,17 @@ check("an app that starts: the throwaway app, database and network are removed t
 check("the smoke test has a time limit of its own (timeout-minutes) and each check is cut off (timeout)",
       all("timeout-minutes" in s and "timeout " in s["run"] for s in ST if s.get("name", "").lower().startswith("smoke")))
 
+# a failed check must stop the run: no continue-on-error on the smoke test or any step it depends on, and no
+# always()/failure()/cancelled() on the steps that tag, check out the deploy branch, mirror or push after it
+first_smoke = min(smoke_at_early) if (smoke_at_early := [i for i, s in enumerate(ST) if s.get("name", "").lower().startswith("smoke")]) else len(ST)
+coe = [s.get("name") for s in ST if s.get("continue-on-error") not in (None, False, "false")]
+check("no step carries continue-on-error (a failed build, check or smoke test would let the tagging and the deploy go "
+      "ahead)", not coe, "continue-on-error on: %s" % coe)
+after = [s for s in ST[first_smoke:]]
+loose = [s.get("name") for s in after if re.search(r"\b(always|failure|cancelled)\s*\(", str(s.get("if", "")))]
+check("no step from the smoke test on runs after a failure (no always(), failure() or cancelled() in its if:)",
+      not loose and after, "if: lets these run after a failure: %s" % loose)
+
 # pull requests: the migration check runs; their concurrency group is their own, cancelling their own older builds
 P = simulate("feature-x", event="pull_request")
 check("on a pull request the migration check runs (it only reads files)",
@@ -564,6 +575,31 @@ if vstep:
     check("the migration check fails, naming it, on a folder named like a migration (no traceback)", loud(rc, out, "x.py"), "exit %d: %s" % (rc, out.strip()[-300:]))
     rc, out = run_validate(plain, lambda v: os.symlink(os.path.join(v, "gone.lock"), os.path.join(v, "link.py")))
     check("the migration check fails, naming it, on a link to a missing file (no traceback)", loud(rc, out, "link.py"), "exit %d: %s" % (rc, out.strip()[-300:]))
+    def planted(v):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(v)))
+        for mod in ("ast", "json", "os", "sys"):
+            open(os.path.join(root, mod + ".py"), "w").write(
+                "open(%r, 'w').write('ran')\n" % os.path.join(root, "MARKER-" + mod))
+    MARKS = []
+    def run_planted(files):
+        d = tempfile.mkdtemp(dir=TMP)
+        v = os.path.join(d, "backend", "alembic", "versions")
+        os.makedirs(v)
+        for n, body in files.items():
+            open(os.path.join(v, n), "w").write(body)
+        planted(v)
+        sc = os.path.join(d, "validate.sh")
+        open(sc, "w").write(vstep["run"])
+        r = run_bash(["-euo", "pipefail", sc], d, dict(os.environ, PATH=STUBS + ":" + os.environ["PATH"]))
+        found = sorted(f for f in os.listdir(d) if f.startswith("MARKER-"))
+        shutil.rmtree(d, ignore_errors=True)
+        return r.returncode, found
+    rc, found = run_planted(plain)
+    check("the migration check runs no module from the repository (ast.py, json.py, os.py, sys.py at its root): "
+          "its python is isolated", not found and rc == 0, "these ran: %s (exit %d)" % (found, rc))
+    pys = [l.strip() for s_ in ST if "run" in s_ for l in s_["run"].splitlines()
+           if re.match(r"\s*(?:\S+=\S+\s+)*python3?\b(?!\s+-I\b)", l) and "docker" not in l]
+    check("every python the workflow runs on the runner is started isolated (python3 -I)", not pys, "\n".join(pys))
 else:
     check("the workflow has a migration check", False)
 shutil.rmtree(TMP, ignore_errors=True)
