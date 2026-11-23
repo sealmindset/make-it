@@ -12719,7 +12719,16 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
                     else:
                         self.assertFalse(st['stopped'] or st['failed'], '%r %r' % (st['stopped'], st['failed']))
                         self.assertTrue(r.git('rev-parse', 'refs/argo-it/setup').strip())  # the one ref it keeps
-                    self.assertEqual(self._refs(r), before, 'a local ref, HEAD or the index changed')
+                    after = self._refs(r)
+                    if not mark:  # git's own push bookkeeping notes the two branches it sent, exactly as sent; nothing else
+                        sent = self._sent_refs(r)
+                        noted = {'refs/remotes/origin/argo-it/setup': sent['refs/heads/argo-it/setup'],
+                                 'refs/remotes/origin/' + self.DEPLOY: sent['refs/heads/' + self.DEPLOY]}
+                        lines = after[0].decode().splitlines()
+                        for ref, sha in noted.items():
+                            self.assertIn('%s %s' % (ref, sha), lines)
+                        after = (('\n'.join(l for l in lines if l.split()[0] not in noted) + '\n').encode(),) + after[1:]
+                    self.assertEqual(after, before, 'a local ref, HEAD or the index changed')
 
     def test_1b_no_bring_level_is_left_in_the_first_set_up(self):
         doc = ArgoItWiringCases._doc(self)
@@ -12843,8 +12852,8 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
             with self.subTest(shell=shell, mutant='no lease'):  # control: without the lease the same case overwrites
                 r = self.fresh()
                 p = self._phase()
-                self.assertIn('git push --force-with-lease=refs/heads/argo-it/setup: "$u"', p)
-                mutated = p.replace('git push --force-with-lease=refs/heads/argo-it/setup: "$u"', 'git push "$u"')
+                self.assertIn('git push --force-with-lease=refs/heads/argo-it/setup: origin', p)
+                mutated = p.replace('git push --force-with-lease=refs/heads/argo-it/setup: origin', 'git push origin')
                 self._phase = lambda: mutated
                 st = self._lease_case(r, shell)
                 del self._phase

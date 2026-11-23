@@ -2940,13 +2940,12 @@ m="$(cat "$(git rev-parse --git-dir)/argo-it-default-branch")"
 mh=$(git ls-remote --heads origin "refs/heads/$m") || { echo "FETCH FAILED"; exit 1; }
 mh=$(printf '%s\n' "$mh" | awk -v r="refs/heads/$m" '$2 == r {print $1}')
 [ -n "$mh" ] && [ "$mh" = "{checked_head}" ] || { echo "NOT ON MAIN VERSION"; exit 3; }
-# Sent to origin's own address (the one step 2 found the same for sends and reads), so git keeps no copy of these two
-# branches here: no ref of the user's changes
-u=$(git remote get-url --push origin) || { echo "FETCH FAILED"; exit 1; }
+# (git's own bookkeeping then notes the two branches it sent as origin/argo-it/setup and origin/<deploy branch>; no
+# branch of the user's moves)
 if [ -z "$found" ]; then
-  git push "$u" "${mh}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
+  git push origin "${mh}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
 fi
-[ "$on" = "{saved_head}" ] || git push --force-with-lease=refs/heads/argo-it/setup: "$u" "{saved_head}:refs/heads/argo-it/setup" --recurse-submodules=no || { echo "PUSH 2 FAILED"; exit 1; }
+[ "$on" = "{saved_head}" ] || git push --force-with-lease=refs/heads/argo-it/setup: origin "{saved_head}:refs/heads/argo-it/setup" --recurse-submodules=no || { echo "PUSH 2 FAILED"; exit 1; }
 ```
 
 If the block prints `FETCH FAILED`, its read of GitHub failed before the first push, so it pushed
