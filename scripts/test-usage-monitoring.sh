@@ -2,7 +2,7 @@
 # E15-S1: the administrators' guide to Claude Code's own usage reporting, and the script that renders its settings.
 # Contract these checks pin (the change must satisfy it):
 #   - .claude/make-it/references/usage-monitoring.md exists; the settings block under "## 1. Switching it on" is valid
-#     JSON, turns the reporting on, and leaves every content flag off ("0"; raw bodies unset), with placeholders only.
+#     JSON, turns the reporting on, and locks every content flag off ("0", raw bodies included), with placeholders only.
 #   - The statements that matter are there whole: make-it sends nothing; what is not sent; the skill event does not
 #     tell you which make-it skill ran; third-party providers; tracking alone does not prove value; the notice text.
 #   - The guide never turns on prompt, raw-body or tool-detail logging, except tool details in the one-shell calibration.
@@ -33,9 +33,9 @@ m = re.search(r"^## 1\. Switching it on\n(.*?)(?=^## )", text, re.S | re.M)
 b = m and re.search(r"```json\n(.*?)```", m.group(1), re.S)
 env = json.loads(b.group(1))["env"]
 assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
-for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT"):
+for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT",
+          "OTEL_LOG_RAW_API_BODIES"):
     assert env[k] == "0", k
-assert "OTEL_LOG_RAW_API_BODIES" not in env
 assert env["OTEL_METRICS_INCLUDE_REPOSITORY"] == "true" and env["OTEL_METRICS_INCLUDE_VERSION"] == "true"
 assert "<collector-host>" in env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 assert "<ingest-token>" in env["OTEL_EXPORTER_OTLP_HEADERS"]
@@ -45,7 +45,7 @@ pinned() { flat < "$1" | grep -qF -- "$2"; }
 in_section() {  # $1 file, $2 exact "## " heading, $3 text that must be inside that section
   awk -v h="$2" '/^## /{on=($0==h)} on' "$1" | flat | grep -qF -- "$3"; }
 content_on_only_in_calibration() {  # tool details on only under the calibration heading; prompts/raw bodies never on
-  ! gq -E 'OTEL_LOG_USER_PROMPTS(=|": ")"?1|OTEL_LOG_RAW_API_BODIES(=|": ")' "$1" || return 1
+  ! gq -E 'OTEL_LOG_USER_PROMPTS(=|": ")"?1|OTEL_LOG_RAW_API_BODIES(=|": ")"?[^0"]' "$1" || return 1
   ! awk '/^#/{cal=($0 ~ /^### Calibrating `plugin_id_hash`, once/)} !cal && /OTEL_LOG_TOOL_DETAILS(=|": ")"?1/' "$1" | gq . || return 1
 }
 hosts_generic() {  # every URL host is the documentation site, the Anthropic GitHub, or a placeholder
@@ -87,7 +87,7 @@ ctl() {  # $1 name, $2 perl substitution, $3 the check (uses $C)
   C="$T/ctl.md"; perl -0pe "$2" "$G" > "$C"
   if eval "$3"; then bad "control: $1 (the check passed on a reversed copy)"; else ok "control: $1"; fi; }
 ctl "a content flag switched on"   's/"OTEL_LOG_TOOL_DETAILS": "0"/"OTEL_LOG_TOOL_DETAILS": "1"/' 'settings_ok "$C"'
-ctl "raw bodies set"               's/("OTEL_LOG_TOOL_CONTENT": "0")/$1,\n    "OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
+ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
 ctl "the settings block broken"    's/("CLAUDE_CODE_ENABLE_TELEMETRY": "1"),/$1/' 'settings_ok "$C"'
 ctl "make-it sends something"      's/make-it itself sends nothing\./make-it itself sends a summary./g' 'pinned "$C" "$S_NOTHING"'
 ctl "what is not sent reversed"    "s/Claude Code does not send what people type/Claude Code sends what people type/" 'pinned "$C" "$S_NOT_SENT"'
@@ -95,6 +95,8 @@ ctl "the skill event names skills" 's/The skill event does not tell you/The skil
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
+ctl "raw bodies dropped from the lock" 's/,\n    "OTEL_LOG_RAW_API_BODIES": "0"//' 'settings_ok "$C"'
+ctl "raw bodies on in the text"    's/^## 2\./`OTEL_LOG_RAW_API_BODIES=file:\/tmp\/b`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
 ctl "prompt logging turned on"     's/("OTEL_LOG_USER_PROMPTS": )"0"/$1"1"/' 'content_on_only_in_calibration "$C"'
 ctl "tool details on outside the calibration" 's/^## 2\./`OTEL_LOG_TOOL_DETAILS=1`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
 ctl "a real host in the guide"     's/<collector-host>/collector.internal.example.org/g' 'hosts_generic "$C"'
