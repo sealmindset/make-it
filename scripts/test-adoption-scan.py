@@ -81,11 +81,17 @@ if "graphql" in args:
         more = start + page < len(fx["repos"])
         reply(200, {"data": {"repositoryOwner": {"__typename": own["type"], "login": own["login"], "repositories": {
             "pageInfo": {"hasNextPage": more, "endCursor": str(start + page)}, "nodes": nodes}}}})
+    fail = queued("content")
+    if fail:
+        reply(fail["status"], fail.get("body", "{}"), fail.get("headers"))
     names = {k: v for k, v in f.items() if k.startswith("n") and k[1:].isdigit()}
     by = {r["name"]: r for r in fx["repos"]}
     behaviours = [by.get(v, {}).get("behaviour") for v in names.values()]
     if "timeout" in behaviours or ("timeout_in_batch" in behaviours and len(names) > 1):
         reply(502, '{"message":"We couldn\'t respond to your request in time"}')
+    if "pathless_in_batch" in behaviours and len(names) > 1:
+        reply(200, {"data": None, "errors": [{"message": "Something went wrong while executing your query. "
+                                                         "This may be the result of a timeout"}]}, code=1)
     data, errors = {}, []
     for k, v in names.items():
         alias, r = "r" + k[1:], by.get(v)
@@ -148,12 +154,14 @@ class Base(unittest.TestCase):
         """Run the scan in-process: (exit code, stdout+stderr, written json or None, sleeps)."""
         with open(self.fixture_path, "w") as f:
             json.dump(self.fx, f)
+        if os.path.exists(self.env["STUB_GH_STATE"]):
+            os.remove(self.env["STUB_GH_STATE"])  # queued failures count from each run's start
         if out is None:
             self.out_n += 1
             out = os.path.join(self.tmp, f"out{self.out_n}")
         argv = list(args) if "--org" in args or "--user" in args else ["--org", "example-org", *args]
         buf, sleeps = io.StringIO(), []
-        with mock.patch.dict(os.environ, self.env), mock.patch.object(self.mod.time, "sleep", sleeps.append), \
+        with mock.patch.dict(os.environ, self.env), mock.patch.object(self.mod, "SLEEP", sleeps.append), \
                 contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
             try:
                 code = self.mod.main([*argv, "--out", out])
@@ -316,6 +324,22 @@ class Failures(Base):
         self.assertEqual(repos["app-one"]["class"], "make-it")
         self.assertEqual(code, 3)
 
+    def test_an_error_naming_no_repository_shrinks_the_page_too(self):
+        self.fx["repos"][3]["behaviour"] = "pathless_in_batch"
+        code, _, data, _ = self.scan("--page-size", "4")
+        repos = self.by_repo(data)
+        self.assertEqual(repos["app-four"]["class"], "Claude Code, no make-it")
+        self.assertEqual(repos["app-one"]["class"], "make-it")
+        sizes = [sum(1 for a in c if re.fullmatch(r"n\d+=.*", a)) for c in self.content_calls()]
+        self.assertEqual(sizes[:3], [4, 2, 2])
+
+    def test_graphql_rate_limited_waits_then_goes_on(self):
+        self.fx["failures"] = {"content": [{"status": 200, "body": json.dumps(
+            {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]})}]}
+        _, _, data, sleeps = self.scan()
+        self.assertIn(60, sleeps)
+        self.assertEqual(self.by_repo(data)["app-one"]["class"], "make-it")
+
     def test_an_invalid_repository_name_is_never_sent(self):
         self.scan()
         self.assertFalse([c for c in self.calls() if any("bad" in a for a in c)])
@@ -469,6 +493,9 @@ class Output(Base):
         self.assertIn("repository names", out)
         self.assertFalse(os.path.exists(os.path.join(repo, "scan")))
         self.assertEqual(self.calls(), [], "refused before asking GitHub anything")
+        os.mkdir(os.path.join(repo, "sub"))
+        os.symlink(os.path.join(repo, "sub"), os.path.join(self.tmp, "looks-outside"))
+        self.assertEqual(self.scan(out=os.path.join(self.tmp, "looks-outside", "scan"))[0], 2)  # a link can't hide it
         with open(os.path.join(repo, ".gitignore"), "w") as f:
             f.write("scan/\n")
         code, _, data, _ = self.scan(out=os.path.join(repo, "scan"))
@@ -489,7 +516,7 @@ class Output(Base):
             with open(self.fixture_path, "w") as f:
                 json.dump(self.fx, f)
             buf = io.StringIO()
-            with mock.patch.dict(os.environ, self.env), mock.patch.object(self.mod.time, "sleep", lambda s: None), \
+            with mock.patch.dict(os.environ, self.env), mock.patch.object(self.mod, "SLEEP", lambda s: None), \
                     contextlib.redirect_stdout(buf):
                 self.mod.main(["--org", "example-org", "--limit", "1"])
                 self.mod.main(["--org", "example-org", "--limit", "1"])

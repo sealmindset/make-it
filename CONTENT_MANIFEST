@@ -45,6 +45,7 @@ cf3c7e9a34e134cb5f865a39dc34ba16f53fc8413ff2d86672288e7e12b5dd6f  make-it/conflu
 6e8f9f7d9f20289c05c33f09f8deeb9252da4126d3aef3eb360146d0fd3a42c8  make-it/confluence-docs/18-deadcode-it.md
 978cf45051562eb422fff781df7eb7833099fa63d298011e7b6d52bc3b431a3b  make-it/confluence-docs/19-resolve-it.md
 a1af2a07d971c3efe4134554d26ec2603c72eedb70a8ff5eb0df29a42e014d09  make-it/hooks/no-force-push.sh
+c7359be11a2815cabebf36ef31fe6801ea4420975e53724d3a5dfb7bea766d80  make-it/references/adoption-scan.md
 c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/references/ai-accounting.md
 343605fc91c37aac81c95e69b51e16d10cd863c566be538036edfb0f447aa67e  make-it/references/approval-block.md
 3455fc5b80e6299e465856c6bcd2574269f98bd30e27432f2f540165cbe5da12  make-it/references/backlog-board.md
@@ -300,6 +301,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffo
 73cc5b4d9579e68001f68c131b918538da48aa824828e84405db7f93e8c88c4f  make-it/scaffolds/overlays/pwa/frontend/public/manifest.json
 cbbd7d67b20ee7ef62dcc779b2d29cc52d4b9d00cf41d141d9b1c505cc1f42f1  make-it/scripts/add-no-force-push-hook.ps1
 9ffb313ab19820690e49bded9ca05755b56bf67fed23517bb82916e39f7c1948  make-it/scripts/add-no-force-push-hook.py
+4913d8efc439b69e656e35eb71bb819a3becaf5d798901a38f8e2fdf10d12943  make-it/scripts/adoption-scan.py
 785a1e35045a18edfd8dad90369dcc47a06d1ceb49a15cb4eac3ab635ca59ffa  make-it/scripts/content-manifest.ps1
 878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
 928cd5d828e802661bfdf62fe523ca4ce3317a60948fabb5c771a9ce7c1e8307  make-it/scripts/hostile-code-check.py

@@ -1,0 +1,22 @@
+name: adoption-scan contract
+
+# adoption-scan.py reads an organisation's repositories and sorts them by make-it use. The test pins
+# that it only ever reads (no mutation, GET only), that a repository it could not read is "not
+# scanned" and never "no signal", and that the decision file alone finds apps older than the build
+# record. A stub gh serves synthetic fixtures: no network, no token.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: adoption-scan contract test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: python3 -I scripts/test-adoption-scan.py
