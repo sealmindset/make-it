@@ -1853,7 +1853,8 @@ pod crash-loops on startup.
           # down_revision: Union[str, None] = None); a tuple of revisions for a merge. Fails loudly, naming
           # the file: two files with the same revision, a down_revision no file declares, not exactly one
           # head, a file it can't read. Never fails silently.
-          python3 - "$MIGRATIONS_DIR" <<'PY'
+          # -I: isolated, so a module file in the repository (a pull request's ast.py, say) is never imported
+          python3 -I - "$MIGRATIONS_DIR" <<'PY'
           import ast, os, sys
           d = sys.argv[1]
           revs, downs, bad = {}, [], []
