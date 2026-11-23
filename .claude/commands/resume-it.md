@@ -477,6 +477,35 @@ b. **Run a quick static scan** for each check ID in the active tiers. This is NO
    - **Tests (T01-T05):** Check for pytest.ini, conftest.py, playwright.config.ts
    - **Code Quality (Q01-Q16):** Check for pyproject.toml with [tool.ruff] section, eslint.config.mjs in frontend, .prettierrc, .pre-commit-config.yaml, .gitleaks.toml, trivy.yaml, pytest-cov in requirements.txt, quality scripts in package.json (lint, format, format:check, type-check), `.github/workflows/quality-gate.yml` exists with python-quality, frontend-quality, security-scan, and attestation jobs; Q14 is the dead-code upkeep reminder: it runs no tools and writes nothing, just reads the dates in `docs/DELETION_LOG.md` (`deadcode.md` §8); Q16 (a [BLOCK] check, so a must-do update): no `${{ }}` expression in a step's `run:` or `script:` text in `.github/workflows/`
    - **Hooks on (Q12):** when `.pre-commit-config.yaml` exists and the hook check (`git-operations.md`, Before any save) prints `HOOKS OFF`: if `pre-commit` is installed, run `pre-commit install` now -- routine, no ask -- and say one line: "I switched on the checks your project runs before every save: a scan for passwords and keys, and a stop on saving straight to the main copy." If `pre-commit` isn't installed, ask preflight's install pick for it (`make-it.md` preflight, the one ask for missing tools), then switch the hooks on the same way. If `pre-commit install` fails, say why in plain words (another tool already manages this project's git hooks, for example) and that the checks stay off. Once they are on, if the project is on its default branch, run "Move to `work`" (`git-operations.md`, The branch) and say its line. Q12 never goes in the gaps list or its ask.
+   - **The secret scan's version (Q08):** when `.pre-commit-config.yaml` exists, run this in the project -- routine, no ask. It changes only the `rev` of the hook built from `gitleaks/gitleaks` (id `gitleaks`), and only when it is older than `v8.24.0`, to the scaffolds' `v8.29.1`; every other line, a customised `entry` or `args` included, stays byte for byte:
+     ```bash
+     [ -f .pre-commit-config.yaml ] || exit 0
+     r=$(python3 - <<'PY'
+     import re
+     p = ".pre-commit-config.yaml"; b = open(p, "rb").read(); lines = b.decode("utf-8").splitlines(keepends=True)
+     out, blk = [], None   # blk: [rev line index, rev value, hook ids]
+     def done(k):
+         if k and "gitleaks" in k[2]:
+             v = k[1].strip("'\"")
+             m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", v)
+             if not m: out.append("REV UNKNOWN " + v)
+             elif (int(m[1]), int(m[2])) < (8, 24):
+                 i = k[0]; lines[i] = lines[i].replace(v, "v8.29.1", 1); out.append("RAISED %s v8.29.1" % v)
+     for i, l in enumerate(lines):
+         if re.match(r"\s*-\s*repo:", l):
+             done(blk); blk = [None, "", []] if re.search(r"github\.com/(gitleaks|zricethezav)/gitleaks(\.git)?['\"]?\s*$", l) else None
+         elif blk is not None and blk[0] is None and (m := re.match(r"\s*rev:\s*(\S+)", l)): blk[0], blk[1] = i, m[1]
+         elif blk is not None and (m := re.match(r"\s*-\s*id:\s*(\S+)", l)): blk[2].append(m[1].strip("'\""))
+     done(blk)
+     if any(re.match(r"\s*-\s*id:\s*['\"]?gitleaks-(system|docker)\b", l) for l in lines): out.append("SYSTEM GITLEAKS")
+     if any(o.startswith("RAISED") for o in out): open(p, "wb").write("".join(lines).encode("utf-8"))
+     print("\n".join(out))
+     PY
+     ) || exit 0
+     [ -n "$r" ] && echo "$r"
+     case $r in *RAISED*) pre-commit install-hooks >/dev/null 2>&1 || echo "SETUP FAILED" ;; esac
+     ```
+     On `RAISED [old] v8.29.1`, say one line: "I updated your project's scan for passwords and keys (gitleaks [old] to v8.29.1): the old version can crash on some newer Intel computers, and then every save is refused." On `SETUP FAILED` after it, add: "It couldn't be set up on this computer yet, so saves will say the checking tool couldn't be set up until it can be downloaded and built." On `REV UNKNOWN [rev]`: "Your project's scan for passwords and keys is pinned to [rev], which I can't compare with the version that fixed a crash on some newer Intel computers (8.24.0), so I left it as it is; a developer can check it." On `SYSTEM GITLEAKS`: "Your project's scan for passwords and keys uses a gitleaks installed on this computer or in Docker, which I don't update; a developer should make sure it is version 8.24.0 or later, because older ones can crash on some newer Intel computers." Never in the gaps list or its ask.
    - **AI (AI01-AI30):** Only if AI features detected, except AI30, which runs on every app -- check for provider abstraction scaffold (AI01 + AI01a/b/c for self-annealing, failover, cost tracking), a text-only Claude-subscription provider (AI29: read `lib/ai/providers/claude_agent.py`; an app built before the check fails it and is fixed from the scaffold's copy), no model training, fine-tuning or retrieval unless the app's left-out record names AI30 (AI30: run its two scans), sanitization, prompt management, SSE streaming, conversation persistence, agent registry, BaseAgent, context builders, routing, fallback, batch job tracking, agent composition (invoke_agent primitive, depends_on declarations, pipeline/delegation/fan-out patterns if agents compose)
    - **Build record and seal (WM01-WM07):** Check the project is sealed and the seal matches the code (an app built before the seal existed gets its first one at the end of this session), that the app reports its stamp to admins, and that its quality-gate workflow has the `watermark` job. Check `.make-it/manifest.json` exists and is current (`~/.claude/make-it/references/watermark.md`). Missing or stale is fixed silently with `watermark.py write`, never by hand and never asked about; a changed security file is noted, not restored
    - **Brain Layer (BN01-BN13):** Only if AI features detected AND brain_features.enabled = true in app-context.json (or user elects to add it) -- check for brain_memories table in migrations/schema, brain_service or brain_service.py, /api/brain/ routes, memory-curator in agent registry, _load_brain_context in BaseAgent, /settings/ai-memory page, /admin/ai-memory page, brain.own.* and brain.admin.* RBAC permissions, BRAIN_FEATURES_ENABLED in .env.example. If AI features exist but brain layer is absent, this is a GAP that can be offered as a suggestion (not auto-applied).

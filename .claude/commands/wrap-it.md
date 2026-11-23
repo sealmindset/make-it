@@ -153,8 +153,8 @@ so save without asking:
   [N] / it would have saved straight to the main copy / a check of the code failed in [file]].
   They're still on this computer, unsaved, so nothing is lost. [what to do next, in plain words --
   for the main copy: "Say 'move my work to a working copy' and I'll do it."]"
-  Say a password or key was found only when the scan's output names one; a scan that crashed gets
-  the "couldn't check" line instead (`git-operations.md`, After the save: A crash is not a finding).
+  Say a password or key was found only when the scan's output names one; a scan that stopped
+  without naming one gets the "couldn't check" line instead (`git-operations.md`, After the save: A crash is not a finding).
   The rest of the wrap-up goes on.
 - Do NOT push to remote -- just commit locally.
 - Tell the user in one line: "Saved your changes on this computer: [list them in plain language,

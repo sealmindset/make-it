@@ -70,14 +70,23 @@ plain words -- for the main copy: "Say 'move my work to a working copy' and I'll
 the value itself.
 
 **A crash is not a finding.** Say the scan found a password or key only when its own output names
-one: gitleaks prints `leaks found`, trufflehog `Found verified result` or `Found unverified
-result`, detect-private-key `Private key found`, detect-secrets `Potential secrets`. When the scan
-for passwords and keys failed without one (a `panic:` or a stack trace, a negative `- exit code:`
-when it was killed, or an error before it scanned anything), it couldn't check, and the save is still refused: never treat a scan
-that didn't run as clean. Then say: "I couldn't check your changes for passwords and keys: the
-checking tool stopped unexpectedly. Nothing was saved; your changes are still in your files. Try
-again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your
-project's checks." Any other hook that refused the save gets the line above, naming that check.
+one: gitleaks prints a `RuleID:` line for each one (the hook runs it with `--verbose`) and a count
+above zero (`leaks found: 2`, `3 leaks found in partial scan`; never `no leaks found`), trufflehog
+`Found verified result` or `Found unverified result`, detect-private-key `Private key found`,
+detect-secrets `Potential secrets about to be committed`. A key found ranks first: when a check of
+the code failed too, say the key, then that check. When the scan for passwords and keys failed
+without naming one (a `panic:` or a stack trace, a negative `- exit code:` when it was killed, a
+scan that stopped partway, or output in a form not listed here), the save is still refused: never
+treat a scan that didn't finish as clean. Then say: "I couldn't check your changes for passwords
+and keys: the checking tool stopped without a result I can read. Nothing was saved; your changes
+are still in your files. Try again; if it keeps happening, ask a developer to look at the secret
+scan (gitleaks) in your project's checks." When pre-commit couldn't set the scanner up (it prints
+`An unexpected error has occurred` after `Installing environment for` the scanner, before any hook
+runs), say: "I couldn't set up the tool that checks your changes for passwords and keys, so nothing
+was checked and nothing was saved; your changes are still in your files. It usually means the tool
+couldn't be downloaded or built on this computer. Try again; if it keeps happening, ask a developer
+to look at the secret scan (gitleaks) in your project's checks." Any other hook that refused the
+save gets the line above, naming that check.
 
 **The branch.** A /make-it project works on `work`: step 41c moves it there after the first save,
 so every save a skill makes lands on `work` (or a worktree branched from it), and `main` holds the

@@ -152,7 +152,7 @@ jobs:
       - name: gitleaks
         id: gitleaks
         run: |
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name)
+          GITLEAKS_VERSION=v8.29.1   # the same version as the gitleaks hook's rev in .pre-commit-config.yaml
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" | tar xz
           ./gitleaks detect --config .gitleaks.toml --source . --no-banner
         continue-on-error: true

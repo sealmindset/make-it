@@ -1550,9 +1550,9 @@ It must print `HOOKS ON` (Q12 is [BLOCK]). Otherwise fix the cause and run it ag
   copy), so I've stopped before showing you the app. [the reason, in plain words]"
 - `FIRST SAVE REFUSED`: a hook that tidies files (trailing spaces, line endings, ruff's fixes)
   changed some -- run it again and they are saved; gitleaks found a value that looks like a password or key (its
-  output says `leaks found`) --
-  move it into `.env` (as the security step does), then run it again; gitleaks stopped without a
-  finding (a `panic:`, a stack trace, killed) -- it couldn't check, so nothing is saved: run it again,
+  output names it: a `RuleID:` line, `leaks found: 1` or more) --
+  move it into `.env` (as the security step does), then run it again; gitleaks stopped without naming
+  one (a `panic:`, a stack trace, killed, `no leaks found in partial scan`) or couldn't be set up -- it couldn't check, so nothing is saved: run it again,
   and if it keeps crashing, stop before /try-it and tell the user the "couldn't check" line
   (`git-operations.md`, After the save: A crash is not a finding); git doesn't know the user's
   name and email -- ask for them; git couldn't sign the save (`commit.gpgsign` is on, but no
