@@ -988,6 +988,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.17 -- The seal check says what actually differs when the version matches and the content doesn't
+
+When an app was sealed by an organization's own build of make-it, the check failed with a line
+that showed the same version number twice, as if nothing differed.
+
+- **The message names the difference.** Same version, different content: it shows a short form
+  of each content fingerprint, and says the app was sealed by another build of make-it, or the
+  record was edited.
+- **It points to a reviewed build.** An organization that ships its own build checks apps
+  against that reviewed build, never one the app's author supplies.
+- **A record with no content fingerprint** gets its own message.
+- **A new section in the seal's reference** says how an organization with its own build runs
+  the check against its own releases, and that the GitHub job accepts any version tag in the
+  repository it is pointed at.
+- **No verdict changed.** The same cases pass and fail, with the same exit codes.
+
 ### v1.71.16 -- The git guards are switched on, and the scaffold's secret scan really scans
 
 Every app shipped with checks that run before each save, but nothing switched them on. And
