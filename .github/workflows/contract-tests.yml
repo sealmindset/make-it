@@ -23,6 +23,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # The runner pool mixes AMD and Intel machines; gitleaks before v8.24.0 crashed only on Intel ones with FSRM.
+      # Naming the processor lets a failure that follows the machine be told from one that follows the code.
+      - name: The processor this run landed on
+        run: grep -m1 'model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo | grep -ow -e erms -e fsrm | tr '\n' ' '; echo
       - name: A git identity for the tests that make throwaway repositories
         run: |
           git config --global user.name "contract tests"
