@@ -822,9 +822,19 @@ def check(app, fw, opts):
         fails.append(NO_RECORD)
         rec = {}
     framework = rec.get("framework") if isinstance(rec.get("framework"), dict) else {}
-    if rec and framework.get("content_manifest_sha256") != fw.digest:
-        fails.append("The build record names a different make-it release than the one it is checked against "
-                     f"(record: {clean(framework.get('version'), 20)}, check: {fw.version}).")
+    recorded = framework.get("content_manifest_sha256")
+    if rec and recorded != fw.digest:  # one condition; only the words depend on what differs
+        if framework.get("version") != fw.version:
+            fails.append("The build record names a different make-it release than the one it is checked against "
+                         f"(record: {clean(framework.get('version'), 20)}, check: {fw.version}).")
+        elif not isinstance(recorded, str) or not recorded:
+            fails.append("The build record does not say which make-it content built it (it has no content digest). "
+                         "Run /resume-it in this project, then push again.")
+        else:
+            fails.append(f"The build record and the make-it it is checked against have the same version number ({fw.version}) "
+                         f"but different content (record: {clean(recorded, 12)}, check: {fw.digest[:12]}): the app was "
+                         "built by a different distribution of make-it. Check it against the make-it build that sealed it "
+                         "(see watermark.md, \"Checking against your own build of make-it\").")
     old_files = rec.get("security_files") if isinstance(rec.get("security_files"), list) else []
     noted = {e.get("path"): clean(e.get("note") or "") for e in old_files
              if isinstance(e, dict) and isinstance(e.get("path"), str)}

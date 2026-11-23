@@ -225,6 +225,31 @@ What makes it a gate, not a courtesy:
 Checked against Jenkins' shared-library docs and GitHub's ruleset docs, 2026-11-16. Not yet run in
 a Jenkins.
 
+### Checking against your own build of make-it
+
+An organization that ships its own build of make-it (its own patches on top of a release) seals
+apps with that build. The record keeps the build's version and the SHA-256 of its `CONTENT_MANIFEST`,
+and `verify` passes only against a make-it whose `CONTENT_MANIFEST` has that same digest. The
+version number alone decides nothing: checked against the public release of the same version,
+`verify` fails with "the same version number ... but different content", showing the first 12
+characters of each digest.
+
+To check such apps against your own releases:
+
+- **Point `--framework` at your build**, at the commit whose `CONTENT_MANIFEST` digest matches the
+  app's record (`framework.content_manifest_sha256` in `.make-it/manifest.json`):
+  `watermark.py verify --app <project> --framework <your make-it checkout>/.claude/make-it`.
+  The security files' hashes and the code rules then come from your build too.
+- **With `scripts/watermark-check.sh`:** set `MAKE_IT_REPO_URL` to your own repository. It
+  fetches the tag `v<version>` named in the record, so tag each of your releases there.
+- **With the scaffold's GitHub job:** change `repository:` in the `watermark` job of
+  `quality-gate.yml` to your own repository; it also checks out the tag `v<version>`.
+- **Accept only your own releases.** Set `ALLOWED_RELEASES` to one `<version> <digest>` line per
+  release built from your own reviewed main branch. The script then refuses any version not on the
+  list and any fetched release whose `CONTENT_MANIFEST` digest differs from the listed one, and runs
+  the hostile-code check. Nothing in the script knows which branch a release came from: keeping
+  the list to your reviewed main branch is your release process's job.
+
 ## 4. Always on (set up once by the Claude administrator)
 
 Claude Code managed settings (a `managed-settings.json` pushed by device management, or the
