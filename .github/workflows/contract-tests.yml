@@ -44,6 +44,9 @@ jobs:
       # only here: bump this line (and nothing else) to move CI to a newer pre-commit.
       - name: Install pre-commit
         run: python -m pip install --quiet "pre-commit==4.4.0"
+      # test-argo-it-workflow-fits-the-scaffold.sh reads docker-compose.yml and the workflow it fills with PyYAML.
+      - name: Install PyYAML
+        run: python -m pip install --quiet "pyyaml==6.0.2"
       - name: Run every scripts/test-*.sh
         env:
           REQUIRE_SCAFFOLD_PYTEST: "1"
