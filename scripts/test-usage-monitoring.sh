@@ -65,14 +65,20 @@ S_BEFORE_AFTER='Proving value, like time saved, needs a before-and-after measure
 H_NOTICE='## 10. A notice for your people'
 S_NOTICE="It does not record what you type, Claude's replies, your code or files, or the commands Claude runs."
 H_ADOPT='## 11. Counting adoption across your repositories'
-S_ADOPT="Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran which command (a plugin from outside the official marketplace shows \`third-party\`), when, and what it cost; the ledger in each repository shows which sealing steps changed which app."
+S_ADOPT="Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran which command (a plugin from outside the official marketplace shows \`third-party\`), when, and what it cost; the seal history in each repository shows which sealing steps changed which app."
 S_WHO='This reporting goes only to our own collector at `<collector-host>`, and only `<who can see it>` can read it.'
 S_OFF='We have set Claude Code so that this content stays off.'
 S_NOR='Nor does it record the paths of the files Claude reads or edits.'
 S_3PNAME='For a make-it plugin from outside the official marketplace, such as the `make-it-desktop` plugin, the counters show `third-party` instead.'
 S_NOTICE_MAKEIT="make-it adds no reporting of its own, but its commands run inside Claude Code, so the name of each make-it command you run is recorded with its cost."
 S_NOTICE_PLAN='your Claude plan'
-S_CHANGED='Skill names are sent by default on the cost and token counters; only the `skill_activated` event hides them.'
+S_CHANGED='Skill names are sent by default on the cost and token counters and the `api_request`, `api_error` and `api_refusal` events; only the `skill_activated` and `user_prompt` events hide them.'
+S_NOT_FULL='ships six skills (`guardrails`, `make-it`, `debug-it`, `nemo-it`, `handoff`, `safety`), not the full set'
+S_AGG='The transform processor deletes the key and adds the look-alike points together.'
+S_NOT_RUN='Not run against a live collector: test it in your own pipeline before you rely on the numbers.'
+S_UNINSTALL="Removing make-it means deleting \`~/.claude/make-it\` and the make-it command files the installer copied into \`~/.claude/commands/\`; other files there are the person's own."
+S_ROW_CHANGE='also change that row of the full list to "The model, the tokens and the cost of each request"'
+S_INV_SAYS='prints `make-it <version>` only when the first line of a regular file (not a symlink) looks like a version'
 S_NO_SETTING='The documentation names no setting for this (checked 23 November 2026).'
 S_DROP_YAML='- key: skill.name action: delete'
 S_NOTICE_DROPPED='make-it adds no reporting of its own, and we remove the name of each command you run before the data is stored.'
@@ -103,6 +109,15 @@ check "section 5 opens with what changed: skill names are sent by default" 'in_s
 check "section 5 says no client-side setting omits skill names" 'in_section "$G" "$H_MAKEIT" "$S_NO_SETTING"'
 check "section 5 shows the collector step that drops skill.name" 'in_section "$G" "$H_MAKEIT" "$S_DROP_YAML"'
 check "section 5 has the who-has-make-it table" 'in_section "$G" "$H_MAKEIT" "$S_TABLE"'
+check "section 5 says the Desktop plugin is not the full set" 'in_section "$G" "$H_MAKEIT" "$S_NOT_FULL"'
+check "section 5 says the transform processor re-aggregates" 'in_section "$G" "$H_MAKEIT" "$S_AGG"'
+check "section 5 says the collector step was not run live" 'in_section "$G" "$H_MAKEIT" "$S_NOT_RUN"'
+check "section 5 shows the transform delete and the aggregation" 'in_section "$G" "$H_MAKEIT" "delete_key(datapoint.attributes, \"skill.name\")" && in_section "$G" "$H_MAKEIT" "aggregate_on_attributes(\"sum\")" && in_section "$G" "$H_MAKEIT" "delete_key(log.attributes, \"skill.name\")"'
+check "section 5 no longer advises summing look-alike points in the backend" '! in_section "$G" "$H_MAKEIT" "sum them in your backend"'
+check "section 5 says removing make-it spares the person's own commands" 'in_section "$G" "$H_MAKEIT" "$S_UNINSTALL"'
+check "section 5 says what the inventory check prints, exactly" 'in_section "$G" "$H_MAKEIT" "$S_INV_SAYS"'
+check "section 11 uses the scan page's term, seal history" '! in_section "$G" "$H_ADOPT" "ledger"'
+check "the notice tells an organization that removes names to change the full-list row" 'in_section "$G" "$H_NOTICE" "$S_ROW_CHANGE"'
 check "the notice offers the sentence for names removed at the collector" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_DROPPED"'
 check "section 1 says why raw bodies are locked, not left unset" 'in_section "$G" "$H_ON" "$S_RAW_WHY"'
 check "section 1 says content for an investigation is a deliberate, announced change" 'in_section "$G" "$H_ON" "$S_RAW_INVESTIGATE"'
@@ -129,6 +144,9 @@ ctl() {  # $1 name, $2 perl substitution, $3 the check (uses $C)
 ctl "a content flag switched on"   's/"OTEL_LOG_TOOL_DETAILS": "0"/"OTEL_LOG_TOOL_DETAILS": "1"/' 'settings_ok "$C"'
 ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
 ctl "what changed reversed"         's/Skill names are sent by default on the cost/Skill names are not sent by default on the cost/' 'in_section "$C" "$H_MAKEIT" "$S_CHANGED"'
+ctl "the Desktop plugin said to be the full set" 's/not the full set/the full set/' 'in_section "$C" "$H_MAKEIT" "$S_NOT_FULL"'
+ctl "the uninstall deletes the person's commands" "s/other files there are the person's own/delete the whole folder/" 'in_section "$C" "$H_MAKEIT" "$S_UNINSTALL"'
+ctl "the collector step said to be tested live" 's/Not run against a live collector:/Run against a live collector:/' 'in_section "$C" "$H_MAKEIT" "$S_NOT_RUN"'
 ctl "a client-side setting claimed" 's/The documentation names no setting for this/The documentation names a setting for this/' 'in_section "$C" "$H_MAKEIT" "$S_NO_SETTING"'
 ctl "the collector step removed"    's/- key: skill\.name(\s+)action: delete/- key: skill.name$1action: insert/' 'in_section "$C" "$H_MAKEIT" "$S_DROP_YAML"'
 ctl "the removed-names notice reversed" 's/and we remove the name of each command/and we keep the name of each command/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_DROPPED"'
@@ -149,7 +167,7 @@ ctl "third-party plugin shows the real name" 's/the counters(\s+)show `third-par
 ctl "the scan link dropped"         's/The adoption scan is described(\s+)in \[/The adoption scan is not$1in [/' 'in_section "$C" "$H_ADOPT" "$S_LINK"'
 ctl "the scan said to know who ran it" 's/What the scan answers that the reporting cannot:/What the scan and the reporting both answer:/' 'in_section "$C" "$H_ADOPT" "$S_SCAN_ONLY"'
 ctl "the reporting said to know nothing" 's/who ran which command, when, and what it cost\./nothing about commands./' 'in_section "$C" "$H_ADOPT" "$S_REPORT_ONLY"'
-ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
+ctl "adoption counts from the seal history only" 's/Per-skill counts come from both:/Per-skill counts come only from the seal history:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
@@ -252,27 +270,46 @@ check "control: the token check catches a token in the output" '! no_token good'
 
 # 5. the read-only inventory check, per OS
 IS=.claude/make-it/scripts/make-it-installed.sh; IP=.claude/make-it/scripts/make-it-installed.ps1
-H1="$T/home1"; H2="$T/home2"; mkdir -p "$H1/.claude/make-it" "$H2"; printf '1.71.18\n' > "$H1/.claude/make-it/VERSION"
-H3="$T/home3"; mkdir -p "$H3/.claude/make-it"; printf '1.71.18;$(touch x)\x1b[31m\n' > "$H3/.claude/make-it/VERSION"
-snap() {  # path, mtime and size of everything under the three homes; Python, so it reads the same on macOS and Linux
+UNREAD='make-it installed (version unreadable)'
+mkh() { mkdir -p "$T/$1/.claude/make-it"; }
+mkh home1; printf '1.71.18\n' > "$T/home1/.claude/make-it/VERSION"
+mkdir -p "$T/home2"
+mkh home3; printf '1.71.18;$(touch x)\033[31m\n' > "$T/home3/.claude/make-it/VERSION"
+printf 'SECRETTOKEN-4f9a2c-rootonly\n' > "$T/rootonly"
+mkh home4; ln -s "$T/rootonly" "$T/home4/.claude/make-it/VERSION"
+mkh home5; printf 'ghp_SECRETSHAPED1234567890abcdef\n' > "$T/home5/.claude/make-it/VERSION"
+mkh home6; printf '\377\376\000\001\200binary\n' > "$T/home6/.claude/make-it/VERSION"
+mkh home7; { printf '1.2.'; head -c 300 /dev/zero | tr '\0' 9; printf '\n'; } > "$T/home7/.claude/make-it/VERSION"
+mkdir -p "$T/real-make-it" "$T/home8/.claude"; printf '1.71.18\n' > "$T/real-make-it/VERSION"; ln -s "$T/real-make-it" "$T/home8/.claude/make-it"
+mkh home9; mkdir "$T/home9/.claude/make-it/VERSION"
+mkh home10; printf '1.72.0-rc.1\n' > "$T/home10/.claude/make-it/VERSION"
+snap() {  # path, mtime and size of everything under the temp root and the folder the test runs from (its own stderr
+          # file excepted); Python, so it reads the same on macOS and Linux
   python3 -I -c 'import os,sys
-for r in sys.argv[1:]:
+skip=sys.argv[1]
+for r in sys.argv[2:]:
     for d,_,fs in os.walk(r):
         for n in [d]+[os.path.join(d,f) for f in fs]:
-            s=os.lstat(n); print(n, s.st_mtime_ns, s.st_size)' "$T/home1" "$T/home2" "$T/home3"; }
+            if n==skip: continue
+            s=os.lstat(n); print(n, s.st_mtime_ns, s.st_size)' "$ERRF" "$T" "$PWD"; }
 before="$(snap)"
-check "sh: an installed account prints make-it <version>, exit 0" '[ "$(sh "$IS" "$H1")" = "make-it 1.71.18" ]'
-check "sh: an account without make-it prints make-it not installed, exit 0" '[ "$(sh "$IS" "$H2")" = "make-it not installed" ]'
-check "sh: a hostile VERSION file prints only safe characters" '[ "$(sh "$IS" "$H3")" = "make-it 1.71.18touchx31m" ]'
-check "sh: with no argument it reads \$HOME" '[ "$(HOME="$H1" sh "$IS")" = "make-it 1.71.18" ]'
-if command -v pwsh >/dev/null 2>&1; then
-  check "pwsh: an installed account prints make-it <version>" '[ "$(pwsh -NoProfile -File "$IP" -HomeDir "$H1")" = "make-it 1.71.18" ]'
-  check "pwsh: an account without make-it prints make-it not installed, exit 0" 'o="$(pwsh -NoProfile -File "$IP" -HomeDir "$H2")" && [ "$o" = "make-it not installed" ]'
-  check "pwsh: a hostile VERSION file prints only safe characters" '[ "$(pwsh -NoProfile -File "$IP" -HomeDir "$H3")" = "make-it 1.71.18touchx31m" ]'
-else
-  echo "SKIP the PowerShell inventory check: pwsh is not on this machine."
-fi
-check "the inventory checks changed nothing they read" '[ "$(snap)" = "$before" ] && [ ! -e x ]'
+inv() { case "$1" in sh) sh "$IS" "$T/$2" ;; pwsh) pwsh -NoProfile -File "$IP" -HomeDir "$T/$2" ;; esac; }
+runners=sh; if command -v pwsh >/dev/null 2>&1; then runners="sh pwsh"; else
+  echo "SKIP the PowerShell inventory check: pwsh is not on this machine."; fi
+for R in $runners; do
+  check "$R: an installed account prints make-it <version>" '[ "$(inv $R home1)" = "make-it 1.71.18" ]'
+  check "$R: an account without make-it prints make-it not installed" '[ "$(inv $R home2)" = "make-it not installed" ]'
+  check "$R: a VERSION line that is not a version is not printed" '[ "$(inv $R home3)" = "$UNREAD" ]'
+  check "$R: a VERSION file that is a symlink is not followed" '[ "$(inv $R home4)" = "$UNREAD" ] && ! inv $R home4 | gq -F SECRETTOKEN'
+  check "$R: a planted secret-shaped line is not printed" '[ "$(inv $R home5)" = "$UNREAD" ] && ! inv $R home5 | gq -F SECRETSHAPED'
+  check "$R: a binary VERSION file reads as unreadable, quietly" '[ "$(inv $R home6)" = "$UNREAD" ]'
+  check "$R: an over-long VERSION line reads as unreadable" '[ "$(inv $R home7)" = "$UNREAD" ]'
+  check "$R: a symlinked make-it folder (dev-link.sh) is still read" '[ "$(inv $R home8)" = "make-it 1.71.18" ]'
+  check "$R: a VERSION that is a folder reads as unreadable" '[ "$(inv $R home9)" = "$UNREAD" ]'
+  check "$R: a pre-release version is printed" '[ "$(inv $R home10)" = "make-it 1.72.0-rc.1" ]'
+done
+check "sh: with no argument it reads \$HOME" '[ "$(HOME="$T/home1" sh "$IS")" = "make-it 1.71.18" ]'
+check "the inventory checks changed nothing under the temp root or the folder they ran from" '[ "$(snap)" = "$before" ] && [ ! -e x ]'
 check "the inventory checks contact nothing (no network command in either)" \
   '! cat "$IS" "$IP" | gq -iE "curl|wget|Invoke-WebRequest|Invoke-RestMethod|nc |ssh|http"'
 
