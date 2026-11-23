@@ -988,6 +988,25 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.18 -- A read-only scan that sorts an organization's GitHub repositories by make-it use
+
+An organization that adopts make-it had no way to count which of its repositories were built
+with make-it, which use AI without it, and which show neither.
+
+- **One script, read-only.** `adoption-scan.py` reads GitHub through the `gh` sign-in you
+  already have. It never clones and never writes: only queries and read requests can leave it.
+- **Five classes.** Built with make-it; make-it without a build record; Claude Code without
+  make-it; no signal; not scanned. Older apps are found by make-it's decision file, since the
+  build record is newer than they are.
+- **A miss is never read as "no signal".** A lookup that fails is "not scanned". A listing that
+  stops partway, or a search GitHub capped, marks the result incomplete or partial on screen
+  and in both output files, with its own exit code.
+- **Names stay off the screen.** Repository names go only into files private to you, and the
+  scan refuses to write them inside a git project.
+- **It works on a personal account too,** with `--user`.
+- **Known limits.** Not yet run on a large organization, GitHub Enterprise Server, or an
+  organization with single sign-on. Presence of a seal is not proof it is intact.
+
 ### v1.71.17 -- The seal check says what actually differs when the version matches and the content doesn't
 
 When an app was sealed by an organization's own build of make-it, the check failed with a line

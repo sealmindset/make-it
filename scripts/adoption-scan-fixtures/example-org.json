@@ -1,0 +1,83 @@
+{
+  "_about": "Hand-written, synthetic. Shaped like GitHub's GraphQL and search answers to adoption-scan.py's own queries. No real organisation's data. scripts/test-adoption-scan.py serves it through a stub gh.",
+  "owner": {"login": "example-org", "type": "Organization"},
+  "repos": [
+    {
+      "name": "app-one", "isArchived": false, "isFork": false,
+      "content": {
+        "ctx": {"__typename": "Blob"},
+        "state": {"__typename": "Blob"},
+        "manifest": {"__typename": "Blob", "byteSize": 160, "isTruncated": false,
+          "text": "{\"schema\": 1, \"framework\": {\"version\": \"1.71.16\", \"content_manifest_sha256\": \"00\"}, \"project\": {\"type\": \"web-app\", \"tiers\": [0, 1], \"scaffold\": \"fastapi-nextjs\"}, \"security_files\": []}"},
+        "ledger": {"__typename": "Tree", "entries": [
+          {"name": "0001-0123456789ab.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 120, "isTruncated": false,
+            "text": "{\"schema\": 1, \"n\": 1, \"skill\": \"make-it\", \"date\": \"2026-09-01\", \"make_it\": {\"version\": \"1.70.0\"}, \"before\": [], \"fingerprint\": \"aa\"}"}},
+          {"name": "0002-abcdef012345.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 120, "isTruncated": false,
+            "text": "{\"schema\": 1, \"n\": 2, \"skill\": \"resume-it\", \"date\": \"2026-10-02\", \"make_it\": {\"version\": \"1.71.16\"}, \"before\": [\"x\"], \"fingerprint\": \"bb\"}"}},
+          {"name": "0003-fedcba987654.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 9, "isTruncated": false, "text": "{not json"}},
+          {"name": "notes.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 2, "isTruncated": false, "text": "{}"}},
+          {"name": ".DS_Store", "type": "blob", "object": {"__typename": "Blob", "byteSize": 3, "isTruncated": false, "text": null}}
+        ]},
+        "readable": {"__typename": "Blob"},
+        "claudemd": {"__typename": "Blob"},
+        "claudedir": {"__typename": "Tree"},
+        "shipit": {"totalCount": 3, "nodes": [{"createdAt": "2026-10-01T12:00:00Z"}]},
+        "workflows": {"__typename": "Tree", "entries": [
+          {"name": "ci.yml", "type": "blob", "object": {"__typename": "Blob", "byteSize": 90, "isTruncated": false,
+            "text": "jobs:\n  build:\n    uses: example-org/shared-ci/.github/workflows/build.yml@v2\n"}},
+          {"name": "README.md", "type": "blob", "object": {"__typename": "Blob", "byteSize": 60, "isTruncated": false,
+            "text": "uses: example-org/shared-ci/.github/workflows/build.yml@not-a-workflow\n"}}
+        ]}
+      }
+    },
+    {
+      "name": "app-two", "isArchived": false, "isFork": false,
+      "content": {
+        "ctx": {"__typename": "Blob"},
+        "state": {"__typename": "Blob"},
+        "claudemd": {"__typename": "Blob"},
+        "workflows": {"__typename": "Tree", "entries": [
+          {"name": "deploy.yaml", "type": "blob", "object": {"__typename": "Blob", "byteSize": 80, "isTruncated": false,
+            "text": "    uses: \"example-org/shared-ci/.github/workflows/build.yml@main\"\n"}}
+        ]}
+      }
+    },
+    {"name": "app-three", "isArchived": false, "isFork": false, "content": {}},
+    {"name": "app-four", "isArchived": false, "isFork": false, "content": {"claudedir": {"__typename": "Tree"}}},
+    {"name": "app-five", "isArchived": false, "isFork": true, "content": {}},
+    {"name": "app-six", "isArchived": false, "isFork": false, "content": {}},
+    {"name": "app-seven", "isArchived": true, "isFork": false,
+      "content": {"ctx": {"__typename": "Blob"}, "manifest": {"__typename": "Blob", "byteSize": 2, "isTruncated": false, "text": "{}"}}},
+    {"name": "app-eight", "isArchived": false, "isFork": false, "behaviour": "error",
+      "content": {"ctx": {"__typename": "Blob"}}},
+    {"name": "app-nine", "isArchived": false, "isFork": false, "behaviour": "timeout_in_batch",
+      "content": {"rootctx": {"__typename": "Blob"}}},
+    {
+      "name": "app-ten", "isArchived": false, "isFork": false,
+      "content": {
+        "manifest": {"__typename": "Blob", "byteSize": 120, "isTruncated": false,
+          "text": "{\"framework\": {\"version\": \"=cmd|' /C calc'!A0\"}, \"project\": {\"type\": \"+SUM(1,1)\", \"scaffold\": \"@evil\"}}"},
+        "ledger": {"__typename": "Tree", "entries": [
+          {"name": "0001-aaaaaaaaaaaa.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 9000000, "isTruncated": true, "text": "{\"sk"}},
+          {"name": "0002-bbbbbbbbbbbb.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 40, "isTruncated": false,
+            "text": "{\"schema\": 1, \"skill\": \"-2+3\", \"date\": \"2026-01-01\", \"make_it\": {\"version\": \"1\"}}"}},
+          {"name": "0003-cccccccccccc.json", "type": "blob", "object": {"__typename": "Blob", "byteSize": 40, "isTruncated": false,
+            "text": "{\"schema\": 1, \"skill\": \"fix-it\", \"date\": \"2026-02-02\", \"make_it\": {\"version\": \"@1.0\"}}"}},
+          {"name": "subfolder", "type": "tree", "object": {}}
+        ]}
+      }
+    },
+    {"name": "bad\"name){x}", "isArchived": false, "isFork": false, "content": {}}
+  ],
+  "code_search": [
+    {"repository": {"full_name": "example-org/app-three"}, "path": "services/api/app-context.json"},
+    {"repository": {"full_name": "example-org/app-two"}, "path": ".make-it/app-context.json"},
+    {"repository": {"full_name": "example-org/not-listed"}, "path": "app-context.json"}
+  ],
+  "commit_search": [
+    {"repository": {"full_name": "example-org/app-five"}},
+    {"repository": {"full_name": "example-org/app-five"}},
+    {"repository": {"full_name": "example-org/app-four"}}
+  ],
+  "commit_total": 3
+}
