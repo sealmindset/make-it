@@ -1005,6 +1005,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.19 -- A guide for administrators to Claude Code's own usage reporting, and what it says about make-it
+
+An organization that adopts make-it wants to see how it is used. Claude Code already has its
+own usage reporting, which the organization switches on centrally. make-it sends nothing itself.
+
+- **A guide for administrators.** `usage-monitoring.md` shows the settings to switch the
+  reporting on with every content flag off, how to deliver them, and how to check them.
+- **What is sent and what is not, in one table.** Prompts, replies, code, commands and file
+  paths are not sent with the flags as the guide sets them.
+- **It says plainly what the reporting shows about make-it.** The name of each make-it command
+  a person runs is sent by default, with its cost. This was observed on Claude Code 2.1.330.
+- **A notice to publish.** A short text, with a full table under it, that tells people what is
+  recorded about them.
+- **A small script** turns the settings into the Mac and Windows forms and refuses malformed
+  input, an unfilled placeholder, or a content flag switched on.
+- **Who has make-it installed.** Two read-only checks, for Mac or Linux and for Windows, read
+  the version file the installer writes, so a device-management tool can list machines and
+  versions. They change nothing and contact nothing.
+- **Known limits.** Not yet rolled out through a real device-management tool. Reporting shows
+  cost and activity; showing value needs a before-and-after measurement.
+
 ### v1.71.18 -- A read-only scan that sorts an organization's GitHub repositories by make-it use
 
 An organization that adopts make-it had no way to count which of its repositories were built
