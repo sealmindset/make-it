@@ -1722,7 +1722,27 @@ on the pushed commit, before anything is built.
 
 **For GitHub Actions** (most common):
 
-Generate `.github/workflows/build-and-deploy.yml`:
+Generate `.github/workflows/build-and-deploy.yml`. Its steps run in this order -- the sections below
+aren't in this order, so place each step by this list. "Each service" means each app service PHASE 0
+found with a `build:` in docker-compose.yml (never a database or mock service), in the file's order:
+
+1. Checkout source branch
+2. Set up Docker Buildx
+3. Login to GHCR -- or the registry's own login step (see "Adapt the login step" below)
+4. Compute image tags -- one step per service, `id: meta-{service}`
+5. Validate Alembic migration chain -- on pull requests too: it only reads files
+6. Build {service} (PR -- no push) -- each service
+7. Build and push {service} -- each service: pushes ONLY this commit's `sha-` tag
+8. Select deploy tag
+9. Smoke test {service} startup -- each service whose docker-compose.yml `environment:` has `DATABASE_URL`
+   (after step 7 published it and step 8 set the tag it starts)
+10. Add the moving tags -- the branch tag and `dev-latest` / `prod-latest`, on the version that passed step 9
+11. Checkout deploy branch
+12. Install yq (YAML-safe editing)
+13. Mirror source to deploy branch and patch image tags
+
+A step runs only when every step before it passed, so a version that fails its smoke test gets no
+moving tag and never reaches the deploy branch.
 
 ```yaml
 name: Build, Push, and Deploy
@@ -1739,10 +1759,13 @@ permissions:
   contents: write              # to push to deploy branch
   packages: write              # to push to GHCR
 
-# Prevent parallel jobs from stepping on the deploy branch
+# Pushes: one group per deploy branch, so deploys never run side by side; one runs, at most one waits,
+# and a newer push replaces a waiting one (GitHub's rule for a group), never a running one.
+# Pull requests: a group of their own per pull request (github.ref is refs/pull/<n>/merge), where a
+# newer push to the same pull request cancels its older build; they never wait on or replace a deploy.
 concurrency:
-  group: {deploy_branch}
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && github.ref || '{deploy_branch}' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   IMAGE_BASE: {registry_host}/{image_base_path}
@@ -1779,6 +1802,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
+          persist-credentials: false   # no later step needs the token in this copy; the deploy checkout has its own
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -1790,16 +1814,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute image tags
-        id: meta
+      # One step per service: each image gets its own name and ONE tag, this commit's sha- tag (its
+      # `version` output is that tag, and the deploy tag is read from it: one source). The moving tags are
+      # added after the smoke test (step 10), never at the build.
+      - name: Compute image tags ({service})
+        id: meta-{service}
         uses: docker/metadata-action@v5
+        env:
+          DOCKER_METADATA_SHORT_SHA_LENGTH: "7"
         with:
           images: ${{ env.IMAGE_BASE }}/{service}
           tags: |
-            type=raw,value=dev-latest,enable=${{ github.ref_name != 'main' }}
-            type=raw,value=prod-latest,enable=${{ github.ref_name == 'main' }}
             type=sha,prefix=sha-,format=short
-            type=ref,event=branch
 ```
 
 **Pre-build validation -- catch broken migrations before they reach the cluster:**
@@ -1812,8 +1838,7 @@ pod crash-loops on startup.
 ```yaml
       # ---------- Validate migration chain (Alembic) ----------
       - name: Validate Alembic migration chain
-        if: ${{ github.event_name != 'pull_request' }}
-        shell: bash
+        shell: bash      # runs on pull requests too: it only reads the files, with no token or secret
         run: |
           set -euo pipefail
           MIGRATIONS_DIR="backend/alembic/versions"
@@ -1823,32 +1848,62 @@ pod crash-loops on startup.
 
           echo "Validating migration chain in ${MIGRATIONS_DIR}..."
 
-          # Collect all revision IDs defined in migration files
-          REVISIONS=$(grep -rh "^revision = " "$MIGRATIONS_DIR"/*.py | sed "s/revision = ['\"]//;s/['\"]//")
-
-          # Collect all down_revision references (skip None/null)
-          DOWN_REVISIONS=$(grep -rh "^down_revision = " "$MIGRATIONS_DIR"/*.py \
-            | sed "s/down_revision = ['\"]//;s/['\"]//;s/None//;s/null//" \
-            | grep -v '^$' || true)
-
-          # Check that every down_revision exists as a revision
-          MISSING=0
-          for down_rev in $DOWN_REVISIONS; do
-            if ! echo "$REVISIONS" | grep -qx "$down_rev"; then
-              echo "ERROR: Migration references down_revision='${down_rev}' but no migration defines revision='${down_rev}'"
-              echo "  This usually means a migration file was not committed (check git status for untracked files)"
-              MISSING=1
-            fi
-          done
-
-          if [ "$MISSING" -eq 1 ]; then
-            echo ""
-            echo "Untracked migration files:"
-            git ls-files --others --exclude-standard "$MIGRATIONS_DIR"/ || true
-            exit 1
-          fi
-
-          echo "Migration chain is valid ($(echo "$REVISIONS" | wc -w | tr -d ' ') migrations)"
+          # Reads each file's `revision` and `down_revision` as Python reads them: the plain form
+          # (revision = "001") and make-it's typed form (revision: str = "001",
+          # down_revision: Union[str, None] = None); a tuple of revisions for a merge. Fails loudly, naming
+          # the file: two files with the same revision, a down_revision no file declares, not exactly one
+          # head, a file it can't read. Never fails silently.
+          # -I: isolated, so a module file in the repository (a pull request's ast.py, say) is never imported
+          python3 -I - "$MIGRATIONS_DIR" <<'PY'
+          import ast, os, sys
+          d = sys.argv[1]
+          revs, downs, bad = {}, [], []
+          for f in sorted(os.listdir(d)):
+              if not f.endswith(".py") or f.startswith("__"):
+                  continue
+              p = os.path.join(d, f)
+              try:   # any file it can't check is an error naming that file, never a traceback
+                  vals = {}
+                  tree = ast.parse(open(p, encoding="utf-8").read(), p)
+                  for n in tree.body:
+                      t = None
+                      if isinstance(n, ast.Assign) and len(n.targets) == 1:
+                          t = n.targets[0]
+                      elif isinstance(n, ast.AnnAssign) and n.value is not None:
+                          t = n.target
+                      if isinstance(t, ast.Name) and t.id in ("revision", "down_revision"):
+                          vals[t.id] = ast.literal_eval(n.value)
+                  if "revision" not in vals:
+                      bad.append("%s: declares no revision" % p)
+                      continue
+                  r = vals["revision"]
+                  dn = vals.get("down_revision")
+                  dl = list(dn) if isinstance(dn, (tuple, list)) else [dn]
+                  if not isinstance(r, str) or not all(x is None or isinstance(x, str) for x in dl):
+                      bad.append("%s: revision and down_revision must be names (text), or None" % p)
+                      continue
+              except Exception as e:
+                  bad.append("%s: can't be checked (%s: %s)" % (p, type(e).__name__, e))
+                  continue
+              if r in revs:
+                  bad.append("%s: revision %r is also declared in %s" % (p, r, revs[r]))
+              revs[r] = p
+              for x in dl:
+                  if x is not None:
+                      downs.append((p, x))
+          for p, x in downs:
+              if x not in revs:
+                  bad.append("%s: down_revision %r names a revision no migration file declares "
+                             "(a migration file that was never committed?)" % (p, x))
+          heads = sorted(set(revs) - set(x for _, x in downs))
+          if revs and len(heads) != 1:
+              bad.append("the chain has %d heads (%s); it needs exactly one" % (len(heads), ", ".join(map(str, heads))))
+          for b in bad:
+              print("ERROR: " + b)
+          if bad:
+              sys.exit(1)
+          print("Migration chain is valid (%d migrations, head %s)" % (len(revs), heads[0] if heads else "none"))
+          PY
 ```
 
 **Adapt the migration check for other frameworks:**
@@ -1858,49 +1913,112 @@ pod crash-loops on startup.
 
 **Post-build smoke test -- verify the app actually starts:**
 
-After building the image, run the entrypoint against a throwaway database to confirm
-the container doesn't crash on startup. This catches migration chain errors, import
-errors, and misconfigured entrypoint scripts.
+After "Build and push" published the version and "Select deploy tag" set its tag (steps 7 and 8 of
+the order above), start that exact version with its own start command, beside a throwaway database,
+and wait for its own health check. Its start command runs the migrations too, so this catches import
+errors, a misconfigured entrypoint and a migration that fails on a real database -- before anything
+reaches the deploy branch. One step per service whose docker-compose.yml `environment:` has
+`DATABASE_URL`:
 
 ```yaml
-      # ---------- Smoke test: verify container starts ----------
-      - name: Smoke test container startup
+      # ---------- Smoke test: the version just published starts ----------
+      - name: Smoke test {service} startup
         if: ${{ github.event_name != 'pull_request' }}
+        timeout-minutes: 5
         shell: bash
+        env:
+          IMAGE_BASE_LC: ${{ steps.deploytag.outputs.IMAGE_BASE_LC }}
+          DEPLOY_TAG: ${{ steps.deploytag.outputs.DEPLOY_TAG }}
         run: |
           set -euo pipefail
           IMAGE="${IMAGE_BASE_LC}/{service}:${DEPLOY_TAG}"
+          NET="smoke-{service}-${GITHUB_RUN_ID:-0}"
+          trap 'docker rm -f "$NET-app" "$NET-db" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true' EXIT
+          docker network create "$NET" >/dev/null
 
+          # A throwaway database of the kind the app uses: no password, gone when this step ends
+          docker run -d --name "$NET-db" --network "$NET" \
+            -e POSTGRES_USER=smoke -e POSTGRES_DB=smoke -e POSTGRES_HOST_AUTH_METHOD=trust \
+            {db_image} >/dev/null
+
+          # The version this run built, with its own start command, pointed at that database
           echo "Smoke testing ${IMAGE}..."
+          docker run -d --name "$NET-app" --network "$NET" \
+            -e DATABASE_URL="{database_url_scheme}://smoke@$NET-db:5432/smoke" \
+            "${IMAGE}" >/dev/null
 
-          # Run the entrypoint with a throwaway SQLite DB (or skip DB entirely)
-          # Override DATABASE_URL to avoid needing a real PostgreSQL
-          # The goal is: does the container start without crashing?
-          docker run --rm \
-            -e DATABASE_URL="sqlite:///tmp/smoke-test.db" \
-            -e FLASK_ENV=testing \
-            -e MOCK_AUTH_ENABLED=true \
-            "${IMAGE}" \
-            python -c "
-          import sys
-          try:
-              from app import create_app
-              app = create_app()
-              print('Container startup OK')
-          except Exception as e:
-              print(f'Container startup FAILED: {e}', file=sys.stderr)
-              sys.exit(1)
-          "
+          # Its own health check, as docker-compose.yml runs it (empty when the service has none)
+          HEALTH=({healthcheck_command})
+          running() { [ -n "$(docker ps -q --filter "name=$NET-app" --filter status=running)" ]; }
+          if [ "${#HEALTH[@]}" -eq 0 ]; then
+            # No health check: only "it started and stayed up" can be checked -- 30 seconds, then it
+            # must still be running
+            sleep 30
+            if running; then echo "Container startup OK (started and stayed up for 30 seconds)"; exit 0; fi
+          else
+            # Up to two minutes: each check is cut off after 10 seconds (GNU timeout, part of the runner's
+            # Ubuntu base), and an app that stops ends the wait at once
+            end=$((SECONDS + 120))
+            while [ "$SECONDS" -lt "$end" ] && running; do
+              if timeout 10 docker exec "$NET-app" "${HEALTH[@]}" >/dev/null 2>&1; then
+                echo "Container startup OK"
+                exit 0
+              fi
+              sleep 2
+            done
+          fi
+          echo "Container startup FAILED: ${IMAGE} did not start and pass its check. Its last output:"
+          docker logs --tail 60 "$NET-app" 2>&1 || true
+          exit 1
 ```
 
+**Moving tags -- only on the version that passed the smoke test (step 10):**
+
+```yaml
+      # ---------- The moving tags, on the version that passed the smoke test ----------
+      - name: Add the moving tags
+        if: ${{ github.event_name != 'pull_request' }}
+        shell: bash
+        env:
+          IMAGE_BASE_LC: ${{ steps.deploytag.outputs.IMAGE_BASE_LC }}
+          DEPLOY_TAG: ${{ steps.deploytag.outputs.DEPLOY_TAG }}
+        run: |
+          set -euo pipefail
+          # The branch tag (the branch name, each character outside A-Z a-z 0-9 _ . - written as -) and
+          # dev-latest, or prod-latest on main: added to the image already in the registry, by
+          # `docker buildx imagetools create`, which copies the manifest under a new tag without
+          # rebuilding, using the login step's credentials
+          BRANCH_TAG="$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9_.-' '-')"
+          if [ "$GITHUB_REF_NAME" = main ]; then LATEST=prod-latest; else LATEST=dev-latest; fi
+          for svc in {services}; do
+            for t in "$BRANCH_TAG" "$LATEST"; do
+              docker buildx imagetools create -t "${IMAGE_BASE_LC}/${svc}:${t}" "${IMAGE_BASE_LC}/${svc}:${DEPLOY_TAG}"
+            done
+          done
+```
+
+`{services}` is every service, by name, separated by spaces.
+
 **Smoke test notes:**
-- Adapt the `python -c` command for the framework (Flask, FastAPI, Django, Express, etc.)
-- For FastAPI: `from app.main import app; print('OK')`
-- For Express/Next.js: `node -e "require('./server'); console.log('OK')"`
-- The smoke test uses SQLite or an in-memory DB -- it doesn't need PostgreSQL
-- If the app can't start without a real DB (e.g., migrations fail on SQLite),
-  use `docker compose` with a temporary PostgreSQL container instead
-- This step is cheap (~5 seconds) and catches the most common deploy failures
+- Fill each bracket from docker-compose.yml: `{db_image}` is the database service's `image:` (a
+  `${VAR:-default}` part read as its default, so `${DOCKER_HUB_PREFIX:-}postgres:16-alpine` is
+  `postgres:16-alpine`); `{database_url_scheme}` is the scheme of the service's `DATABASE_URL`
+  (`postgresql+asyncpg` for make-it's scaffold -- an async app refuses a sync address);
+  `{healthcheck_command}` is the service's `healthcheck: test:` as shell words for a bash array: the
+  words after `CMD`, each shell-quoted; for `CMD-SHELL`, `sh -c` and then its string shell-quoted.
+  Shell-quoted means wrapped in single quotes, with each single quote inside written as `'\''`
+  (so `print('ok')` becomes `'print('\''ok'\'')'`).
+- The app starts with nothing else set: settings it doesn't get here fall back to its own defaults,
+  as in docker-compose.yml.
+- A database other than PostgreSQL: that image's own variables for a user and a database with no
+  password, and its port.
+- A service with no health check in docker-compose.yml: `{healthcheck_command}` is empty, and the step
+  only checks that the app started and was still running 30 seconds later -- it can't tell whether
+  the app answers.
+- Only services with `DATABASE_URL` get this step. The front end gets none: its start has no database
+  or migration to fail on; a front end that doesn't start shows on the cluster as not ready.
+- The step is cut off after 5 minutes (`timeout-minutes`); the checks themselves take about half a
+  minute, at most about two minutes.
 
 **Build steps -- generate one per buildable service:**
 
@@ -1914,7 +2032,7 @@ errors, and misconfigured entrypoint scripts.
           file: ./{dockerfile_path}
           push: false
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta-{service}.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -1926,18 +2044,28 @@ errors, and misconfigured entrypoint scripts.
           context: ./{build_context}
           file: ./{dockerfile_path}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta-{service}.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 ```
 
+**Each service's build context and Dockerfile come from its own `build:` in docker-compose.yml**,
+never from an assumption: `{build_context}` is its `build.context` (or the `build:` string), and
+`{dockerfile_path}` is that folder plus its `build.dockerfile` (`Dockerfile` when none is given). A
+Dockerfile copies files from its own context, so building from any other folder fails. For make-it's
+scaffold that is `./backend` with `./backend/Dockerfile`, and `./frontend` with `./frontend/Dockerfile`.
+When the service's `build:` names a `target:`, add the same `target:` under the build step's `with:`.
+
 **For split-service apps, generate build steps for EACH service:**
-- Backend: `context: ./backend`, `file: ./backend/Dockerfile`
-- Frontend: `context: .` (often needs root for shared configs), `file: ./frontend/Dockerfile`
+- Each service with its own context and Dockerfile, as above, and its own image-tags step (`meta-{service}`)
   - Add `build-args: BACKEND_INTERNAL_URL=http://{app}-backend-service:8000` for Next.js
 - Database: do NOT build -- uses upstream image (e.g., `postgres:16-alpine`)
 
-**Compute deploy tag (after build steps):**
+**Compute deploy tag (after the build steps, before the smoke test):** the version this run built:
+the `sha-` tag the image-tags steps gave the build (`type=sha,prefix=sha-,format=short`, its length
+pinned to 7 in the same step), read from the first service's step's `version` output
+(`{first_service}` is the first service in the order list), on every branch it deploys from -- never
+a moving tag such as `dev-latest`:
 ```yaml
       - name: Select deploy tag
         if: ${{ github.event_name != 'pull_request' }}
@@ -1945,10 +2073,14 @@ errors, and misconfigured entrypoint scripts.
         shell: bash
         env:
           IMAGE_BASE: ${{ env.IMAGE_BASE }}
+          # the tag the build pushed: the first service's image-tags step's version (every service's is
+          # the same commit tag); never recomputed here
+          BUILT_TAG: ${{ steps.meta-{first_service}.outputs.version }}
         run: |
           set -euo pipefail
           IMAGE_BASE_LC="${IMAGE_BASE,,}"
-          DEPLOY_TAG="dev-latest"
+          DEPLOY_TAG="${BUILT_TAG}"     # the exact version this run built
+          case "$DEPLOY_TAG" in (sha-?*) ;; (*) echo "The build's tag is '$DEPLOY_TAG', not a sha- tag"; exit 1;; esac
           echo "IMAGE_BASE_LC=${IMAGE_BASE_LC}" >> "$GITHUB_OUTPUT"
           echo "DEPLOY_TAG=${DEPLOY_TAG}" >> "$GITHUB_OUTPUT"
 ```
@@ -1983,13 +2115,17 @@ errors, and misconfigured entrypoint scripts.
         run: |
           set -euo pipefail
 
-          # Clean deploy worktree except .git
-          find deploy -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          # Clean deploy worktree except its top-level .git and .github (the deploy copy never takes workflow
+          # files: the built-in token may not push a change to one, so .github stays as the deploy branch
+          # has it). -maxdepth 1: only top-level names are matched
+          find deploy -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' -exec rm -rf {} +
 
-          # Mirror everything from source branch; exclude .git and deploy worktree
+          # Mirror everything from source branch; exclude the top-level .git, .github and deploy worktree
+          # (anchored with /, so a nested frontend/.github or backend/app/deploy is mirrored)
           rsync -a --delete \
-            --exclude '.git' \
-            --exclude 'deploy' \
+            --exclude '/.git' \
+            --exclude '/.github' \
+            --exclude '/deploy' \
             ./ deploy/
 ```
 
@@ -2048,9 +2184,12 @@ They use a static upstream image like `postgres:16-alpine` that doesn't change p
 - `concurrency: group: {deploy_branch}` prevents parallel deploys from conflicting
 - PRs: build only, no push, no deploy branch edits (validation gate)
 - Non-PR pushes: full build + push + mirror + patch + deploy
-- The deploy branch contains the FULL source tree (mirrored via rsync), not just manifests
+- The deploy branch contains the FULL source tree (mirrored via rsync), not just manifests -- except `.github/`, which it never takes or loses
 - `yq` is used for YAML-safe image tag patching -- never use `sed` on YAML
-- `docker/metadata-action` generates standard tags: `dev-latest`/`prod-latest` + SHA + branch name
+- One `docker/metadata-action` step per service (`meta-{service}`), with one tag: the commit's `sha-` tag
+- The deploy tag is that `sha-` tag, read from the image-tags step, never a moving tag
+- The moving tags (branch name, `dev-latest`/`prod-latest`) are added only after the smoke test passed
+- Steps run in the order listed at the top of this phase: nothing starts or deploys a version before it is published
 
 **Adapt the login step for non-ghcr.io registries:**
 - ECR: use `aws-actions/amazon-ecr-login@v2`
@@ -3256,8 +3395,8 @@ existing pattern.
 - For split-service apps, CI patches EACH deployment manifest separately (backend + frontend)
 - Init containers (migrations) must also be patched with the new image tag
 - Migration chain validation runs BEFORE image build -- catches untracked migration files
-- Startup smoke test runs AFTER image build -- catches runtime failures (bad imports, broken entrypoint)
-- Both checks are cheap (<10s each) and prevent the most common crash-loop deploy failures
+- Startup smoke test runs AFTER the image is published and the deploy tag is set -- it starts that version with its own start command beside a throwaway database (bad imports, broken entrypoint, a failing migration)
+- Both checks are cheap (seconds, and about half a minute) and prevent the most common crash-loop deploy failures
 
 **Post-deploy troubleshooting rules (PHASE 5c):**
 - When the user reports "changes not showing up" or "still old version," go straight to PHASE 5c

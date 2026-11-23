@@ -1005,6 +1005,29 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.20 -- the workflow /argo-it generates can build and deploy an app made from make-it's scaffold
+
+Run as released, /argo-it's generated workflow failed on every app built from make-it's own
+scaffold: five failed runs and six hand fixes before the app came up on a test cluster.
+
+- **The first deploy works with no hand fix.** Proven on a local test bed (a git server with
+  a runner, a registry, a cluster with Argo CD) by an agent that did not write the fix.
+- **The migration check reads make-it's own migration files,** and only reads them: it never
+  runs a file from the repository. It fails naming the file on a broken chain, and now runs
+  on pull requests too.
+- **Each service builds from its own folder,** with its own image-tags step.
+- **The workflow deploys the version the same run built,** labelled by its commit.
+- **Nothing is offered for use before it passes its check.** The smoke test starts the real
+  app beside a throwaway database. Only after it passes are the moving labels added and the
+  deploy branch updated. A service with no health check must still be running after 30
+  seconds.
+- **The workflow folder stays out of the deploy branch,** and pull requests no longer share
+  a queue with deploys.
+- **Known limits.** Sign-in does not work on the cluster yet: the app runs, but nobody can
+  sign in. The front end gets no smoke test. GitHub's own registry, queueing and token rules
+  are proven on the local bed only. Building the same commit twice can replace its image
+  before the second smoke test.
+
 ### v1.71.19 -- A guide for administrators to Claude Code's own usage reporting, and what it says about make-it
 
 An organization that adopts make-it wants to see how it is used. Claude Code already has its
