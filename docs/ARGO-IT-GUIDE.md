@@ -238,7 +238,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # --- Build + Push ---
-      - uses: docker/metadata-action@v5     # One per service: its own image name, sha-<short>, branch
+      - uses: docker/metadata-action@v5     # One per service: its own image name, one tag: sha-<short>
         id: meta-backend
       - uses: docker/metadata-action@v5
         id: meta-frontend
@@ -255,8 +255,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-frontend.outputs.tags }}
 
-      # (then: the deploy tag is set to sha-<short>, and a smoke test starts the version just pushed beside a
-      #  throwaway database and waits for its health check)
+      # (then: the deploy tag is read from that step (sha-<short>), a smoke test starts that version beside a
+      #  throwaway database and waits for its health check, and only then does the version get its moving
+      #  tags -- the branch name and dev-latest / prod-latest -- by docker buildx imagetools create)
 
       # --- Deploy (non-PR only) ---
       - if: github.event_name != 'pull_request'
@@ -268,7 +269,7 @@ jobs:
       - if: github.event_name != 'pull_request'
         run: |
           # Mirror source → deploy branch (never .github/: the built-in token may not push workflow files)
-          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' ./ deploy/
+          rsync -a --delete --exclude='/.git' --exclude='/.github' --exclude='/deploy' ./ deploy/
           # Patch image tags in K8s manifests: the version this run built
           cd deploy
           yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/backend:sha-'"${GITHUB_SHA::7}"'"' env/dev/backend.yaml
