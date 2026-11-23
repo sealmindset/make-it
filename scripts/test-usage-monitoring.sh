@@ -2,8 +2,7 @@
 # E15-S1: the administrators' guide to Claude Code's own usage reporting, and the script that renders its settings.
 # Contract these checks pin (the change must satisfy it):
 #   - .claude/make-it/references/usage-monitoring.md exists; the settings block under "## 1. Switching it on" is valid
-#     JSON, turns the reporting on, locks four content flags off ("0") and leaves raw-body logging unset (the owner's
-#     call, 2026-11-23), with placeholders only; the guide says plainly what leaving it unlocked allows.
+#     JSON, turns the reporting on, and locks every content flag off ("0", raw bodies included), with placeholders only.
 #   - The statements that matter are there whole: make-it sends nothing; what is not sent; the skill event does not
 #     say which make-it skill ran (it is sent by default, on the cost counters) and that a skill name is not proof of
 #     make-it; third-party providers; tracking alone does not prove value; the notice text; where per-skill counts come from.
@@ -35,9 +34,9 @@ m = re.search(r"^## 1\. Switching it on\n(.*?)(?=^## )", text, re.S | re.M)
 b = m and re.search(r"```json\n(.*?)```", m.group(1), re.S)
 env = json.loads(b.group(1))["env"]
 assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
-for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT"):
+for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT",
+          "OTEL_LOG_RAW_API_BODIES"):
     assert env[k] == "0", k
-assert "OTEL_LOG_RAW_API_BODIES" not in env
 assert env["OTEL_METRICS_INCLUDE_REPOSITORY"] == "true" and env["OTEL_METRICS_INCLUDE_VERSION"] == "true"
 assert "<collector-host>" in env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 assert "<ingest-token>" in env["OTEL_EXPORTER_OTLP_HEADERS"]
@@ -77,9 +76,8 @@ S_CHANGED='Skill names are sent by default on the cost and token counters; only 
 S_NO_SETTING='The documentation names no setting for this (checked 23 November 2026).'
 S_DROP_YAML='- key: skill.name action: delete'
 S_NOTICE_DROPPED='make-it adds no reporting of its own, and we remove the name of each command you run before the data is stored.'
-S_RAW_UNSET='`OTEL_LOG_RAW_API_BODIES` is left unset in this block, and unset means off.'
-S_RAW_RISK='Because it is not locked, a person can switch it on from their own shell or user settings, and that would send their whole conversations, prompts and replies included, to your collector.'
-S_RAW_LOCK='"OTEL_LOG_RAW_API_BODIES": "0"'
+S_RAW_WHY='Raw bodies are locked, not left unset, because an unset value can be switched on from a person'"'"'s own shell or user settings, which would send full prompts, replies and code to your collector.'
+S_RAW_INVESTIGATE='An organization that later needs content for an investigation makes that a deliberate change to the managed settings, by an administrator, and updates the notice to its people first.'
 S_TABLE='| Who has make-it installed, and which version |'
 H_ON='## 1. Switching it on'
 H_MAKEIT='## 5. What it tells you about make-it'
@@ -106,9 +104,8 @@ check "section 5 says no client-side setting omits skill names" 'in_section "$G"
 check "section 5 shows the collector step that drops skill.name" 'in_section "$G" "$H_MAKEIT" "$S_DROP_YAML"'
 check "section 5 has the who-has-make-it table" 'in_section "$G" "$H_MAKEIT" "$S_TABLE"'
 check "the notice offers the sentence for names removed at the collector" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_DROPPED"'
-check "section 1 says raw bodies are unset, and unset means off" 'in_section "$G" "$H_ON" "$S_RAW_UNSET"'
-check "section 1 says plainly what leaving raw bodies unlocked allows" 'in_section "$G" "$H_ON" "$S_RAW_RISK"'
-check "section 1 shows the one line that locks raw bodies" 'in_section "$G" "$H_ON" "$S_RAW_LOCK"'
+check "section 1 says why raw bodies are locked, not left unset" 'in_section "$G" "$H_ON" "$S_RAW_WHY"'
+check "section 1 says content for an investigation is a deliberate, announced change" 'in_section "$G" "$H_ON" "$S_RAW_INVESTIGATE"'
 check "the adoption section says per-skill counts come from both sources" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
 S_LINK='The adoption scan is described in [`adoption-scan.md`](adoption-scan.md).'
 S_SCAN_ONLY='What the scan answers that the reporting cannot: which repositories were built with make-it, including ones nobody has opened since the reporting was switched on, and which sealing steps changed which app.'
@@ -130,14 +127,13 @@ ctl() {  # $1 name, $2 perl substitution, $3 the check (uses $C)
   C="$T/ctl.md"; perl -0pe "$2" "$G" > "$C"
   if eval "$3"; then bad "control: $1 (the check passed on a reversed copy)"; else ok "control: $1"; fi; }
 ctl "a content flag switched on"   's/"OTEL_LOG_TOOL_DETAILS": "0"/"OTEL_LOG_TOOL_DETAILS": "1"/' 'settings_ok "$C"'
-ctl "raw bodies switched on in the block" 's/("OTEL_LOG_TOOL_CONTENT": "0")/$1,\n    "OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
-ctl "raw bodies locked in the block, against the owner's call" 's/("OTEL_LOG_TOOL_CONTENT": "0")/$1,\n    "OTEL_LOG_RAW_API_BODIES": "0"/' 'settings_ok "$C"'
+ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
 ctl "what changed reversed"         's/Skill names are sent by default on the cost/Skill names are not sent by default on the cost/' 'in_section "$C" "$H_MAKEIT" "$S_CHANGED"'
 ctl "a client-side setting claimed" 's/The documentation names no setting for this/The documentation names a setting for this/' 'in_section "$C" "$H_MAKEIT" "$S_NO_SETTING"'
 ctl "the collector step removed"    's/- key: skill\.name(\s+)action: delete/- key: skill.name$1action: insert/' 'in_section "$C" "$H_MAKEIT" "$S_DROP_YAML"'
 ctl "the removed-names notice reversed" 's/and we remove the name of each command/and we keep the name of each command/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_DROPPED"'
-ctl "unset said to be on"           's/and unset means off\./and unset means on./' 'in_section "$C" "$H_ON" "$S_RAW_UNSET"'
-ctl "the unlocked risk hidden"      's/a person can switch it on from their own shell/nobody can switch it on from their own shell/' 'in_section "$C" "$H_ON" "$S_RAW_RISK"'
+ctl "the lock's reason reversed"    's/an unset value can be switched on from/an unset value can never be switched on from/' 'in_section "$C" "$H_ON" "$S_RAW_WHY"'
+ctl "investigation content made routine" 's/makes(\s+)that(\s+)a(\s+)deliberate(\s+)change/switches$1it$2on$3whenever$4needed/' 'in_section "$C" "$H_ON" "$S_RAW_INVESTIGATE"'
 ctl "the settings block broken"    's/("CLAUDE_CODE_ENABLE_TELEMETRY": "1"),/$1/' 'settings_ok "$C"'
 ctl "make-it sends something"      's/make-it itself sends nothing\./make-it itself sends a summary./g' 'pinned "$C" "$S_NOTHING"'
 ctl "what is not sent reversed"    "s/Claude Code does not send what people type/Claude Code sends what people type/" 'pinned "$C" "$S_NOT_SENT"'
@@ -157,6 +153,7 @@ ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/P
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
+ctl "raw bodies dropped from the lock" 's/,\n    "OTEL_LOG_RAW_API_BODIES": "0"//' 'settings_ok "$C"'
 ctl "raw bodies on in the text"    's/^## 2\./`OTEL_LOG_RAW_API_BODIES=file:\/tmp\/b`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
 ctl "prompt logging turned on"     's/("OTEL_LOG_USER_PROMPTS": )"0"/$1"1"/' 'content_on_only_in_calibration "$C"'
 ctl "tool details on outside the calibration" 's/^## 2\./`OTEL_LOG_TOOL_DETAILS=1`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
