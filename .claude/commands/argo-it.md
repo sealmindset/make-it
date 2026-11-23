@@ -1392,8 +1392,8 @@ skipped.
 
 ### What sign-in will do (the sentence the person hears)
 
-Say exactly the sentence for what this run generated -- at the send ask (PHASE 5 step 3) and in the
-report (PHASE 5 step 5) -- with `{hostname}` filled:
+Say exactly the sentence for what this run generated -- at the send ask and in the report after the
+send (both in PHASE 5) -- with `{hostname}` filled:
 - **Practice sign-in on the test copy:** "Sign-in on the test copy ({hostname}) uses the practice
   sign-in: a list of pretend people, no passwords. Anyone who can open {hostname} can sign in as any of
   them, an administrator included, so keep that address off the internet. The live version never uses
