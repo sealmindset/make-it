@@ -321,17 +321,59 @@ generated or sealed, from the project root: list what the folder holds now, and 
 record of what an earlier run made (`rm -f "$(git rev-parse --git-dir)/argo-it-made"` is in it):
 
 ```bash
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
+# A run that died part-way left the person's copies here: they go back first, and are never overwritten
+g="$(git rev-parse --git-dir)"; yours; rm -f "$g/argo-it-made"
+top=$(git rev-parse --show-toplevel); pre=$(git rev-parse --show-prefix); kd="$g/argo-it-kept"
+mkdir -p "$kd" && chmod 700 "$kd" || { echo "COPY FAILED"; exit 1; }
 # What the folder holds before this run makes anything: every path git lists as changed, new or ignored (from the
-# repo's top), with what it holds now (`-` for an ignored file) -- a stop later never takes a file that was already there
-g="$(git rev-parse --git-dir)"; rm -f "$g/argo-it-made"; top=$(git rev-parse --show-toplevel)
+# repo's top), with what it holds now (`-` for an ignored file elsewhere) -- and a copy, in .git, of each one at a path
+# argo-it writes ({manifest_dir}/, the workflows folder, its onboarding notes, the seal's files): never in the folder,
+# never sent
 git -C "$top" status --porcelain=v1 -z --untracked-files=all --ignored --no-renames | tr '\0' '\n' | while IFS= read -r l; do
-  f=${l#???}
-  case "$l" in ('!!'*) h=-;; (*) h=$(git -C "$top" hash-object -- "$f" 2>/dev/null) || h=-;; esac
+  f=${l#???}; w=
+  case "$f" in ("$pre"{manifest_dir}/*|"$pre".github/workflows/*|"$pre"ONBOARDING-K8S.md|"$pre".make-it/manifest.json|\
+    "$pre".make-it/sealed-files.txt|"$pre"MAKE-IT.md|"$pre"backend/make-it-stamp.json|"$pre".gitattributes) w=1;; esac
+  case "$l" in ('!!'*) [ -n "$w" ] || { printf -- '- %s\n' "$f"; continue; };; esac
+  h=$(git -C "$top" hash-object -- "$f" 2>/dev/null) || h=-
   printf '%s %s\n' "$h" "$f"
-done > "$g/argo-it-before"
+  [ -n "$w" ] && [ -f "$top/$f" ] || continue
+  case "$f" in (*/*) mkdir -p "$kd/${f%/*}";; esac
+  cp -p "$top/$f" "$kd/$f" || { echo "COPY FAILED" >&2; exit 1; }
+done > "$g/argo-it-before" || { echo "COPY FAILED"; exit 1; }
 ```
 
-Then run PHASE 5 step 1's check of where the set-up would start (its block that asks GitHub
+If it prints `COPY FAILED`, stop before anything is made: tell the user "I haven't changed or sent
+anything: I couldn't keep a safe copy of your own files before making the set-up, so I stopped.
+What to do next: ask your DevOps team to check this project's folder can be written to, then run
+/argo-it again." If it prints `restored:` lines, a run that stopped part-way last time had kept
+those files of yours, and they're back as they were: say "I put back [each path] as you had
+[it / them] -- a run of /argo-it that stopped part-way last time had kept [it / them] safe." Then run
+PHASE 5 step 1's check of where the set-up would start (its block that asks GitHub
 `git ls-remote --symref origin HEAD`). If it prints a line PHASE 5 has a rule for, use that rule's
 message and stop: nothing has been generated, sealed, saved or sent, and the folder is exactly as it
 was. /argo-it never moves, resets or fast-forwards a branch here.
@@ -2350,6 +2392,8 @@ as PHASE 5b, where 3e checks before step 4 saves.
 First keep a record of what this run made or changed, from the project root (`{generated_files}` are
 argo-it's own files from this run, by exact name): a stop takes back only these, and only while each
 is exactly as this run left it -- never a file that was there before the run (PHASE 0 step 9's list).
+Each `yours:` line it prints is a file of the person's own -- unsaved edits, or one they made -- that
+this run's file replaced; PHASE 0 step 9 kept their version, and the step-3 ask names it.
 
 ```bash
 # What this run made or changed: each of argo-it's files, with what it holds now -- the first time it is seen this run
@@ -2359,6 +2403,11 @@ for f in {generated_files}; do
   [ -f "$f" ] || continue
   awk -v f="$f" 'substr($0, index($0, " ") + 1) == f { n = 1 } END { exit !n }' "$rec" ||
     printf '%s %s\n' "$(git hash-object -- "$f")" "$f" >> "$rec"
+done
+# The person's own files this run replaced: those PHASE 0 step 9 kept a copy of that now differ
+kd="$(git rev-parse --git-dir)/argo-it-kept"; top=$(git rev-parse --show-toplevel)
+[ ! -d "$kd" ] || (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+  cmp -s "$kd/$k" "$top/$k" || printf 'yours: %s\n' "$k"
 done
 ```
 
@@ -2377,19 +2426,31 @@ its step 4 saves the user's own changes and sends them with the update.)
 # Unsaved code: each path git status lists in the project folder that the seal fingerprints, except argo-it's own
 # files (and .gitattributes when its change holds the seal's lines). Not a make-it project: nothing to seal or check
 [ -f .make-it/app-context.json ] || exit 0
-# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
-# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
-# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
-back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
-  while IFS=' ' read -r h f; do
-    [ -e "$f" ] || continue
-    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
-    now=$(git hash-object -- "$f" 2>/dev/null)
-    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
-    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
-    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
-    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
-  done < "$rec"; rm -f "$rec"; }
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
 pre=$(git rev-parse --show-prefix 2>/dev/null)
 # .gitattributes: unsaved code when its unsaved change holds no seal line (the seal list's rule takes the rest)
 k=none
@@ -2445,19 +2506,31 @@ from the code here, so the code here must be exactly that version: then the prop
 only argo-it's files and the seal's, and the seal describes what it lands on.
 
 ```bash
-# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
-# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
-# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
-back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
-  while IFS=' ' read -r h f; do
-    [ -e "$f" ] || continue
-    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
-    now=$(git hash-object -- "$f" 2>/dev/null)
-    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
-    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
-    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
-    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
-  done < "$rec"; rm -f "$rec"; }
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
 # An online home, the same one for sends and reads (as step 2), then everything GitHub has, into argo-it's own names
 git remote get-url origin >/dev/null 2>&1 || { back; echo "NO ORIGIN"; exit 1; }
 [ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { back; echo "SPLIT ORIGIN"; exit 1; }
@@ -2502,7 +2575,11 @@ in PHASE 5 (not PHASE 0's, where nothing was made yet) -- this one, the unsaved-
 stop after it that takes the files back (step 7) -- add to the message, right after its first
 sentence, in these words: I've taken the set-up files I made this time back out of your folder. And,
 only if `kept:` lines were printed: [each path after a `kept:` line, joined by and] [was / were]
-changed after I made [it / them], so I left [it / them] there.
+changed after I made [it / them], so I left [it / them] there. Only if `restored:` lines were
+printed: [each path after a `restored:` line, joined by and] [was / were] yours, and I've put [it /
+them] back exactly as you had [it / them]. Only if `left:` lines were printed: [each path after a
+`left:` line, joined by and] [was / were] already in your folder before this run, so I left [it /
+them] as [it is / they are]. (A file of the person's own that the run didn't change prints nothing.)
 
 If it prints `NO MAIN VERSION`, GitHub has no main version of this project yet (nothing was ever
 sent there, or the branch GitHub's HEAD names is missing), so there is nothing for a proposed change
@@ -2805,7 +2882,10 @@ code to this project it builds and deploys to **{hostname}** on its own, for eve
 the deployment system watches. It starts as [the main version's branch] is now, without these
 files, so nothing deploys from it before the change is accepted.] Nothing goes live until your
 DevOps team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, accepting the
-change makes it go live. After the send I take these files out of your folder until the change is
+change makes it go live. [Only if step 1 printed `yours:` lines: I'd replace your own [each path after
+a `yours:` line, joined by and] with the set-up's version; your version is kept and put back if you
+pick Not now or anything stops -- and after a send it goes back in your folder, unsaved, while the
+proposed change holds the set-up's version.] After the send I take these files out of your folder until the change is
 accepted -- GitHub and this computer each keep a copy. To undo before then, close the proposed
 change and delete `argo-it/setup` on GitHub -- nothing will have been deployed[ if step 2 found the
 deploy branch missing: ; `{deploy_branch}` can stay as it is -- it holds none of the set-up]. The checks your project runs when you save don't run on the setup files I made; my
@@ -3005,10 +3085,38 @@ for f in {generated_files}; do
     else printf 'kept: %s\n' "$f"; fi
   else printf 'kept: %s\n' "$f"; fi
 done
+# Then, with the tidy done, the person's own versions of these paths go back in the folder, unsaved, as they had them
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
+yours
 ```
 
 Each `kept:` line names one of argo-it's files that stays in the folder because it changed after the
-save. Then open the proposed change, from the project root:
+save. Each `restored:` line names a file of the person's own that the set-up replaced: the proposed
+change holds the set-up's version, and theirs is back in the folder, unsaved, exactly as they had it. Then open the proposed change, from the project root:
 
 ```bash
 # One proposed change from argo-it/setup into GitHub's main version (its branch from step 3's file), opened with gh when
@@ -3053,7 +3161,42 @@ it unsaved: it stays unsaved until 'Send it', whose check reads it first.
 **Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask);
 nothing is saved or sent. Then go back to the step-3 pick without option 3.
 
-**Option 4 (not now):** say the files stay in the project folder, not saved yet, and nothing was sent;
+**Option 4 (not now):** first put back the person's own files this run replaced, from the project
+root:
+
+```bash
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
+yours
+```
+
+Then say the files stay in the project folder, not saved yet, and nothing was sent[ only if
+`restored:` lines were printed: -- except your own [each path after a `restored:` line, joined by
+and], which I put back exactly as you had [it / them], so the set-up's version of [it / them] isn't
+in your folder];
 stop here. Skip step 5.
 
 **5. Stop there:** tell the user, then stop -- nothing more is sent, and while the proposed change
@@ -3070,7 +3213,7 @@ main version's branch] stays as it was, and nothing is deployed until someone ac
 test build of it runs first).[ If this run set up `{deploy_branch}`: I also set up
 `{deploy_branch}` on GitHub, the copy the deployment system watches; it holds none of the set-up
 yet.] Along with the set-up files, the change holds your project's make-it record[ only if the seal
-step listed its files], so it matches what it lands on. Your set-up files are saved on their own copy waiting for review, so I've taken them out of your folder until it's accepted.[ only if `kept:` lines were printed: I left [each path after a
+step listed its files], so it matches what it lands on. Your set-up files are saved on their own copy waiting for review, so I've taken them out of your folder until it's accepted.[ only if `restored:` lines were printed: Your own [each path after a `restored:` line, joined by and] [is / are] back in your folder exactly as you had [it / them], unsaved -- the proposed change holds the set-up's version of [it / them], so before you get the latest once it's accepted, save or move your version.][ only if `kept:` lines were printed: I left [each path after a
 `kept:` line, joined by and] in your folder, because [it was / they were] changed after I sent the
 set-up.] What to do next: ask your reviewer to look at the proposed change, and share
 ONBOARDING-K8S.md (it's in the change) with your DevOps team for the one-time setup. Once it's
@@ -3109,19 +3252,31 @@ MIXED`, 2b's), from the project root, with the same lines step 1's check uses, s
 the run found it:
 
 ```bash
-# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it:
-# never a file that was there before the run (PHASE 0's list) -- that one stays, and is named if the run changed it --
-# never one changed since this run made it (named); a saved file the run changed goes back to its saved version
-back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; [ -f "$rec" ] || return 0; bp=$(git rev-parse --show-prefix)
-  while IFS=' ' read -r h f; do
-    [ -e "$f" ] || continue
-    was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
-    now=$(git hash-object -- "$f" 2>/dev/null)
-    if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'kept: %s\n' "$f"
-    elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
-    elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
-    else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
-  done < "$rec"; rm -f "$rec"; }
+# The person's own versions of argo-it's paths, copied into .git before this run made anything (PHASE 0 step 9): each
+# goes back exactly -- bytes and mode -- where it differs now, then the copies go
+yours() { g="$(git rev-parse --git-dir)"; kd="$g/argo-it-kept"; [ -d "$kd" ] || return 0; top=$(git rev-parse --show-toplevel)
+  (cd "$kd" && find . -type f) | while IFS= read -r k; do k=${k#./}
+    cmp -s "$kd/$k" "$top/$k" && continue
+    case "$k" in (*/*) mkdir -p "$top/${k%/*}";; esac
+    rm -f "$top/$k"; cp -p "$kd/$k" "$top/$k" && printf 'restored: %s\n' "$k"
+  done; rm -rf "$kd"; }
+# Take back out of the folder each file this run made or changed (the record), so the folder is as the run found it,
+# then put the person's own versions back (`yours`): a saved file the run changed goes back to its saved version; one
+# changed since this run made it stays, and is named (`kept:`); one that was there before the run with no copy stays
+# (`left:`)
+back() { g="$(git rev-parse --git-dir)"; rec="$g/argo-it-made"; kd="$g/argo-it-kept"; bp=$(git rev-parse --show-prefix)
+  if [ -f "$rec" ]; then
+    while IFS=' ' read -r h f; do
+      [ -e "$f" ] && [ ! -e "$kd/$bp$f" ] || continue
+      was=; [ ! -f "$g/argo-it-before" ] || was=$(awk -v p="$bp$f" 'substr($0, index($0, " ") + 1) == p { print $1; exit }' "$g/argo-it-before")
+      now=$(git hash-object -- "$f" 2>/dev/null)
+      if [ -n "$was" ]; then [ "$was" = "$now" ] || printf 'left: %s\n' "$f"
+      elif [ "$now" != "$h" ]; then printf 'kept: %s\n' "$f"
+      elif git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then git restore --source=HEAD --worktree -- "$f"
+      else rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac; fi
+    done < "$rec"; rm -f "$rec"
+  fi
+  yours; }
 back
 ```
 
