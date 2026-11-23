@@ -12888,5 +12888,47 @@ class ArgoItSetupBranchRound3Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
                 self.assertIn("a copy of them is already on GitHub from last time, but they aren't saved here yet", ask)
 
 
+class ArgoItSetupBranchRound4Cases(_SetupBranch2, _SetupBranch, _SealFiles, _FirstSendAdv3, _FirstSendFix7,
+                                   _FirstSendAdv2, _FirstSendFix6, _FirstSendFix5, _FirstSendFix4, _FirstSendFix3,
+                                   _FirstSendFix2, _FirstSendAdv1, _FirstSendFix1, _FirstSend, Base):
+    """E12-S1, the real-GitHub proof: the tidy after the send exits 0 when it worked (its last `rmdir -p` ran on a file
+    with no folder part, so it exited 1); the scan's time limit is one a Mac can set."""
+
+    def _tidy(self):
+        p = self._phase()
+        return [f[2] for f in self._fences(p) if 'git update-ref refs/argo-it/setup' in f[2]][0]
+
+    def test_1_the_tidy_after_a_normal_send_exits_0_with_a_top_level_file_and_a_file_in_a_folder(self):
+        for shell in ('bash', 'zsh'):
+            for order in (['env/dev/kustomization.yaml', 'ONBOARDING-K8S.md'],
+                          ['ONBOARDING-K8S.md', 'env/dev/kustomization.yaml']):
+                with self.subTest(shell=shell, last=order[-1]):
+                    r = self.fresh()
+                    self._prep(r)
+                    files = {f: self.GENERATED[f] for f in order}
+                    sent = self._object_commit(r, self._head(r), files)  # what the send sent
+                    for f, t in files.items():
+                        r.write(f, t)  # argo-it's copies, exactly as sent
+                    code = self._files_filled(self._tidy(), order).replace('{saved_head}', sent)
+                    cp = self._run_block(r, shell, code)
+                    self.assertEqual(cp.returncode, 0, 'the tidy after a send that worked exits %d: %r'
+                                     % (cp.returncode, cp.stderr[:200]))
+                    self.assertFalse([f for f in order if os.path.exists(r.path(f))], 'a copy stays in the folder')
+                    self.assertFalse(os.path.exists(r.path('env')), 'the emptied folder stays')
+
+    def test_2_every_take_back_and_tidy_guards_rmdir_for_a_file_with_no_folder_part(self):
+        for f in self._fences(self._phase()):
+            for l in f[2].splitlines():
+                if 'rmdir -p' in l:
+                    self.assertIn('case "$f" in (*/*) rmdir -p', l, 'an unguarded rmdir -p: %r' % l)
+
+    def test_3_the_scan_s_time_limit_is_one_a_mac_can_set(self):
+        doc = ArgoItWiringCases._doc(self)
+        for m in re.finditer(r'120-second timeout', doc):
+            near = self._flat(doc[m.start():m.start() + 300])
+            self.assertRegex(near, r"(?i)the time limit of the tool that runs the command", 'a timeout with no way to '
+                             'set it on a Mac: %r' % near)
+
+
 if __name__ == '__main__':
     unittest.main()
