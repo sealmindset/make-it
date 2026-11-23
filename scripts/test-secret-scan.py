@@ -13006,10 +13006,11 @@ class ArgoItSetupBranchRound5Cases(_SetupBranch2, _SetupBranch, _SealFiles, _Fir
                     if case == 'behind':
                         self._theirs_on_origin(r, shell)
                     r.write('ONBOARDING-K8S.md', '# my own notes\n')
+                    mode = os.stat(r.path('ONBOARDING-K8S.md')).st_mode & 0o777  # as this machine's umask made it
                     self._prep(r)
                     self._snap(r, shell)
                     st = self._flow(r, shell, self._gen(r), picks=(4,) if case == 'Not now' else (1,))
-                    self._is_mine(r, 'ONBOARDING-K8S.md', 0o644, '# my own notes\n')
+                    self._is_mine(r, 'ONBOARDING-K8S.md', mode, '# my own notes\n')
 
     def test_3_after_a_send_the_set_up_s_version_is_sent_and_the_person_s_is_back_in_the_folder_unsaved(self):
         for shell in ('bash', 'zsh'):
