@@ -2,7 +2,8 @@
 # E15-S1: the administrators' guide to Claude Code's own usage reporting, and the script that renders its settings.
 # Contract these checks pin (the change must satisfy it):
 #   - .claude/make-it/references/usage-monitoring.md exists; the settings block under "## 1. Switching it on" is valid
-#     JSON, turns the reporting on, and locks every content flag off ("0", raw bodies included), with placeholders only.
+#     JSON, turns the reporting on, locks four content flags off ("0") and leaves raw-body logging unset (the owner's
+#     call, 2026-11-23), with placeholders only; the guide says plainly what leaving it unlocked allows.
 #   - The statements that matter are there whole: make-it sends nothing; what is not sent; the skill event does not
 #     say which make-it skill ran (it is sent by default, on the cost counters) and that a skill name is not proof of
 #     make-it; third-party providers; tracking alone does not prove value; the notice text; where per-skill counts come from.
@@ -34,9 +35,9 @@ m = re.search(r"^## 1\. Switching it on\n(.*?)(?=^## )", text, re.S | re.M)
 b = m and re.search(r"```json\n(.*?)```", m.group(1), re.S)
 env = json.loads(b.group(1))["env"]
 assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
-for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT",
-          "OTEL_LOG_RAW_API_BODIES"):
+for k in ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT"):
     assert env[k] == "0", k
+assert "OTEL_LOG_RAW_API_BODIES" not in env
 assert env["OTEL_METRICS_INCLUDE_REPOSITORY"] == "true" and env["OTEL_METRICS_INCLUDE_VERSION"] == "true"
 assert "<collector-host>" in env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 assert "<ingest-token>" in env["OTEL_EXPORTER_OTLP_HEADERS"]
@@ -72,6 +73,16 @@ S_NOR='Nor does it record the paths of the files Claude reads or edits.'
 S_3PNAME='For a make-it plugin from outside the official marketplace, such as the `make-it-desktop` plugin, the counters show `third-party` instead.'
 S_NOTICE_MAKEIT="make-it adds no reporting of its own, but its commands run inside Claude Code, so the name of each make-it command you run is recorded with its cost."
 S_NOTICE_PLAN='your Claude plan'
+S_CHANGED='Skill names are sent by default on the cost and token counters; only the `skill_activated` event hides them.'
+S_NO_SETTING='The documentation names no setting for this (checked 23 November 2026).'
+S_DROP_YAML='- key: skill.name action: delete'
+S_NOTICE_DROPPED='make-it adds no reporting of its own, and we remove the name of each command you run before the data is stored.'
+S_RAW_UNSET='`OTEL_LOG_RAW_API_BODIES` is left unset in this block, and unset means off.'
+S_RAW_RISK='Because it is not locked, a person can switch it on from their own shell or user settings, and that would send their whole conversations, prompts and replies included, to your collector.'
+S_RAW_LOCK='"OTEL_LOG_RAW_API_BODIES": "0"'
+S_TABLE='| Who has make-it installed, and which version |'
+H_ON='## 1. Switching it on'
+H_MAKEIT='## 5. What it tells you about make-it'
 H_CAL='### Calibrating `plugin_id_hash`, once'
 S_CAL='one shell, one time'
 
@@ -90,6 +101,14 @@ check "the notice says who can see it" 'in_section "$G" "$H_NOTICE" "$S_WHO"'
 check "the notice says the content stays off" 'in_section "$G" "$H_NOTICE" "$S_OFF"'
 check "the notice says file paths are not recorded" 'in_section "$G" "$H_NOTICE" "$S_NOR"'
 check "the guide says a third-party plugin shows third-party on the counters" 'pinned "$G" "$S_3PNAME"'
+check "section 5 opens with what changed: skill names are sent by default" 'in_section "$G" "$H_MAKEIT" "$S_CHANGED"'
+check "section 5 says no client-side setting omits skill names" 'in_section "$G" "$H_MAKEIT" "$S_NO_SETTING"'
+check "section 5 shows the collector step that drops skill.name" 'in_section "$G" "$H_MAKEIT" "$S_DROP_YAML"'
+check "section 5 has the who-has-make-it table" 'in_section "$G" "$H_MAKEIT" "$S_TABLE"'
+check "the notice offers the sentence for names removed at the collector" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_DROPPED"'
+check "section 1 says raw bodies are unset, and unset means off" 'in_section "$G" "$H_ON" "$S_RAW_UNSET"'
+check "section 1 says plainly what leaving raw bodies unlocked allows" 'in_section "$G" "$H_ON" "$S_RAW_RISK"'
+check "section 1 shows the one line that locks raw bodies" 'in_section "$G" "$H_ON" "$S_RAW_LOCK"'
 check "the adoption section says per-skill counts come from both sources" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
 S_LINK='The adoption scan is described in [`adoption-scan.md`](adoption-scan.md).'
 S_SCAN_ONLY='What the scan answers that the reporting cannot: which repositories were built with make-it, including ones nobody has opened since the reporting was switched on, and which sealing steps changed which app.'
@@ -111,7 +130,14 @@ ctl() {  # $1 name, $2 perl substitution, $3 the check (uses $C)
   C="$T/ctl.md"; perl -0pe "$2" "$G" > "$C"
   if eval "$3"; then bad "control: $1 (the check passed on a reversed copy)"; else ok "control: $1"; fi; }
 ctl "a content flag switched on"   's/"OTEL_LOG_TOOL_DETAILS": "0"/"OTEL_LOG_TOOL_DETAILS": "1"/' 'settings_ok "$C"'
-ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
+ctl "raw bodies switched on in the block" 's/("OTEL_LOG_TOOL_CONTENT": "0")/$1,\n    "OTEL_LOG_RAW_API_BODIES": "1"/' 'settings_ok "$C"'
+ctl "raw bodies locked in the block, against the owner's call" 's/("OTEL_LOG_TOOL_CONTENT": "0")/$1,\n    "OTEL_LOG_RAW_API_BODIES": "0"/' 'settings_ok "$C"'
+ctl "what changed reversed"         's/Skill names are sent by default on the cost/Skill names are not sent by default on the cost/' 'in_section "$C" "$H_MAKEIT" "$S_CHANGED"'
+ctl "a client-side setting claimed" 's/The documentation names no setting for this/The documentation names a setting for this/' 'in_section "$C" "$H_MAKEIT" "$S_NO_SETTING"'
+ctl "the collector step removed"    's/- key: skill\.name(\s+)action: delete/- key: skill.name$1action: insert/' 'in_section "$C" "$H_MAKEIT" "$S_DROP_YAML"'
+ctl "the removed-names notice reversed" 's/and we remove the name of each command/and we keep the name of each command/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_DROPPED"'
+ctl "unset said to be on"           's/and unset means off\./and unset means on./' 'in_section "$C" "$H_ON" "$S_RAW_UNSET"'
+ctl "the unlocked risk hidden"      's/a person can switch it on from their own shell/nobody can switch it on from their own shell/' 'in_section "$C" "$H_ON" "$S_RAW_RISK"'
 ctl "the settings block broken"    's/("CLAUDE_CODE_ENABLE_TELEMETRY": "1"),/$1/' 'settings_ok "$C"'
 ctl "make-it sends something"      's/make-it itself sends nothing\./make-it itself sends a summary./g' 'pinned "$C" "$S_NOTHING"'
 ctl "what is not sent reversed"    "s/Claude Code does not send what people type/Claude Code sends what people type/" 'pinned "$C" "$S_NOT_SENT"'
@@ -131,7 +157,6 @@ ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/P
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
-ctl "raw bodies dropped from the lock" 's/,\n    "OTEL_LOG_RAW_API_BODIES": "0"//' 'settings_ok "$C"'
 ctl "raw bodies on in the text"    's/^## 2\./`OTEL_LOG_RAW_API_BODIES=file:\/tmp\/b`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
 ctl "prompt logging turned on"     's/("OTEL_LOG_USER_PROMPTS": )"0"/$1"1"/' 'content_on_only_in_calibration "$C"'
 ctl "tool details on outside the calibration" 's/^## 2\./`OTEL_LOG_TOOL_DETAILS=1`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
@@ -227,6 +252,27 @@ check "with --allow-content-flags the same file renders, and says so" '[ "$(rc a
 # a control for the token check itself: it must catch a token that does reach the output
 echo "$TOKEN" >> "$T/good.err"
 check "control: the token check catches a token in the output" '! no_token good'
+
+# 5. the read-only inventory check, per OS
+IS=.claude/make-it/scripts/make-it-installed.sh; IP=.claude/make-it/scripts/make-it-installed.ps1
+H1="$T/home1"; H2="$T/home2"; mkdir -p "$H1/.claude/make-it" "$H2"; printf '1.71.18\n' > "$H1/.claude/make-it/VERSION"
+H3="$T/home3"; mkdir -p "$H3/.claude/make-it"; printf '1.71.18;$(touch x)\x1b[31m\n' > "$H3/.claude/make-it/VERSION"
+snap() { find "$T/home1" "$T/home2" "$T/home3" -exec stat -f '%N %m %z' {} + 2>/dev/null || find "$T/home1" "$T/home2" "$T/home3" -printf '%p %T@ %s\n'; }
+before="$(snap)"
+check "sh: an installed account prints make-it <version>, exit 0" '[ "$(sh "$IS" "$H1")" = "make-it 1.71.18" ]'
+check "sh: an account without make-it prints make-it not installed, exit 0" '[ "$(sh "$IS" "$H2")" = "make-it not installed" ]'
+check "sh: a hostile VERSION file prints only safe characters" '[ "$(sh "$IS" "$H3")" = "make-it 1.71.18touchx31m" ]'
+check "sh: with no argument it reads \$HOME" '[ "$(HOME="$H1" sh "$IS")" = "make-it 1.71.18" ]'
+if command -v pwsh >/dev/null 2>&1; then
+  check "pwsh: an installed account prints make-it <version>" '[ "$(pwsh -NoProfile -File "$IP" -HomeDir "$H1")" = "make-it 1.71.18" ]'
+  check "pwsh: an account without make-it prints make-it not installed, exit 0" 'o="$(pwsh -NoProfile -File "$IP" -HomeDir "$H2")" && [ "$o" = "make-it not installed" ]'
+  check "pwsh: a hostile VERSION file prints only safe characters" '[ "$(pwsh -NoProfile -File "$IP" -HomeDir "$H3")" = "make-it 1.71.18touchx31m" ]'
+else
+  echo "SKIP the PowerShell inventory check: pwsh is not on this machine."
+fi
+check "the inventory checks changed nothing they read" '[ "$(snap)" = "$before" ] && [ ! -e x ]'
+check "the inventory checks contact nothing (no network command in either)" \
+  '! gq -iE "curl|wget|Invoke-WebRequest|Invoke-RestMethod|nc |ssh|http" "$IS" "$IP"'
 
 # the whole run's stderr: a helper error or a bad regex must not read as a pass
 exec 2>&4
