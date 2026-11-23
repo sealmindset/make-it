@@ -51,13 +51,16 @@ jobs:
       # test-argo-it-workflow-fits-the-scaffold.sh reads docker-compose.yml and the workflow it fills with PyYAML.
       - name: Install PyYAML
         run: python -m pip install --quiet "pyyaml==6.0.2"
-      # test-argo-it-signin-on-the-cluster.sh runs the scaffold's own mock-oidc: it needs the backend's packages
-      # (installed above) and cryptography, at the version mock-oidc pins.
-      - name: Install mock-oidc's cryptography
-        run: python -m pip install --quiet "cryptography==50.0.1"
+      # test-argo-it-signin-on-the-cluster.sh runs the scaffold's own mock-oidc under its own pinned packages
+      # (its requirements.txt, server version included), in a venv of its own so the backend's stay as they are.
+      - name: A venv for mock-oidc, from its own pinned requirements
+        run: |
+          python -m venv "$RUNNER_TEMP/mock-oidc-venv"
+          "$RUNNER_TEMP/mock-oidc-venv/bin/pip" install --quiet -r .claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
       - name: Run every scripts/test-*.sh
         env:
           REQUIRE_SCAFFOLD_PYTEST: "1"
+          MOCK_OIDC_PYTHON: ${{ runner.temp }}/mock-oidc-venv/bin/python
         run: |
           failed=""
           count=0
