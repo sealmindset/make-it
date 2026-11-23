@@ -91,8 +91,15 @@ check "the notice says the content stays off" 'in_section "$G" "$H_NOTICE" "$S_O
 check "the notice says file paths are not recorded" 'in_section "$G" "$H_NOTICE" "$S_NOR"'
 check "the guide says a third-party plugin shows third-party on the counters" 'pinned "$G" "$S_3PNAME"'
 check "the adoption section says per-skill counts come from both sources" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
-check "the adoption section does not claim adoption-scan.md exists on this branch" \
-  '[ -f .claude/make-it/references/adoption-scan.md ] || ! in_section "$G" "$H_ADOPT" "adoption-scan.md"'
+S_LINK='The adoption scan is described in [`adoption-scan.md`](adoption-scan.md).'
+S_SCAN_ONLY='What the scan answers that the reporting cannot: which repositories were built with make-it, including ones nobody has opened since the reporting was switched on, and which sealing steps changed which app.'
+S_REPORT_ONLY='What the reporting answers that the scan cannot: who ran which command, when, and what it cost.'
+check "the adoption section links to adoption-scan.md, and that page exists" \
+  'in_section "$G" "$H_ADOPT" "$S_LINK" && [ -f .claude/make-it/references/adoption-scan.md ]'
+check "the adoption section says what only the scan answers" 'in_section "$G" "$H_ADOPT" "$S_SCAN_ONLY"'
+check "the adoption section says what only the reporting answers" 'in_section "$G" "$H_ADOPT" "$S_REPORT_ONLY"'
+check "the README names both pages" \
+  'awk "/^## Version History/{exit} {print}" README.md | gq -F "references/adoption-scan.md"'
 check "the calibration is one shell, one time" 'awk -v h="$H_CAL" "/^#/{on=(\$0==h)} on" "$G" | flat | grep -qF "$S_CAL"'
 check "no content flag is turned on outside the calibration" 'content_on_only_in_calibration "$G"'
 check "every URL host in the guide is the documentation or a placeholder" 'hosts_generic "$G"'
@@ -117,6 +124,9 @@ ctl "anyone may read it"            's/and only `<who can see it>` can(\s+>?\s*)
 ctl "we may turn this content on"   's/content(\s+>?\s*)stays(\s+>?\s*)off\./content$1we may turn$2on./' 'in_section "$C" "$H_NOTICE" "$S_OFF"'
 ctl "file paths recorded"           's/Nor does it record the paths/It records the paths/' 'in_section "$C" "$H_NOTICE" "$S_NOR"'
 ctl "third-party plugin shows the real name" 's/the counters(\s+)show `third-party` instead\./the counters$1show the real name./' 'pinned "$C" "$S_3PNAME"'
+ctl "the scan link dropped"         's/The adoption scan is described in \[`adoption-scan\.md`\]\(adoption-scan\.md\)\./The adoption scan is described elsewhere./' 'in_section "$C" "$H_ADOPT" "$S_LINK"'
+ctl "the scan said to know who ran it" 's/What the scan answers that the reporting cannot:/What the scan and the reporting both answer:/' 'in_section "$C" "$H_ADOPT" "$S_SCAN_ONLY"'
+ctl "the reporting said to know nothing" 's/who ran which command, when, and what it cost\./nothing about commands./' 'in_section "$C" "$H_ADOPT" "$S_REPORT_ONLY"'
 ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
