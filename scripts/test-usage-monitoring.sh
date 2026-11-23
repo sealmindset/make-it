@@ -254,7 +254,12 @@ check "control: the token check catches a token in the output" '! no_token good'
 IS=.claude/make-it/scripts/make-it-installed.sh; IP=.claude/make-it/scripts/make-it-installed.ps1
 H1="$T/home1"; H2="$T/home2"; mkdir -p "$H1/.claude/make-it" "$H2"; printf '1.71.18\n' > "$H1/.claude/make-it/VERSION"
 H3="$T/home3"; mkdir -p "$H3/.claude/make-it"; printf '1.71.18;$(touch x)\x1b[31m\n' > "$H3/.claude/make-it/VERSION"
-snap() { find "$T/home1" "$T/home2" "$T/home3" -exec stat -f '%N %m %z' {} + 2>/dev/null || find "$T/home1" "$T/home2" "$T/home3" -printf '%p %T@ %s\n'; }
+snap() {  # path, mtime and size of everything under the three homes; Python, so it reads the same on macOS and Linux
+  python3 -I -c 'import os,sys
+for r in sys.argv[1:]:
+    for d,_,fs in os.walk(r):
+        for n in [d]+[os.path.join(d,f) for f in fs]:
+            s=os.lstat(n); print(n, s.st_mtime_ns, s.st_size)' "$T/home1" "$T/home2" "$T/home3"; }
 before="$(snap)"
 check "sh: an installed account prints make-it <version>, exit 0" '[ "$(sh "$IS" "$H1")" = "make-it 1.71.18" ]'
 check "sh: an account without make-it prints make-it not installed, exit 0" '[ "$(sh "$IS" "$H2")" = "make-it not installed" ]'
