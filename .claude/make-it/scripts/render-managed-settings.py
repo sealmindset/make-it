@@ -8,7 +8,7 @@ Checks, before anything is written:
     (a macOS plist can't hold one);
   - no placeholder such as <collector-host> or <ingest-token> is left unfilled;
   - no content flag is switched on (OTEL_LOG_USER_PROMPTS, OTEL_LOG_ASSISTANT_RESPONSES, OTEL_LOG_TOOL_DETAILS,
-    OTEL_LOG_TOOL_CONTENT other than "0" or unset; OTEL_LOG_RAW_API_BODIES set at all), unless
+    OTEL_LOG_TOOL_CONTENT, OTEL_LOG_RAW_API_BODIES: anything but "0" or unset), unless
     --allow-content-flags says the organization has decided to collect that content.
 Then writes, into DIR (created if missing, files readable by their owner only, because they hold the token):
   com.anthropic.claudecode.plist  the payload for the com.anthropic.claudecode managed preferences domain
@@ -27,8 +27,7 @@ import re
 import sys
 
 CONTENT_FLAGS = ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_TOOL_DETAILS",
-                 "OTEL_LOG_TOOL_CONTENT")
-RAW_BODIES = "OTEL_LOG_RAW_API_BODIES"
+                 "OTEL_LOG_TOOL_CONTENT", "OTEL_LOG_RAW_API_BODIES")
 PLACEHOLDER = re.compile(r"<[A-Za-z][A-Za-z0-9_.-]*>")
 PLIST_NAME = "com.anthropic.claudecode.plist"
 REG_NAME = "ClaudeCode-Settings.reg"
@@ -68,10 +67,7 @@ def content_flags_on(settings):
     env = settings.get("env")
     if not isinstance(env, dict):
         return []
-    on = [f"env.{k}" for k in CONTENT_FLAGS if k in env and env[k] not in ("0", "")]
-    if RAW_BODIES in env and env[RAW_BODIES] != "":
-        on.append(f"env.{RAW_BODIES}")
-    return on
+    return [f"env.{k}" for k in CONTENT_FLAGS if k in env and env[k] not in ("0", "")]
 
 
 def check(raw, allow_content):
