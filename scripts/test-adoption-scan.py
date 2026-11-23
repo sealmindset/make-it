@@ -63,6 +63,8 @@ def queued(kind):
 
 if args[:1] != ["api"]:
     sys.exit(9)
+if os.environ.get("STUB_EXIT"):  # gh failing before GitHub answers: 4 is gh's "not signed in"
+    sys.exit(int(os.environ["STUB_EXIT"]))
 f = fields(args)
 if "graphql" in args:
     q = f["query"]
@@ -73,8 +75,22 @@ if "graphql" in args:
         own = fx["owner"]
         if f["login"].lower() != own["login"].lower():
             reply(200, {"data": {"repositoryOwner": None}})
-        page = int(os.environ.get("STUB_LIST_PAGE", "100"))
+        import re
+        page = min(int(os.environ.get("STUB_LIST_PAGE", "100")), int(re.search(r"first: (\d+)", q).group(1)))
         start = int(f.get("after") or 0)
+        lf = fx.get("listing_fail", {}).get(str(start))
+        if lf:
+            n = state.get("lf" + str(start), 0)
+            state["lf" + str(start)] = n + 1
+            save()
+        if lf and n < lf.get("times", 999):
+            err = {"type": "FORBIDDEN", "path": ["repositoryOwner", "repositories"],
+                   "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization."} \
+                if lf["kind"] == "sso" else {"path": ["repositoryOwner", "repositories"],
+                                             "message": "Something went wrong while executing your query. This may be the result of a timeout"}
+            reply(200, {"data": {"repositoryOwner": {"__typename": own["type"], "login": own["login"], "repositories": None}},
+                        "errors": [err]}, {"X-GitHub-SSO": "required; url=https://github.com/orgs/example-org/sso?authorization_request=x"}
+                  if lf["kind"] == "sso" else None, code=1)
         chunk = fx["repos"][start:start + page]
         nodes = [{"name": r["name"], "nameWithOwner": own["login"] + "/" + r["name"], "isArchived": r["isArchived"],
                   "isFork": r["isFork"]} for r in chunk]
@@ -89,6 +105,8 @@ if "graphql" in args:
     behaviours = [by.get(v, {}).get("behaviour") for v in names.values()]
     if "timeout" in behaviours or ("timeout_in_batch" in behaviours and len(names) > 1):
         reply(502, '{"message":"We couldn\'t respond to your request in time"}')
+    if os.environ.get("STUB_BIG"):
+        reply(200, '{"data": {"pad": "' + "x" * int(os.environ["STUB_BIG"]) + '"}}')
     if "pathless_in_batch" in behaviours and len(names) > 1:
         reply(200, {"data": None, "errors": [{"message": "Something went wrong while executing your query. "
                                                          "This may be the result of a timeout"}]}, code=1)
@@ -117,7 +135,7 @@ if fail:
 items = fx["code_search" if kind == "code" else "commit_search"]
 per, page = int(f.get("per_page", 100)), int(f.get("page", 1))
 per = int(os.environ.get("STUB_SEARCH_PAGE", per))
-total = fx.get("commit_total", len(items)) if kind == "commits" else len(items)
+total = fx.get("commit_total", len(items)) if kind == "commits" else fx.get("code_total", len(items))
 reply(200, {"total_count": total, "incomplete_results": False, "items": items[(page - 1) * per: page * per]})
 '''
 
@@ -227,7 +245,7 @@ class Classes(Base):
         self.assertIn(".make-it/app-context.json", repos["app-two"]["ma0_where"])
         self.assertIn(".make-it-state.md", repos["app-two"]["ma0_where"])
         self.assertIn("app-context.json", repos["app-nine"]["ma0_where"])
-        self.assertRegex(out, r"3 have make-it's decision file but no build record")
+        self.assertRegex(out, r"3 were found by make-it's decision file")
         # an organisation whose apps all predate the build record still counts them
         for r in self.fx["repos"]:
             for k in ("manifest", "ledger", "readable"):
@@ -390,7 +408,7 @@ class Failures(Base):
         self.fx["failures"] = {"listing": [{"status": 401}]}
         code, out, _, _ = self.scan()
         self.assertEqual(code, 2)
-        self.assertIn("gh auth status", out)
+        self.assertIn("gh auth login", out)
 
 
 class Arguments(Base):
@@ -413,7 +431,7 @@ class Arguments(Base):
     def test_help_documents_exit_codes(self):
         p = subprocess.run([sys.executable, "-I", SCRIPT, "--help"], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0)
-        for must in ("0 ", "2 ", "3 ", "read-only", "--user"):
+        for must in ("0 ", "2 ", "3 ", "4 ", "INCOMPLETE", "read-only", "--user"):
             self.assertIn(must, p.stdout)
 
 
@@ -435,7 +453,8 @@ class ReadOnly(Base):
 
     def test_a_mutation_is_refused_before_gh_runs(self):
         with mock.patch.dict(os.environ, self.env):
-            for q in ("mutation { addStar(input: {}) { clientMutationId } }", "query { a } MUTATION { b }"):
+            for q in ("mutation { addStar(input: {}) { clientMutationId } }", "query { a } MUTATION { b }",
+                      "{ viewer { login } }"):
                 with self.assertRaises(RuntimeError):
                     self.mod.gh_graphql(q, {})
             with self.assertRaises(RuntimeError):
@@ -475,8 +494,35 @@ class Output(Base):
         self.assertTrue(self.by_repo(data)["app-seven"]["archived"])
         self.assertRegex(out, r"11 repositories looked at: 10 active, 1 archived")
         self.assertRegex(out, r"(?m)^\s+make-it\s+2$")  # app-one, app-ten; not archived app-seven
-        self.assertIn("Archived (not counted): example-org/app-seven", out)
+        self.assertIn("Archived (not counted): 1", out)
+        self.assertNotIn("app-seven", out)  # names stay in the files
         self.assertEqual(data["counts"]["make-it"], 2)
+
+    def test_no_repository_name_is_printed_by_default(self):
+        for args in ([], ["--trailers", "--ci-pattern", "example-org/shared-ci"]):
+            _, out, data, _ = self.scan(*args)
+            self.assertNotIn("app-", out)
+            self.assertNotIn("bad", out)
+            self.assertIn("example-org/app-seven", [r["repository"] for r in data["repositories"]])
+
+    def test_the_closing_line_fits_the_mode(self):
+        _, out, _, _ = self.scan()
+        self.assertIn("the organisation's repository names", out)
+        self.fx["owner"]["type"] = "User"
+        _, out, _, _ = self.scan("--user", "example-org")
+        self.assertIn("the account's repository names", out)
+        self.assertNotIn("organisation's repository names", out)
+
+    def test_output_files_are_created_exclusively(self):
+        target = os.path.join(self.tmp, "exists.json")
+        with open(target, "w") as f:
+            f.write("{}")
+        with self.assertRaises(FileExistsError):
+            self.mod.write_file(target, "x")
+        os.symlink(os.path.join(self.tmp, "elsewhere.json"), os.path.join(self.tmp, "link.json"))
+        with self.assertRaises(OSError):
+            self.mod.write_file(os.path.join(self.tmp, "link.json"), "x")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "elsewhere.json")))
 
     def test_the_summary_never_says_a_seal_is_intact(self):
         _, out, _, _ = self.scan()
@@ -525,6 +571,154 @@ class Output(Base):
         made = sorted(n for n in os.listdir(self.tmp) if n.startswith("adoption-scan-"))
         self.assertEqual(len(made), 2, made)
         self.assertRegex(made[0], r"^adoption-scan-\d{4}-\d{2}-\d{2}")
+
+
+class Listing(Base):
+    """Fix round 1: a listing that fails part-way never reads as a complete count."""
+
+    def listing_calls(self):
+        return [c for c in self.calls() if "graphql" in c and "repositoryOwner" in self.query(c)]
+
+    def test_an_error_on_a_later_page_marks_the_run_incomplete(self):
+        self.env["STUB_LIST_PAGE"] = "2"
+        self.fx["listing_fail"] = {"2": {"kind": "timeout"}}
+        code, out, data, sleeps = self.scan()
+        self.assertEqual(code, 4, out)
+        self.assertIn("INCOMPLETE", out)
+        self.assertIn("listing stopped after 2 repositories", out)
+        self.assertTrue(data["incomplete"].startswith("listing stopped after 2 repositories"), data["incomplete"])
+        self.assertEqual(len(data["repositories"]), 2)
+        with open(os.path.join(self.last_out, "adoption-scan.csv"), newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertTrue(rows and all(r["scan_status"].startswith("INCOMPLETE: listing stopped after 2") for r in rows))
+        firsts = [int(re.search(r"first: (\d+)", self.query(c)).group(1)) for c in self.listing_calls()]
+        self.assertIn(1, firsts)  # the listing's page shrinks too
+        self.assertTrue(sleeps)   # and it waits between tries
+
+    def test_a_listing_error_that_clears_on_retry_completes(self):
+        self.env["STUB_LIST_PAGE"] = "2"
+        self.fx["listing_fail"] = {"2": {"kind": "timeout", "times": 1}}
+        code, out, data, _ = self.scan()
+        self.assertIsNone(data["incomplete"])
+        self.assertEqual(len(data["repositories"]), 11)
+        self.assertEqual(code, 3)  # app-eight and the bad name, as ever
+        self.assertNotIn("INCOMPLETE", out)
+
+    def test_single_sign_on_is_named_with_what_to_do(self):
+        self.fx["listing_fail"] = {"0": {"kind": "sso"}}
+        code, out, data, _ = self.scan()
+        self.assertEqual(code, 4)
+        self.assertIn("single sign-on", out)
+        self.assertIn("gh auth", out)
+        self.assertEqual(len(self.listing_calls()), 1)  # retrying cannot help
+        self.assertEqual(data["repositories"], [])
+        self.assertIn("single sign-on", data["incomplete"])
+
+    def test_a_failure_on_the_first_page_is_incomplete_not_zero(self):
+        self.fx["listing_fail"] = {"0": {"kind": "timeout"}}
+        code, out, data, _ = self.scan()
+        self.assertEqual(code, 4)
+        self.assertIn("listing stopped after 0 repositories", out)
+        self.assertNotRegex(out, r"(?m)^\s+no signal\s+0$")  # no class table that reads as a clean count
+
+
+class FixRound(Base):
+    def test_a_capped_code_search_is_said(self):
+        self.fx["code_total"] = 5000
+        code, out, data, _ = self.scan()
+        self.assertEqual(code, 3)
+        self.assertIn("code search was capped", out)
+        self.assertTrue(any("code search was capped" in n for n in data["notes"]))
+
+    def test_decision_file_and_seal_only_are_counted_apart(self):
+        entry = {"name": "0001-0123456789ab.json", "type": "blob", "object": {
+            "__typename": "Blob", "byteSize": 99, "isTruncated": False,
+            "text": json.dumps({"schema": 1, "skill": "make-it", "date": "2026-01-01", "make_it": {"version": "1.0"}})}}
+        self.fx["repos"][5]["content"] = {"ledger": {"__typename": "Tree", "entries": [entry]}}  # app-six
+        self.fx["repos"][3]["content"] = {"readable": {"__typename": "Blob"}}                     # app-four
+        _, out, _, _ = self.scan()
+        self.assertIn("3 were found by make-it's decision file", out)
+        self.assertIn("2 by a seal history or MAKE-IT.md alone", out)
+
+    def test_a_too_large_answer_is_refused_without_reading_it_all(self):
+        self.mod.RESPONSE_CAP = 20000
+        self.env["STUB_BIG"] = "200000"
+        code, out, data, _ = self.scan()
+        self.assertEqual(code, 3)
+        reasons = {r["not_scanned_reason"] for r in data["repositories"] if r["class"] == "not scanned"}
+        self.assertTrue(any("too large" in (x or "") for x in reasons), reasons)
+
+    def test_a_rate_limit_given_up_on_stops_the_scan_and_marks_it_incomplete(self):
+        self.fx["failures"] = {"content": [{"status": 403, "headers": {"Retry-After": "999999"}}] * 20}
+        code, out, data, sleeps = self.scan("--page-size", "3")
+        self.assertEqual(code, 4)
+        self.assertTrue(sleeps and max(sleeps) <= 3600, sleeps)
+        self.assertEqual(len(self.content_calls()), 4)  # one batch's tries, then no more
+        self.assertGreaterEqual(out.count("Waiting"), 4)
+        self.assertIn("INCOMPLETE", out)
+        scanned = [r for r in data["repositories"] if r["class"] != "not scanned"]
+        self.assertEqual(scanned, [])
+        self.assertTrue(all("rate limit" in r["not_scanned_reason"] for r in data["repositories"]
+                            if r["repository"] != 'example-org/bad"name){x}'))
+
+    def test_a_reset_a_day_away_is_capped_and_said(self):
+        import time as _t
+        self.fx["failures"] = {"code": [{"status": 403, "headers": {"X-Ratelimit-Remaining": "0",
+                                                                    "X-Ratelimit-Reset": str(int(_t.time()) + 86400)}}]}
+        _, out, _, sleeps = self.scan()
+        self.assertIn(3600, sleeps)
+        self.assertIn("Waiting 3600 s", out)
+
+    def test_graphql_waits_are_said(self):
+        self.fx["failures"] = {"content": [{"status": 200, "body": json.dumps(
+            {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]})}]}
+        _, out, _, _ = self.scan()
+        self.assertIn("Waiting 60 s", out)
+
+    def test_each_failure_says_why(self):
+        with tempfile.TemporaryDirectory() as empty:
+            self.env["PATH"] = empty
+            self.assertIn("not installed", self.scan()[1])
+        self.setUp()
+        self.env["STUB_EXIT"] = "4"
+        code, out, _, _ = self.scan()
+        self.assertEqual(code, 2)
+        self.assertIn("not signed in", out)
+        self.env["STUB_EXIT"] = "1"
+        self.assertIn("network", self.scan()[1])
+        del self.env["STUB_EXIT"]
+        self.fx["failures"] = {"listing": [{"status": 403, "body": '{"message": "Resource not accessible by integration"}',
+                                            "headers": {"X-Accepted-Oauth-Scopes": "repo", "X-Oauth-Scopes": "gist"}}]}
+        out = self.scan()[1]
+        self.assertIn("repo", out)
+        self.assertIn("gh auth refresh -s repo", out)
+
+    def test_a_signal_needs_the_right_kind_of_object(self):
+        self.fx["repos"][5]["content"] = {"manifest": {"__typename": "Tree"}, "ctx": {"__typename": "Tree"},
+                                          "claudemd": {"__typename": "Tree"}, "readable": {"__typename": "Tree"},
+                                          "claudedir": {"__typename": "Blob"}}
+        _, _, data, _ = self.scan()
+        self.assertEqual(self.by_repo(data)["app-six"]["class"], "no signal")
+
+    def test_a_ci_pattern_in_a_comment_is_not_a_call(self):
+        self.fx["repos"][5]["content"] = {"workflows": {"__typename": "Tree", "entries": [
+            {"name": "old.yml", "type": "blob", "object": {"__typename": "Blob", "byteSize": 80, "isTruncated": False,
+             "text": "  # uses: example-org/shared-ci/.github/workflows/build.yml@old\n"}}]}}
+        _, _, data, _ = self.scan("--ci-pattern", "example-org/shared-ci")
+        self.assertEqual(self.by_repo(data)["app-six"]["ma4_ci_refs"], [])
+
+    def test_a_truncated_file_is_too_large_not_parsed_even_when_its_text_is_valid(self):
+        good = json.dumps({"schema": 1, "skill": "make-it", "date": "2026-01-01", "make_it": {"version": "1.0"}})
+        rec = json.dumps({"framework": {"version": "1.0"}, "project": {"type": "web-app"}})
+        self.fx["repos"][5]["content"] = {
+            "manifest": {"__typename": "Blob", "byteSize": 99, "isTruncated": True, "text": rec},
+            "ledger": {"__typename": "Tree", "entries": [{"name": "0001-0123456789ab.json", "type": "blob", "object": {
+                "__typename": "Blob", "byteSize": 99, "isTruncated": True, "text": good}}]}}
+        _, out, data, _ = self.scan()
+        six = self.by_repo(data)["app-six"]
+        self.assertEqual((six["ma1_readable"], six["ma1_version"], six["ma1_note"]), (False, None, "too large to read here"))
+        self.assertEqual((six["ma2_ledger_entries"], six["ma2_too_large"], six["ma2_unreadable"], six["ma2_skills"]), (1, 1, 0, {}))
+        self.assertIn("too large to read here", out)
 
 
 if __name__ == "__main__":
