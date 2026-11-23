@@ -303,6 +303,7 @@ def list_repos(login, want_type, limit):
                 return repos, why
             pause(5 * 2 ** tries, "GitHub could not list a page of repositories; trying a smaller page")
             continue
+        tries = max(0, tries - 1)  # a good page: the next one is a size larger, and failures don't add up
         conn = owner["repositories"]
         for n in conn.get("nodes") or []:
             if isinstance(n, dict) and isinstance(n.get("nameWithOwner"), str):
@@ -603,7 +604,8 @@ def summary(report, path):
     if not report["repositories"]:
         out += ["", "Nothing to count."]
     else:
-        out += ["", "Active repositories by class" + (", so far:" if report["incomplete"] else ":")]
+        out += ["", "Active repositories by class" + (", so far:" if report["incomplete"] else
+                " (may be missing some: a search failed or was capped, see the notes):" if report["partial"] else ":")]
         for c in CLASSES:
             out.append(f"  {c:<26}{report['counts'][c]:>6}")
     if report["counts"]["not scanned"]:
@@ -709,23 +711,25 @@ def main(argv=None):
     except GhFailed as e:
         print(f"Could not list the repositories: {e}", file=sys.stderr)
         return 2
-    incomplete = f"listing stopped after {len(repos)} repositories: {stopped}" if stopped else None
-    notes, partial = set(), False
+    incomplete = f"listing stopped after {len(repos)} repositories: {stopped.rstrip('.')}" if stopped else None
+    # partial: a search failed or was capped, so a missed signal could sit in any class. Every row says so
+    # (all rows, not only "no signal": simpler, and a reader handed only the CSV can't miss it).
+    notes, partial = set(), {}
     hits, total, seen = search("search/code", f"{qual}:{login} filename:app-context.json", notes)
     if hits is None:
-        partial, hits = True, {}
-        notes.add(f"The code search failed ({total}): decision files outside .make-it/ and the root were not looked for.")
+        hits = {}
+        partial["code search failed"] = (f"The code search failed ({total.rstrip('.')}): decision files outside "
+                                         ".make-it/ and the root were not looked for.")
     elif total > seen:
-        partial = True
-        notes.add(f"The code search was capped: GitHub found {total} app-context.json files and returns at most 1,000 "
-                  "(and searches at most 4,000 repositories), so the \"no signal\" count may include make-it apps whose "
-                  "only sign is a decision file outside the usual places.")
+        partial["code search capped"] = (
+            f"The code search was capped: GitHub found {total} app-context.json files and returns at most 1,000 "
+            "(and searches up to 4,000 private repositories), so the \"no signal\" count may include make-it apps "
+            "whose only sign is a decision file outside the usual places.")
     trailers = None
     if a.trailers:
         trailers, total, _ = search("search/commits", f"{qual}:{login} {TRAILER}", notes)
         if trailers is None:
-            partial = True
-            notes.add(f"The commit search failed ({total}): no trailer counts.")
+            partial["commit search failed"] = f"The commit search failed ({total.rstrip('.')}): no trailer counts."
         else:
             notes.add(f"Trailer commits: {total} found by GitHub; it returns at most 1,000, so counts are a lower bound.")
     valid = [r["name"] for r in repos if isinstance(r.get("name"), str) and REPO.fullmatch(r["name"])
@@ -752,13 +756,15 @@ def main(argv=None):
                   "ma2_latest", "ma2_versions", "ma3_make_it_md", "ma4_ci_refs", "ma5_ship_it_prs", "ma5_latest",
                   "ma6_claude_files", "ma7_trailer_commits"):
             row[k] = s[k] if s else None
-        row["scan_status"] = f"INCOMPLETE: {incomplete}" if incomplete else "complete"
+        row["scan_status"] = (f"INCOMPLETE: {incomplete}" if incomplete else
+                              "partial: " + "; ".join(partial) if partial else "complete")
         rows.append(row)
     counts = {c: sum(1 for r in rows if not r["archived"] and r["class"] == c) for c in CLASSES}
     report = {"owner": login, "owner_kind": "organisation" if a.org else "personal account",
               "scanned_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-              "seconds": round(time.monotonic() - started, 1), "incomplete": incomplete, "ci_pattern": a.ci_pattern,
-              "trailers": a.trailers, "counts": counts, "notes": sorted(notes), "repositories": rows}
+              "seconds": round(time.monotonic() - started, 1), "incomplete": incomplete,
+              "partial": sorted(partial.values()) or None, "ci_pattern": a.ci_pattern, "trailers": a.trailers,
+              "counts": counts, "notes": sorted(notes | set(partial.values())), "repositories": rows}
     try:
         write_outputs(path, report)
     except OSError as e:

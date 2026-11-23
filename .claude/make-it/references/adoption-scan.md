@@ -35,6 +35,7 @@ python3 -I "$HOME/.claude/make-it/scripts/adoption-scan.py" --org <your-org>
 - 0: every repository was scanned.
 - 3: it finished, but some repositories could not be scanned, or a search failed or was capped. The
   summary says which part.
+- 3 also means **partial** when a search failed or was capped: see "What it cannot tell you".
 - 4: **INCOMPLETE.** The listing stopped part-way (single sign-on, or GitHub kept failing), or GitHub's
   rate limit held through every wait. The counts cover only part of the repositories. The summary
   starts with `INCOMPLETE:` and the reason, the JSON's `incomplete` field holds it, and every CSV row's
@@ -110,11 +111,15 @@ so a spreadsheet never runs it as a formula.
 - **Anything off the default branch.** Work on other branches is not seen, by the scan or by GitHub's
   code search.
 - **Every decision file the code search could find.** GitHub's code search returns at most 1,000
-  results and covers at most 4,000 repositories, skips files of 384 KB or more, and does not search
-  archived repositories or most forks. When GitHub reports more matches than it returned, the summary
+  results; its documentation says "Up to 4,000 private repositories are searchable."; it skips files
+  of 384 KB or more, and does not search archived repositories or most forks. When GitHub reports more matches than it returned, the summary
   says the search was capped and that "no signal" may then include make-it apps whose only sign is a
-  decision file outside `.make-it/` and the root. The 4,000-repository limit is not reported by
-  GitHub, so a very large organisation should assume it applies.
+  decision file outside `.make-it/` and the root. GitHub does not report when the 4,000
+  private-repository limit applies, so an organisation with more private repositories than that
+  should assume it does.
+- When a search failed or was capped, every row's `scan_status` says `partial:` with the reason,
+  the JSON carries a `partial` field with the notes, and the summary's counts say "may be missing
+  some". Read "no signal" rows in such a run as "nothing found so far", not as final.
 - **Every Claude commit.** GitHub's search returns at most 1,000 results, so the trailer count is a
   lower bound, and the summary says so. A trailer can also be typed by hand or removed.
 - **Who ran which command, and what it cost.** The seal history's counts say which sealing steps
@@ -182,9 +187,8 @@ Checked on 2026-11-22 against GitHub's documentation:
   scan then halves the page and tries again, down to one repository; one that still fails is "not
   scanned". When fewer than 50 points are left it waits for the reset (at most an hour, and says so).
   An answer larger than 64 MB is abandoned while it is being read, and the page shrinks.
-- **Code search coverage:** "The REST API will find up to 4,000 repositories that match your filters
-  and return results from those repositories." (search API page). The legacy code-search syntax page,
-  which applies to that API, adds: "Forks with fewer stars than the parent repository or no commits
+- **Code search coverage:** the legacy code-search syntax page, which applies to the REST search API,
+  says "Up to 4,000 private repositories are searchable." and adds: "Forks with fewer stars than the parent repository or no commits
   are not indexed for code search." and "Archived repositories are not searchable."
   https://docs.github.com/en/search-github/searching-on-github/searching-code
   https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api
