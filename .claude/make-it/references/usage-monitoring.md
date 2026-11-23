@@ -379,8 +379,8 @@ to.
 > Desktop, the folders you opened; and your Claude Code version, operating system and terminal.
 >
 > It does not record what you type, Claude's replies, your code or files, or the commands Claude runs.
-> Nor are the paths of the files Claude reads or edits. We have set Claude Code so that this content
-> stays off.
+> Nor does it record the paths of the files Claude reads or edits. We have set Claude Code so that
+> this content stays off.
 >
 > make-it adds no reporting of its own, but its commands run inside Claude Code, so the name of each make-it command you run is recorded with its cost.
 >
@@ -412,8 +412,9 @@ console exporter on Claude Code v2.1.330, with every content flag off):
 
 ## 11. Counting adoption across your repositories
 
-Per-skill counts come from both: the usage reporting shows who ran which command, when, and what it
-cost; the ledger in each repository shows which sealing steps changed which app.
+Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran
+which command (a plugin from outside the official marketplace shows `third-party`), when, and what
+it cost; the ledger in each repository shows which sealing steps changed which app.
 Use the reporting for cost and activity per command and per person. Use the ledger for what make-it
 actually did to each app: it is committed in the repository, so it covers every machine and every
 provider, and it can't collide with someone's own command of the same name.
