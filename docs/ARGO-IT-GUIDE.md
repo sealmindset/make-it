@@ -16,7 +16,7 @@ This guide explains what `/argo-it` produces, what it expects from your cluster,
 - Generates Kustomize manifests for dev and prod (`env/dev/`, `env/prod/`)
 - Generates a CI workflow for building and pushing container images
 - Generates `ONBOARDING-K8S.md` with manual setup steps
-- Offers to send the set-up for review: its own branch, `argo-it/setup`, and one pull request into the main version (nothing builds or deploys until it's accepted)
+- Offers to send the set-up for review: its own branch, `argo-it/setup`, and one pull request into the main version (nothing is deployed until it's accepted; a test build runs on it)
 
 **What it does NOT do:**
 - Modify Docker Compose files, or change how your app behaves (before sending an update it may apply the linters' safe automatic fixes -- formatting, imports -- and it lists each file it changed)
@@ -212,7 +212,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches-ignore: [deploy-nonprod, deploy-prod]   # Prevent infinite loop
+    branches-ignore: [deploy-nonprod, deploy-prod, 'argo-it/**']   # Prevent infinite loop; the set-up waiting for review deploys nothing
   pull_request:
 
 permissions:
@@ -245,13 +245,13 @@ jobs:
         with:
           context: ./backend
           push: ${{ github.event_name != 'pull_request' }}   # Push only on non-PR
-          tags: ghcr.io/your-org/my-app/backend:dev-latest
+          tags: ${{ steps.meta.outputs.tags }}   # includes sha-<7>, the exact version this run deploys
 
       - uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/your-org/my-app/frontend:dev-latest
+          tags: ${{ steps.meta.outputs.tags }}
 
       # --- Deploy (non-PR only) ---
       - if: github.event_name != 'pull_request'
@@ -263,11 +263,13 @@ jobs:
       - if: github.event_name != 'pull_request'
         run: |
           # Mirror source → deploy branch
-          rsync -a --delete --exclude='.git' --exclude='deploy' ./ deploy/
-          # Patch image tags in K8s manifests
+          # (.github/ never goes to the deploy branch: the run's own token may not change workflow files)
+          rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' ./ deploy/
           cd deploy
-          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/backend:dev-latest"' env/dev/backend.yaml
-          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/your-org/my-app/frontend:dev-latest"' env/dev/frontend.yaml
+          # Patch image tags in K8s manifests: the sha- tag this same run built
+          TAG="sha-${GITHUB_SHA::7}"
+          yq -i ".spec.template.spec.containers[0].image = \"ghcr.io/your-org/my-app/backend:${TAG}\"" env/dev/backend.yaml
+          yq -i ".spec.template.spec.containers[0].image = \"ghcr.io/your-org/my-app/frontend:${TAG}\"" env/dev/frontend.yaml
           # Commit and push (triggers Argo CD sync)
           git config user.name "ci-bot"
           git config user.email "ci@noreply"

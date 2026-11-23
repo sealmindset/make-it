@@ -46,7 +46,7 @@ It will:
 1. **Discover** — read your `docker-compose.yml` and detect your org's conventions.
 2. **Generate** — create the Kubernetes configuration and a build-and-deploy pipeline.
 3. **Document** — produce onboarding docs for your team.
-4. **Propose** — send the set-up to GitHub on its own branch, `argo-it/setup`, as one proposed change (a pull request) for review. Your main version doesn't change, and nothing builds or deploys until someone accepts it.
+4. **Propose** — send the set-up to GitHub on its own branch, `argo-it/setup`, as one proposed change (a pull request) for review. Your main version doesn't change, and nothing is deployed until someone accepts it (a test build runs on it).
 
 Once it's accepted, the workflow is simply: **push your code → automation deploys it.**
 

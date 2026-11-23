@@ -315,6 +315,15 @@ If ALL of the following are true, skip directly to the redeploy step (PHASE 5b):
 This is the most common /argo-it use case after initial setup: the user made changes and wants
 to deploy them. Do NOT explain the infrastructure -- just deploy.
 
+**9. A first set-up: check where it would start, before anything is made.** When step 8 doesn't skip
+to PHASE 5b, this run is a first set-up. Before PHASE 1 asks anything, and before anything is
+generated or sealed, from the project root: remove argo-it's record of what an earlier run made
+(`rm -f "$(git rev-parse --git-dir)/argo-it-made"`), then run PHASE 5 step 1's check of where the
+set-up would start (its block that asks GitHub `git ls-remote --symref origin HEAD`). If it prints a
+line PHASE 5 has a rule for, use that rule's message and stop: nothing has been generated, sealed,
+saved or sent, and the folder is exactly as it was. If it prints `level: brought`, say PHASE 5's
+line for it and go on.
+
 </step>
 
 <!-- ============================================================ -->
@@ -1722,7 +1731,21 @@ on the pushed commit, before anything is built.
 
 **For GitHub Actions** (most common):
 
-Generate `.github/workflows/build-and-deploy.yml`:
+Generate `.github/workflows/build-and-deploy.yml`. Its steps run in this order -- the sections below
+aren't in this order, so place each step by this list:
+
+1. Checkout source branch
+2. Set up Docker Buildx
+3. Login to GHCR
+4. Compute image tags
+5. Validate Alembic migration chain (only if the app has migrations)
+6. Build {service} (PR -- no push)
+7. Build and push {service}
+8. Smoke test container startup (after Build and push: it starts the version just published)
+9. Select deploy tag
+10. Checkout deploy branch
+11. Install yq (YAML-safe editing)
+12. Mirror source to deploy branch and patch image tags
 
 ```yaml
 name: Build, Push, and Deploy
@@ -1859,7 +1882,7 @@ pod crash-loops on startup.
 
 **Post-build smoke test -- verify the app actually starts:**
 
-After building the image, run the entrypoint against a throwaway database to confirm
+After the Build and push step (step 8 in the list above, before Select deploy tag), run the entrypoint against a throwaway database to confirm
 the container doesn't crash on startup. This catches migration chain errors, import
 errors, and misconfigured entrypoint scripts.
 
@@ -1986,12 +2009,14 @@ errors, and misconfigured entrypoint scripts.
         run: |
           set -euo pipefail
 
-          # Clean deploy worktree except .git
-          find deploy -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          # Clean deploy worktree except .git and .github (the deploy copy never takes workflow files: the
+          # run's own token may not change them, and the deployment system reads only the manifests)
+          find deploy -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' -exec rm -rf {} +
 
-          # Mirror everything from source branch; exclude .git and deploy worktree
+          # Mirror everything from source branch; exclude .git, .github and deploy worktree
           rsync -a --delete \
             --exclude '.git' \
+            --exclude '.github' \
             --exclude 'deploy' \
             ./ deploy/
 ```
@@ -2053,7 +2078,7 @@ They use a static upstream image like `postgres:16-alpine` that doesn't change p
 - Pushes to `argo-it/**` (the set-up waiting for review) run nothing: it deploys only once accepted
 - The deploy tag is the `sha-` tag the same run built, never a moving tag the run didn't build
 - Non-PR pushes: full build + push + mirror + patch + deploy
-- The deploy branch contains the FULL source tree (mirrored via rsync), not just manifests
+- The deploy branch contains the FULL source tree (mirrored via rsync), not just manifests -- except `.github/`, which it never takes or loses
 - `yq` is used for YAML-safe image tag patching -- never use `sed` on YAML
 - `docker/metadata-action` generates standard tags: `dev-latest`/`prod-latest` + SHA + branch name
 
@@ -2080,6 +2105,8 @@ what the developer does (ongoing).**
 ```markdown
 # Kubernetes Deployment -- [PROJECT_NAME]
 
+<!-- argo-it set-up: this line marks the set-up /argo-it made; keep it -->
+
 ## What was generated
 
 /argo-it created the following files:
@@ -2089,7 +2116,7 @@ what the developer does (ongoing).**
 - This file
 
 These files arrive as one proposed change for review (a pull request from the branch `argo-it/setup`
-into the main version). Nothing builds or deploys until it's accepted.
+into the main version). Nothing is deployed until it's accepted; a test build runs on it first.
 
 ---
 
@@ -2299,14 +2326,30 @@ mirrors the source tree and patches manifests on every push.
 
 The first set-up never goes onto `main` or the branch the user is on: it goes onto its own branch,
 `argo-it/setup`, built on GitHub's main version (the branch GitHub's HEAD names), and reaches it only
-through one proposed change (a pull request) someone reviews. Nothing builds or deploys before that
-change is accepted. Later updates (PHASE 5b) are unchanged.
+through one proposed change (a pull request) someone reviews. Nothing is deployed before that
+change is accepted (a test build runs on it). Later updates (PHASE 5b) are unchanged.
 
 **1. Don't save the generated files yet:** nothing is saved or sent before the user's pick in
 step 3. 2b checks what this send would carry; only on 'Send it' does Option 1 check once more,
 build argo-it's save of its files by name (no branch moves, and a save that holds anything but
 argo-it's files is never sent), check exactly that save, and send it by its id -- the same order
 as PHASE 5b, where 3e checks before step 4 saves.
+
+First keep a record of what this run made, from the project root (`{generated_files}` are argo-it's
+own files from this run, by exact name): a stop before the seal takes back only these copies, and
+only while each is exactly as it was made.
+
+```bash
+# What this run made: each of argo-it's files that isn't saved, with what it holds now -- the first time it is seen this
+# run only, so a copy changed later (by the user, say) is never taken for one argo-it made
+rec="$(git rev-parse --git-dir)/argo-it-made"; touch "$rec"
+for f in {generated_files}; do
+  [ -f "$f" ] || continue
+  ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || continue
+  awk -v f="$f" 'substr($0, index($0, " ") + 1) == f { n = 1 } END { exit !n }' "$rec" ||
+    printf '%s %s\n' "$(git hash-object -- "$f")" "$f" >> "$rec"
+done
+```
 
 In a make-it project (one with `.make-it/app-context.json`), first check for unsaved code, from
 the project root, before the seal runs. The seal fingerprints the whole project folder, unsaved work
@@ -2369,6 +2412,156 @@ them] out of your project folder, or ask your DevOps team to have [it / them] le
 next: save your changes[ only if `keep-out:` lines were printed: -- all but [that file / those
 files]], or run /wrap-it, then run /argo-it again."
 
+Then check where the set-up would start, from the project root, before the seal runs (PHASE 0
+step 9 ran this same block before anything was made; things can change while the files are made).
+The set-up goes onto its own branch built on GitHub's main version, and argo-it's files were made
+from the code here, so the code here must be exactly that version: then the proposed change holds
+only argo-it's files and the seal's, and the seal describes what it lands on.
+
+```bash
+# Before a stop here: take back out of the folder each file this run made that is still exactly as made (the record
+# above; never a saved file, never one changed since -- that one stays, and is named), so the folder is as it was
+back() { rec="$(git rev-parse --git-dir)/argo-it-made"; [ -f "$rec" ] || return 0
+  while IFS=' ' read -r h f; do
+    if [ -f "$f" ] && [ "$(git hash-object -- "$f")" = "$h" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+      rm -f -- "$f"; case "$f" in (*/*) rmdir -p -- "${f%/*}" 2>/dev/null;; esac
+    elif [ -e "$f" ]; then printf 'kept: %s\n' "$f"; fi
+  done < "$rec"; rm -f "$rec"; }
+# An online home, the same one for sends and reads (as step 2), then everything GitHub has, into argo-it's own names
+git remote get-url origin >/dev/null 2>&1 || { back; echo "NO ORIGIN"; exit 1; }
+[ "$(git remote get-url --all origin)" = "$(git remote get-url --push --all origin)" ] || [ "$(git remote get-url --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" = "$(git remote get-url --push --all origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')" ] || { back; echo "SPLIT ORIGIN"; exit 1; }
+[ "$(git rev-parse --is-shallow-repository)" != true ] || git fetch --unshallow --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' || { back; echo "FETCH FAILED"; exit 1; }
+git fetch --prune --no-tags --refmap= origin '+refs/heads/*:refs/argo-it/gh/heads/*' '+refs/tags/*:refs/argo-it/gh/tags/*' || { back; echo "FETCH FAILED"; exit 1; }
+# GitHub's main version: the branch GitHub's HEAD names, asked of GitHub itself -- a plain branch name, never `work`
+s=$(git ls-remote --symref origin HEAD) || { back; echo "FETCH FAILED"; exit 1; }
+d=$(printf '%s\n' "$s" | awk '$1 == "ref:" && $3 == "HEAD" { sub("^refs/heads/", "", $2); print $2; exit }')
+[ -n "$d" ] || { back; echo "NO MAIN VERSION"; exit 1; }
+git check-ref-format --branch "$d" >/dev/null 2>&1 || { back; echo "MAIN NAME UNSAFE"; exit 1; }
+m=$(git rev-parse -q --verify "refs/argo-it/gh/heads/$d") || { back; echo "NO MAIN VERSION"; exit 1; }
+[ "$d" != work ] || { back; echo "WORK ONLINE AS MAIN"; exit 1; }
+printf '%s\n' "$d" > "$(git rev-parse --git-dir)/argo-it-default-branch"
+# A set-up already accepted: GitHub's main version holds argo-it's workflow and its onboarding notes with argo-it's line
+if git cat-file -e "${m}:./.github/workflows/build-and-deploy.yml" 2>/dev/null &&
+  git show "${m}:./ONBOARDING-K8S.md" 2>/dev/null | awk -v l='<!-- argo-it set-up: this line marks the set-up /argo-it made; keep it -->' '$0 == l { n = 1 } END { exit !n }'; then
+  back; echo "SET UP ALREADY"; exit 1
+fi
+# A set-up already on GitHub, waiting for review
+! git rev-parse -q --verify refs/argo-it/gh/heads/argo-it/setup >/dev/null || { back; echo "SETUP WAITING"; exit 1; }
+# The code here against that version. On `work`, first bring it level when every save it holds is already in that
+# version (a ship accepted) -- git-operations.md's "Bring `work` level after a ship", read from argo-it's own copy of
+# GitHub (so no ref of the user's but `work` moves); --ff-only and --keep refuse rather than overwrite unsaved work
+pos() { h=$(git rev-parse -q --verify HEAD) || { echo BEHIND; return; }; [ "$h" != "$m" ] || { echo LEVEL; return; }
+  if git merge-base --is-ancestor "$h" "$m"; then echo BEHIND; elif git merge-base --is-ancestor "$m" "$h"; then echo AHEAD
+  else echo APART; fi; }
+w=$(pos)
+if [ "$w" != LEVEL ] && [ "$(git branch --show-current)" = work ]; then
+  if git merge-base --is-ancestor work "$m"; then git merge -q --ff-only "$m" >/dev/null 2>&1
+  elif [ "$(git merge-tree --write-tree "$m" work 2>/dev/null | sed -n 1p)" = "$(git rev-parse "${m}:")" ]; then
+    git reset -q --keep "$m" >/dev/null 2>&1; fi
+  w=$(pos); [ "$w" != LEVEL ] || echo "level: brought"
+fi
+case "$w" in
+  (LEVEL) exit 0;;
+  (BEHIND) back; echo "BEHIND GITHUB";;
+  (AHEAD) back; echo "AHEAD OF GITHUB";;
+  (*) back; echo "APART FROM GITHUB";;
+esac
+exit 1
+```
+
+When it prints nothing, or only `level: brought`, the code here is GitHub's main version: go on to
+the seal. If it prints `level: brought`, say: "Your shipped changes are in the main copy now, so your
+working copy is up to date with it." Every other line it prints is a stop: don't run the seal and
+don't show the step-3 ask; the seal writes nothing, and nothing is saved or sent. For no online
+home, a split origin or a failed read, use step 2's own stop and its message. Name the main
+version's branch from the file the block wrote (`argo-it-default-branch`), never a guess. On a stop
+in PHASE 5 (not PHASE 0's, where nothing was made yet), add to the message, right after its first
+sentence, in these words: I've taken the set-up files I made this time back out of your folder. And,
+only if `kept:` lines were printed: [each path after a `kept:` line, joined by and] [was / were]
+changed after I made [it / them], so I left [it / them] there.
+
+If it prints `NO MAIN VERSION`, GitHub has no main version of this project yet (nothing was ever
+sent there, or the branch GitHub's HEAD names is missing), so there is nothing for a proposed change
+to go into. Tell the user:
+
+"I haven't saved or sent anything: your project's main copy isn't on GitHub yet, and your set-up
+goes in as a proposed change to it, for review. The main copy has to be put online once first --
+your DevOps team or a developer can do that, and /ship-it's first ship needs it too. What to do
+next: ask them to put your project's main copy on GitHub, then run /argo-it again."
+
+If it prints `WORK ONLINE AS MAIN`, GitHub's main version is make-it's working copy, `work` (a
+project whose `work` went online before its main copy did): a proposed change would go into the
+working copy, and the deploy copy would start from it. Tell the user:
+
+"I haven't saved or sent anything: your project's online copy on GitHub has your working copy
+('work') set as its main version, so a proposed change would go into your working copy instead of
+the main copy. What to do next: ask your DevOps team (or a developer) to put your project's main
+copy on GitHub and make it the main version there, then run /argo-it again."
+
+If it prints `MAIN NAME UNSAFE`, the name GitHub gives its main version isn't a plain branch name,
+so argo-it uses it nowhere. Tell the user:
+
+"I haven't saved or sent anything: the main version of your project on GitHub has a name I can't
+use safely. What to do next: ask your DevOps team (or a developer) to check the main version's name
+on GitHub, then run /argo-it again."
+
+If it prints `AHEAD OF GITHUB`, the code here holds saves the main version on GitHub doesn't have
+(on `work`, say, before a ship is accepted). Tell the user:
+
+"I haven't saved or sent anything: your project here has saved changes that aren't in the main
+version on GitHub yet, and your set-up has to start from exactly that version, so the proposed
+change holds only the set-up files. What to do next: ship your changes with /ship-it; once the ship
+is accepted, start with /resume-it (it brings your working copy level with the main copy), then run
+/argo-it again."
+
+If it prints `BEHIND GITHUB`, the main version on GitHub has saves the code here doesn't have (or
+the project here has no saves yet). Tell the user:
+
+"I haven't saved or sent anything: the main version on GitHub has changes your project here doesn't
+have yet, and your set-up has to start from exactly that version. What to do next: get the latest
+of the main version from GitHub into your project, without sending anything -- on a working copy,
+/resume-it does this once your last ship is accepted; otherwise ask your DevOps team how -- then run
+/argo-it again."
+
+If it prints `APART FROM GITHUB`, the code here and the main version on GitHub have each changed
+since they were last the same. Tell the user:
+
+"I haven't saved or sent anything: your project here and the main version on GitHub have each
+changed since they were last the same, and your set-up has to start from exactly the main version.
+What to do next: if you've shipped these changes and the ship was accepted, start with /resume-it
+(it brings your working copy level with the main copy); if not, ship them with /ship-it and wait for
+it to be accepted first. Then run /argo-it again."
+
+If it prints `SET UP ALREADY`, the main version on GitHub already holds argo-it's workflow and its
+onboarding notes with argo-it's own line: a set-up was accepted before, so this isn't a first
+set-up. Tell the user:
+
+"I haven't saved or sent anything: your set-up is already in the main version of your project on
+GitHub, so there's no first set-up to send. What to do next: get the latest of the main version
+from GitHub into your project; after that, run /argo-it whenever you change your app, and it sends
+the update the usual way."
+
+If it prints `SETUP WAITING`, GitHub already has `argo-it/setup`: a set-up waiting for review (or
+one closed without being accepted, and its branch left there). argo-it sends nothing past this
+while that branch is there; the only thing it offers is the local try-out (step 6). Tell the user:
+
+"I haven't saved or sent anything: your set-up is already on GitHub on its own branch,
+argo-it/setup, waiting for review. What to do next: ask your reviewer to look at the proposed change
+for argo-it/setup on GitHub (if there isn't one yet, open one from that branch into [the main
+version's branch]). Once it's accepted, get the latest of the main version from GitHub into your
+project. If it was closed without being accepted, delete the branch argo-it/setup on GitHub, then
+run /argo-it again to make a fresh one."
+
+Then, only if kubectl is present AND `kubectl config current-context` is a local cluster
+(rancher-desktop, docker-desktop, minikube, or kind-*), offer the try-out as a pick, and on
+"Try it", run step 6; otherwise stop here:
+
+"While it waits, I can try the set-up on this computer, in your local Kubernetes -- nothing is
+sent.
+
+1. **Try it on this computer** -- from the copy waiting for review
+2. **Not now**"
+
 Then run the seal step now, before step 2: it writes its files beside argo-it's, and the check and
 the save on 'Send it' must both see them. The seal's files count as argo-it's files: one save holds
 both. Then list them, from the project root:
@@ -2411,7 +2604,7 @@ again."
 **2. Check whether the deploy branch exists** (don't create it yet -- that happens on 'Send
 it' in step 4, after the user's go; nothing leaves the machine before the ask). First remember
 `git rev-parse HEAD` as `{asked_head}`: the commit the step-3 ask will be shown on, remembered
-before 2b's check (in a repo with no commits yet it prints `HEAD` and an error: remember `HEAD`).
+before 2b's check.
 Write `{deploy_branch}` alone on one line to `$(git rev-parse --git-dir)/argo-it-deploy-branch`
 (in the folder `git rev-parse --git-dir` prints) with your file tool, never a shell command. The
 block keeps the branch the ask will be shown on in a file too, so a branch name is never pasted
@@ -2433,7 +2626,7 @@ git ls-remote --heads origin || { echo "FETCH FAILED"; exit 1; }
 # The tree argo-it's save would hold now: this commit's files plus argo-it's, by name, in a temporary index,
 # past any `git replace`; no commit is made
 i="$(git rev-parse --absolute-git-dir)/argo-it-index"; rm -f "$i"
-{ ! git rev-parse -q --verify HEAD >/dev/null || GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree HEAD; } &&
+GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree HEAD &&
   GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null update-index --add -- {generated_files} &&
   t=$(GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null write-tree) && echo "tree $t"
 rm -f "$i"
@@ -2467,8 +2660,7 @@ second field, compared whole -- is exactly `refs/heads/{deploy_branch}`, never a
 ends in it. The `tree <id>` line is the tree argo-it's save would hold now: step 3 compares each
 GitHub line's own tree with it, and the save on 'Send it' builds its tree the same way. If no
 `tree` line is printed (one of argo-it's files is missing, say), no GitHub line counts as holding
-argo-it's files. In a repo with no commits yet, `git log` prints an error there: read it as
-nothing listed. If the block prints `FETCH FAILED`, stop -- don't show the step-3 ask; nothing is
+argo-it's files. If the block prints `FETCH FAILED`, stop -- don't show the step-3 ask; nothing is
 sent: without a current copy of what GitHub holds, 2b can't tell what was already sent. Tell the
 user:
 
@@ -2539,116 +2731,9 @@ send past either one.
 will save and none with an escaped path (exit 0 or exit 1, with the three labels each once, in
 order, read as 3e reads them): go on to step 3 -- the user never sees this check.
 
-**3. Ask the user what they want to do** -- first, where the set-up would start (after 2b's check,
-before the ask is shown). The set-up goes onto its
-own branch built on GitHub's main version, and argo-it's files were made from the code here, so the
-code here must be exactly that version: then the proposed change holds only argo-it's files, and the
-seal describes what it lands on. `{generated_files}` are the same files as in 2b. From the project
-root:
+**3. Ask the user what they want to do:**
 
-```bash
-# GitHub's main version: the branch GitHub's HEAD names, asked of GitHub itself, and its commit as step 2 read it
-s=$(git ls-remote --symref origin HEAD) || { echo "FETCH FAILED"; exit 1; }
-d=$(printf '%s\n' "$s" | awk '$1 == "ref:" && $3 == "HEAD" { sub("^refs/heads/", "", $2); print $2; exit }')
-m=; [ -z "$d" ] || m=$(git rev-parse -q --verify "refs/argo-it/gh/heads/$d")
-[ -n "$m" ] || { echo "NO MAIN VERSION"; exit 1; }
-printf '%s\n' "$d" > "$(git rev-parse --git-dir)/argo-it-default-branch"
-# The set-up was accepted already: GitHub's main version holds argo-it's onboarding notes
-! git cat-file -e "$m:ONBOARDING-K8S.md" 2>/dev/null || { echo "SET UP ALREADY"; exit 1; }
-# A set-up already on GitHub, waiting for review: each copy made again here that is exactly GitHub's leaves the folder
-# (a saved file goes back to its saved version); anything that differs stays, and is named. Then stop.
-w=$(git rev-parse -q --verify refs/argo-it/gh/heads/argo-it/setup)
-if [ -n "$w" ]; then
-  for f in {generated_files}; do
-    [ -e "$f" ] || continue
-    if [ "$(git hash-object -- "$f")" = "$(git rev-parse -q --verify "$w:$f")" ]; then
-      if git cat-file -e "HEAD:$f" 2>/dev/null; then git restore --source=HEAD --worktree -- "$f"
-      elif ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then rm -f -- "$f"; rmdir -p -- "${f%/*}" 2>/dev/null
-      else printf 'kept: %s\n' "$f"; fi
-    else printf 'kept: %s\n' "$f"; fi
-  done
-  echo "SETUP WAITING"; exit 1
-fi
-# The code here against that version: the same commit goes on; anything else stops
-h=$(git rev-parse -q --verify HEAD) || { echo "BEHIND GITHUB"; exit 1; }
-[ "$h" != "$m" ] || exit 0
-if git merge-base --is-ancestor "$h" "$m"; then echo "BEHIND GITHUB"
-elif git merge-base --is-ancestor "$m" "$h"; then echo "AHEAD OF GITHUB"
-else echo "APART FROM GITHUB"; fi
-exit 1
-```
-
-When it prints nothing, the code here is GitHub's main version: show the ask below. Each line below is a stop: don't show the step-3 ask, and
-nothing is saved or sent (`FETCH FAILED` is step 2's stop, with its message). Name the main
-version's branch from the file the block wrote (`argo-it-default-branch`), never a guess.
-
-If it prints `NO MAIN VERSION`, GitHub has no main version of this project yet (nothing was ever
-sent there, or its main branch is missing), so there is nothing for a proposed change to go into.
-Tell the user:
-
-"I haven't saved or sent anything: your project's online copy on GitHub doesn't have a main version
-yet, and your set-up goes in as a proposed change to it, for review. What to do next: send your app
-to GitHub first with /ship-it, then run /argo-it again."
-
-If it prints `AHEAD OF GITHUB`, the code here holds saves the main version on GitHub doesn't have
-(on `work`, say, before a ship). Tell the user:
-
-"I haven't saved or sent anything: your project here has saved changes that aren't in the main
-version on GitHub yet, and your set-up has to start from exactly that version, so the proposed
-change holds only the set-up files. What to do next: ship your changes with /ship-it, and once
-they're accepted, run /argo-it again."
-
-If it prints `BEHIND GITHUB`, the main version on GitHub has saves the code here doesn't have (or
-the project here has no saves yet). Tell the user:
-
-"I haven't saved or sent anything: the main version on GitHub has changes your project here doesn't
-have yet, and your set-up has to start from exactly that version. What to do next: get the latest
-of the main version from GitHub into your project, without sending anything (if you're not sure
-how, ask your DevOps team), then run /argo-it again."
-
-If it prints `APART FROM GITHUB`, the code here and the main version on GitHub have each changed
-since they were last the same. Tell the user:
-
-"I haven't saved or sent anything: your project here and the main version on GitHub have each
-changed since they were last the same, and your set-up has to start from exactly the main version.
-What to do next: ship your changes with /ship-it, and once they're accepted, get the latest of the
-main version from GitHub into your project, then run /argo-it again."
-
-If it prints `SET UP ALREADY`, the main version on GitHub already holds argo-it's onboarding notes:
-a set-up was accepted before, so this isn't a first set-up. Tell the user:
-
-"I haven't saved or sent anything: your set-up is already in the main version of your project on
-GitHub, so there's no first set-up to send. What to do next: get the latest of the main version
-from GitHub into your project; after that, run /argo-it whenever you change your app, and it sends
-the update the usual way."
-
-If it prints `SETUP WAITING`, GitHub already has `argo-it/setup`: a set-up waiting for review (or
-one closed without being accepted, and its branch left there). argo-it sends nothing past this
-while that branch is there; the only thing it offers is the local try-out (step 6). Each `kept:`
-line is one of argo-it's files that is still in the folder because it differs from GitHub's copy.
-Tell the user:
-
-"I haven't saved or sent anything: your set-up is already on GitHub on its own branch,
-argo-it/setup, waiting for review. The set-up files I just made again are the same as that copy,
-so I've taken them out of your folder[ only if `kept:` lines were printed: -- all but [each path
-after a `kept:` line, joined by and], which [differs / differ] from it, so I left [it / them]
-there]. What to do next: ask your reviewer to look at the proposed change for argo-it/setup on
-GitHub (if there isn't one yet, open one from that branch into [the main version's branch]). Once
-it's accepted, get the latest of the main version from GitHub into your project. If it was closed
-without being accepted, delete the branch argo-it/setup on GitHub, then run /argo-it again to make
-a fresh one."
-
-Then, only if kubectl is present AND `kubectl config current-context` is a local cluster
-(rancher-desktop, docker-desktop, minikube, or kind-*), offer the try-out as a pick, and on
-"Try it", run step 6; otherwise stop here:
-
-"While it waits, I can try the set-up on this computer, in your local Kubernetes -- nothing is
-sent.
-
-1. **Try it on this computer** -- from the copy waiting for review
-2. **Not now**"
-
-**The ask.** Sending starts a deployment, so this is active confirmation, per the approval block: the user
+Sending starts a deployment, so this is active confirmation, per the approval block: the user
 picks the target by name, a plain yes isn't an answer. Fill every bracket from what was found.
 If the hostname was left as a TODO placeholder, write "the address still marked TODO in the
 deployment files" wherever {hostname} appears below, and make the one thing to check: who will
@@ -2658,11 +2743,7 @@ fill that in before it can go live.
 been saved or sent yet [if any branch line step 2's `git ls-remote --heads origin` printed has a
 commit whose tree (`git --no-replace-objects rev-parse -q --verify <line id>^{tree}`) equals the
 `tree <id>` step 2 printed, and argo-it's files aren't saved here, in place of that: a copy of them
-is already on GitHub from last time, but they aren't saved here yet] [if argo-it's files are
-already saved from an earlier run (`git ls-files` lists them and `git status` shows them
-unchanged), in place of that: they're saved from last time [if the lines step 2's
-`git ls-remote --heads origin` printed show that earlier save on GitHub, so step 2's list leaves
-it out: , and a copy is already on GitHub / otherwise: , but nothing has been sent yet]]. [If this
+is already on GitHub from last time, but they aren't saved here yet]. [If this
 ask is shown again because something changed since the last one: Since I last asked, [your branch
 changed / you switched your project to **[branch]**], so I checked
 again.] Here's what's ready:
@@ -2673,10 +2754,12 @@ again.] Here's what's ready:
 - `.github/workflows/build-and-deploy.yml` -- the automated build-and-deploy steps
 - `ONBOARDING-K8S.md` -- Setup checklist for DevOps and developers
 
-If I send this, I put these files on their own branch on GitHub, `argo-it/setup`, and ask for a
-proposed change for review into **[the main version's branch, from step 3's file]** -- I open it on
-GitHub myself when I can, otherwise I'll tell you how. That branch itself stays as it is. Nothing
-builds or deploys until someone accepts that change; once it's accepted, every time anyone sends
+If I send this, I put these files[ only if the seal step listed its files: , and your project's
+make-it record,] on their own branch on GitHub, `argo-it/setup`, and ask for a proposed change for
+review into **[the main version's branch, from step 1's file]** -- I open it on GitHub myself when I
+can, otherwise I'll tell you how. That branch itself stays as it is. Nothing is deployed until
+someone accepts that change (a test build of it runs on GitHub, without deploying anything); once
+it's accepted, every time anyone sends
 code to this project it builds and deploys to **{hostname}** on its own, for everyone who uses it.
 [If step 2 found the deploy branch missing: I'll also set up `{deploy_branch}` on GitHub -- the copy
 the deployment system watches. It starts as [the main version's branch] is now, without these
@@ -2684,7 +2767,8 @@ files, so nothing deploys from it before the change is accepted.] Nothing goes l
 DevOps team finishes the one-time setup in ONBOARDING-K8S.md; if that's already done, accepting the
 change makes it go live. After the send I take these files out of your folder until the change is
 accepted -- GitHub and this computer each keep a copy. To undo before then, close the proposed
-change and delete `argo-it/setup` on GitHub -- nothing will have been built or deployed. The checks your project runs when you save don't run on the setup files I made; my
+change and delete `argo-it/setup` on GitHub -- nothing will have been deployed[ if step 2 found the
+deploy branch missing: ; `{deploy_branch}` can stay as it is -- it holds none of the set-up]. The checks your project runs when you save don't run on the setup files I made; my
 secret check does. [What stands out, e.g. 'the database runs inside the cluster for dev' /
 'this sits next to an existing workflow' / 'nothing unusual']. The one thing to check: is
 **{hostname}** the right address for the dev version of your app?
@@ -2692,21 +2776,20 @@ secret check does. [What stands out, e.g. 'the database runs inside the cluster 
 **What would you like to do?**
 
 1. **Send it for review -- deploys to {hostname} once accepted** -- I save these files on their own
-   branch and send it to GitHub for review; nothing builds or deploys until it's accepted
+   branch and send it to GitHub for review; nothing is deployed until it's accepted
 2. **Try it on this computer first** -- run it in your local Kubernetes before sending anything
    [only if kubectl is present AND `kubectl config current-context` is a local cluster:
    rancher-desktop, docker-desktop, minikube, or kind-*. Any other context may be a shared
    cluster -- leave this option out]
 3. **Show me the files first** -- nothing is saved or sent
-4. **Not now** -- the files stay in your project folder, not saved yet [if argo-it's files are
-   already saved, in place of that: saved from last time]; nothing is sent"
+4. **Not now** -- the files stay in your project folder, not saved yet; nothing is sent"
 
 Wait for the pick. A plain 'yes' or 'go' isn't an answer -- ask which.
 
 **4. Execute based on user choice:**
 
-**Option 1 (send -- CI deploys automatically):** remember `git rev-parse HEAD` as `{checked_head}`
-(in a repo with no commits yet it prints `HEAD` and an error: remember `HEAD`), then run 2b's check
+**Option 1 (send -- CI deploys automatically):** remember `git rev-parse HEAD` as `{checked_head}`,
+then run 2b's check
 again and read it the same way. On a stop, use 2b's stop as written -- nothing has been saved or
 sent. If no hit counts, first make sure nothing changed since the ask -- no new save, and no switch
 to another branch:
@@ -2739,30 +2822,25 @@ making a new one, and when GitHub can't be read, it stops before saving anything
 gl=$(git ls-remote --heads origin) || { echo "FETCH FAILED"; exit 1; }
 # A temporary index: that commit's files plus argo-it's, by name -- the real commit, past any `git replace`
 i="$(git rev-parse --absolute-git-dir)/argo-it-index"; rm -f "$i"
-{ [ "{checked_head}" = HEAD ] || GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree "{checked_head}"; } &&
+GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null read-tree "{checked_head}" &&
   GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null update-index --add -- {generated_files} &&
   tree="$(GIT_INDEX_FILE="$i" git --no-replace-objects -c core.hooksPath=/dev/null write-tree)" || { rm -f "$i"; echo "SAVE FAILED"; exit 1; }
 rm -f "$i"
-# The save: {checked_head} itself when argo-it's files are already saved there, unchanged; else GitHub's copy
-# on argo-it/setup when it is exactly this save on {checked_head} (a send whose report was lost); else a new
-# commit on {checked_head} (the first commit, in a repo with no commits yet)
+# The save: GitHub's copy on argo-it/setup when it is exactly this save on {checked_head} (a send whose report was
+# lost); else a new commit on {checked_head}
 b=argo-it/setup
-p="{checked_head}"; [ "$p" != HEAD ] || p=
+p="{checked_head}"
 # GitHub's commit on that branch: the line whose name is exactly refs/heads/<branch>
 gh=$(printf '%s\n' "$gl" | awk -v r="refs/heads/$b" '$2 == r {print $1}')
-if [ -n "$p" ] && [ "$tree" = "$(git --no-replace-objects rev-parse "${p}:")" ]; then
-  s="$p"
-elif [ -n "$gh" ] && [ "$(git --no-replace-objects rev-parse -q --verify "${gh}:" 2>/dev/null)" = "$tree" ] &&
-  [ "$(git --no-replace-objects rev-list --parents -n 1 "$gh" 2>/dev/null)" = "$gh${p:+ $p}" ]; then
+if [ -n "$gh" ] && [ "$(git --no-replace-objects rev-parse -q --verify "${gh}:" 2>/dev/null)" = "$tree" ] &&
+  [ "$(git --no-replace-objects rev-list --parents -n 1 "$gh" 2>/dev/null)" = "$gh $p" ]; then
   s="$gh"
-elif [ -z "$p" ]; then
-  s="$(git --no-replace-objects commit-tree -m "Add K8s manifests and CI workflow for Argo CD deployment" "$tree")" || { echo "SAVE FAILED"; exit 1; }
 else
   s="$(git --no-replace-objects commit-tree -p "$p" -m "Add K8s manifests and CI workflow for Argo CD deployment" "$tree")" || { echo "SAVE FAILED"; exit 1; }
 fi
 # The save must differ from {checked_head} by argo-it's files alone (a hook set in git's own settings can add
 # more): name every file it changes, then only argo-it's, and stop unless the two lists match
-base="$p"; [ -n "$base" ] || base="$(git hash-object -t tree /dev/null)"
+base="$p"
 all="$(git --no-replace-objects diff-tree -r --name-only "$base" "$s")" &&
   ours="$(git --no-replace-objects diff-tree -r --name-only "$base" "$s" -- {generated_files})" || { echo "SAVE FAILED"; exit 1; }
 [ "$all" = "$ours" ] || { echo "SAVE HOLDS MORE"; exit 3; }
@@ -2807,8 +2885,8 @@ one in a file argo-it generated, not in a change you already saved. If no hit co
 # Send {saved_head} -- the commit argo-it built and checked -- by its id to argo-it/setup only, never to main or
 # the branch here, and only as a new branch (the lease: it must not be on GitHub yet); a copy there that is
 # exactly this save (a send whose report was lost) is left as it is. First, if GitHub has no deploy branch,
-# start it at the commit the check read -- GitHub's main version, without the set-up -- so nothing can deploy
-# from it before the review (its name read from step 2's file, never pasted in)
+# start it at GitHub's main version, without the set-up -- so nothing can deploy from it before the review
+# (both branch names read from files, never pasted in)
 d="$(cat "$(git rev-parse --git-dir)/argo-it-deploy-branch")"
 # GitHub's deploy branch line: 0 = found, 2 = no such branch, anything else = GitHub couldn't be read, so
 # push nothing; it counts only when its name is exactly refs/heads/<deploy branch>
@@ -2816,14 +2894,26 @@ out=$(git ls-remote --exit-code --heads origin "refs/heads/$d"); case $? in 0|2)
 found=$(printf '%s\n' "$out" | awk -v r="refs/heads/$d" '$2 == r')
 on=$(git ls-remote --heads origin refs/heads/argo-it/setup) || { echo "FETCH FAILED"; exit 1; }
 on=$(printf '%s\n' "$on" | awk '$2 == "refs/heads/argo-it/setup" {print $1}')
+# The commit the check read must still be GitHub's main version (its branch from step 1's file), read again now: else
+# the set-up would carry other saves, and the deploy branch would start from them
+m="$(cat "$(git rev-parse --git-dir)/argo-it-default-branch")"
+mh=$(git ls-remote --heads origin "refs/heads/$m") || { echo "FETCH FAILED"; exit 1; }
+mh=$(printf '%s\n' "$mh" | awk -v r="refs/heads/$m" '$2 == r {print $1}')
+[ -n "$mh" ] && [ "$mh" = "{checked_head}" ] || { echo "NOT ON MAIN VERSION"; exit 3; }
 if [ -z "$found" ]; then
-  git push origin "{checked_head}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
+  git push origin "${mh}:refs/heads/$d" --recurse-submodules=no || { echo "PUSH 1 FAILED"; exit 1; }
 fi
 [ "$on" = "{saved_head}" ] || git push --force-with-lease=refs/heads/argo-it/setup: origin "{saved_head}:refs/heads/argo-it/setup" --recurse-submodules=no || { echo "PUSH 2 FAILED"; exit 1; }
 ```
 
 If the block prints `FETCH FAILED`, its read of GitHub failed before the first push, so it pushed
 nothing and the deploy branch wasn't touched; go on to the read below, as for any line it prints.
+
+If it prints `NOT ON MAIN VERSION`, nothing was sent: the commit the check read is no longer GitHub's
+main version (a save, a switch, or a change on GitHub since step 1), so go back to step 1 -- run its
+record, its unsaved-code check, its check of where the set-up would start, and the seal again, on
+what is there now -- then run step 2 and 2b again, then show the step-3 ask again -- never send from
+a commit that isn't GitHub's main version.
 
 **After the send, whatever the block printed** -- every push worked, or one failed -- read what
 GitHub holds now before you tell the user anything about what was sent: run
@@ -2851,7 +2941,7 @@ the raw output:
 only the copy the deployment system watches, `{deploy_branch}`, was set up there -- it holds none of
 the setup, so nothing deploys from it -- and nothing else was sent / if `argo-it/setup` on GitHub
 holds the save: it reached GitHub anyway, on its own branch, argo-it/setup, waiting for review, and
-nothing builds or deploys until it's accepted]. [the reason, in plain words -- e.g. 'Git can't sign
+nothing is deployed until it's accepted]. [the reason, in plain words -- e.g. 'Git can't sign
 in to GitHub on this computer'] What to do next: [the fix], then run /argo-it again."
 
 **If every push worked**, keep the sent commit here and take argo-it's own copies out of the folder,
@@ -2864,10 +2954,11 @@ from the project root (`{generated_files}` as in the save):
 # is staged stays staged.
 w="{saved_head}"
 git update-ref refs/argo-it/setup "$w" || exit 1
+rm -f "$(git rev-parse --git-dir)/argo-it-made"
 for f in {generated_files}; do
   [ -e "$f" ] || continue
-  if [ "$(git hash-object -- "$f")" = "$(git rev-parse -q --verify "$w:$f")" ]; then
-    if git cat-file -e "HEAD:$f" 2>/dev/null; then git restore --source=HEAD --worktree -- "$f"
+  if [ "$(git hash-object -- "$f")" = "$(git rev-parse -q --verify "${w}:./$f")" ]; then
+    if git cat-file -e "HEAD:./$f" 2>/dev/null; then git restore --source=HEAD --worktree -- "$f"
     elif ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then rm -f -- "$f"; rmdir -p -- "${f%/*}" 2>/dev/null
     else printf 'kept: %s\n' "$f"; fi
   else printf 'kept: %s\n' "$f"; fi
@@ -2882,20 +2973,23 @@ save. Then open the proposed change, from the project root:
 # it is here: the repository named from origin's own address (host/owner/repository), never another remote's, and
 # no reviewers named (GitHub asks the project's code owners itself, if it has any). Otherwise the user opens it.
 m="$(cat "$(git rev-parse --git-dir)/argo-it-default-branch")"
-repo=$(git config --get remote.origin.url | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')
-printf '%s\n' "$repo" | grep -Eq '^[A-Za-z0-9.-]+\.[A-Za-z]+/[^/]+/[^/]+$' || { echo "by hand: not a GitHub address"; exit 0; }
-command -v gh >/dev/null 2>&1 || { echo "by hand: no gh"; exit 0; }
+repo=$(git remote get-url origin | sed -E 's#^([A-Za-z][A-Za-z0-9+.-]*://[^/]*):[0-9]+/#\1/#; s#^[A-Za-z][A-Za-z0-9+.-]*://##; s#^[^@/]*@##; s#^([^/:]*):#\1/#; s#/+$##; s#\.git$##')
+printf '%s\n' "$repo" | grep -Eq '^[A-Za-z0-9.-]+\.[A-Za-z]+/[^/]+/[^/]+$' || { echo "by hand: no address"; exit 0; }
+host=${repo%%/*}
+command -v gh >/dev/null 2>&1 || { echo "by hand: no gh $host"; exit 0; }
 u=$(gh pr list --repo "$repo" --head argo-it/setup --state open --json url --jq '.[0].url' 2>/dev/null)
 [ -z "$u" ] || { echo "pr: $u"; exit 0; }
 u=$(gh pr create --repo "$repo" --head argo-it/setup --base "$m" --title "Set up deployment with Argo CD (argo-it)" \
   --body "This proposed change holds only the set-up files /argo-it made: the deployment files, the build-and-deploy workflow and ONBOARDING-K8S.md. Nothing builds or deploys until it is accepted; ONBOARDING-K8S.md lists the one-time steps for DevOps.") ||
-  { echo "by hand: gh couldn't open it"; exit 0; }
+  { echo "by hand: refused $host"; exit 0; }
 printf 'pr: %s\n' "$(printf '%s\n' "$u" | tail -1)"
 ```
 
-A `pr:` line is the proposed change's link. A `by hand:` line means the user opens it: `not a GitHub
-address` (GitLab or Azure DevOps, say, or no online address argo-it can name), `no gh` (GitHub's
-command-line tool isn't on this computer), or `gh couldn't open it` (it isn't signed in, say).
+A `pr:` line is the proposed change's link. A `by hand:` line means the user opens it: `no address`
+(no online address argo-it can name), `no gh <host>` (GitHub's command-line tool isn't on this
+computer), or `refused <host>` (the tool couldn't open it: it isn't signed in, say, or the host isn't
+GitHub). The host is the online home's name: when it is `github.com` or names GitHub (`github.` in
+it), it is GitHub; anything else (`gitlab.com`, `dev.azure.com`, a company's own) isn't.
 Then go on to step 5.
 
 **Option 2 (local test):** only offered when step 3 found a local context; pin every command to
@@ -2917,22 +3011,24 @@ it unsaved: it stays unsaved until 'Send it', whose check reads it first.
 **Option 3 (show the files):** describe each file in plain words (raw YAML only if they ask);
 nothing is saved or sent. Then go back to the step-3 pick without option 3.
 
-**Option 4 (not now):** say the files stay in the project folder, not saved yet [if argo-it's
-files are already saved, in place of that: they're saved from last time], and nothing was sent;
+**Option 4 (not now):** say the files stay in the project folder, not saved yet, and nothing was sent;
 stop here. Skip step 5.
 
 **5. Stop there:** tell the user, then stop -- nothing more is sent, and while the proposed change
 is open the only thing argo-it offers is the local try-out (step 6):
 
-"I've sent your set-up to GitHub on its own branch, argo-it/setup[ if a `pr:` line was printed: ,
-and opened a proposed change for review: [the link] / if a `by hand:` line was printed: , but I
-couldn't open the proposed change myself ([this project's online home isn't on GitHub / GitHub's
-command-line tool isn't on this computer / GitHub didn't let me open it]), so please open one: on
-your project's page online, start a new pull request (a merge request on GitLab) from argo-it/setup
-into [the main version's branch]]. [The main version's branch] stays as it was, and nothing builds
-or deploys until someone accepts the change.[ If this run set up `{deploy_branch}`: I also set up
+"I've sent your set-up to your project's online home on its own branch, argo-it/setup[ if a `pr:`
+line was printed: , and opened a proposed change for review: [the link] / if a `by hand:` line was
+printed: , but I couldn't open the proposed change myself ([for `no address`: I couldn't tell where
+your project lives online / for a host that is GitHub: GitHub's command-line tool isn't on this
+computer, or GitHub didn't let me open it / for any other host: your project lives on [host], not on
+GitHub, and I can only open these on GitHub]), so please open one: on your project's page online,
+start a new proposed change for review from argo-it/setup into [the main version's branch]]. [The
+main version's branch] stays as it was, and nothing is deployed until someone accepts the change (a
+test build of it runs first).[ If this run set up `{deploy_branch}`: I also set up
 `{deploy_branch}` on GitHub, the copy the deployment system watches; it holds none of the set-up
-yet.] Your set-up files are saved on their own copy waiting for review, so I've taken them out of your folder until it's accepted.[ only if `kept:` lines were printed: I left [each path after a
+yet.] Along with the set-up files, the change holds your project's make-it record[ only if the seal
+step listed its files], so it matches what it lands on. Your set-up files are saved on their own copy waiting for review, so I've taken them out of your folder until it's accepted.[ only if `kept:` lines were printed: I left [each path after a
 `kept:` line, joined by and] in your folder, because [it was / they were] changed after I sent the
 set-up.] What to do next: ask your reviewer to look at the proposed change, and share
 ONBOARDING-K8S.md (it's in the change) with your DevOps team for the one-time setup. Once it's
