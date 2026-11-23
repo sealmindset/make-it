@@ -415,9 +415,15 @@ console exporter on Claude Code v2.1.330, with every content flag off):
 Per-skill counts come from both: for make-it's standard install, the usage reporting shows who ran
 which command (a plugin from outside the official marketplace shows `third-party`), when, and what
 it cost; the ledger in each repository shows which sealing steps changed which app.
-Use the reporting for cost and activity per command and per person. Use the ledger for what make-it
-actually did to each app: it is committed in the repository, so it covers every machine and every
-provider, and it can't collide with someone's own command of the same name.
 
-make-it's adoption scan, which counts the repositories that carry make-it's records and reads
-their ledgers, ships separately. See the scan's own reference once it is installed.
+What the scan answers that the reporting cannot: which repositories were built with make-it,
+including ones nobody has opened since the reporting was switched on, and which sealing steps
+changed which app. It reads what make-it committed to each repository, so it covers every machine
+and every provider, and a repository's records can't collide with someone's own command of the same
+name. It shows presence, not validity: it never checks a seal.
+
+What the reporting answers that the scan cannot: who ran which command, when, and what it cost.
+
+Join the two by repository: the reporting's `vcs.*` identity against the scan's list (section 5).
+The scan only reads, and sends nothing anywhere but GitHub's own API. The adoption scan is described
+in [`adoption-scan.md`](adoption-scan.md).

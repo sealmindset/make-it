@@ -936,6 +936,9 @@ usage reporting (OpenTelemetry) centrally, sent to a collector you run.
 every content flag off, how to deliver and confirm it, what is sent and what is not, what it does and doesn't tell you
 about make-it, third-party providers, the collector token, and a notice to publish to your people.
 `render-managed-settings.py` checks that file and renders the macOS plist and Windows registry forms.
+To count which of your repositories were built with make-it, and which make-it steps changed them, run the
+read-only adoption scan described in [`adoption-scan.md`](.claude/make-it/references/adoption-scan.md); the two
+pages say which questions each one answers.
 
 ---
 
