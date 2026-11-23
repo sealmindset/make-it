@@ -97,7 +97,7 @@ ctl "tracking proves value"        's/Tracking alone does not prove value\./Trac
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
 ctl "prompt logging turned on"     's/("OTEL_LOG_USER_PROMPTS": )"0"/$1"1"/' 'content_on_only_in_calibration "$C"'
 ctl "tool details on outside the calibration" 's/^## 2\./`OTEL_LOG_TOOL_DETAILS=1`\n\n## 2./m' 'content_on_only_in_calibration "$C"'
-ctl "a real host in the guide"     's/<collector-host>/collector.internal.example.org/' 'hosts_generic "$C"'
+ctl "a real host in the guide"     's/<collector-host>/collector.internal.example.org/g' 'hosts_generic "$C"'
 ctl "the calibration not one-shell" 's/one shell, one time/in every shell/' 'awk -v h="$H_CAL" "/^#/{on=(\$0==h)} on" "$C" | flat | grep -qF "$S_CAL"'
 
 # 4. the render/validate script
