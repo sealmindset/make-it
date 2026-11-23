@@ -24,6 +24,7 @@ You describe what you want in plain English. The skills handle everything else -
 - [Architecture](#architecture)
 - [Build Quality](#build-quality)
 - [Deployment Lifecycle](#deployment-lifecycle)
+- [For Administrators: Usage Reporting](#for-administrators-usage-reporting)
 - [FAQ](#faq)
 - [Related Skills](#related-skills)
 - [Version History](#version-history)
@@ -924,6 +925,17 @@ All of Tier 0, plus: package manifest, type declarations, explicit public API, n
 ### Tier 5: API Service
 
 All of Tier 0, plus: health check endpoint, OpenAPI spec, structured logging, consistent error format
+
+---
+
+## For Administrators: Usage Reporting
+
+make-it itself sends nothing. To see how Claude Code is used across your organization, switch on Claude Code's own
+usage reporting (OpenTelemetry) centrally, sent to a collector you run.
+[`usage-monitoring.md`](.claude/make-it/references/usage-monitoring.md) is the guide: the managed-settings file with
+every content flag off, how to deliver and confirm it, what is sent and what is not, what it does and doesn't tell you
+about make-it, third-party providers, the collector token, and a notice to publish to your people.
+`render-managed-settings.py` checks that file and renders the macOS plist and Windows registry forms.
 
 ---
 
