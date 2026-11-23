@@ -4,7 +4,8 @@
 #   - .claude/make-it/references/usage-monitoring.md exists; the settings block under "## 1. Switching it on" is valid
 #     JSON, turns the reporting on, and locks every content flag off ("0", raw bodies included), with placeholders only.
 #   - The statements that matter are there whole: make-it sends nothing; what is not sent; the skill event does not
-#     tell you which make-it skill ran; third-party providers; tracking alone does not prove value; the notice text.
+#     say which make-it skill ran (it is sent by default, on the cost counters) and that a skill name is not proof of
+#     make-it; third-party providers; tracking alone does not prove value; the notice text; where per-skill counts come from.
 #   - The guide never turns on prompt, raw-body or tool-detail logging, except tool details in the one-shell calibration.
 #   - Only placeholder or documentation hosts appear in the guide; the README links to it outside Version History.
 #   - render-managed-settings.py: valid JSON in gives a plist (plutil -lint when plutil exists) and a registry file;
@@ -54,14 +55,19 @@ hosts_generic() {  # every URL host is the documentation site, the Anthropic Git
 
 S_NOTHING='make-it itself sends nothing.'
 S_NOT_SENT="By default, Claude Code does not send what people type, Claude's replies, the commands Claude runs, the contents of files, or tool inputs such as file paths."
-S_SKILL='The skill event does not tell you which make-it skill ran.'
+S_SKILL='Which make-it skill ran, and what it cost, is sent by default.'
+S_SKILL_EVENT='The `skill_activated` event does not name it: it reports `custom_skill`.'
+S_COLLIDE="A skill name is not proof of make-it: anyone's own command with the same name looks the same."
+S_OBSERVED='observed with the console exporter on Claude Code v2.1.330, with every content flag off'
 S_3P="On Amazon Bedrock, Google Cloud's Agent Platform or Microsoft Foundry, Claude Code skips server-managed settings, and its events carry no \`user.email\`: only the anonymous \`user.id\` and the \`session.id\`."
 S_VALUE='Tracking alone does not prove value.'
 S_BEFORE_AFTER='Proving value, like time saved, needs a before-and-after measurement.'
 H_NOTICE='## 10. A notice for your people'
 S_NOTICE="It does not record what you type, Claude's replies, your code or files, or the commands Claude runs."
 H_ADOPT='## 11. Counting adoption across your repositories'
-S_ADOPT="Per-skill counts come from make-it's ledger in each repository, not from the usage reporting."
+S_ADOPT="Per-skill counts come from both: the usage reporting shows who ran which command, when, and what it cost; the ledger in each repository shows which sealing steps changed which app."
+S_NOTICE_MAKEIT="make-it adds no reporting of its own, but its commands run inside Claude Code, so the name of each make-it command you run is recorded with its cost."
+S_NOTICE_PLAN='your Claude plan'
 H_CAL='### Calibrating `plugin_id_hash`, once'
 S_CAL='one shell, one time'
 
@@ -70,12 +76,15 @@ check "the guide exists at $G" '[ -f "$G" ]'
 check "the settings block is valid JSON, turns reporting on, and leaves every content flag off" 'settings_ok "$G"'
 
 # 2. the statements that matter, whole
-for s in "$S_NOTHING" "$S_NOT_SENT" "$S_SKILL" "$S_3P" "$S_VALUE" "$S_BEFORE_AFTER"; do
+for s in "$S_NOTHING" "$S_NOT_SENT" "$S_SKILL" "$S_SKILL_EVENT" "$S_COLLIDE" "$S_OBSERVED" "$S_3P" "$S_VALUE" "$S_BEFORE_AFTER"; do
   check "the guide says: $s" 'pinned "$G" "$s"'
 done
 check "the notice section says what is not recorded" 'in_section "$G" "$H_NOTICE" "$S_NOTICE"'
-check "the notice section says make-it sends nothing" 'in_section "$G" "$H_NOTICE" "$S_NOTHING"'
-check "the adoption placeholder says per-skill counts come from the ledger" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
+check "the notice says make-it's command names are recorded with their cost" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
+check "the notice names the Claude plan" 'in_section "$G" "$H_NOTICE" "$S_NOTICE_PLAN"'
+check "the adoption section says per-skill counts come from both sources" 'in_section "$G" "$H_ADOPT" "$S_ADOPT"'
+check "the adoption section does not claim adoption-scan.md exists on this branch" \
+  '[ -f .claude/make-it/references/adoption-scan.md ] || ! in_section "$G" "$H_ADOPT" "adoption-scan.md"'
 check "the calibration is one shell, one time" 'awk -v h="$H_CAL" "/^#/{on=(\$0==h)} on" "$G" | flat | grep -qF "$S_CAL"'
 check "no content flag is turned on outside the calibration" 'content_on_only_in_calibration "$G"'
 check "every URL host in the guide is the documentation or a placeholder" 'hosts_generic "$G"'
@@ -91,7 +100,12 @@ ctl "raw bodies switched on"       's/"OTEL_LOG_RAW_API_BODIES": "0"/"OTEL_LOG_R
 ctl "the settings block broken"    's/("CLAUDE_CODE_ENABLE_TELEMETRY": "1"),/$1/' 'settings_ok "$C"'
 ctl "make-it sends something"      's/make-it itself sends nothing\./make-it itself sends a summary./g' 'pinned "$C" "$S_NOTHING"'
 ctl "what is not sent reversed"    "s/Claude Code does not send what people type/Claude Code sends what people type/" 'pinned "$C" "$S_NOT_SENT"'
-ctl "the skill event names skills" 's/The skill event does not tell you/The skill event does tell you/' 'pinned "$C" "$S_SKILL"'
+ctl "skill names said not sent"   's/and what it cost, is sent by default\./and what it cost, is not sent by default./' 'pinned "$C" "$S_SKILL"'
+ctl "the skill event said to name it" 's/event does not name it:/event names it:/' 'pinned "$C" "$S_SKILL_EVENT"'
+ctl "a skill name said to be proof" 's/A skill name is not proof of make-it/A skill name is proof of make-it/' 'pinned "$C" "$S_COLLIDE"'
+ctl "the observation unlabelled"   's/observed with the console exporter on Claude Code v2\.1\.330, with every content flag off/documented/g' 'pinned "$C" "$S_OBSERVED"'
+ctl "notice hides make-it command names" 's/so the name of each make-it command you run is recorded with its cost\./so nothing about make-it is recorded./' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
+ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
 ctl "tracking proves value"        's/Tracking alone does not prove value\./Tracking alone proves value./' 'pinned "$C" "$S_VALUE"'
 ctl "notice says it records code"  's/It does not record what you type/It records what you type/' 'in_section "$C" "$H_NOTICE" "$S_NOTICE"'
@@ -161,6 +175,31 @@ check "the content-flag refusal prints no token" 'no_token on'
 sed "s|\"OTEL_LOG_USER_PROMPTS\": \"0\"|\"OTEL_LOG_RAW_API_BODIES\": \"file:/tmp/x\"|" "$good" > "$T/raw.json"
 run raw "$T/raw.json" --out "$T/o5"
 check "raw-body logging set is refused" '[ "$(rc raw)" = 1 ] && gq -F "env.OTEL_LOG_RAW_API_BODIES" "$T/raw.err"'
+for v in '""' '"false"'; do
+  sed "s|\"OTEL_LOG_TOOL_DETAILS\": \"0\"|\"OTEL_LOG_TOOL_DETAILS\": $v|" "$good" > "$T/v.json"
+  run v "$T/v.json" --out "$T/o7"
+  check "a content flag set to $v is refused (only \"0\" counts as off)" '[ "$(rc v)" = 1 ] && gq -F "env.OTEL_LOG_TOOL_DETAILS" "$T/v.err"'
+done
+# every placeholder the guide itself uses is refused by the script
+python3 -I -c 'import re,sys; print("\n".join(sorted(set(re.findall(r"<[^<>\n]+>", open(sys.argv[1]).read())))))' "$G" > "$T/ph.list"
+check "the guide uses placeholders (the list is not empty)" '[ -s "$T/ph.list" ]'
+while IFS= read -r ph; do
+  python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); d["env"]["OTEL_RESOURCE_ATTRIBUTES"]="enduser.id="+sys.argv[2]; json.dump(d,open(sys.argv[3],"w"))' "$good" "$ph" "$T/gp.json"
+  run gp "$T/gp.json" --out "$T/o8"
+  check "the guide's placeholder $ph is refused" '[ "$(rc gp)" = 1 ] && gq -F "env.OTEL_RESOURCE_ATTRIBUTES" "$T/gp.err"'
+done < "$T/ph.list"
+# symlinks and file modes: the token-bearing files never land outside --out, and are always owner-only
+mkdir -p "$T/o9"; : > "$T/victim"; ln -s ../victim "$T/o9/ClaudeCode-Settings.reg"
+run sl "$good" --out "$T/o9"
+check "a target that is a symlink is refused, and nothing is written through it" '[ "$(rc sl)" != 0 ] && [ ! -s "$T/victim" ] && no_token sl'
+ln -s "$T/o1" "$T/outlink"
+run sd "$good" --out "$T/outlink"
+check "an --out folder that is a symlink is refused" '[ "$(rc sd)" != 0 ]'
+mkdir -p "$T/o10"; : > "$T/o10/com.anthropic.claudecode.plist"; chmod 644 "$T/o10/com.anthropic.claudecode.plist"
+run md "$good" --out "$T/o10"
+check "an existing 0644 file is replaced by an owner-only one" \
+  '[ "$(rc md)" = 0 ] && [ "$(python3 -I -c "import os,sys;print(oct(os.stat(sys.argv[1]).st_mode&0o777))" "$T/o10/com.anthropic.claudecode.plist")" = 0o600 ]'
+check "the fresh files are owner-only" '[ "$(python3 -I -c "import os,sys;print(oct(os.stat(sys.argv[1]).st_mode&0o777))" "$T/o1/ClaudeCode-Settings.reg")" = 0o600 ]'
 run ack "$T/on.json" --out "$T/o6" --allow-content-flags
 check "with --allow-content-flags the same file renders, and says so" '[ "$(rc ack)" = 0 ] && gq -F "content" "$T/ack.err" && no_token ack'
 # a control for the token check itself: it must catch a token that does reach the output
