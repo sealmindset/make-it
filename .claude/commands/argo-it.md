@@ -1728,7 +1728,7 @@ found with a `build:` in docker-compose.yml (never a database or mock service), 
 
 1. Checkout source branch
 2. Set up Docker Buildx
-3. Login to the registry
+3. Login to GHCR -- or the registry's own login step (see "Adapt the login step" below)
 4. Compute image tags -- one step per service, `id: meta-{service}`
 5. Validate Alembic migration chain
 6. Build {service} (PR -- no push) -- each service

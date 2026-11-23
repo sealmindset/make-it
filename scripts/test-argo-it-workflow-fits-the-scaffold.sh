@@ -158,7 +158,9 @@ def order_key(item):
         e = e.replace("{service}", svc or "")
         if name == e or (e and name.startswith(e)):
             return (int(k), SERVICES.index(svc) if svc in SERVICES else 0)
+    UNPLACED.append(step_name(t))
     return (999, idx)
+UNPLACED = []
 ordered = [it[1] for it in sorted(enumerate(expanded), key=order_key)]
 
 # fill the remaining placeholders the way the text says
@@ -194,7 +196,8 @@ ST = job["steps"]
 ids = [s.get("id") for s in ST if s.get("id")]
 dup = sorted(set(x for x in ids if ids.count(x) > 1))
 check("every step id is unique (one image-tags step per service, each with its own id)", not dup, "repeated: %s" % dup)
-check("the order of the steps is stated in the text", ORDER_GIVEN, "PHASE 3 gives no numbered step order")
+check("the order of the steps is stated in the text, and it places every step", ORDER_GIVEN and not UNPLACED,
+      "PHASE 3 gives no numbered step order" if not ORDER_GIVEN else "not in the order list: %s" % UNPLACED)
 WENV = {k: str(v) for k, v in (wf.get("env") or {}).items()}
 
 # ---------- a model run ----------
