@@ -118,7 +118,7 @@ my-app/
 | `backend` (FastAPI) | Yes -- Deployment + Service | App service |
 | `frontend` (Next.js) | Yes -- Deployment + Service + Ingress | Web-facing app service |
 | `db` (PostgreSQL) | No | Use managed DB or existing cluster DB |
-| `mock-oidc` | No | Local dev only -- real OIDC in K8s |
+| `mock-oidc` | Test copy only, when picked | The practice sign-in: in `env/dev/` only if the person picks it (pretend people, no passwords -- anyone who can reach the dev address can sign in as anyone); never in `env/prod/`, which always uses the organisation's sign-in |
 | `mock-jira` | No | Local dev only -- real API in K8s |
 | `worker` (Celery) | Yes -- Deployment only (no Service) | Background worker |
 
@@ -194,7 +194,7 @@ spec:
     - match: Host(`my-app-dev.example.com`)
       kind: Rule
       services:
-        - name: frontend-service
+        - name: frontend            # each Service is named as its compose service
           port: 3000
   tls:
     secretName: my-app-tls-dev
