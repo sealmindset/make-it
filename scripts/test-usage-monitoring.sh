@@ -114,7 +114,7 @@ ctl "a skill name said to be proof" 's/A skill name is not proof of make-it/A sk
 ctl "the observation unlabelled"   's/observed(\s+)with(\s+)the(\s+)console/noticed$1with$2the$3console/gi' 'pinned "$C" "$S_OBSERVED"'
 ctl "notice hides make-it command names" 's/so the name of each make-it command you run is recorded with its cost\./so nothing about make-it is recorded./' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
 ctl "anyone may read it"            's/and only `<who can see it>` can(\s+>?\s*)read it\./and anyone may$1read it./' 'in_section "$C" "$H_NOTICE" "$S_WHO"'
-ctl "we may turn this content on"   's/so that this content(\s+>?\s*)stays off\./so that we may turn this content$1on./' 'in_section "$C" "$H_NOTICE" "$S_OFF"'
+ctl "we may turn this content on"   's/content(\s+>?\s*)stays(\s+>?\s*)off\./content$1we may turn$2on./' 'in_section "$C" "$H_NOTICE" "$S_OFF"'
 ctl "file paths recorded"           's/Nor does it record the paths/It records the paths/' 'in_section "$C" "$H_NOTICE" "$S_NOR"'
 ctl "third-party plugin shows the real name" 's/the counters(\s+)show `third-party` instead\./the counters$1show the real name./' 'pinned "$C" "$S_3PNAME"'
 ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
