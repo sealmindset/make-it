@@ -573,10 +573,13 @@ class Verify(Base):
         self.assertEqual(len(fails), 1, r.stdout)
         line = fails[0]
         self.assertNotIn(f"record: {version}, check: {version}", line)  # the old message's contradiction
-        self.assertIn(f"same version number ({version})", line)
-        self.assertIn("different content", line)
-        self.assertIn("different distribution of make-it", line)
-        self.assertIn("watermark.md", line)
+        self.assertIn(f"The version numbers are the same ({version}) but the content differs", line)
+        self.assertIn("sealed by another build of make-it, or the record was edited", line)
+        self.assertIn("check it against that reviewed build", line)
+        self.assertIn('watermark.md, "Checking against your own build of make-it"', line)
+        # only what verify knows, and never "trust the build the app came with"
+        self.assertNotIn("was built by a different distribution", line)
+        self.assertNotIn("the build that sealed it", line)
         mine = self.record()["framework"]["content_manifest_sha256"][:12]
         with open(os.path.join(fw, "CONTENT_MANIFEST"), "rb") as f:
             theirs = hashlib.sha256(f.read()).hexdigest()[:12]
@@ -604,6 +607,31 @@ class Verify(Base):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("does not say which make-it content built it", r.stdout)
         self.assertNotIn("names a different make-it release than the one", r.stdout)
+
+    def test_an_empty_or_wrong_typed_content_digest_says_there_is_none(self):
+        # hand-edited records: one line about the digest, no exception. The record no longer matches the
+        # seal's release either, so the seal check adds its own line, as it always has.
+        self.write()
+        good = self.record()
+        for bad in ("", 0, 12345, [], ["a" * 64], {}, None):
+            with self.subTest(digest=bad):
+                rec = json.loads(json.dumps(good))
+                rec["framework"]["content_manifest_sha256"] = bad
+                with open(self.p(".make-it/manifest.json"), "w") as f:
+                    json.dump(rec, f)
+                r = self.verify(reseal=False)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertEqual(r.stderr, "")
+                fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+                digest = [l for l in fails if "content" in l]
+                self.assertEqual(digest, ["FAIL  The build record does not say which make-it content built it "
+                                          "(it has no content digest). Run /resume-it in this project, then push again."])
+                self.assertEqual(fails, digest + ["FAIL  The build record and the seal name different make-it "
+                                                  "releases. Run /resume-it in this project."])
+                self.assertNotIn("could not finish", r.stdout)
+                j = json.loads(self.verify("--json", reseal=False).stdout)
+                self.assertEqual(j["result"], "fail")
+                self.assertEqual(j["fails"], [l[len("FAIL  "):] for l in fails])
 
     def test_a_record_that_names_another_scaffold_does_not_skip_the_hashes(self):
         # claiming "no scaffold" in the record must not switch the file check off
