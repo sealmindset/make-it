@@ -103,7 +103,7 @@ ctl "what is not sent reversed"    "s/Claude Code does not send what people type
 ctl "skill names said not sent"   's/and what it cost, is sent by default\./and what it cost, is not sent by default./' 'pinned "$C" "$S_SKILL"'
 ctl "the skill event said to name it" 's/event does not name it:/event names it:/' 'pinned "$C" "$S_SKILL_EVENT"'
 ctl "a skill name said to be proof" 's/A skill name is not proof of make-it/A skill name is proof of make-it/' 'pinned "$C" "$S_COLLIDE"'
-ctl "the observation unlabelled"   's/observed with the console exporter on Claude Code v2\.1\.330, with every content flag off/documented/g' 'pinned "$C" "$S_OBSERVED"'
+ctl "the observation unlabelled"   's/observed(\s+)with(\s+)the(\s+)console/noticed$1with$2the$3console/gi' 'pinned "$C" "$S_OBSERVED"'
 ctl "notice hides make-it command names" 's/so the name of each make-it command you run is recorded with its cost\./so nothing about make-it is recorded./' 'in_section "$C" "$H_NOTICE" "$S_NOTICE_MAKEIT"'
 ctl "adoption counts from the ledger only" 's/Per-skill counts come from both:/Per-skill counts come only from the ledger:/' 'in_section "$C" "$H_ADOPT" "$S_ADOPT"'
 ctl "third parties carry email"    's/its events carry no `user.email`/its events carry `user.email`/' 'pinned "$C" "$S_3P"'
