@@ -1147,7 +1147,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
 - **D01-D06**: Database & seed data (migrations, seed users, Alembic syntax, one migration head)
 - **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
-- **M01-M04**: Mock services (mock-oidc, seed script, contracts, env vars)
+- **M01-M05**: Mock services (mock-oidc, seed script, contracts, env vars, the access code)
 - **L01-L11**: Activity logs (LogStore, middleware, interceptors, REST API, admin UI, the signed-in user and the visitor's address on each event, no query string in the console log)
 - **G01-G07**: Application settings (tables, service, API, admin page, RBAC, fallback)
 - **X01-X09**: Security (secrets, validation, deps, headers, no Java, no module throws, X09 hostile code: `~/.claude/make-it/references/hostile-code.md`, a stop rather than a fix, run before Part B starts anything)

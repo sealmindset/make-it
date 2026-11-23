@@ -1315,7 +1315,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **U01-U07**: UI & frontend
 - **D01-D06**: Database & seed data
 - **I01-I07**: Docker & infrastructure
-- **M01-M04**: Mock services
+- **M01-M05**: Mock services
 - **L01-L11**: Activity logs
 - **N01-N08**: Notifications
 - **F01-F08**: File upload & document processing (if app has Documents page or uploads)

@@ -17,14 +17,22 @@ Config via environment variables:
 - MOCK_OIDC_INTERNAL_BASE_URL (default http://mock-oidc:10090) -- Docker internal
 - MOCK_OIDC_CLIENT_ID (default mock-oidc-client)
 - MOCK_OIDC_CLIENT_SECRET (default mock-oidc-secret)
+- MOCK_OIDC_ACCESS_CODE (optional) -- when set, the sign-in page asks for this code before it shows
+  anyone or signs anyone in (a shared code, for a practice sign-in someone else can reach)
+- MOCK_OIDC_REQUIRE_ACCESS_CODE (optional, "true" on a cluster) -- refuse to start without an access code
+  of at least 16 characters
+Unset, both leave local development exactly as it was.
 """
 
+import asyncio
 import base64
 import hashlib
+import hmac
 import html as html_mod
 import json
 import os
 import secrets
+import sys
 import time
 import uuid
 from typing import Optional
@@ -45,6 +53,22 @@ EXTERNAL_BASE = os.getenv("MOCK_OIDC_EXTERNAL_BASE_URL", f"http://localhost:{POR
 INTERNAL_BASE = os.getenv("MOCK_OIDC_INTERNAL_BASE_URL", f"http://mock-oidc:{PORT}")
 CLIENT_ID = os.getenv("MOCK_OIDC_CLIENT_ID", "mock-oidc-client")
 CLIENT_SECRET = os.getenv("MOCK_OIDC_CLIENT_SECRET", "mock-oidc-secret")
+ACCESS_CODE = os.getenv("MOCK_OIDC_ACCESS_CODE", "")
+if os.getenv("MOCK_OIDC_REQUIRE_ACCESS_CODE", "").lower() == "true" and len(ACCESS_CODE) < 16:
+    # Fail closed: a practice sign-in someone else can reach never runs without its access code.
+    print("mock-oidc: not starting: MOCK_OIDC_REQUIRE_ACCESS_CODE is true and MOCK_OIDC_ACCESS_CODE is "
+          "missing or shorter than 16 characters", file=sys.stderr, flush=True)
+    sys.exit(1)
+
+# Access code: a correct code is remembered for that browser in a signed cookie for ACCESS_TTL seconds.
+# Wrong codes are counted per client address, in memory (a restart clears them): after ACCESS_MAX_FAILS
+# within ACCESS_WINDOW seconds, every try is refused until the window passes; each wrong try waits 1 second.
+ACCESS_COOKIE = "mock_oidc_access"
+ACCESS_TTL = 15 * 60
+ACCESS_MAX_FAILS = 5
+ACCESS_WINDOW = 5 * 60
+_access_key = secrets.token_bytes(32)
+_access_fails: dict[str, list[float]] = {}
 
 # ---------------------------------------------------------------------------
 # RSA key pair (generated once on startup)
@@ -157,6 +181,68 @@ async def jwks():
 
 
 # ---------------------------------------------------------------------------
+# Access code (only when MOCK_OIDC_ACCESS_CODE is set)
+# ---------------------------------------------------------------------------
+
+
+def _access_token(expires: int) -> str:
+    sig = hmac.new(_access_key, str(expires).encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{sig}"
+
+
+def _has_access(request: Request) -> bool:
+    """True when no access code is set, or the browser holds a valid, unexpired access cookie."""
+    if not ACCESS_CODE:
+        return True
+    raw = request.cookies.get(ACCESS_COOKIE, "")
+    expires, _, _sig = raw.partition(".")
+    if not expires.isdigit() or int(expires) < time.time():
+        return False
+    return hmac.compare_digest(raw, _access_token(int(expires)))
+
+
+def _client(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+def _render_code_page(query: str, message: str = "") -> HTMLResponse:
+    """The sign-in page when an access code is set: a code field only, no names."""
+    esc = html_mod.escape
+    note = f'<p style="color:#b00;">{esc(message)}</p>' if message else ""
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html><head><title>Practice sign-in - Access code</title></head>
+<body style="font-family:sans-serif;display:flex;justify-content:center;margin-top:80px;">
+  <form method="POST" action="/authorize" style="max-width:360px;">
+    <h2>Practice sign-in</h2>
+    <p>Enter the access code your team gave you.</p>{note}
+    <input type="hidden" name="return_query" value="{esc(query, quote=True)}">
+    <input type="password" name="access_code" autocomplete="off" required style="width:100%;padding:8px;">
+    <button type="submit" style="margin-top:12px;padding:8px 16px;">Continue</button>
+  </form>
+</body></html>""", status_code=401 if message else 200)
+
+
+async def _check_code(request: Request, code: str, return_query: str):
+    """A code submitted from the code page: right -> set the cookie and go back to the sign-in page."""
+    who, now = _client(request), time.time()
+    recent = [t for t in _access_fails.get(who, []) if now - t < ACCESS_WINDOW]
+    _access_fails[who] = recent
+    if len(recent) >= ACCESS_MAX_FAILS:
+        return _render_code_page(return_query, "Too many wrong codes. Wait a few minutes and try again.")
+    if not hmac.compare_digest(code.encode(), ACCESS_CODE.encode()):
+        recent.append(now)
+        await asyncio.sleep(1)
+        return _render_code_page(return_query, "That code isn't right.")
+    _access_fails.pop(who, None)
+    expires = int(now) + ACCESS_TTL
+    secure = EXTERNAL_BASE.startswith("https://") or request.headers.get("x-forwarded-proto") == "https"
+    resp = RedirectResponse(url="/authorize?" + return_query.lstrip("?"), status_code=303)
+    resp.set_cookie(ACCESS_COOKIE, _access_token(expires), max_age=ACCESS_TTL, httponly=True,
+                    secure=secure, samesite="lax", path="/authorize")
+    return resp
+
+
+# ---------------------------------------------------------------------------
 # Authorization
 # ---------------------------------------------------------------------------
 
@@ -241,6 +327,7 @@ def _render_login_page(
 
 @app.get("/authorize")
 async def authorize_get(
+    request: Request,
     response_type: str = Query("code"),
     client_id: str = Query(...),
     redirect_uri: str = Query(...),
@@ -261,6 +348,10 @@ async def authorize_get(
     # Validate redirect_uri against registered URIs to prevent open redirect
     _validate_redirect_uri(client_id, redirect_uri)
 
+    # With an access code set, nothing below (not even login_hint) happens without it
+    if not _has_access(request):
+        return _render_code_page(request.url.query)
+
     # If login_hint matches a known user, auto-approve
     if login_hint and login_hint in _users:
         code = _generate_auth_code(login_hint, redirect_uri, client_id, nonce)
@@ -274,13 +365,22 @@ async def authorize_get(
 
 @app.post("/authorize")
 async def authorize_post(
-    sub: str = Form(...),
-    redirect_uri: str = Form(...),
-    client_id: str = Form(...),
+    request: Request,
+    sub: Optional[str] = Form(None),
+    redirect_uri: Optional[str] = Form(None),
+    client_id: Optional[str] = Form(None),
     state: str = Form(""),
     nonce: str = Form(""),
+    access_code: Optional[str] = Form(None),
+    return_query: str = Form(""),
 ):
-    """Authorization endpoint (POST) -- form submission from login page."""
+    """Authorization endpoint (POST) -- the access code form, or a user picked on the login page."""
+    if access_code is not None and ACCESS_CODE:
+        return await _check_code(request, access_code, return_query)
+    if not _has_access(request):
+        raise HTTPException(403, "The access code is needed first.")
+    if not sub or not redirect_uri or not client_id:
+        raise HTTPException(422, "sub, redirect_uri and client_id are required")
     if sub not in _users:
         raise HTTPException(400, f"Unknown user: {sub}")
 

@@ -222,6 +222,8 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 **M04** [Tier 1, 5] [BLOCK] **All service URLs from env vars** -- Never hardcoded base URLs in client code.
 
+**M05** [Tier 1, 5] [FIX] **The practice sign-in can ask for an access code** -- `mock-services/mock-oidc/app.py` contains `MOCK_OIDC_ACCESS_CODE` (read the file, never a version guess). An older copy can't run on a cluster, so /argo-it offers only the organisation's sign-in until it is updated. Fix: replace `mock-oidc/app.py` with the scaffold's, keeping only the app's own built-in return addresses (the `redirect_uris` list, with the app's ports); local development is unchanged (no code set means no code asked). **SaaS auth pattern only -- skip if EasyAuth is selected.**
+
 ---
 
 ## Activity Logs

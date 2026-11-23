@@ -71,6 +71,12 @@ is invisible to the user.
 
 <process>
 
+**Reading this text.** Where it says GitHub, read the project's online home: the host its `origin`
+remote names (GitHub, GitLab, a company Gitea...). Where it asks for a block to run "with a 120-second
+timeout", give the command your tool's own time limit (macOS has no `timeout` command; on Linux,
+`timeout 120 <command>` works too). A setting the person doesn't know is written as `TODO-<what>`, e.g.
+`TODO-prod-hostname`, and said in the report.
+
 <!-- ============================================================ -->
 <!-- PHASE 0: DISCOVER -- Read the app and detect conventions       -->
 <!-- ============================================================ -->
@@ -255,6 +261,13 @@ git branch -r 2>/dev/null | grep -i deploy
 | **Database** | Image is postgres, mysql, mariadb, mongo, redis, etc. | See database strategy below |
 | **Mock service** | Name starts with mock-*, or is in docker-compose `profiles: [dev]` | SKIP -- local dev only. One exception: the mock sign-in (`mock-oidc`), deployed to the test copy (`env/dev/`) only, and only when the person picks the practice sign-in (PHASE 1 **Sign-in**); never in `env/prod/` |
 | **Worker** | Has no ports, or is named worker/celery/scheduler | Generate Deployment only (no Service/Ingress) |
+
+**6a. Service names must work as cluster names.** Each app service's Kubernetes Service is named
+exactly as its Compose service (PHASE 2, the address rule). A Compose service name that isn't a valid
+DNS label (lower-case letters, digits and hyphens, starting and ending with a letter or digit, at most
+63 characters) can't be one: stop, generate nothing, and tell the user: "I can't set this up yet: your
+app's part called **[name]** has a name a cluster can't use (only small letters, digits and hyphens
+work). What to do next: ask a developer to rename it in docker-compose.yml, then run /argo-it again."
 
 **6b. Detect split-service architecture:**
 
@@ -469,10 +482,17 @@ MANIFEST_VARS=$(grep -E '^\s+- name: [A-Z_]+' env/dev/*.yaml 2>/dev/null | sed '
 MISSING=$(comm -23 <(echo "$COMPOSE_VARS") <(echo "$MANIFEST_VARS"))
 ```
 
-If new env vars are found in docker-compose.yml that don't exist in the K8s manifests,
-auto-add them to the manifests (as `secretKeyRef` if the name suggests a secret, or
-literal `value:` otherwise). Tell the user: "I noticed you added a new setting to your
-app. I've included it in the deployment config."
+If new env vars are found in docker-compose.yml that don't exist in the K8s manifests, add each one to
+the workload of the Compose service that has it, by PHASE 2's rules -- never by a literal copy or a guess
+from its name:
+- skip the practice sign-in's own settings (every `MOCK_OIDC_*`), build arguments, and any service that
+  isn't deployed (a database, a mock service): they belong to no workload here;
+- an address: the address rule and its table (in `env/prod/`, the table's live-version column);
+- a secret by PHASE 0's rule: a `secretKeyRef` to `{app}-secrets-{env}`, and the key added to ONBOARDING;
+- anything else: its literal value;
+- never write anything of the practice sign-in into `env/prod/`; run PHASE 2's live-version check after.
+Tell the user: "I noticed you added a new setting to your app. I've included it in the deployment
+config."
 
 **3c. Verify migration files are tracked:**
 ```bash
@@ -1198,6 +1218,10 @@ split routing so API calls go directly to the backend for better performance.
   and confirm with user rather than asking open-ended
 - For dev and prod separately
 - Save to app-context.json
+- Check each answer before using it: a host name only -- letters, digits, hyphens and dots, each part
+  starting and ending with a letter or digit, at most 253 characters; no `http://`, no path, no port, no
+  spaces, commas or quotes. Anything else: ask again, saying why in plain words (e.g. "Just the address,
+  without `https://` -- like `myapp.example.com`."). "I don't know" is fine: `TODO-<env>-hostname`.
 
 **Ingress controller** (if not in .argo-it.yml or detected):
 "What ingress controller does your cluster use?"
@@ -1231,23 +1255,41 @@ one option per such cluster, by name, and **None of these / not sure**.
 2. Use a managed cloud database (recommended for production)
 3. Connect to an existing database (you'll provide the URL)"
 - If `.argo-it.yml` has `database_strategy`: use it, skip the question
-- Default: `in-cluster` for dev, `managed` for prod
+- The answer is the TEST COPY's (`env/dev/`). The live version never gets an in-cluster database from it:
+  `env/prod/` holds no database files and reads `DATABASE_URL` from its Secret (`{app}-secrets-prod`),
+  which DevOps points at the live database (deciding the live version's database is a later step)
 
 **Sign-in** (only if the app signs people in: docker-compose.yml has a `mock-oidc` service or an
-`OIDC_ISSUER_URL` setting). One select; the live version is never part of it:
+`OIDC_ISSUER_URL` setting).
+
+On a re-run, read `deployment.signin_dev` from app-context.json and use it: don't ask again (the report
+says which is in use); the person can ask to change it.
+
+The practice sign-in can be offered only when ALL of these hold -- otherwise don't offer it, use your
+organisation's sign-in, and say why in one plain line:
+- the app has a separate front end and backend (split-service). Otherwise: "The practice sign-in works on
+  the cluster only for an app with a separate front end and backend, so your test copy uses your
+  organisation's sign-in." (A single-service app's sign-in library trusts only its sign-in service's own
+  address, which isn't proven to work through the app's address.)
+- the app's practice sign-in can ask for an access code: its `mock-services/mock-oidc/app.py` contains
+  `MOCK_OIDC_ACCESS_CODE` (read the file; never guess from a version). Otherwise: "Your app's practice
+  sign-in is older than the one that works on a cluster: /resume-it updates it first. Until then your
+  test copy uses your organisation's sign-in."
+- the app's pretend people are in `scripts/seed-mock-services.sh` (its `declare -a USER_SUBS=(...)`,
+  `USER_EMAILS` and `USER_NAMES` lines). Otherwise: "I can't find your app's pretend people
+  (scripts/seed-mock-services.sh), so your test copy uses your organisation's sign-in."
+
+When it can be offered, one select; the live version is never part of it:
 "Who should sign people in on the test copy of your app ({hostname})?
-- **The practice sign-in** -- the same pretend sign-in you use on this computer: a list of pretend
-  people, no passwords. Anyone who can open {hostname} can sign in as any of them, an administrator
-  included, so pick this only if {hostname} can't be reached from the internet.
+- **The practice sign-in** -- pretend people, no passwords, behind an access code your DevOps team sets.
+  Anyone who has the code can sign in as any of them, an administrator included, so keep {hostname}
+  off the internet too.
 - **Your organisation's sign-in** -- your company's real sign-in service. Your DevOps team adds its
-  settings as protected settings (ONBOARDING-K8S.md says which); until they do, people can open the
-  test copy but can't sign in.
+  settings as protected settings (ONBOARDING-K8S.md says which); the test copy won't start until they do.
 The live version of your app always uses your organisation's sign-in, never the practice one."
-- Default, and the recommended option: **The practice sign-in** when docker-compose.yml has a
-  `mock-oidc` service; without one, there's nothing to practise with: don't ask, use your
-  organisation's sign-in.
-- Ask nothing else for it: everything the organisation's sign-in needs is a protected setting DevOps
-  fills in (`{app}-oidc-{env}`, below), so no address or ID of it is ever written into the files.
+- Default, and the recommended option: **The practice sign-in** when it can be offered.
+- Ask nothing else for it: everything either sign-in needs is a protected setting DevOps fills in
+  (`{app}-oidc-{env}`, below), so no address, ID, password or code of it is ever written into a file.
 - Save the pick to app-context.json as `deployment.signin_dev` (`practice` or `organisation`).
 
 **Split-service ingress** (only if split-service architecture detected):
@@ -1264,6 +1306,17 @@ API calls (`/api/*`) go directly to the backend and everything else goes to the 
 <step name="generate-manifests">
 
 **Generate manifests using detected conventions (or user answers for anything not detected).**
+
+**Placeholders, defined once** (every template below uses them this way):
+- `{app}` -- the app's short name: app-context.json's `project_slug` if set, else the project folder's
+  name, lower-cased, every character outside a-z, 0-9 and `-` written as `-`, at most 40 characters
+  (e.g. `bedapp`).
+- `{compose_service}` -- a Compose service's own name, as written in docker-compose.yml (`backend`,
+  `frontend`, `app`, `mock-oidc`): the Kubernetes Service's name, the image's name, and the workflow's
+  step names and ids.
+- `{service}` -- a workload's name (its Deployment, container, file and labels): `{app}-{compose_service}`
+  (e.g. `bedapp-backend`), and `mock-oidc` for the practice sign-in.
+- `{hostname}` / `{prod_hostname}` -- the test copy's and the live version's host names (checked in PHASE 1).
 
 Determine the manifest directory structure:
 - If existing manifests use `env/dev/` and `env/prod/`: follow that
@@ -1317,12 +1370,13 @@ spec:
         image: {registry}/{image_path}:{tag}
         command: ["python", "-m", "alembic", "upgrade", "head"]  # adapt for framework
         env:
-          # Same env vars as main container (secrets + config)
+          # Every env entry of the main container, as above (secrets + config) -- the same list
           - name: DATABASE_URL
             valueFrom:
               secretKeyRef:
                 name: {detected_secret_name_pattern}
                 key: DATABASE_URL
+          # ... and the rest of the main container's entries
       # If volumes:
       volumes:
       - name: {app}-pvc
@@ -1383,11 +1437,14 @@ Every docker-compose.yml `environment:` value that is an address (it starts with
 | `OIDC_CLIENT_ID` (backend, app) | a server | `mock-oidc-client` | secret `{app}-oidc-dev` `OIDC_CLIENT_ID` | secret `{app}-oidc-prod` `OIDC_CLIENT_ID` |
 | `OIDC_CLIENT_SECRET` (backend, app) | a server | secret `{app}-oidc-dev` `OIDC_CLIENT_SECRET` | secret `{app}-oidc-dev` `OIDC_CLIENT_SECRET` | secret `{app}-oidc-prod` `OIDC_CLIENT_SECRET` |
 | `BACKEND_INTERNAL_URL` (frontend) | a server | `http://backend:8000` | `http://backend:8000` | `http://backend:8000` |
+| `ENFORCE_SECRETS` (backend, app) | the app at start | as docker-compose.yml has it | as docker-compose.yml has it | `"true"`, whatever docker-compose.yml says |
 | `MOCK_OIDC_EXTERNAL_BASE_URL` (mock-oidc) | the browser | `https://{hostname}` | not generated | never generated |
 | `MOCK_OIDC_INTERNAL_BASE_URL` (mock-oidc) | a server | `http://mock-oidc:10090` | not generated | never generated |
 
 "secret `X` `K`" means a `secretKeyRef` to key `K` of Secret `X`: the value is never in a file argo-it
-writes. A row's service in brackets is where the scaffold sets it; a variable a service doesn't have is
+writes. `ENFORCE_SECRETS` isn't an address, but it belongs to sign-in: it is the app's own check that its
+token-signing key is long enough and not a default, and that its sign-in password isn't the practice
+one, so the live version always turns it on (a live version with a weak key refuses to start, by design). A row's service in brackets is where the scaffold sets it; a variable a service doesn't have is
 skipped.
 
 ### What sign-in will do (the sentence the person hears)
@@ -1395,24 +1452,31 @@ skipped.
 Say exactly the sentence for what this run generated -- at the send ask and in the report after the
 send (both in PHASE 5) -- with `{hostname}` filled:
 - **Practice sign-in on the test copy:** "Sign-in on the test copy ({hostname}) uses the practice
-  sign-in: a list of pretend people, no passwords. Anyone who can open {hostname} can sign in as any of
-  them, an administrator included, so keep that address off the internet. The live version never uses
-  it: it signs people in with your organisation's sign-in, which works once your DevOps team adds its
-  settings (ONBOARDING-K8S.md)."
+  sign-in: pretend people, no passwords, behind an access code your DevOps team sets. Anyone who has the
+  code can sign in as any of them, an administrator included, so keep {hostname} off the internet too.
+  The test copy won't start until your DevOps team adds the access code and the sign-in password
+  (ONBOARDING-K8S.md); they give the code to your testers. The live version never uses it: it signs
+  people in with your organisation's sign-in, and it won't start until your DevOps team adds that
+  sign-in's settings."
 - **Your organisation's sign-in on the test copy:** "Sign-in on the test copy ({hostname}) uses your
-  organisation's sign-in, and it isn't set up yet: until your DevOps team adds its settings and
-  registers {hostname} with it (ONBOARDING-K8S.md), people can open the app but can't sign in. The live
-  version works the same way."
+  organisation's sign-in, and it isn't set up yet: the app won't start until your DevOps team adds its
+  settings, and people can't sign in until they also register {hostname} with it (ONBOARDING-K8S.md). The
+  live version works the same way."
 - **An app with no sign-in:** say nothing about sign-in.
 
 ### mock-oidc.yaml (the practice sign-in -- `env/dev/` only, only when the person picked it)
 
 Generate it ONLY in `env/dev/`, and only for **The practice sign-in**. `env/prod/` never holds this
-file, the `mock-oidc` image, Service or address, or the `/authorize` route: refuse to write any of them
-there, whatever is asked. Its image is built and published by the workflow like the app's services
-(PHASE 3). It registers the app's own sign-in return address (`https://{hostname}/api/auth/callback`)
-with itself when it starts, through its own admin API, so nobody registers it by hand; the API stays
-inside the cluster (only `/authorize` is routed to it from outside).
+file, the `mock-oidc` image, Service or address, its people, its access code, or the `/authorize` route:
+refuse to write any of them there, whatever is asked. Its image is built and published by the workflow
+like the app's services (PHASE 3). It runs in cluster mode: it refuses to start without an access code of
+at least 16 characters (`{app}-oidc-dev`, key `PRACTICE_ACCESS_CODE`), and its sign-in page asks for that
+code before it shows anyone. When it starts, its start-up hook loads the pretend people from
+`scripts/seed-mock-services.sh` -- the single place the app keeps them; the workflow copies that file into
+the deploy copy on every deploy, so the cluster's copy is never edited by hand -- and registers the app's
+own return address (`https://{hostname}/api/auth/callback`), both through its own admin API, which stays
+inside the cluster (only `/authorize` is routed to it from outside). So after any restart, of it or of the
+app, in any order, it has its people and its return address, with no hand step.
 
 ```yaml
 apiVersion: apps/v1
@@ -1431,12 +1495,31 @@ spec:
       labels:
         app: mock-oidc
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
       containers:
       - name: mock-oidc
         image: {registry}/{image_base_path}/mock-oidc:{tag}
+        imagePullPolicy: Always            # the same as the app's own workloads
         ports:
           - containerPort: 10090
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 96Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
         env:
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
           - name: MOCK_OIDC_PORT
             value: "10090"
           - name: MOCK_OIDC_EXTERNAL_BASE_URL     # the browser reaches /authorize through the Ingress
@@ -1450,8 +1533,19 @@ spec:
               secretKeyRef:
                 name: {app}-oidc-dev
                 key: OIDC_CLIENT_SECRET
+          - name: MOCK_OIDC_REQUIRE_ACCESS_CODE   # cluster mode: no code of 16+ characters, no start
+            value: "true"
+          - name: MOCK_OIDC_ACCESS_CODE
+            valueFrom:
+              secretKeyRef:
+                name: {app}-oidc-dev
+                key: PRACTICE_ACCESS_CODE
           - name: MOCK_OIDC_REDIRECT_URIS          # read by the start-up hook below
             value: "https://{hostname}/api/auth/callback"
+        volumeMounts:
+          - name: people
+            mountPath: /people
+            readOnly: true
         readinessProbe:
           httpGet:
             path: /health
@@ -1459,28 +1553,41 @@ spec:
         lifecycle:
           postStart:
             exec:
-              # Registers the app's return address with the practice sign-in's own admin API on every
-              # start (it keeps them in memory); a start where that fails is stopped and retried.
+              # Loads the pretend people (scripts/seed-mock-services.sh, mounted at /people) and registers
+              # the app's return address, through its own admin API, on every start (it keeps both in
+              # memory); a start where that fails is stopped and retried.
               command:
               - python3
               - -I
               - -c
               - |
-                import json, os, time, urllib.request
+                import json, os, re, shlex, time, urllib.request
+                src = open("/people/seed-mock-services.sh").read()
+                def people(name):
+                    m = re.search(r"^declare -a %s=\((.*)\)\s*$" % name, src, re.M)
+                    return shlex.split(m.group(1)) if m else []
+                subs, emails, names = people("USER_SUBS"), people("USER_EMAILS"), people("USER_NAMES")
+                if not subs or not len(subs) == len(emails) == len(names):
+                    raise SystemExit("no pretend people found in scripts/seed-mock-services.sh")
+                base = "http://127.0.0.1:%s" % os.environ["MOCK_OIDC_PORT"]
+                def call(method, path, payload):
+                    for _ in range(60):
+                        try:
+                            req = urllib.request.Request(base + path, data=json.dumps(payload).encode(), method=method)
+                            req.add_header("Content-Type", "application/json")
+                            urllib.request.urlopen(req, timeout=5)
+                            return
+                        except Exception:
+                            time.sleep(1)
+                    raise SystemExit("the practice sign-in didn't answer at start-up")
+                for sub, email, name in zip(subs, emails, names):
+                    call("POST", "/api/users", dict(sub=sub, email=email, name=name))
                 uris = [u for u in os.environ["MOCK_OIDC_REDIRECT_URIS"].split(",") if u]
-                url = "http://127.0.0.1:%s/api/clients/%s/redirect_uris" % (
-                    os.environ["MOCK_OIDC_PORT"], os.environ["MOCK_OIDC_CLIENT_ID"])
-                body = json.dumps(dict(redirect_uris=uris)).encode()
-                for _ in range(60):
-                    try:
-                        req = urllib.request.Request(url, data=body, method="PUT")
-                        req.add_header("Content-Type", "application/json")
-                        urllib.request.urlopen(req, timeout=5)
-                        break
-                    except Exception:
-                        time.sleep(1)
-                else:
-                    raise SystemExit("could not register the sign-in return address")
+                call("PUT", "/api/clients/%s/redirect_uris" % os.environ["MOCK_OIDC_CLIENT_ID"], dict(redirect_uris=uris))
+      volumes:
+        - name: people
+          configMap:
+            name: mock-oidc-people        # made by kustomization.yaml's configMapGenerator, below
 ---
 apiVersion: v1
 kind: Service
@@ -1497,10 +1604,44 @@ spec:
       targetPort: 10090
 ```
 
+### mock-oidc-network-policy.yaml (the practice sign-in -- `env/dev/` only, with mock-oidc.yaml)
+
+Only the app's backend and the ingress controller may reach the practice sign-in; nothing else in the
+cluster can call its admin API. `{ingress_controller_namespace}` is where the cluster's ingress
+controller runs (`kube-system` for k3s and its Traefik, `ingress-nginx` for ingress-nginx; detect it
+from existing manifests, else ask DevOps through ONBOARDING and write `TODO-ingress-namespace`). It only
+takes effect on a cluster that enforces NetworkPolicy; ONBOARDING says so.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mock-oidc
+spec:
+  podSelector:
+    matchLabels:
+      app: mock-oidc
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {app}-backend
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {ingress_controller_namespace}
+      ports:
+        - protocol: TCP
+          port: 10090
+```
+
 ### {service}-service.yaml (Service)
 
 Named exactly as its Compose service (`{compose_service}`: `backend`, `frontend`, `app`), so the
-addresses the app's services already use for each other (rule 1 above) work on the cluster.
+addresses the app's services already use for each other (rule 1 above) work on the cluster. This wins
+over a `-service` naming convention found in existing manifests: the front end's image has the backend's
+Compose name built in (`http://backend:8000`), so a `backend-service` Service would leave its server-side
+calls nowhere. The detected convention still names the files.
 
 ```yaml
 apiVersion: v1
@@ -1841,6 +1982,11 @@ resources:
 - {app}-pvc.yaml           # only if PVC or in-cluster database was generated
 # The practice sign-in (env/dev only, only when picked):
 # - mock-oidc.yaml
+# - mock-oidc-network-policy.yaml
+# configMapGenerator:            # the pretend people; the workflow copies scripts/seed-mock-services.sh
+# - name: mock-oidc-people       # next to this file on every deploy (never edit that copy by hand)
+#   files:
+#   - seed-mock-services.sh
 # If External Secrets Operator:
 # - {app}-external-secret.yaml
 ```
@@ -1883,6 +2029,19 @@ Otherwise, document manual secret creation in ONBOARDING-K8S.md.
 
 **Generate manifests for all configured environments.**
 
+**Before PHASE 5: the live version holds no practice sign-in.** From the project root, after generating
+(and again after any fix to a generated file):
+
+```bash
+# Anything under the live version's folder that names the practice sign-in stops the set-up here
+if [ -d {manifest_dir}/prod ] && grep -rlE 'mock-oidc|MOCK_OIDC|PRACTICE_ACCESS_CODE|/authorize|seed-mock-services' {manifest_dir}/prod; then
+  echo "PRACTICE SIGN-IN IN THE LIVE VERSION"; exit 1
+fi
+```
+
+If it prints `PRACTICE SIGN-IN IN THE LIVE VERSION`, the files it names are wrong: write them again by
+the rules above (never send them). The workflow runs the same check on every run (PHASE 3).
+
 </step>
 
 <!-- ============================================================ -->
@@ -1917,22 +2076,24 @@ Generate `.github/workflows/build-and-deploy.yml`. Its steps run in this order -
 aren't in this order, so place each step by this list. "Each service" means each app service PHASE 0
 found with a `build:` in docker-compose.yml (never a database or mock service), in the file's order --
 plus `mock-oidc` when the practice sign-in was picked (its image, built from its own context; it gets no
-smoke test: it has no `DATABASE_URL`):
+smoke test: it has no `DATABASE_URL`). In this workflow `{compose_service}` is that service's Compose
+name -- its image's name and its steps' names and ids -- and never the workload's `{app}-` name:
 
 1. Checkout source branch
 2. Set up Docker Buildx
 3. Login to GHCR -- or the registry's own login step (see "Adapt the login step" below)
-4. Compute image tags -- one step per service, `id: meta-{service}`
+4. Compute image tags -- one step per service, `id: meta-{compose_service}`
 5. Validate Alembic migration chain -- on pull requests too: it only reads files
-6. Build {service} (PR -- no push) -- each service
-7. Build and push {service} -- each service: pushes ONLY this commit's `sha-` tag
+6. Build {compose_service} (PR -- no push) -- each service
+7. Build and push {compose_service} -- each service: pushes ONLY this commit's `sha-` tag
 8. Select deploy tag
-9. Smoke test {service} startup -- each service whose docker-compose.yml `environment:` has `DATABASE_URL`
+9. Smoke test {compose_service} startup -- each service whose docker-compose.yml `environment:` has `DATABASE_URL`
    (after step 7 published it and step 8 set the tag it starts)
 10. Add the moving tags -- the branch tag and `dev-latest` / `prod-latest`, on the version that passed step 9
-11. Checkout deploy branch
-12. Install yq (YAML-safe editing)
-13. Mirror source to deploy branch and patch image tags
+11. Refuse the practice sign-in in the live version -- on pull requests too
+12. Checkout deploy branch
+13. Install yq (YAML-safe editing)
+14. Mirror source to deploy branch and patch image tags
 
 A step runs only when every step before it passed, so a version that fails its smoke test gets no
 moving tag and never reaches the deploy branch.
@@ -1969,7 +2130,8 @@ env:
 ```yaml
   # Single service -- one target file to patch
   TARGET_FILE: {manifest_dir}/dev/{service}.yaml
-  CONTAINER_NAME: {service_container_name}
+  CONTAINER_NAME: {service}
+  IMAGE_NAME: {compose_service}
 ```
 
 **For split-service apps:**
@@ -2010,13 +2172,13 @@ jobs:
       # One step per service: each image gets its own name and ONE tag, this commit's sha- tag (its
       # `version` output is that tag, and the deploy tag is read from it: one source). The moving tags are
       # added after the smoke test (step 10), never at the build.
-      - name: Compute image tags ({service})
-        id: meta-{service}
+      - name: Compute image tags ({compose_service})
+        id: meta-{compose_service}
         uses: docker/metadata-action@v5
         env:
           DOCKER_METADATA_SHORT_SHA_LENGTH: "7"
         with:
-          images: ${{ env.IMAGE_BASE }}/{service}
+          images: ${{ env.IMAGE_BASE }}/{compose_service}
           tags: |
             type=sha,prefix=sha-,format=short
 ```
@@ -2115,7 +2277,7 @@ reaches the deploy branch. One step per service whose docker-compose.yml `enviro
 
 ```yaml
       # ---------- Smoke test: the version just published starts ----------
-      - name: Smoke test {service} startup
+      - name: Smoke test {compose_service} startup
         if: ${{ github.event_name != 'pull_request' }}
         timeout-minutes: 5
         shell: bash
@@ -2124,8 +2286,8 @@ reaches the deploy branch. One step per service whose docker-compose.yml `enviro
           DEPLOY_TAG: ${{ steps.deploytag.outputs.DEPLOY_TAG }}
         run: |
           set -euo pipefail
-          IMAGE="${IMAGE_BASE_LC}/{service}:${DEPLOY_TAG}"
-          NET="smoke-{service}-${GITHUB_RUN_ID:-0}"
+          IMAGE="${IMAGE_BASE_LC}/{compose_service}:${DEPLOY_TAG}"
+          NET="smoke-{compose_service}-${GITHUB_RUN_ID:-0}"
           trap 'docker rm -f "$NET-app" "$NET-db" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true' EXIT
           docker network create "$NET" >/dev/null
 
@@ -2163,6 +2325,21 @@ reaches the deploy branch. One step per service whose docker-compose.yml `enviro
           echo "Container startup FAILED: ${IMAGE} did not start and pass its check. Its last output:"
           docker logs --tail 60 "$NET-app" 2>&1 || true
           exit 1
+```
+
+**The live version never runs the practice sign-in (step 11):** on every run, before anything is
+written to the deploy branch, so a hand edit is caught too.
+
+```yaml
+      # ---------- The live version holds no practice sign-in ----------
+      - name: Refuse the practice sign-in in the live version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d {manifest_dir}/prod ] && grep -rlE 'mock-oidc|MOCK_OIDC|PRACTICE_ACCESS_CODE|/authorize|seed-mock-services' {manifest_dir}/prod; then
+            echo "The live version's files name the practice sign-in (listed above): it never runs there."
+            exit 1
+          fi
 ```
 
 **Moving tags -- only on the version that passed the smoke test (step 10):**
@@ -2217,7 +2394,7 @@ reaches the deploy branch. One step per service whose docker-compose.yml `enviro
 
 ```yaml
       # ---------- Build only on PRs (no push, no deploy branch edits) ----------
-      - name: Build {service} (PR -- no push)
+      - name: Build {compose_service} (PR -- no push)
         if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@v6
         with:
@@ -2225,19 +2402,19 @@ reaches the deploy branch. One step per service whose docker-compose.yml `enviro
           file: ./{dockerfile_path}
           push: false
           load: true
-          tags: ${{ steps.meta-{service}.outputs.tags }}
+          tags: ${{ steps.meta-{compose_service}.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       # ---------- Build and push on non-PR pushes ----------
-      - name: Build and push {service}
+      - name: Build and push {compose_service}
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v6
         with:
           context: ./{build_context}
           file: ./{dockerfile_path}
           push: true
-          tags: ${{ steps.meta-{service}.outputs.tags }}
+          tags: ${{ steps.meta-{compose_service}.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 ```
@@ -2250,7 +2427,7 @@ scaffold that is `./backend` with `./backend/Dockerfile`, and `./frontend` with 
 When the service's `build:` names a `target:`, add the same `target:` under the build step's `with:`.
 
 **For split-service apps, generate build steps for EACH service:**
-- Each service with its own context and Dockerfile, as above, and its own image-tags step (`meta-{service}`)
+- Each service with its own context and Dockerfile, as above, and its own image-tags step (`meta-{compose_service}`)
   - No build argument for the front end's backend address: the `http://backend:8000` built into its
     image reaches the backend's Service, which has the Compose name (the address rule)
 - Database: do NOT build -- uses upstream image (e.g., `postgres:16-alpine`)
@@ -2328,7 +2505,7 @@ a moving tag such as `dev-latest`:
           # Patch image tag in the deployment manifest
           yq -i '
             (.spec.template.spec.containers[] | select(.name==env(CONTAINER_NAME)).image)
-              = env(IMAGE_BASE_LC) + "/" + env(CONTAINER_NAME) + ":" + env(DEPLOY_TAG)
+              = env(IMAGE_BASE_LC) + "/" + env(IMAGE_NAME) + ":" + env(DEPLOY_TAG)
           ' "deploy/${TARGET_FILE}"
 ```
 
@@ -2346,11 +2523,15 @@ a moving tag such as `dev-latest`:
               = env(IMAGE_BASE_LC) + "/frontend:" + env(DEPLOY_TAG)
           ' "deploy/${FRONTEND_TARGET}"
 
-          # The practice sign-in (only when env/dev/mock-oidc.yaml was generated): its Deployment only
-          [ ! -f deploy/env/dev/mock-oidc.yaml ] || yq -i '
-            (select(.kind=="Deployment") | .spec.template.spec.containers[] | select(.name=="mock-oidc").image)
-              = env(IMAGE_BASE_LC) + "/mock-oidc:" + env(DEPLOY_TAG)
-          ' deploy/env/dev/mock-oidc.yaml
+          # The practice sign-in (only when {manifest_dir}/dev/mock-oidc.yaml was generated -- never the live
+          # version's folder): its Deployment's image, and its pretend people from their one source
+          if [ -f deploy/{manifest_dir}/dev/mock-oidc.yaml ]; then
+            yq -i '
+              (select(.kind=="Deployment") | .spec.template.spec.containers[] | select(.name=="mock-oidc").image)
+                = env(IMAGE_BASE_LC) + "/mock-oidc:" + env(DEPLOY_TAG)
+            ' deploy/{manifest_dir}/dev/mock-oidc.yaml
+            cp scripts/seed-mock-services.sh deploy/{manifest_dir}/dev/seed-mock-services.sh
+          fi
 
           # Patch backend init container (migration) if present
           yq -i '
@@ -2386,7 +2567,7 @@ They use a static upstream image like `postgres:16-alpine` that doesn't change p
 - Non-PR pushes: full build + push + mirror + patch + deploy
 - The deploy branch contains the FULL source tree (mirrored via rsync), not just manifests -- except `.github/`, which it never takes or loses
 - `yq` is used for YAML-safe image tag patching -- never use `sed` on YAML
-- One `docker/metadata-action` step per service (`meta-{service}`), with one tag: the commit's `sha-` tag
+- One `docker/metadata-action` step per service (`meta-{compose_service}`), with one tag: the commit's `sha-` tag
 - The deploy tag is that `sha-` tag, read from the image-tags step, never a moving tag
 - The moving tags (branch name, `dev-latest`/`prod-latest`) are added only after the smoke test passed
 - Steps run in the order listed at the top of this phase: nothing starts or deploys a version before it is published
@@ -2396,9 +2577,9 @@ They use a static upstream image like `postgres:16-alpine` that doesn't change p
 - ACR: use `azure/docker-login@v1`
 - Docker Hub: use `docker/login-action@v3` with Docker Hub credentials
 
-**If existing CI workflows are found**, read them and either:
-- Extend the existing workflow with the mirror + patch steps, or
-- Create a new workflow that doesn't conflict (use different concurrency group)
+**If existing CI workflows are found**, leave them as they are: always create this workflow as its own new
+file, `.github/workflows/build-and-deploy.yml` (its own concurrency group), and never edit another
+workflow file.
 
 </step>
 
@@ -2455,13 +2636,27 @@ These secrets must exist in the `{namespace}` namespace before pods can start.
 | {VAR_NAME} | {description} | {source hint} |
 
 **{app}-oidc-{env}:** (if the app signs people in) -- the sign-in settings, never written into a file.
+The app won't start until this Secret exists.
 [Test copy with the practice sign-in -- `{app}-oidc-dev`:]
 | Key | Description | Where to get it |
 |-----|-------------|-----------------|
-| OIDC_CLIENT_SECRET | Shared by the app and the practice sign-in | Generate: `openssl rand -hex 32` |
+| OIDC_CLIENT_SECRET | Shared by the app and the practice sign-in | Generate (below) |
+| PRACTICE_ACCESS_CODE | The code testers type before they can sign in (16+ characters; without it the practice sign-in won't start) | Generate (below) |
 
-The practice sign-in lets anyone who can open `{hostname}` sign in as any pretend person, an
-administrator included: keep `{hostname}` reachable only from your organisation's network.
+```bash
+# Generated values go straight into the Secret: they are never typed, so never in your shell history
+kubectl create secret generic {app}-oidc-dev -n {namespace} \
+  --from-literal=OIDC_CLIENT_SECRET="$(openssl rand -hex 32)" \
+  --from-literal=PRACTICE_ACCESS_CODE="$(openssl rand -hex 12)"
+# Read the access code when you hand it to your testers -- out of band (in person, or your team's
+# password manager), never in a ticket, chat or email:
+kubectl get secret {app}-oidc-dev -n {namespace} -o jsonpath='{.data.PRACTICE_ACCESS_CODE}' | base64 -d; echo
+```
+
+The practice sign-in lets anyone who has the access code sign in as any pretend person, an
+administrator included: keep `{hostname}` reachable only from your organisation's network too. Its admin
+routes are reachable only inside the cluster, and the NetworkPolicy `mock-oidc` lets only the app's
+backend and the ingress controller reach it -- only on a cluster that enforces NetworkPolicy.
 
 [Organisation's sign-in -- `{app}-oidc-dev` when picked for the test copy, and always `{app}-oidc-prod`:]
 | Key | Description | Where to get it |
@@ -2471,8 +2666,17 @@ administrator included: keep `{hostname}` reachable only from your organisation'
 | OIDC_CLIENT_ID | This app's ID there | Register the app with the sign-in service |
 | OIDC_CLIENT_SECRET | This app's password there | The same registration |
 
-Register `https://{hostname}/api/auth/callback` (and the live version's address) as the app's return
-address with the sign-in service.
+```bash
+kubectl create secret generic {app}-oidc-{env} -n {namespace} \
+  --from-literal=OIDC_ISSUER_URL="https://<your sign-in service>" \
+  --from-literal=OIDC_EXTERNAL_URL="https://<your sign-in service>" \
+  --from-literal=OIDC_CLIENT_ID="<the app's ID there>" \
+  --from-file=OIDC_CLIENT_SECRET=/dev/stdin   # paste the password, then Ctrl-D: never in history
+```
+
+Register the app's return address with the sign-in service: `https://{prod_hostname}/api/auth/callback`
+for the live version, and -- only when the test copy uses your organisation's sign-in too --
+`https://{hostname}/api/auth/callback`.
 
 **Option A: Manual creation (quick start)**
 ```bash
@@ -2531,8 +2735,8 @@ This is typically a CNAME to the ingress controller's load balancer hostname.
 
 If the cluster needs credentials to pull from {registry}:
 ```bash
-kubectl create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
+kubectl create secret docker-registry {app}-registry-pull \
+  --docker-server={registry_host} \
   --docker-username={github_user} \
   --docker-password={PAT_or_token} \
   -n {namespace}
@@ -2926,7 +3130,8 @@ ONBOARDING-K8S.md; if that's already done, this send goes live too. To undo, I'd
 files and send again -- the pipeline stops, but whatever already went live stays until it's
 replaced. The checks your project runs when you save don't run on the setup files I made; my
 secret check does. [The sign-in sentence from PHASE 2 "What sign-in will do", for what this run
-generated.] [What stands out, e.g. 'the database runs inside the cluster for dev' /
+generated.] [If the address rule copied any setting as is: These settings were copied as they are and may
+need changing for the cluster: [each VAR (service)].] [What stands out, e.g. 'the database runs inside the cluster for dev' /
 'this sits next to an existing workflow' / 'nothing unusual']. The one thing to check: is
 **{hostname}** the right address for the dev version of your app?
 
@@ -3211,7 +3416,12 @@ stop here. Skip step 5.
 [If deploy branch was just created:]
 - [x] Deploy branch `{deploy_branch}` created
 
-**Sign-in:** [the sign-in sentence from PHASE 2 "What sign-in will do", for what this run generated]
+**Sign-in:** [the sign-in sentence from PHASE 2 "What sign-in will do", for what this run generated][on a
+re-run: (in use since your first set-up: [the practice sign-in / your organisation's sign-in])]
+[If .make-it/app-context.json changed: I recorded your answers in .make-it/app-context.json
+(deployment.k8s_namespace, deployment.hostname_dev, deployment.hostname_prod, deployment.deploy_branch,
+deployment.signin_dev[, deployment.k8s_context, deployment.k8s_server]) and left it changed, not saved:
+it goes with your next save.]
 [If the address rule copied any setting as is: **Copied as is** (they may need changing for the cluster):
 [each VAR (service): value]]
 
@@ -3571,7 +3781,8 @@ existing pattern.
 - ALWAYS detect conventions from existing manifests before asking questions
 - ALWAYS generate both dev and prod environments
 - ALWAYS skip mock services (they're local dev only) -- except the practice sign-in (`mock-oidc`) in `env/dev/` when the person picked it
-- NEVER put the practice sign-in in `env/prod/`: not its file, image, Service, address or `/authorize` route, whatever is asked
+- NEVER put the practice sign-in in `env/prod/`: not its file, image, Service, address, people, access code or `/authorize` route, whatever is asked; the live-version check (PHASE 2, and the workflow's step 11) proves it
+- NEVER run the practice sign-in on a cluster without its access code (cluster mode, a Secret reference)
 - ALWAYS write the app's addresses by the address rule (PHASE 2), never by judgement; say what sign-in will do (PHASE 2 "What sign-in will do")
 - ALWAYS generate ONBOARDING-K8S.md with DevOps and Developer sections
 - ALWAYS offer local K8s testing as an option before pushing when kubectl points at a local cluster
