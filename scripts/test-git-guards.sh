@@ -62,12 +62,12 @@ UNITS = [
     ('resume-it 0a2 brings work level', '.claude/commands/resume-it.md', '**0a2. Bring `work` level (fixed check, every session):** run "Bring `work` level after a ship"\n(`git-operations.md`, The branch) and say its line, if it gives one. When the user asks to move\ntheir work to a working copy (in those words or any that mean it), run "Move to `work`" from the\nsame section.'),
     ('resume-it suggests the move', '.claude/commands/resume-it.md', '| On the default branch with the save checks on | "Your saves go to the main copy, which refuses them. Move your work to a working copy called \'work\'?" (picked: "Move to `work`", `git-operations.md`) |'),
     ('retrofit: the stop lines', '.claude/commands/retrofit-it.md', '/ for a password or key: \'Something in your unsaved changes looks like a password or key, so I didn\'t save it. Move it into your .env file, then run /retrofit-it again.\' / when the scan for passwords and keys stopped without a result: \'I couldn\'t check your changes for passwords and keys: the checking tool stopped without a result I can read. Nothing was saved and nothing was changed. Run /retrofit-it again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks.\' / when that tool couldn\'t be set up: \'I couldn\'t set up the tool that checks your changes for passwords and keys, so nothing was checked, saved or changed. It usually means the tool couldn\'t be downloaded or built on this computer. Run /retrofit-it again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks.\' / for another check: \'The check [its name] that your project runs before every save stopped the snapshot, so nothing was changed. Fix what it found, or ask a developer, then run /retrofit-it again.\']"'),
-    ('E02-S108 git-operations: a crash is not a finding', '.claude/make-it/references/git-operations.md', '**A crash is not a finding.** Say the scan found a password or key only when its own output names one: gitleaks prints a `RuleID:` line for each one (the hook runs it with `--verbose`) and a count above zero (`leaks found: 2`, `3 leaks found in partial scan`; never `no leaks found`), trufflehog `Found verified result` or `Found unverified result`, detect-private-key `Private key found`, detect-secrets `Potential secrets about to be committed`. A key found ranks first: when a check of the code failed too, say the key, then that check. When the scan for passwords and keys failed without naming one (a `panic:` or a stack trace, a negative `- exit code:` when it was killed, a scan that stopped partway, or output in a form not listed here), the save is still refused: never treat a scan that didn\'t finish as clean. Then say: "I couldn\'t check your changes for passwords and keys: the checking tool stopped without a result I can read. Nothing was saved; your changes are still in your files. Try again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks." When pre-commit couldn\'t set the scanner up (it prints `An unexpected error has occurred` after `Installing environment for` the scanner, before any hook runs), say: "I couldn\'t set up the tool that checks your changes for passwords and keys, so nothing was checked and nothing was saved; your changes are still in your files. It usually means the tool couldn\'t be downloaded or built on this computer. Try again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks." Any other hook that refused the save gets the line above, naming that check.'),
+    ('E02-S108 git-operations: a crash is not a finding', '.claude/make-it/references/git-operations.md', '**A crash is not a finding.** Say the scan found a password or key only when its own output (its part of pre-commit\'s output, from its `- hook id:` line to the next hook\'s line) names one: gitleaks prints a `RuleID:` line for each one (the hook runs it with `--verbose`) and a count above zero (`leaks found: 2`, `3 leaks found in partial scan`; never `no leaks found`), trufflehog `Found verified result` or `Found unverified result`, detect-private-key `Private key found`, detect-secrets `Potential secrets about to be committed`. A key found ranks first: when a check of the code failed too, say the key, then that check. When the scan for passwords and keys failed without naming one (a `panic:` or a stack trace, a negative `- exit code:` when it was killed, a scan that stopped partway, or output in a form not listed here), the save is still refused: never treat a scan that didn\'t finish as clean. Then say: "I couldn\'t check your changes for passwords and keys: the checking tool stopped without a result I can read. Nothing was saved; your changes are still in your files. Try again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks." When pre-commit couldn\'t set the scanner up (it prints `An unexpected error has occurred` after `Initializing environment for` the scanner, when it couldn\'t fetch it, say with no network, or after `Installing environment for` it, before any hook runs), say: "I couldn\'t set up the tool that checks your changes for passwords and keys, so nothing was checked and nothing was saved; your changes are still in your files. It usually means the tool couldn\'t be downloaded or built on this computer. Try again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project\'s checks." Any other hook that refused the save gets the line above, naming that check.'),
     ('E02-S108 wrap-it points at it', '.claude/commands/wrap-it.md', 'Say a password or key was found only when the scan\'s output names one; a scan that stopped without naming one gets the "couldn\'t check" line instead (`git-operations.md`, After the save: A crash is not a finding). The rest of the wrap-up goes on.'),
     ('E02-S108 argo-it points at it', '.claude/commands/argo-it.md', 'a scan for passwords and keys that stopped without naming one: the "couldn\'t check" line, never a found key (`git-operations.md`, After the save: A crash is not a finding)'),
     ('E02-S108 retrofit: the crash line', '.claude/commands/retrofit-it.md', "when the scan for passwords and keys stopped without a result: 'I couldn't check your changes for passwords and keys: the checking tool stopped without a result I can read. Nothing was saved and nothing was changed. Run /retrofit-it again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project's checks.' / when that tool couldn't be set up: 'I couldn't set up the tool that checks your changes for passwords and keys, so nothing was checked, saved or changed. It usually means the tool couldn't be downloaded or built on this computer. Run /retrofit-it again; if it keeps happening, ask a developer to look at the secret scan (gitleaks) in your project's checks.' / for another check:"),
-    ('E02-S108 resume-it: the gitleaks rev lines', '.claude/commands/resume-it.md', 'On `RAISED [old] v8.29.1`, say one line: "I updated your project\'s scan for passwords and keys (gitleaks [old] to v8.29.1): the old version can crash on some newer Intel computers, and then every save is refused." On `SETUP FAILED` after it, add: "It couldn\'t be set up on this computer yet, so saves will say the checking tool couldn\'t be set up until it can be downloaded and built." On `REV UNKNOWN [rev]`: "Your project\'s scan for passwords and keys is pinned to [rev], which I can\'t compare with the version that fixed a crash on some newer Intel computers (8.24.0), so I left it as it is; a developer can check it." On `SYSTEM GITLEAKS`: "Your project\'s scan for passwords and keys uses a gitleaks installed on this computer or in Docker, which I don\'t update; a developer should make sure it is version 8.24.0 or later, because older ones can crash on some newer Intel computers." Never in the gaps list or its ask.'),
-    ('E02-S108 Q08: the version floor', '.claude/make-it/references/build-standards.md', 'The gitleaks hook\'s `rev` is `v8.24.0` or later (the scaffolds pin `v8.29.1`, the newest release that still builds with Go 1.23.8; the quality gate downloads the same version): pre-commit builds the hook with the computer\'s own Go, and an earlier gitleaks built with Go 1.24 or later crashes (`panic: wasm error: invalid table access`) on Intel processors with fast string copying (FSRM), so the save is refused with nothing checked. /resume-it\'s catch-up raises an older `rev` to the scaffold\'s ("The secret scan\'s version (Q08)") and names a `gitleaks-system` or `gitleaks-docker` hook it can\'t update.'),
+    ('E02-S108 resume-it: the gitleaks rev lines', '.claude/commands/resume-it.md', 'Say one line for what it printed, and nothing when it printed nothing. `RAISED [old] v8.29.1`: "I updated your project\'s scan for passwords and keys (gitleaks [old] to v8.29.1) and saved that one change: the old version can crash on some newer Intel computers, and then every save is refused." `NOT RAISED [old] setup-failed`: "I tried to update your project\'s scan for passwords and keys and couldn\'t set the new version up on this computer, so I left it as it was; I\'ll try again next time." `NOT RAISED [old] save-refused`: "I tried to update your project\'s scan for passwords and keys, but the save was refused, so I left it as it was; I\'ll try again next time." `NOT RAISED [old] unfinished`: the unfinished-update line (top of this skill). `NOT RAISED [old] unsaved`: "Your project\'s scan for passwords and keys needs an update (gitleaks [old] can crash on some newer Intel computers), but its settings file has changes of yours that aren\'t saved, so I left it alone; once they\'re saved or undone, I\'ll update it next time." `NOT RAISED [old] default-branch`: "Your project\'s scan for passwords and keys needs an update (gitleaks [old] can crash on some newer Intel computers); I\'ll make it once your saves go on a working copy instead of the main copy." `NOT RAISED [old] hooks-off`: nothing more (the Q12 line above already says the checks are off; the update waits for them). `NOT RAISED [old] symlink` / `read-only`, and `LEFT AS IS form`: "Your project\'s scan for passwords and keys needs a developer to check it: [its settings file is a link to another file / its settings file can\'t be written / it is written in a form I don\'t change automatically], so I left it as it is. gitleaks should be 8.24.0 or later, because older ones can crash on some newer Intel computers." `REV UNKNOWN [rev]`: "Your project\'s scan for passwords and keys is pinned to [rev], which I can\'t compare with the version that fixed a crash on some newer Intel computers (8.24.0), so I left it as it is; a developer can check it." `SYSTEM GITLEAKS`: "Your project\'s scan for passwords and keys uses a gitleaks installed on this computer or in Docker, which I don\'t update; a developer should make sure it is version 8.24.0 or later, because older ones can crash on some newer Intel computers." Never in the gaps list or its ask.'),
+    ('E02-S108 Q08: the version floor', '.claude/make-it/references/build-standards.md', 'The gitleaks hook\'s `rev` is `v8.24.0` or later (the scaffolds pin `v8.29.1`, the newest release that still builds with Go 1.23.8; the quality gate downloads the same version): pre-commit builds the hook with the computer\'s own Go, and an earlier gitleaks built with Go 1.24 or later crashes (`panic: wasm error: invalid table access`) on Intel processors with fast string copying (FSRM), so the save is refused with nothing checked. /resume-it\'s catch-up raises an older `rev` to the scaffold\'s and saves that one change alone, or puts it back when the new version can\'t be set up ("The secret scan\'s version (Q08)") and names a `gitleaks-system` or `gitleaks-docker` hook it can\'t update.'),
     ('deadcode-it saves', '.claude/commands/deadcode-it.md', 'Before the first save (precondition 3\'s "Save them", or the first batch), run the hook check\n(`git-operations.md`, Before any save): `hk="$(git rev-parse --git-path hooks/pre-commit)"; [ ! -f "$(git rev-parse --show-toplevel)/.pre-commit-config.yaml" ] || { [ -x "$hk" ] && grep -qs \'File generated by pre-commit\' "$hk"; } || echo "HOOKS OFF"`. On `HOOKS OFF`, save\nnothing, delete nothing more, and stop with: "I haven\'t saved anything: the checks this project runs before every save (a scan for passwords and keys, and a stop on saving straight to the main copy) are switched off on this computer. Run /resume-it to switch them on." After each save, read the commit\'s exit code:\nanything but 0 means that batch wasn\'t saved -- put its files back as they were, and say so with the\n"couldn\'t save" line (`git-operations.md`, After the save), never "Removed".'),
 ]
 bad = 0
@@ -93,6 +93,31 @@ for d in "$SC" "$SF"; do
   qg="$d/.github/workflows/quality-gate.yml"; hr=$(sed -n '/gitleaks\/gitleaks/{n;s/^ *rev: //p;}' "$d/.pre-commit-config.yaml")
   [ ! -f "$qg" ] || { grep -q "GITLEAKS_VERSION=$hr " "$qg" && ! grep -q 'releases/latest' "$qg"; } \
     && ok "$d: the quality gate downloads the same gitleaks as the hook ($hr), never 'latest'" || bad "$d: the quality gate's gitleaks differs from the hook's $hr, or is 'latest'"
+  if [ -f "$qg" ]; then  # the download is checked against a pinned hash before it runs; a wrong hash fails the step
+    gstep=$(python3 - "$qg" <<'PY2'
+import re, sys, textwrap
+t = open(sys.argv[1], encoding="utf-8").read()
+a = t.find("- name: Download gitleaks"); b = t.find("\n      - name:", a + 1); step = t[a:b] if a >= 0 else ""
+m = re.search(r"run: \|\n((?:\s{10}.*\n)+)", step + "\n")
+# its own step, which may not continue on error (a mismatch fails the job); then the scan runs ./gitleaks
+print(textwrap.dedent(m.group(1)) + "./gitleaks" if m and "continue-on-error" not in step else "")
+PY2
+)
+    pin=$(printf '%s' "$gstep" | grep -oE '[0-9a-f]{64}' | head -1)
+    if [ -z "$pin" ]; then bad "$d: the quality gate runs gitleaks without a download step that checks its hash and fails the job"; else
+      Q="$T/qg"; rm -rf "$Q"; mkdir -p "$Q/bin" "$Q/w" "$Q/pkg"; printf '#!/bin/sh\necho FAKE-GITLEAKS-RAN\n' > "$Q/pkg/gitleaks"; chmod +x "$Q/pkg/gitleaks"
+      tar -czf "$Q/gl.tgz" -C "$Q/pkg" gitleaks; good=$( (sha256sum "$Q/gl.tgz" 2>/dev/null || shasum -a 256 "$Q/gl.tgz") | cut -c1-64)
+      printf '#!/bin/sh\nout=""; while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift;; esac; shift; done\n[ -n "$out" ] && cp "%s" "$out" || cat "%s"\n' "$Q/gl.tgz" "$Q/gl.tgz" > "$Q/bin/curl"; chmod +x "$Q/bin/curl"
+      command -v sha256sum >/dev/null || printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' > "$Q/bin/sha256sum"; chmod +x "$Q/bin/sha256sum" 2>/dev/null
+      o1=$(cd "$Q/w" && PATH="$Q/bin:$PATH" bash -e -c "${gstep//$pin/$good}" 2>&1); r1=$?; rm -f "$Q/w/"*
+      o2=$(cd "$Q/w" && PATH="$Q/bin:$PATH" bash -e -c "${gstep//$pin/0000000000000000000000000000000000000000000000000000000000000000}" 2>&1); r2=$?
+      [ "$r1" = 0 ] && case $o1 in *FAKE-GITLEAKS-RAN*) true ;; *) false ;; esac && [ "$r2" != 0 ] && case $o2 in *FAKE-GITLEAKS-RAN*) false ;; *) true ;; esac \
+        && ok "$d: the quality gate runs gitleaks only when the download matches the pinned hash (a wrong hash fails the step)" || bad "$d: the quality gate's hash check doesn't hold (right: $r1, wrong: $r2)"
+      sums=$(command curl -sfL "https://github.com/gitleaks/gitleaks/releases/download/$hr/gitleaks_${hr#v}_checksums.txt" 2>/dev/null)
+      if [ -z "$sums" ]; then echo "SKIPPED  the quality gate's pinned hash against gitleaks' published checksums: couldn't download them -- NOT PROVEN here"
+      else printf '%s\n' "$sums" | grep -q "^$pin  gitleaks_${hr#v}_linux_x64.tar.gz$" && ok "$d: the pinned hash is gitleaks' published one for $hr linux_x64" || bad "$d: the pinned hash isn't gitleaks' published one for $hr"; fi
+    fi
+  fi
   [ "$(grep -c 'entry: bash scripts/precommit-in-container.sh' "$d/.pre-commit-config.yaml")" = 2 ] && [ -x "$d/scripts/precommit-in-container.sh" ] && ! grep -q 'npx ' "$d/.pre-commit-config.yaml" \
     && ok "$d: eslint and prettier run through the container script, never npx on the host" || bad "$d: a frontend hook still needs the app's packages on the host"
   python3 -c 'import sys,tomllib; d=tomllib.load(open(sys.argv[1],"rb")); a=d.get("allowlist",{}); ps=a.get("paths",[])
@@ -155,38 +180,6 @@ if [ -z "$tryline" ]; then bad "no try-it save line found to run"; else
   rm -f .git/hooks/pre-commit; git add -A; git commit -q -m clean; out=$(bash -c "$tryline" 2>&1); rc=$?
   [ "$rc" = 0 ] && ok "try-it's save with nothing to save exits 0 (not read as a refusal)" || bad "try-it's save with nothing to save failed ($rc: $out)"
   cd - >/dev/null
-fi
-
-# E02-S108 H2: /resume-it raises an old gitleaks rev (and only that line), run as written on fixtures
-gl_blk=$(python3 - <<'PY2'
-import re
-t = open(".claude/commands/resume-it.md", encoding="utf-8").read()
-import textwrap
-m = re.search(r"\*\*The secret scan's version \(Q08\):\*\*.*?```bash\n(.*?)\n *```", t, re.S)
-print(textwrap.dedent(m.group(1)) if m else "")   # the block sits in a list item: run it dedented, as written
-PY2
-)
-scaf_rev=$(sed -n '/gitleaks\/gitleaks/{n;s/^ *rev: //p;}' "$SC/.pre-commit-config.yaml")
-if [ -z "$gl_blk" ]; then bad "resume-it has no block that raises an old gitleaks rev"; else
-  case $gl_blk in *"$scaf_rev"*) ok "resume-it raises to the scaffold's gitleaks rev ($scaf_rev)" ;; *) bad "resume-it's raise block doesn't name the scaffold's rev $scaf_rev" ;; esac
-  mkdir -p "$T/fakepc"; printf '#!/bin/sh\necho "$@" >> "$PC_CALLS"\n' > "$T/fakepc/pre-commit"; chmod +x "$T/fakepc/pre-commit"
-  glcase() {  # $1 name, $2 config text (or "" for no file), $3 expected config after ("" = unchanged), $4 expected output, $5 install expected (yes/no)
-    local d="$T/gl-$1"; rm -rf "$d"; mkdir -p "$d"; [ -z "$2" ] || printf '%s' "$2" > "$d/.pre-commit-config.yaml"
-    local out; out=$(cd "$d" && PC_CALLS="$d/calls" PATH="$T/fakepc:$PATH" bash -c "$gl_blk" 2>&1)
-    local after=""; [ -f "$d/.pre-commit-config.yaml" ] && after=$(cat "$d/.pre-commit-config.yaml"; echo .)
-    local want="${3:-$2}"; [ -n "$want" ] && want="$want."
-    local inst=no; grep -qs install-hooks "$d/calls" && inst=yes
-    [ "$after" = "$want" ] && [ "$out" = "$4" ] && [ "$inst" = "$5" ] && ok "resume-it gitleaks rev: $1" || bad "resume-it gitleaks rev: $1 (out: $out; install: $inst)"
-  }
-  old=$'repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.8.6\n    hooks:\n      - id: ruff\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1   # pinned\n    hooks:\n      - id: gitleaks\n        entry: gitleaks git --pre-commit --staged --verbose --log-level warn\n        args: ["--redact"]\n  - repo: https://github.com/pre-commit/pre-commit-hooks\n    rev: v5.0.0\n    hooks:\n      - id: no-commit-to-branch\n'
-  glcase old-pin "$old" "${old/rev: v8.22.1   # pinned/rev: $scaf_rev   # pinned}" "RAISED v8.22.1 $scaf_rev" yes
-  glcase new-pin "${old/v8.22.1/$scaf_rev}" "" "" no
-  glcase quoted "${old/rev: v8.22.1/rev: \"v8.18.4\"}" "${old/rev: v8.22.1/rev: \"$scaf_rev\"}" "RAISED v8.18.4 $scaf_rev" yes
-  glcase sha "${old/v8.22.1/4f5c3e1b2a0d9c8e7f6a5b4c3d2e1f0a9b8c7d6e}" "" "REV UNKNOWN 4f5c3e1b2a0d9c8e7f6a5b4c3d2e1f0a9b8c7d6e" no
-  glcase system $'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks-system\n' "" "SYSTEM GITLEAKS" no
-  glcase docker $'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.18.0\n    hooks:\n      - id: gitleaks-docker\n' "" "SYSTEM GITLEAKS" no
-  glcase no-file "" "" "" no
-  glcase no-gitleaks $'repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.8.6\n    hooks:\n      - id: ruff\n' "" "" no
 fi
 
 # "Move to work" and "Bring work level after a ship", run as written (git-operations.md, The branch)
@@ -353,9 +346,10 @@ PY
       stubcfg() {  # $1 = the secret hook's id; $2 = "lint" to put a failing lint hook first
         printf 'repos:\n  - repo: local\n    hooks:\n' > .pre-commit-config.yaml
         [ "${2:-}" = lint ] && printf '      - id: our-own-lint\n        name: our-own-lint\n        entry: "false"\n        language: system\n        pass_filenames: false\n' >> .pre-commit-config.yaml
+        [ "${2:-}" = bigfile ] && printf 'echo "leaks found: 3.bin (600 KB) exceeds 500 KB."; exit 1\n' > big.sh && printf '      - id: check-added-large-files\n        name: check for added large files\n        entry: bash big.sh\n        language: system\n        pass_filenames: false\n' >> .pre-commit-config.yaml
         printf '      - id: %s\n        name: %s\n        entry: bash stub.sh\n        language: system\n        pass_filenames: false\n' "$1" "$1" >> .pre-commit-config.yaml
       }
-      for c in rule-lines count partial-count partial-none panic signal private-key trufflehog detect-secrets lint-then-key; do
+      for c in rule-lines count partial-count partial-none panic signal private-key trufflehog detect-secrets lint-then-key bigfile-then-crash; do
         id=gitleaks; extra=""
         case $c in
           rule-lines) printf 'echo "Finding:     TOKEN = \\"REDACTED\\""\necho "RuleID:      github-pat"\necho "File:        app.py"\necho "Line:        1"\nexit 1\n' > stub.sh; want=$key_line ;;
@@ -367,16 +361,17 @@ PY
           private-key) id=detect-private-key; printf 'echo "Private key found: keys.pem"\nexit 1\n' > stub.sh; want=$key_line ;;
           trufflehog) id=trufflehog; printf 'echo "Found unverified result 🐷🔑❓"\nexit 183\n' > stub.sh; want=$key_line ;;
           detect-secrets) id=detect-secrets; printf 'echo "ERROR: Potential secrets about to be committed to git repo!"\nexit 1\n' > stub.sh; want=$key_line ;;
+          bigfile-then-crash) extra=bigfile; printf 'echo "panic: wasm error: invalid table access"\nexit 2\n' > stub.sh; want=$crash ;;
           lint-then-key) extra=lint; printf 'echo "RuleID:      github-pat"\necho "WRN leaks found: 1"\nexit 1\n' > stub.sh; want=$key_line ;;
         esac
         stubcfg "$id" $extra
-        git add -A; SKIP=$id,our-own-lint git commit -q -m "stub $c"; echo "s = '$c'" >> app.py
+        git add -A; SKIP=$id,our-own-lint,check-added-large-files git commit -q -m "stub $c"; echo "s = '$c'" >> app.py
         out=$(bash -c "$snap" 2>&1)
         [ "$(printf '%s' "$out" | tail -1)" = "$want" ] && [ "$(git log -1 --format=%s)" = "stub $c" ] \
           && ok "retrofit snapshot: a secret scan that ends in '$c' gets its own line, and saves nothing" || bad "retrofit snapshot: a secret scan that ends in '$c' said: $(printf '%s' "$out" | tail -1)"
         rm -rf "$L.pre-retrofit"; git checkout -q -- app.py
       done
-      git rm -q -f stub.sh
+      git rm -q -f stub.sh big.sh
       # the scanner can't be set up (pre-commit's install error, before any hook runs): its own line, nothing saved
       G="$T/fake-gitleaks"; rm -rf "$G"; mkdir -p "$G"; (cd "$G" && git init -q -b main . && printf -- '- id: gitleaks\n  name: Detect hardcoded secrets\n  entry: gitleaks\n  language: python\n  pass_filenames: false\n' > .pre-commit-hooks.yaml \
         && printf 'raise SystemExit("cannot be built")\n' > setup.py && git add -A && git -c user.name=t -c user.email=t@example.invalid commit -qm x)
@@ -385,6 +380,13 @@ PY
       out=$(bash -c "$snap" 2>&1)
       [ "$(printf '%s' "$out" | tail -1)" = "$setup" ] && [ "$(git log -1 --format=%s)" = "stub setup" ] \
         && ok "retrofit snapshot: a scanner that can't be set up gets its own line, and saves nothing" || bad "retrofit snapshot: a scanner that can't be set up said: $(printf '%s' "$out" | tail -1)"
+      rm -rf "$L.pre-retrofit"; git checkout -q -- app.py
+      # no network: pre-commit stops while fetching the scanner (Initializing environment for ...), before installing it
+      printf 'repos:\n  - repo: %s\n    rev: v8.29.1\n    hooks:\n      - id: gitleaks\n' "$T/no-such-host/gitleaks/gitleaks" > .pre-commit-config.yaml
+      git add -A; pre-commit uninstall >/dev/null; git commit -q -m "stub offline"; pre-commit install >/dev/null; echo "s = 'offline'" >> app.py
+      out=$(bash -c "$snap" 2>&1)
+      [ "$(printf '%s' "$out" | tail -1)" = "$setup" ] && [ "$(git log -1 --format=%s)" = "stub offline" ] \
+        && ok "retrofit snapshot: a scanner that can't be fetched (no network) gets the set-up line, and saves nothing" || bad "retrofit snapshot: a scanner that can't be fetched said: $(printf '%s' "$out" | tail -1)"
       rm -rf "$L.pre-retrofit"; git checkout -q -- app.py
       printf 'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.29.1\n    hooks:\n      - id: gitleaks\n' > .pre-commit-config.yaml
       git add -A; git commit -q -m back
@@ -395,6 +397,63 @@ PY
       cd "$OLDROOT"
     fi
   fi
+    # E02-S108: /resume-it raises an old gitleaks rev -- only that line, saved alone, behind the skill's own checks
+    cd "$OLDROOT"
+    gl_blk=$(python3 - <<'PY2'
+import re, textwrap
+t = open(".claude/commands/resume-it.md", encoding="utf-8").read()
+m = re.search(r"\*\*The secret scan's version \(Q08\):\*\*.*?```bash\n(.*?)\n *```", t, re.S)
+print(textwrap.dedent(m.group(1)) if m else "")   # the block sits in a list item: run it dedented, as written
+PY2
+)
+    scaf_rev=$(sed -n '/gitleaks\/gitleaks/{n;s/^ *rev: //p;}' "$SC/.pre-commit-config.yaml")
+    if [ -z "$gl_blk" ]; then bad "resume-it has no block that raises an old gitleaks rev"; else
+      case $gl_blk in *"$scaf_rev"*) ok "resume-it raises to the scaffold's gitleaks rev ($scaf_rev)" ;; *) bad "resume-it's raise block doesn't name the scaffold's rev $scaf_rev" ;; esac
+      # pre-commit as the skill finds it, except that its hook set-up can be made to fail (offline, Go too old)
+      realpc=$(command -v pre-commit); mkdir -p "$T/pcw"
+      printf '#!/bin/sh\n[ "$1" = install-hooks ] && [ -n "${FAIL_SETUP:-}" ] && { echo "offline" >&2; exit 3; }\nexec "%s" "$@"\n' "$realpc" > "$T/pcw/pre-commit"; chmod +x "$T/pcw/pre-commit"
+      glrepo() {  # $1 dir, $2 config ("" = none), $3 branch; the config saved, hooks on
+        rm -rf "$1"; git init -q -b "${3:-work}" "$1"; (cd "$1" && git config user.name t && git config user.email t@example.invalid
+          echo a > a.txt; [ -z "$2" ] || printf '%s' "$2" > .pre-commit-config.yaml; git add -A && git commit -q -m base && pre-commit install >/dev/null)
+      }
+      runblk() { (cd "$1" && PATH="$T/pcw:$PATH" bash -c "$gl_blk" 2>&1); }
+      glsame() {  # $1 name, $2 dir, $3 output wanted, $4 config wanted (bytes, "" = no file)
+        local out after n; out=$(runblk "$2"); n=$(git -C "$2" rev-list --count HEAD)
+        after=""; [ -e "$2/.pre-commit-config.yaml" ] && after="$(cat "$2/.pre-commit-config.yaml"; echo .)"
+        [ "$out" = "$3" ] && [ "$after" = "${4:+$4.}" ] && [ "$n" = 1 ] && ok "resume-it gitleaks rev: $1 -> left as it is, nothing saved" || bad "resume-it gitleaks rev: $1 (out: $out; saves: $n)"
+      }
+      glraise() {  # $1 name, $2 dir, $3 old rev, $4 config wanted after
+        local out; out=$(runblk "$2")
+        if [ "$out" = "RAISED $3 $scaf_rev" ] && [ "$(cat "$2/.pre-commit-config.yaml"; echo .)" = "$4." ] && [ "$(git -C "$2" rev-list --count HEAD)" = 2 ] \
+          && [ "$(git -C "$2" show --numstat --format= HEAD)" = "$(printf '1\t1\t.pre-commit-config.yaml')" ] && [ -z "$(git -C "$2" status --porcelain)" ]; then
+          ok "resume-it gitleaks rev: $1 -> raised, that one line saved alone"
+          echo b >> "$2/a.txt"; (cd "$2" && git commit -q -m later -- a.txt >"$T/later" 2>&1) && ok "resume-it gitleaks rev: $1 -> a later save goes through" || bad "resume-it gitleaks rev: $1 -> a later save was refused: $(tail -3 "$T/later")"
+        else bad "resume-it gitleaks rev: $1 (out: $out; saves: $(git -C "$2" rev-list --count HEAD); $(git -C "$2" status --porcelain | tr '\n' ' '))"; fi
+      }
+      old=$'repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.8.6\n    hooks:\n      - id: ruff\n        types: [text]\n        files: ^$\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1   # pinned\n    hooks:\n      - id: gitleaks\n        entry: gitleaks git --pre-commit --staged --verbose --log-level warn\n        args: ["--redact"]\n'
+      d="$T/gl"
+      glrepo "$d" "$old"; glraise old-pin "$d" v8.22.1 "${old/rev: v8.22.1   # pinned/rev: $scaf_rev   # pinned}"
+      glrepo "$d" "$old"; FAIL_SETUP=1; export FAIL_SETUP
+      glsame "set-up fails" "$d" "NOT RAISED v8.22.1 setup-failed" "$old"; unset FAIL_SETUP
+      glraise "set-up fails, next run" "$d" v8.22.1 "${old/rev: v8.22.1   # pinned/rev: $scaf_rev   # pinned}"
+      q="${old/rev: v8.22.1/rev: \"v8.18.4\"}"; glrepo "$d" "$q"; glraise quoted "$d" v8.18.4 "${q/\"v8.18.4\"/\"$scaf_rev\"}"
+      c="${old/gitleaks\/gitleaks/gitleaks/gitleaks   # the secret scan}"; glrepo "$d" "$c"; glraise "a comment after repo:" "$d" v8.22.1 "${c/rev: v8.22.1/rev: $scaf_rev}"
+      glrepo "$d" "${old/v8.22.1/$scaf_rev}"; glsame new-pin "$d" "" "${old/v8.22.1/$scaf_rev}"
+      glrepo "$d" "${old/v8.22.1/v8.30.1}"; glsame "newer pin" "$d" "" "${old/v8.22.1/v8.30.1}"
+      x="${old/v8.22.1/4f5c3e1b2a0d9c8e7f6a5b4c3d2e1f0a9b8c7d6e}"; glrepo "$d" "$x"; glsame sha "$d" "REV UNKNOWN 4f5c3e1b2a0d9c8e7f6a5b4c3d2e1f0a9b8c7d6e" "$x"
+      x=$'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.22.1\n    hooks:\n      - id: gitleaks-system\n'; glrepo "$d" "$x"; glsame system "$d" "SYSTEM GITLEAKS" "$x"
+      x=$'repos:\n  - repo: https://github.com/gitleaks/gitleaks\n    rev: v8.18.0\n    hooks:\n      - id: gitleaks-docker\n'; glrepo "$d" "$x"; glsame docker "$d" "SYSTEM GITLEAKS" "$x"
+      x=$'repos:\n  - {repo: "https://github.com/gitleaks/gitleaks", rev: v8.22.1, hooks: [{id: gitleaks}]}\n'; glrepo "$d" "$x"; glsame "flow style" "$d" "LEFT AS IS form" "$x"
+      glrepo "$d" ""; glsame "no file" "$d" "" ""
+      x=$'repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: v0.8.6\n    hooks:\n      - id: ruff\n'; glrepo "$d" "$x"; glsame "no gitleaks" "$d" "" "$x"
+      glrepo "$d" "$old"; git -C "$d" rev-parse HEAD > "$d/.git/MERGE_HEAD"; glsame "an unfinished merge" "$d" "NOT RAISED v8.22.1 unfinished" "$old"
+      glrepo "$d" "$old"; printf '# my own note\n' >> "$d/.pre-commit-config.yaml"; glsame "the person's unsaved edit" "$d" "NOT RAISED v8.22.1 unsaved" "$old# my own note"$'\n'
+      glrepo "$d" "$old" main; glsame "the default branch" "$d" "NOT RAISED v8.22.1 default-branch" "$old"
+      glrepo "$d" "$old"; rm -f "$d/.git/hooks/pre-commit"; glsame "hooks off" "$d" "NOT RAISED v8.22.1 hooks-off" "$old"
+      glrepo "$d" "$old"; chmod 444 "$d/.pre-commit-config.yaml"; glsame "read-only" "$d" "NOT RAISED v8.22.1 read-only" "$old"; chmod 644 "$d/.pre-commit-config.yaml"
+      glrepo "$d" ""; printf '%s' "$old" > "$T/real-config.yaml"; ln -s "$T/real-config.yaml" "$d/.pre-commit-config.yaml"; git -C "$d" add -A; git -C "$d" commit -q --amend -m base
+      glsame symlink "$d" "NOT RAISED v8.22.1 symlink" "$old"; [ "$(cat "$T/real-config.yaml")" = "$(printf '%s' "$old")" ] && ok "resume-it gitleaks rev: the file a link points at is untouched" || bad "resume-it gitleaks rev: wrote through a link"
+    fi
   cd "$OLDROOT"
 fi
 
