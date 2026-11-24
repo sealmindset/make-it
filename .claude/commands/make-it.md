@@ -1221,8 +1221,10 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 it checks, and every row marked `[LIVE]` in `build-standards.md` is named by one of them. A row
 or step whose feature the app doesn't have ("Skip unless", "Only when") is N/A: reported as N/A,
 never as NOT RUN, and not written to TODO.md. A check that could not run goes in TODO.md as NOT
-RUN with its reason, never as passed. "As User" means signed in as that role's test user, the way
-step 25 signs in. Never print a key or token value: not in a command, a log or the results.
+RUN with its reason, never as passed. A check today's scaffold itself can't pass (step 28 b's
+page guard, step 31 f's known pages) is KNOWN, from the scaffold: counted and said plainly, not a
+FAIL, and the fix cycle doesn't touch it. "As User" means signed in as that role's test user, the
+way step 25 signs in. Never print a key or token value: not in a command, a log or the results.
 
 **Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
 shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
@@ -1304,21 +1306,29 @@ build goes on.
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
 
-22b. **Install the browser for the browser items (once, as /try-it's smoke test does):**
+22b. **Install the browser for the browser items, once:** the same Chromium /try-it's smoke
+    test downloads. No `e2e/package.json` in the app (a Next.js full-stack app has none) → install
+    nothing: every browser item is NOT RUN with the reason "no browser here: this app has no
+    browser test setup (no `e2e/` folder)". Otherwise, in a sub-shell, so the next step still
+    runs in the app's folder:
     ```bash
-    cd e2e
-    if npx --no-install playwright --version >/dev/null 2>&1 &&
-       node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
-    then echo "browser ready"   # already installed: nothing is downloaded
-    else npm install && npx playwright install chromium   # the app's own Playwright, then Chromium
-    fi
+    (
+      cd e2e || exit 1
+      if node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
+      then echo "browser ready"   # already installed: nothing is downloaded
+      elif [ -f package-lock.json ]; then npm ci && npx --no-install playwright install chromium
+      else npm install --no-save --no-package-lock && npx --no-install playwright install chromium
+      fi
+    )
     ```
-    Then run the `node -e` launch line again. It works → the browser items run. It fails (the
-    install failed, Node.js or npm isn't on this computer, or Chromium won't start) → every
-    browser item is NOT RUN with the reason "no browser here: [the install's reason]", never
-    FAIL, and the build goes on. Only when it downloads, tell the user: "Downloading a test
-    browser (Chromium, about 150 MB, once) so I can check your app's pages the way a person sees
-    them." Nothing is asked.
+    `npm ci` installs the exact Playwright version `e2e/package-lock.json` names and writes no
+    new file; an app built before the scaffold shipped that lock file installs without writing
+    one. Then run the launch line again, `(cd e2e && node -e "...")`. It works → the browser
+    items run. It fails (the install failed, Node.js or npm isn't on this computer, or Chromium
+    won't start) → every browser item is NOT RUN with the reason "no browser here: [the install's
+    reason]", never FAIL, and the build goes on. Only when it downloads, tell the user:
+    "Downloading a test browser (Chromium, about 300 MB, once) so I can check your app's pages
+    the way a person sees them." Nothing is asked.
 
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
@@ -1357,6 +1367,25 @@ build goes on.
     a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
        update, then delete of this step's own test record per resource, its name or title starting
        `live-check-test-`, never a seed record; a resource with no create route isn't written.
+       Before the first write, sweep leftovers from a run that was cut off and count every
+       table's rows; after the last, sweep again and count again. Every count must equal the
+       first one: a table that grew is a mark the writes left (a notification, an audit row)
+       that the sweep couldn't find, a FAIL naming the table, at the top of TODO.md.
+       ```bash
+       # <db> is the database service in docker-compose.yml (db in the scaffold)
+       q() { docker compose exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
+       # sweep: every row whose text mentions live-check-test-, in any table (run it twice:
+       # a row another row points at goes on the second pass)
+       printf '%s\n' "SELECT format('DELETE FROM %I.%I WHERE %I::text LIKE %L', table_schema,
+         table_name, column_name, '%live-check-test-%') FROM information_schema.columns WHERE
+         table_schema = 'public' AND data_type IN ('text', 'character varying', 'json', 'jsonb')
+         \gexec" | q
+       # count: one line per table, name|rows
+       printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+         table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
+         information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+         \gexec" | q
+       ```
        Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
        a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
        aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
@@ -1380,24 +1409,32 @@ build goes on.
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
        browser) a page that shows a refusal and none of its data or working controls. A page
-       that renders its normal shell with an empty table is a FAIL. On apps built from today's
-       scaffold that FAIL is expected: report it as "the page isn't guarded, only its data (a
-       known scaffold gap)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
+       that renders its normal shell with an empty table isn't refused. On an app from today's
+       scaffold it is KNOWN, from the scaffold: "the page isn't guarded, only its data". Part C
+       doesn't add a page guard for it: the scaffold has no page-guard pattern
        (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
        signed-out person to the sign-in page).
     c. Write refusals. The expected answer never comes from the route's own code, which is what
-       is being checked. For each POST, PUT, PATCH and DELETE route in `/openapi.json`, sent to
-       the exact path it declares (trailing slash included) with an empty JSON body `{}`, and an
-       id or slug no record has where the path takes one:
+       is being checked. A write route R04's file check (Part A) named as unguarded is a FAIL
+       from the file alone and gets no request: with no guard, a request would run. Never sent
+       either, and reported "not probed: an empty request could act": a DELETE; a route whose
+       path takes no id or slug and whose request body has no required field in `/openapi.json`
+       (an empty request could run it, like "mark all read"); and a route whose path has
+       `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `email`, `notify`, `mark`,
+       `run`, `replay`, `test`, `curation`, `statement`, `messages`, `chat`, `agents`, `revert`,
+       `restore`, `archive`, `publish` or `bulk`. R04's file check is their check. Every other
+       POST, PUT and PATCH route gets these requests, sent to the exact path it declares
+       (trailing slash included) with an empty JSON body `{}`, and an id or slug no record has
+       where the path takes one:
        - Signed out: expect 401.
-       - As the seeded role with the fewest permissions: map the route to a permission from its
+       - As the seeded role with the fewest permissions, sent only when that role LACKS the
+         route's permission: map the route to a permission from its
          path and method: the first path segment after `/api/` (after `/api/admin/`, with
          `admin.` in front) is the resource, and POST is `create`, PUT or PATCH `update`, DELETE
          `delete` -- `POST /api/notes/` is `notes.create`, `PUT /api/admin/settings/{key}` is
          `admin.settings.update`. Look it up in the app's own permission list (its seed, or
          `app-context.json`'s permission matrix); not there, try `admin.<resource>` (the scaffold
-         guards `/api/users` with `admin.users`). When the role's `/auth/me` permissions don't
-         have it, expect 403. A route whose permission can't be found that way is NOT RUN for
+         guards `/api/users` with `admin.users`). Expect 403. A route whose permission can't be found that way is NOT RUN for
          that route, named in the results with the reason "no permission matches this route";
          never skipped silently.
        A 308 is the frontend's proxy moving a trailing-slash path: follow it with the same method
@@ -1406,11 +1443,7 @@ build goes on.
        Fail: 422 (it got past a missing guard to the body check; nothing was written), 404 (past
        it to the lookup), or 2xx (it wrote a record: name it from the response, delete it as
        Super Admin through its own route, and if it can't be deleted, put it at the top of
-       TODO.md). Routes that would do something if their guard were missing -- every DELETE, and
-       a path with `run`, `replay`, `test`, `curation`, `statement`, `send`, `email`, `notify`,
-       `messages`, `chat` or `agents` -- get only the signed-out request, and only when their
-       path takes an id or slug (none exists, so nothing runs); R04's file check (Part A) covers
-       them otherwise. In a stack whose permission check doesn't come first, this item is NOT RUN
+       TODO.md). In a stack whose permission check doesn't come first, this item is NOT RUN
        with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
@@ -1443,8 +1476,8 @@ build goes on.
        scaffold is fixed, its own admin pages have raw tables: a match in
        `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
        or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
-       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is reported once as
-       "known, from the scaffold", not a FAIL and not fixed. A raw table in any
+       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is KNOWN, from the
+       scaffold (reported once, not a FAIL, not fixed). A raw table in any
        page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
@@ -1539,8 +1572,9 @@ provider, which the scaffold doesn't have yet.
 33c. **Test upload failures, AI analysis and file layouts (F09, F10, F14)** -- Skip a row whose
     feature the app doesn't have (F10 needs file upload and AI features).
     - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF
-      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 for the
-      empty file and 422 for the corrupt one, each with a plain message. Fail: any 500, or a body
+      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 or 422 for the
+      empty file (its rulebook row allows either) and 422 for the corrupt one, each with a plain
+      message. Fail: any 500, or a body
       naming a library, a stack trace or a file path.
     - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect:
       the stored document has its extracted text and, kept apart from it, an AI analysis. Then,
@@ -1704,9 +1738,9 @@ nobody has to scan this app again later to find and fix these.
 
 **PART D: Declare success and hand off**
 
-40. Tell the user:
+40. Tell the user, filled from Part B's results:
 
-"Your app is built and verified! Here's what I created:
+"Your app is built! Here's what I created:
 
 - [X] pages/screens
 - [X] API endpoints
@@ -1715,8 +1749,18 @@ nobody has to scan this app again later to find and fix these.
 - Security features built in
 - [Development environment / Cloud infrastructure] ready
 
-Everything is working -- login, permissions, data, and all your pages. Now let's
-see your app in action!"
+[The results sentence.] Now let's see your app in action!"
+
+**The results sentence** (here, and in /resume-it's live pass) is built from these parts, in this
+order, leaving out a part whose count is 0. It never claims more than the results show.
+
+| Part | When | Say |
+|------|------|-----|
+| passed | any check passed | "[N] checks passed on your running app" |
+| failed | a FAIL still open after the fixes | "[N] failed and are at the top of your to-do list: [each, in plain words]" |
+| known | a KNOWN, from the scaffold | "[N] are known gaps in the app's starting template, which I don't change here: [each, in plain words]" |
+| not run | a NOT RUN | "[N] weren't run: [each reason with its count, in plain words, e.g. '3 need an AI key', '2 need a browser']" |
+| all clear | only when failed, known and not run are all 0 | "everything I checked works" |
 
 40b. **Seal the project (silent -- checks WM01-WM07).** Follow
 `~/.claude/make-it/references/watermark.md`: put the security step's outcome in a small JSON file

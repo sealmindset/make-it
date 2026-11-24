@@ -941,8 +941,10 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
    "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
    configured, priced AI provider" (their check expects no call).
-5. **Each row's result is PASS, FAIL, NOT RUN with its reason, N/A, or LEFT OUT (your choice).**
-   N/A is a row whose feature the app doesn't have: reported, not written to TODO.md. A row
+5. **Each row's result is PASS, FAIL, NOT RUN with its reason, KNOWN (from the scaffold), N/A,
+   or LEFT OUT (your choice).** KNOWN is what make-it's Part B calls a check today's scaffold
+   can't pass: counted and said, never a FAIL, never fixed here. N/A is a row whose feature the
+   app doesn't have: reported, not written to TODO.md. A row
    that belongs to an item in `## Left out by your choice` (read as
    `~/.claude/make-it/references/left-out-record.md`'s read steps say) is LEFT OUT: reported,
    never run and never fixed. A check that could not run -- the app didn't start, the step needs
@@ -954,13 +956,13 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    has one TODO.md line with its reason: when its line is already there, update its date and
    reason; never add a second line for it.
 7. **Tell the user one plain line**, the one that fits what happened:
+   Said after the fix rounds. [The results sentence] is make-it step 40's: its parts and their
+   rules, so it says how many weren't run and why, for every reason, and "everything I checked
+   works" only when nothing failed, nothing is known and nothing was left unrun.
    - It ran, and the pass started the app: "I started your app and checked [the areas, in plain
-     words] on it: [everything passed / N things failed and I'm fixing them][; N checks weren't
-     run here because they'd call the AI or leave test records]. I've left it running; /wrap-it
-     stops it."
+     words] on it: [the results sentence]. I've left it running; /wrap-it stops it."
    - It ran, and the app was already running: "Your app was already running, so I checked [the
-     areas, in plain words] on it: [everything passed / N things failed and I'm fixing them][; N
-     checks weren't run here because they'd call the AI or leave test records]."
+     areas, in plain words] on it: [the results sentence]."
    - Docker isn't running: "I couldn't check [the areas] on your app because Docker isn't
      running, so those checks are marked not run."
    - The settings point elsewhere: "I didn't start your app to check [the areas]: its settings

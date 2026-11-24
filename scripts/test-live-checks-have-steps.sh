@@ -886,7 +886,7 @@ ROUTES = [dict(method="PATCH", path="/api/notifications", required_body=False), 
 UNGUARDED = {"/api/notes/"}
 sent = [r["method"] + " " + r["path"] for r in ROUTES if probed(r, UNGUARDED)]
 check("step 28 c sends nothing to a route an empty request could act on, a DELETE, or a route R04 named unguarded",
-      bool(words) and "R04's file check (Part A) named as unguarded is a FAIL" in flat(s28raw)
+      bool(words) and "R04's file check (Part A) named as unguarded is a FAIL from the file alone and gets no request" in flat(s28raw)
       and "has no required field" in flat(s28raw) and sent == ["POST /api/categories/", "PUT /api/roles/{role_id}"],
       f"words: {words}; would send: {sent}")
 check("step 28 c sends the role's request only when it LACKS the permission", "sent only when that role LACKS the route's permission" in flat(s28raw))
@@ -1015,7 +1015,7 @@ if [ -z "${1:-}" ]; then
   check "(control) the not-run part removed from the results sentence" \
     'opp "$MK" "s/^\| not run \|.*\n//m" "the results sentence is true in every case"'
   check "(control) step 28 c probes routes an empty request could act on" \
-    'opp "$MK" "s/ a route whose path takes no id or slug and whose request body has no required field in \`\/openapi\.json\`\n       \(an empty request could run it, like \"mark all read\"\); and/ and/" "step 28 c sends nothing to a route"'
+    'opp "$MK" "s/ a route whose\s+path takes no id or slug and whose request body has no required field in \`\/openapi\.json\`\s+\(an empty request could run it, like \"mark all read\"\); and/ and/" "step 28 c sends nothing to a route"'
   check "(control) step 28 c probes a route R04 named unguarded" \
     'opp "$MK" "s/ and gets no request: with no guard, a request would run\.//" "step 28 c sends nothing to a route"'
   check "(control) /resume-it's live pass installs the browser" \
