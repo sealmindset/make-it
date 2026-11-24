@@ -14,10 +14,23 @@ S="$root/.claude/make-it/scaffolds"
 fail=0
 check() { local name="$1"; shift; if "$@"; then echo "ok   $name"; else echo "FAIL $name"; fail=1; fi; }
 
-ignores() { grep -qx '\.env' "$1" && grep -qx '\.env\.\*' "$1" && grep -qx '!\.env\.example' "$1"; }
-for f in fastapi-nextjs/backend/.dockerignore fastapi-nextjs/frontend/.dockerignore nextjs-fullstack/.dockerignore; do
-  check "$f keeps .env and .env.* out of the image, .env.example in" ignores "$S/$f"
-done
+ignores() { [ -f "$1" ] && grep -qx '\.env' "$1" && grep -qx '\.env\.\*' "$1" && grep -qx '!\.env\.example' "$1"; }
+# Every build context is read from the Compose files themselves (`context: <dir>` or `build: <dir>`, comments
+# skipped), so a service added later is covered without editing this list.
+contexts() { sed -nE 's/^[[:space:]]+(context|build):[[:space:]]*["'\'']?([^"'\''#[:space:]]+).*/\2/p' "$1"; }
+n=0
+while IFS= read -r compose; do
+  dir="$(dirname "$compose")"; found=0
+  while IFS= read -r ctx; do
+    [ -n "$ctx" ] || continue
+    found=1; n=$((n + 1))
+    f="$dir/${ctx#./}"; [ "$ctx" = . ] && f="$dir"
+    f="${f#"$S"/}/.dockerignore"
+    check "$f keeps .env and .env.* out of the image, .env.example in" ignores "$S/$f"
+  done < <(contexts "$compose")
+  check "${compose#"$S"/} names at least one build context" test "$found" = 1
+done < <(find "$S" -name 'docker-compose*.yml' | sort)
+check "the Compose files name build contexts (found $n)" test "$n" -ge 5
 
 port_first() {  # DB_PORT=[DB_PORT] comes before a DATABASE_URL that uses ${DB_PORT}
   awk '/^DB_PORT=\[DB_PORT\]$/ { p = NR } /^DATABASE_URL=.*@localhost:\$\{DB_PORT\}\// { u = NR } END { exit !(p && u && p < u) }' "$1"
