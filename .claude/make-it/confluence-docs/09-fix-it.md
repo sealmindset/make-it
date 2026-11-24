@@ -63,7 +63,7 @@ It will ask **how you want your work saved** (a new branch, or the current branc
 
 ## Good to know
 
-- It **tells you what really happened.** Each finding ends as fixed, changed but not re-checked, failed, needs a person, or not attempted, and the numbers add up. "Fixed" means the new scan ran the same check and no longer reports the problem. If your tests or your build could not run, it says "no tests ran" or "the build was not checked" — never "pass".
+- It **tells you what really happened.** Each finding ends as fixed, changed but not re-checked, failed, needs a person, or not attempted, and the numbers add up. "Fixed" means the scanner that found the problem ran again and no longer reports it. If your tests or your build could not run, it says "no tests ran" or "the build was not checked" — never "pass".
 - Some findings **can't be safely auto-fixed** — `/fix-it` clearly separates those and leaves them for a human, rather than guessing.
 - It gets your **approval on the plan** before changing anything -- with one exception. Critical and High findings from `/nemo-it`'s deep code audit are fixed **without asking**, each with a test that shows the flaw, on a separate `fix-it/<date>` branch. Nothing reaches your own branch until you say keep it.
 

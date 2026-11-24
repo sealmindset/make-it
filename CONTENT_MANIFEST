@@ -5,7 +5,7 @@ aa893b942a32ddba98e10ba1f084c07965465355587607f650d5b338942e9a2d  commands/clear
 0e61b67e10154e9b9175a1d3dd1fb394d4fddb21fa4904a9d828dd1a9fe90721  commands/debug-it.md
 4b46fdfc2ca829f3eef7d0c9df06e8c42f9a6865a07c1cc257f666bce6f659f0  commands/demo-it.md
 b25ba819428260ddfa7d1e18fc814a35beddb8981267fbed4f406074c5af5d1f  commands/dispatch-it.md
-222576178a6fc822261ee75fe57cb3e163b1f9c8ff136b2c015acf2971bb6877  commands/fix-it.md
+bfb6920259e9883488bf0faa7ddf5ce11541ca61a36c76d994d91f51dd599034  commands/fix-it.md
 c022aadd5c53af3a083c168fe9c33759782ddf9d7a7ba7df55fc33769de592fe  commands/git-it.md
 5c71e3550e7317d2a9c1e52d1bc8ba9f7944acd2a5c607d24d0c4fee7c91b87d  commands/make-it.md
 d82f6f517f4063e911b1344ead42ae53d2c84a7790c7f257311d41de69823e77  commands/nemo-it.md
@@ -33,7 +33,7 @@ c799a9f852b28e77141ce74e19cfebfa382fbb73503ef7f3cc8a697dcdb1ab9f  make-it/backlo
 f5a3a1ae0c1f460d78340bd328a5c90b4e9fc8a7aa6ba963756857769b52c789  make-it/confluence-docs/06-ship-it.md
 3cfe0de010613649343b5d2a1bf46d5425e6e005e5fd706b3e9ce4e7a82d26da  make-it/confluence-docs/07-argo-it.md
 072d2ca8246588ffdf77fca56d4edcd42bbfadead7c5203a5aca88d590b84f73  make-it/confluence-docs/08-nemo-it.md
-cc4701527e08ed646041fbd654a205082af390d0c1b2b0d9002c0df8c64626d3  make-it/confluence-docs/09-fix-it.md
+d60269d2683cc5f7e73dbcbd128f6a59f386d4681cc449f8780a19779e500f7e  make-it/confluence-docs/09-fix-it.md
 b39d8610679204a95441028b4cb8b53de8ed2e561e02c43a8a9df28fc3eebbb4  make-it/confluence-docs/10-debug-it.md
 4265fdea159045ed50e7a4f4b1c64c75140fdff6bde7012d54570054938ab0dd  make-it/confluence-docs/11-git-it.md
 277f7667060ec91ac82d2331321d0884ed7693dfc86b8882cbec406a1c600e42  make-it/confluence-docs/12-clear-it.md
@@ -316,7 +316,7 @@ cbbd7d67b20ee7ef62dcc779b2d29cc52d4b9d00cf41d141d9b1c505cc1f42f1  make-it/script
 59c5190a071c49e1ddfe0f8c129d0d040385e32a55b0e546ab680bfcd858bff1  make-it/scripts/adoption-scan.py
 785a1e35045a18edfd8dad90369dcc47a06d1ceb49a15cb4eac3ab635ca59ffa  make-it/scripts/content-manifest.ps1
 878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
-3c65a7d91d51dec2bbc067e2e9c9ba7a60e16e276de1dbc9fa348c61e7b18415  make-it/scripts/fix-it-results.py
+fd842caf5e5d5805b54a2e76e548f5c64b9543d5ca97efa0230b28815e013a9b  make-it/scripts/fix-it-results.py
 7022abaaf83c4048ba200cbedcbbc8cb412a107b3ed95b769157c49af5dd208f  make-it/scripts/hostile-code-check.py
 e9a667944cff69c90e65cfc0e59ecd459a4d93082aac60caa8e393687afab3cf  make-it/scripts/make-it-installed.ps1
 08f066fb72590dd0351f722738aea5035f78c4c32be30163c8177f3abb824566  make-it/scripts/make-it-installed.sh
