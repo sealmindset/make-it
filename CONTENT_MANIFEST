@@ -316,7 +316,7 @@ cbbd7d67b20ee7ef62dcc779b2d29cc52d4b9d00cf41d141d9b1c505cc1f42f1  make-it/script
 59c5190a071c49e1ddfe0f8c129d0d040385e32a55b0e546ab680bfcd858bff1  make-it/scripts/adoption-scan.py
 785a1e35045a18edfd8dad90369dcc47a06d1ceb49a15cb4eac3ab635ca59ffa  make-it/scripts/content-manifest.ps1
 878aeb17de210642d7786696d0ff90d9e983b0edd8eb3ff3f11ee2924c8e68fe  make-it/scripts/content-manifest.sh
-e398d196c3b264eda63e9cb38fc74e69dd6e199bd80a06357c6047c4ec953c0e  make-it/scripts/fix-it-results.py
+3c65a7d91d51dec2bbc067e2e9c9ba7a60e16e276de1dbc9fa348c61e7b18415  make-it/scripts/fix-it-results.py
 7022abaaf83c4048ba200cbedcbbc8cb412a107b3ed95b769157c49af5dd208f  make-it/scripts/hostile-code-check.py
 e9a667944cff69c90e65cfc0e59ecd459a4d93082aac60caa8e393687afab3cf  make-it/scripts/make-it-installed.ps1
 08f066fb72590dd0351f722738aea5035f78c4c32be30163c8177f3abb824566  make-it/scripts/make-it-installed.sh

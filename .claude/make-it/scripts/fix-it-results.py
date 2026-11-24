@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fix-it-results.py -- /fix-it's record of what really happened (E02-S92).
+"""fix-it-results.py -- /fix-it's record of what really happened.
 
 /fix-it used to work its "Fixed" count out by subtraction (findings before minus findings after), so a
 finding whose scanner did not run the second time counted as fixed; and it took "tests pass" and "still
