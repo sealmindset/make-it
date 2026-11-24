@@ -778,7 +778,8 @@ line of work, don't build on the default branch. Every /make-it project ships
 `scripts/worktree.sh`; create or reuse an isolated worktree for this task:
 `scripts/worktree.sh new <branch>` (it branches from where you are: `work` in a project /make-it
 built, so `main` stays as the build left it until /ship-it). It seeds an isolated `.env` (unique COMPOSE_PROJECT_NAME +
-offset ports) so the app runs without colliding with other worktrees/sessions. Never commit to
+offset ports) so the app gets its own containers, database volume and database port (an offset
+port can still land on another checkout's port; see `worktree-workflow.md`). Never commit to
 `main`/`master` (a `no-commit-to-branch` hook enforces it), and never stash/commit unfinished
 work just to switch tasks -- switch worktrees instead. Keep this invisible to the vibe-coder
 unless they ask. Full spec: `worktree-workflow.md`.

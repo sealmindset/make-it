@@ -51,9 +51,11 @@ database volume** (silent corruption). So isolation is mandatory, and it's autom
   derives a stable `COMPOSE_PROJECT_NAME` and **offsets every host port** by a deterministic
   amount (hashed from the branch name), writing them into the new worktree's `.env`.
 
-Result: `docker compose --profile dev up --build` "just works" in any worktree with zero
-collisions and zero manual edits. Each worktree gets its own containers, network, and DB
-volume namespace.
+Result: each worktree gets its own containers, network and database volume, and its own
+database port, which host-side migrations and tests reach through `DATABASE_URL`. Two limits
+remain: an offset port can land on another checkout's port (a frontend on 3100 offset by 5000
+takes 8100, the main checkout's backend port), and `scripts/seed-mock-services.sh` still calls the
+main checkout's mock-oidc and frontend ports, so check both before running two checkouts at once.
 
 > Each worktree is a separate directory, so it needs its own `node_modules` / virtualenv and
 > its own `.env` (which is gitignored). The helper copies `.env` from the main checkout; run

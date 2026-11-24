@@ -178,8 +178,10 @@ agents/advanced devs; mostly invisible to the vibe-coder. Full spec: `worktree-w
 26. **Per-worktree runtime isolation is mandatory for Dockerized projects.** `docker-compose.yml`
     declares `name: ${COMPOSE_PROJECT_NAME:-<slug>}` and every host port uses `${VAR:-default}`
     (mappings AND browser-facing URLs). The helper seeds each worktree's `.env` with a unique
-    project name + offset ports so `docker compose up` in two worktrees never collides on
-    ports, containers, or the DB volume. (N/A for non-Docker project types.)
+    project name + offset ports, so two worktrees don't share containers or the DB volume, and
+    each gets its own database port. An offset port can still land on another checkout's port,
+    and `scripts/seed-mock-services.sh` still uses the main checkout's ports (see
+    `worktree-workflow.md`). (N/A for non-Docker project types.)
 27. **Stage only your own paths.** Prefer `git add <specific paths>` over `git add -A` in a
     shared checkout; never sweep another session's unfinished files into your commit. Gate
     (lint/build/tests) before committing.

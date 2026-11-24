@@ -8,9 +8,11 @@
 # same repo. Use one per concurrent task so you never stash/commit unfinished
 # work to switch context, and parallel sessions never clobber each other.
 #
-# This helper also makes "docker compose up" collision-free across worktrees by
-# seeding each new worktree's .env with a unique COMPOSE_PROJECT_NAME and host
-# ports offset by a deterministic amount derived from the branch name.
+# This helper also seeds each new worktree's .env with a unique COMPOSE_PROJECT_NAME
+# (its own containers and database volume) and host ports offset by a deterministic
+# amount derived from the branch name (its own database port, too). An offset port can
+# still land on another checkout's port, and scripts/seed-mock-services.sh still uses
+# the main checkout's ports.
 #
 # Usage:
 #   scripts/worktree.sh new <branch> [base-ref]   # create + seed an isolated worktree
