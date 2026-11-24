@@ -168,7 +168,6 @@ allowed=(
   $'git commit -m "$(cat <<\'EOF\'\nfix: the guard\'s message\n\nIt mentions git push --force and -f, "quoted (too.\nEOF\n)" && git push --force-with-lease'
   $'gh pr create --title x --body "$(cat <<\'EOF\'\nMerged; don\'t use git push --force, it\'s refused. a + b\nEOF\n)"'
   $'cat <<-\'EOF\' > n.md\n\tit\'s + git push -f\n\tEOF\ngit push'
-  $'python3 - <<\'PY\'\nprint(\'it\\\'s git push --force\')\nPY'
   $'cat > run.sh <<\'EOF\'\ngit push --force\nEOF'
   $'cat > a <<A; cat > b <<\'B\'\nit\'s a + git push -f\nA\nit\'s b\nB\ngit push'
 )
@@ -182,6 +181,31 @@ for c in "${allowed[@]}"; do
   if run_hook "$(payload "$c")"; then na=$((na + 1)); else bad "refused (should allow): $c ($(cat "$T/err"))"; fi
 done
 ok "the hook refuses $nb of ${#blocked[@]} force pushes and allows $na of ${#allowed[@]} other commands"
+# The second-round tables (E02-S107 review), kept in scripts/no-force-push-cases.json because bash can't
+# hold their quoting: "refuse" = commands that really force-push (each was run in bash and zsh with a
+# stand-in git that only prints its arguments) or that set one up; "allow" = harmless commands;
+# "refuse_harmless" = harmless commands the guard refuses on purpose (when unsure, it refuses): kept
+# here so that list stays true.
+python3 - scripts/no-force-push-cases.json "$T/cases" <<'PYEOF'
+import json, os, sys
+d = json.load(open(sys.argv[1])); os.mkdir(sys.argv[2])
+for kind in ("refuse", "allow", "refuse_harmless"):
+    for n, c in enumerate(d[kind]):
+        json.dump({"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": c, "description": "run it"}},
+                  open("%s/%s-%03d.json" % (sys.argv[2], kind, n), "w"))
+PYEOF
+n2r=0; n2a=0; n2h=0; t2r=0; t2a=0; t2h=0
+for f in "$T"/cases/*.json; do
+  bash "$HOOK" < "$f" >/dev/null 2>"$T/err"; rc=$?
+  cmd=$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["tool_input"]["command"]))' "$f")
+  case $(basename "$f") in
+    refuse-*) t2r=$((t2r + 1)); [ "$rc" = 2 ] && n2r=$((n2r + 1)) || bad "allowed (should refuse): $cmd" ;;
+    allow-*) t2a=$((t2a + 1)); [ "$rc" = 0 ] && n2a=$((n2a + 1)) || bad "refused (should allow): $cmd" ;;
+    refuse_harmless-*) t2h=$((t2h + 1)); [ "$rc" = 2 ] && n2h=$((n2h + 1)) || bad "allowed (listed as refused on purpose): $cmd" ;;
+  esac
+done
+[ "$t2r" -ge 170 ] && [ "$t2a" -ge 30 ] && [ "$t2h" -ge 10 ] || bad "the case file is short: $t2r refuse, $t2a allow, $t2h refused on purpose"
+ok "the case file: refuses $n2r of $t2r force pushes, allows $n2a of $t2a harmless commands, and refuses $n2h of $t2h harmless ones on purpose"
 # the message names the safe way
 run_hook "$(payload 'git push --force')"
 grep -qF -- '--force-with-lease' "$T/err" && ok "the refusal names --force-with-lease" || bad "the refusal doesn't name --force-with-lease"
@@ -215,8 +239,34 @@ python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":"git push
 s=$(python3 -c 'import time;print(time.time())'); bash "$HOOK" < "$T/big-force.json" >/dev/null 2>&1; rc1=$?; bash "$HOOK" < "$T/big-plain.json" >/dev/null 2>&1; rc2=$?
 e=$(python3 -c "import time;print(round(time.time()-$s,2))")
 [ "$rc1" = 2 ] && [ "$rc2" = 0 ] && python3 -c "import sys; sys.exit(0 if $e < 2 else 1)" && ok "two 2 MB commands judged by the raw-text rule in ${e}s: force refused, plain push allowed" || bad "2 MB commands: exits $rc1/$rc2 in ${e}s"
+# just past 64 KB too, a force flag in any spelling ends in a refusal (the raw-text rule takes quotes
+# and backslashes out), and a plain push or --force-with-lease still goes through
+python3 - "$T" <<'PYEOF'
+import json, sys
+pad = "x" * 66000
+refuse = ["; git push -f", "; git push origin +main", "; git push -4f", '; git push -"f"', "; git push -\\f", "; git push --mirror", "; git push --mi", "; git push --forc",
+          "; git push --fo''rce", "; git push {-f,origin}", "; git push $'\\x2df'", "; bash -c 'git push --force'", "; git push --force-with-lease --force", "\tgit\tpush\t-f"]
+allow = ["; git push origin main", "; git push --force-with-lease", "; git push --follow-tags origin main"]
+for kind, tails in (("r", refuse), ("a", allow)):
+    for n, t in enumerate(tails):
+        t = t.replace("\\t", "\t")
+        json.dump({"tool_input": {"command": "echo " + pad + t, "description": "a + b -rf --force"}}, open("%s/big-%s%02d.json" % (sys.argv[1], kind, n), "w"))
+json.dump({"tool_input": {"command": "git push -4f; echo " + pad}}, open(sys.argv[1] + "/big-r99.json", "w"))
+PYEOF
+nbr=0; nba=0
+for f in "$T"/big-r*.json; do bash "$HOOK" < "$f" >/dev/null 2>&1; [ $? = 2 ] && nbr=$((nbr + 1)) || bad "over 64 KB, allowed (should refuse): $(basename "$f")"; done
+for f in "$T"/big-a*.json; do bash "$HOOK" < "$f" >/dev/null 2>&1 && nba=$((nba + 1)) || bad "over 64 KB, refused (should allow): $(basename "$f")"; done
+ok "over 64 KB: $nbr force pushes in different spellings refused, $nba plain pushes allowed"
+# without awk, bash's own raw-text rule gives the same answers on a short command
+mkdir "$T/noawk"; for tool in bash cat; do ln -s "$(command -v "$tool")" "$T/noawk/$tool"; done
+noawk() { printf '%s' "$(payload "$1")" | PATH="$T/noawk" "$T/noawk/bash" "$HOOK" >/dev/null 2>&1; }
+nna=0
+for c in 'git push -f' 'git push -4f' 'git push -"f"' 'git push --mi' 'git push --forc' 'git push origin +main' "git push \$'\\x2df'" $'git\tpush\t-f'; do
+  noawk "$c"; [ $? = 2 ] && nna=$((nna + 1)) || bad "without awk, allowed (should refuse): $c"
+done
+noawk 'git push origin main' && noawk 'git push --force-with-lease' && ok "without awk: $nna force pushes refused, a plain push and --force-with-lease allowed" || bad "without awk, a plain push was refused"
 # the hook header names what it does not catch
-for w in 'script file' 'aliases' 'remote.*.push' '$VARIABLE' '$(echo git)' 'ssh' 'case pattern' "pu''sh"; do
+for w in 'EARLIER command' 'echo / printf' 'python -c' 'env -S' 'aliases' 'remote.*.push' 'PATH' '$VARIABLE' '$(echo git)' "pu''sh"; do
   grep -qF -- "$w" "$HOOK" && ok "the hook's header names a bypass it doesn't catch: $w" || bad "the hook's header doesn't name: $w"
 done
 
