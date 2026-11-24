@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# E02-S92: /fix-it's counts, its "tests pass" and its "still builds" say what really happened.
+# Three faults this pins shut, each by RUNNING the commands fix-it.md tells the AI to run, taken out of fix-it.md
+# itself, against a stand-in for /fix-it's outside world (scripts/fix-it-fixtures/: a small project with a
+# backend/ pytest suite and a frontend/ build and test, plus a first report and a re-scan report):
+#   (a) Counts. "Fixed" used to be findings-before minus findings-after, so a finding whose scanner did not run the
+#       second time counted as fixed. Now each in-scope finding has one recorded outcome -- fixed / changed, not
+#       re-checked / failed / needs a person / not attempted -- and the five counts add up to the findings in scope.
+#   (b) Tests. `pytest 2>/dev/null || npm test 2>/dev/null || echo "No test suite found"` turned a red suite into
+#       "No test suite found" and exit 0. Now the result is passed / failed / not run from the real exit status and
+#       output: missing tool, zero tests, red suite and timeout are never "passed".
+#   (c) Build. `cd src/web-ui && npm run build 2>/dev/null` built nothing in an app whose build is in frontend/.
+#       Now the build runs where the build is; a broken build is failed, no build is "not checked".
+# The closing sentences /fix-it says are printed by the same record, and are checked word for word here.
+# No Docker, no network, no scanner: `docker` is a two-line stub, and the fixture's "build" is one node file.
+# Needs git, python3 with pytest, node and npm (CI has them; a missing one fails the first check, it does not skip).
+# Usage: test-fix-it-true-results.sh [ROOT]. With no ROOT it checks this repo, then proves the checks fail on opposites.
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"; SELF="$root/scripts/$(basename "$0")"
+R="$(cd "${1:-$root}" && pwd)"; cd "$R"
+fail=0
+ok()  { echo "ok   $1"; }
+bad() { echo "FAIL $1"; fail=1; [ -z "${FIRST_FAIL_STOPS:-}" ] || exit 1; }   # the controls stop at the first failure
+check() { if eval "$2"; then ok "$1"; else bad "$1"; fi; }
+# "grep -q" quits at its first match and SIGPIPEs the writer under pipefail; gq reads all of its input.
+gq() { [ "$(grep -c "$@")" -gt 0 ]; }
+# The whole run's stderr is caught; the last check fails on any of it.
+ERRF="$(mktemp)"; TMPD="$(mktemp -d)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&4; rm -rf "$ERRF" "$TMPD"' EXIT
+
+F=.claude/commands/fix-it.md; PY=.claude/make-it/scripts/fix-it-results.py; FX=scripts/fix-it-fixtures
+flat() { tr '\n' ' ' | tr -s ' '; }
+has() { flat < "$F" | gq -F -- "$1" || { echo "  missing in fix-it.md: $1"; false; }; }
+hasnt() { ! gq -F -- "$1" "$F" || { echo "  still in fix-it.md: $1"; false; }; }
+
+check "the tools this test needs are here: git, python3 with pytest, node, npm" \
+  'command -v git >/dev/null && python3 -m pytest --version >/dev/null 2>&1 && command -v node >/dev/null && command -v npm >/dev/null'
+
+# ---- the commands, taken out of fix-it.md ------------------------------------------------------------------
+# "$HOME/.claude/make-it/..." in the blocks is the installed copy; here HOME is a folder whose copy is this tree's.
+mkdir -p "$TMPD/home/.claude" "$TMPD/stub"; ln -s "$R/.claude/make-it" "$TMPD/home/.claude/make-it"
+BLK="$TMPD/blocks"; mkdir -p "$BLK"
+awk -v d="$BLK" '/^```bash/{n++; on=1; next} on && /^```/{on=0; close(f); next} on{f = sprintf("%s/%03d.sh", d, n); print > f}' "$F"
+# line PATTERN: the one command line in fix-it.md's bash blocks that matches (a fixed string)
+line() { awk -v p="$1" 'index($0, p) && !n++' "$BLK"/*.sh; }
+# block PATTERN: the whole bash block that holds a line ending in PATTERN (a block is run as it is written)
+block() { local b; for b in "$BLK"/*.sh; do if gq -E -- "$1\$" "$b"; then cat "$b"; return 0; fi; done; }
+# fill LINE VALUE...: each [placeholder] in turn becomes the next value, quoted for the shell
+fill() { local l="$1" v; shift; for v in "$@"; do l="$(printf '%s\n' "$l" | V="$v" perl -pe 's/"?\[[^\]]*\]"?/"\x27" . ($ENV{V} =~ s{\x27}{\x27\\\x27\x27}gr) . "\x27"/e')"; done; printf '%s\n' "$l"; }
+L_START="$(line 'fix-it-results.py" start ')"; L_SCOPE="$(line 'fix-it-results.py" scope ')"
+L_REC="$(line 'fix-it-results.py" record "[ID]" [event]')"; L_RESCAN="$(line 'fix-it-results.py" rescan ')"
+L_GONE="$(line 'fix-it-results.py" record "[ID]" gone')"; L_STILL="$(line 'fix-it-results.py" record "[ID]" still')"
+L_OWN="$(line 'fix-it-results.py" check tests --in ')"; L_DOCKER="$(line 'fix-it-results.py" check docker-build -- docker compose build')"
+B_TESTS="$(block 'fix-it-results[.]py" check tests')"; B_BUILD="$(block 'fix-it-results[.]py" check build')"
+B_SUM="$(block 'fix-it-results[.]py" summary')"
+check "fix-it.md has each command as a line to run: start, scope, record, rescan, gone, still, check tests, check build, summary" \
+  '( for v in "$L_START" "$L_SCOPE" "$L_REC" "$L_RESCAN" "$L_GONE" "$L_STILL" "$L_OWN" "$L_DOCKER" "$B_TESTS" "$B_BUILD" "$B_SUM"; do [ -n "$v" ] || exit 1; done )'
+
+# at NAME 'commands': run them in that project, output kept. proj NAME: a fresh copy of the fixture project, as a git
+# project, with this run's record started (fix-it.md's own start line).
+at() { (cd "$TMPD/$1" && HOME="$TMPD/home" PATH="${STUBPATH:-$PATH}" FIXIT_CHECK_TIMEOUT="${TO:-120}" bash -c "$2") > "$TMPD/out" 2>&1; }
+proj() { rm -rf "${TMPD:?}/$1"; mkdir -p "$TMPD/$1"; cp -R "$FX/project/." "$TMPD/$1/"; (cd "$TMPD/$1" && git init -q . 2>/dev/null) && at "$1" "$(fill "$L_START" "$R/$FX/report-before.md")"; }
+out() { gq -xF -- "$1" "$TMPD/out" || { echo "  not printed: $1"; sed 's/^/    | /' "$TMPD/out" | tail -n 25; false; }; }
+noout() { ! gq -E -- "$1" "$TMPD/out" || { echo "  must not be printed: $1"; grep -E -- "$1" "$TMPD/out" | sed 's/^/    | /'; false; }; }
+PASSWORDS='Tests: passed|Build: the app still builds|every check I ran passed|is fixed and nothing failed'
+# begin NAME: start the record and put the first report's eight findings in scope (the commands are fix-it.md's)
+begin() {
+  local id sev title
+  while IFS='|' read -r id sev title; do at "$1" "$(fill "$L_SCOPE" "$id" "$sev" "$title")" || return 1; done < <(
+    awk '/^##### /{sub(/^##### /, ""); id = $0; sub(/:.*/, "", id); t = $0; sub(/^[^:]*: /, "", t)} /^- \*\*Severity:\*\* /{print id "|" $3 "|" t}' "$FX/report-before.md")
+}
+rec() { at "$1" "$(fill "$L_REC" "$2" "$3" "$4")"; }
+gone() { at "$1" "$(fill "$L_GONE" "$2")"; }
+still() { at "$1" "$(fill "$L_STILL" "$2")"; }
+rescan() { at "$1" "$(fill "$L_RESCAN" "$R/$FX/$2")"; }
+
+# ---- (a) the counts ----------------------------------------------------------------------------------------
+# Eight findings. Two fixed and confirmed; one changed, but Trivy did not run the second time; one changed and still
+# reported; one tried and reverted; one for a person; two never touched (one of them a Trivy finding that the re-scan
+# no longer lists). The old subtraction said 8 - 4 = 4 fixed.
+scenario_a() {
+  proj a && begin a || return 1
+  rec a DEP-NPM-001 changed "upgraded next" && rec a DEP-PIP-001 changed "upgraded requests" && rec a DEP-TRIVY-001 changed "newer base image" \
+    && rec a SAST-SEMGREP-001 changed "query takes parameters" && rec a SAST-SEMGREP-002 failed "it broke the tests and was reverted" \
+    && rec a OTG-AUTHZ-001 person "a business rule" && rescan a report-after.md \
+    && gone a DEP-NPM-001 && gone a DEP-PIP-001 && gone a DEP-TRIVY-001 && still a SAST-SEMGREP-001
+}
+check "(a) the scenario records through fix-it.md's own commands" 'scenario_a || { cat "$TMPD/out"; false; }'
+check "(a) the old subtraction on the two fixture reports says 4 fixed (8 before, 4 after): the fault this replaces" \
+  '[ "$(( $(grep -c "^##### " "$FX/report-before.md") - $(grep -c "^##### " "$FX/report-after.md") ))" = 4 ]'
+check "(a) a finding that was never changed cannot be marked gone, and no event can set 'fixed' directly" \
+  '! gone a DEP-TRIVY-002 && out "fix-it-results: DEP-TRIVY-002 has no kept change (it is \"not attempted\"), so the re-scan does not change its outcome" && ! rec a SAST-LINT-001 fixed "said so" && ! rec a NOT-IN-SCOPE-001 changed "x"'
+at a "$B_SUM" || true; cp "$TMPD/out" "$TMPD/sum-a"
+check "(a) the counts are what happened: 2 fixed, 1 changed but not re-checked, 2 failed, 1 needs a person, 2 not attempted, of 8" \
+  'out "| **Total** | 8 | 2 | 1 | 2 | 1 | 2 |" && out "| CRITICAL | 1 | 1 | 0 | 0 | 0 | 0 |" && out "| HIGH | 7 | 1 | 1 | 2 | 1 | 2 |"'
+check "(a) every row of the count table adds up to its findings in scope" \
+  '[ "$(grep -cE "^\| (CRITICAL|HIGH|\*\*Total\*\*) \|" "$TMPD/out")" = 3 ] && grep -E "^\| (CRITICAL|HIGH|\*\*Total\*\*) \|" "$TMPD/out" | awk -F"|" "{ if (\$3 + 0 != \$4 + \$5 + \$6 + \$7 + \$8) bad = 1 } END { exit bad }"'
+check "(a) each of the eight findings is listed once, with one outcome" \
+  '[ "$(grep -cE "^- [A-Z-]+-[0-9]+ \((CRITICAL|HIGH)\) .* -- (FIXED|CHANGED, NOT RE-CHECKED|FAILED|NEEDS A PERSON|NOT ATTEMPTED)(: |$)" "$TMPD/out")" = 8 ] && [ "$(grep -oE "^- [A-Z-]+-[0-9]+ " "$TMPD/out" | sort -u | grep -c .)" = 8 ]'
+check "(a) Trivy did not run the second time: its changed finding is 'not re-checked', its untouched one 'not attempted', neither is fixed" \
+  'out "- DEP-TRIVY-001 (HIGH) Known flaw in the base image (openssl) -- CHANGED, NOT RE-CHECKED: newer base image; the new scan did not run this check (DEP-TRIVY: NOT RUN)" && out "- DEP-TRIVY-002 (HIGH) Known flaw in the base image (zlib) -- NOT ATTEMPTED" && out "- SAST-SEMGREP-001 (HIGH) SQL built from user input in the search route -- FAILED: query takes parameters; the new scan still reports it"'
+check "(a) the sentences for the person say those counts, in plain words" \
+  'out "Of the 8 findings I set out to fix, 2 are fixed: the change is kept, and the new scan ran the same check and no longer reports it." && out "1 was changed but not re-checked: no new scan ran the check that found it, so I can'"'"'t say it is fixed. (DEP-TRIVY-001)" && out "2 are not fixed: I tried, and the fix did not work or the new scan still reports the problem. (SAST-SEMGREP-001, SAST-SEMGREP-002)" && out "1 needs a person: I did not fix it, and it is on the manual list. (OTG-AUTHZ-001)" && out "2 were not attempted: nothing was changed for them. (DEP-TRIVY-002, SAST-LINT-001)" && out "Critical and high findings: 6 of 8 not confirmed fixed (DEP-TRIVY-001, DEP-TRIVY-002, SAST-SEMGREP-001, SAST-SEMGREP-002, OTG-AUTHZ-001, SAST-LINT-001)."'
+check "(a) with no check run, the summary says tests and build were not run, and the bottom line is not an all-clear" \
+  'out "Tests: not run. I did not run your app'"'"'s tests, so I can'"'"'t say they pass." && out "Build: not checked. I did not build your app, so I can'"'"'t say it still builds." && out "Bottom line: this is not finished -- 6 findings are not confirmed fixed; the build was not checked; no tests ran." && noout "$PASSWORDS"'
+# no re-scan at all: a kept change is not "fixed"
+check "(a) with no re-scan, a changed finding stays 'changed, not re-checked', and 'gone' is refused" \
+  'proj a2 && begin a2 && rec a2 DEP-NPM-001 changed "upgraded next" && ! gone a2 DEP-NPM-001 && { at a2 "$B_SUM" || true; } && out "- DEP-NPM-001 (CRITICAL) Remote code execution in the web framework (next) -- CHANGED, NOT RE-CHECKED: upgraded next; no new scan has checked it" && out "Of the 8 findings I set out to fix, none is confirmed fixed." && out "| **Total** | 8 | 0 | 1 | 0 | 0 | 7 |"'
+check "(a) a re-scan report with no table of what ran records nothing, and says so" \
+  'printf "# no table here\n" > "$TMPD/empty.md" && ! at a2 "$(fill "$L_RESCAN" "$TMPD/empty.md")" && out "fix-it-results: I could not read which checks ran from $TMPD/empty.md (no Category Breakdown rows with ID and Status). Nothing is recorded, so every changed finding stays \"changed, not re-checked\"."'
+check "(a) the record lives inside .git: the project's files show nothing new" \
+  '[ -s "$TMPD/a/.git/fix-it-run/ledger.jsonl" ] && [ "$(cd "$TMPD/a" && git status --porcelain | sort | tr "\n" " ")" = "?? backend/ ?? frontend/ " ]'
+
+# all fixed, every check green: the one case that may sound like a success
+all_fixed() {
+  proj ok || return 1
+  at ok "$(fill "$L_SCOPE" DEP-NPM-001 CRITICAL "Remote code execution in the web framework (next)")" \
+    && at ok "$(fill "$L_SCOPE" DEP-PIP-001 HIGH "Known flaw in the HTTP library (requests)")" \
+    && rec ok DEP-NPM-001 changed "upgraded next" && rec ok DEP-PIP-001 changed "upgraded requests" \
+    && at ok "$B_TESTS" && at ok "$B_BUILD" && rescan ok report-after.md && gone ok DEP-NPM-001 && gone ok DEP-PIP-001 && at ok "$B_SUM"
+}
+check "(all fixed) both findings fixed, tests and build green: the sentences say so, and name what ran" \
+  'all_fixed && out "All 2 findings I set out to fix are fixed: each change is kept, and the new scan ran the same check and no longer reports it." && out "Tests: passed in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: 2 passed)." && out "Tests: passed in frontend/ (\`npm test\`: 1 passed)." && out "Build: the app still builds (\`npm run build\` in frontend/ finished without an error)." && out "Critical and high findings: all 2 fixed." && out "Bottom line: everything I set out to fix is fixed, and every check I ran passed." || { cat "$TMPD/out"; false; }'
+check "(all fixed) the checks left no cache or bytecode files in the project" \
+  '[ -z "$(find "$TMPD/ok" -name __pycache__ -o -name .pytest_cache -o -name "*.pyc")" ]'
+
+# ---- (b) the tests -----------------------------------------------------------------------------------------
+# tests NAME: run fix-it.md's test block there, keep its exit status, then print the summary
+tests() { local rc=0; at "$1" "$B_TESTS" || rc=$?; cp "$TMPD/out" "$TMPD/run"; at "$1" "$B_SUM" || true; return "$rc"; }
+check "(b) a red pytest suite in backend/ is 'did NOT pass', with the counts, and the block exits non-zero" \
+  'proj b1 && sed "s/== 5/== 6/" "$FX/project/backend/tests/test_app.py" > "$TMPD/b1/backend/tests/test_app.py" && ! tests b1 && out "Tests: did NOT pass in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: 1 failed, 1 passed)." && out "Tests: passed in frontend/ (\`npm test\`: 1 passed)." && noout "Tests: passed in backend|No test suite found|every check I ran passed" && gq -F "the tests did not pass" "$TMPD/out"'
+check "(b) a red suite at the project root (the old fall-through case) is 'did NOT pass in the project folder'" \
+  'rm -rf "$TMPD/b1r" && mkdir "$TMPD/b1r" && cp -R "$FX/project/backend/." "$TMPD/b1r/" && sed "s/== 5/== 6/" "$FX/project/backend/tests/test_app.py" > "$TMPD/b1r/tests/test_app.py" && (cd "$TMPD/b1r" && git init -q . 2>/dev/null) && at b1r "$(fill "$L_START" x)" && ! tests b1r && out "Tests: did NOT pass in the project folder (\`python3 -m pytest -q -p no:cacheprovider\`: 1 failed, 1 passed)." && noout "$PASSWORDS|No test suite found"'
+check "(b) a test command whose tool is not installed is 'no tests ran', never a pass" \
+  'proj b2 && rm -rf "$TMPD/b2/backend" && sed "s/node --test/no-such-test-tool-e02s92/" "$FX/project/frontend/package.json" > "$TMPD/b2/frontend/package.json" && ! tests b2 && out "Tests: no tests ran in frontend/ (\`npm test\`: the command could not be started (exit status 127: a tool it needs is not installed)). That is not a pass." && noout "Tests: passed|every check I ran passed"'
+check "(b) pytest not installed: the backend suite is 'no tests ran', never a pass" \
+  'proj b3 && rm -rf "$TMPD/b3/frontend" && printf "%s\n" "#!/bin/sh" "case \" \$* \" in *\" -m pytest \"*) echo \"No module named pytest\" >&2; exit 1;; esac" "exec \"$(command -v python3)\" \"\$@\"" > "$TMPD/stub/python3" && cp "$TMPD/stub/python3" "$TMPD/stub/python" && chmod +x "$TMPD/stub/python3" "$TMPD/stub/python" && ! STUBPATH="$TMPD/stub:$PATH" tests b3 && out "Tests: no tests ran in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: the command could not be started (exit status 127: a tool it needs is not installed)). That is not a pass." && noout "Tests: passed"; rc=$?; rm -f "$TMPD/stub/python3" "$TMPD/stub/python"; [ "$rc" = 0 ]'
+check "(b) a suite that collects zero tests, and a test script that runs none, are 'no tests ran'" \
+  'proj b4 && printf "x = 1\n" > "$TMPD/b4/backend/tests/test_app.py" && sed "s/node --test/node -e 0/" "$FX/project/frontend/package.json" > "$TMPD/b4/frontend/package.json" && ! tests b4 && out "Tests: no tests ran in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: the test command ran but found no tests). That is not a pass." && out "Tests: no tests ran in frontend/ (\`npm test\`: the test command finished without an error, but its output does not show a test that ran). That is not a pass." && noout "Tests: passed|every check I ran passed"'
+check "(b) a project with no test suite is 'no tests ran', and the block exits non-zero" \
+  'proj b5 && rm -rf "$TMPD/b5/backend/tests" "$TMPD/b5/backend/pytest.ini" "$TMPD/b5/frontend/app.test.js" && sed "/\"test\":/d; s/\"node build.js\",/\"node build.js\"/" "$FX/project/frontend/package.json" > "$TMPD/b5/frontend/package.json" && ! tests b5 && out "Tests: no tests ran. I found no test suite in this project. That is not a pass." && noout "Tests: passed"'
+check "(b) a test run that does not finish is stopped and is 'did NOT pass', never a pass" \
+  'proj b6 && rm -rf "$TMPD/b6/backend" && sed "s/node --test/sleep 60/" "$FX/project/frontend/package.json" > "$TMPD/b6/frontend/package.json" && ! TO=3 tests b6 && out "Tests: did NOT pass in frontend/ (\`npm test\`: it did not finish within 3 seconds, so I stopped it)." && noout "Tests: passed"'
+check "(b) the project's own test command goes through the same record: red is red, a missing folder is not run" \
+  'proj b7 && ! at b7 "$(fill "$L_OWN" backend false)" && out "CHECK tests | backend/ | false | FAILED | exit status 1" && ! at b7 "$(fill "$L_OWN" no-such-folder "true")" && { at b7 "$B_SUM" || true; } && noout "Tests: passed"'
+check "(b) a later green run replaces an earlier red one (the self-healing loop reports the code as it now is)" \
+  'cp "$FX/project/backend/tests/test_app.py" "$TMPD/b1/backend/tests/test_app.py" && tests b1 && out "Tests: passed in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: 2 passed)." && noout "did NOT pass"'
+
+# ---- (c) the build -----------------------------------------------------------------------------------------
+build() { local rc=0; at "$1" "$B_BUILD" || rc=$?; cp "$TMPD/out" "$TMPD/run"; at "$1" "$B_SUM" || true; return "$rc"; }
+check "(c) the build in frontend/ is found and run there" \
+  'proj c1 && build c1 && out "Build: the app still builds (\`npm run build\` in frontend/ finished without an error)."'
+check "(c) a broken build in frontend/ is 'does NOT build', and the block exits non-zero" \
+  'proj c2 && echo "throw new Error(\"build broken\")" >> "$TMPD/c2/frontend/build.js" && ! build c2 && out "Build: the app does NOT build (\`npm run build\` in frontend/ failed: exit status 1)." && noout "Build: the app still builds|every check I ran passed" && gq -F "the app does not build" "$TMPD/out"'
+check "(c) a build two folders down (src/web-ui/) and one in backend/ are both found" \
+  'proj c3 && mkdir "$TMPD/c3/src" && mv "$TMPD/c3/frontend" "$TMPD/c3/src/web-ui" && cp "$FX/project/frontend/package.json" "$FX/project/frontend/build.js" "$TMPD/c3/backend/" && echo "process.exit(3)" >> "$TMPD/c3/backend/build.js" && ! build c3 && out "Build: the app still builds (\`npm run build\` in src/web-ui/ finished without an error)." && out "Build: the app does NOT build (\`npm run build\` in backend/ failed: exit status 3)."'
+check "(c) a project with no build step is 'not checked', never 'still builds'" \
+  'proj c4 && rm -rf "$TMPD/c4/frontend" && ! build c4 && out "Build: not checked. I found no build step in this project. I can'"'"'t say the app still builds." && noout "Build: the app still builds"'
+check "(c) a build whose tool is not installed is 'not checked', never 'still builds'" \
+  'proj c5 && sed "s/node build.js/no-such-build-tool-e02s92 build/" "$FX/project/frontend/package.json" > "$TMPD/c5/frontend/package.json" && ! build c5 && out "Build: not checked in frontend/ (\`npm run build\`: the command could not be started (exit status 127: a tool it needs is not installed)). I can'"'"'t say the app still builds." && noout "Build: the app still builds"'
+# the Docker build line, with a stand-in for docker (it is never the real one: the stub is first on PATH)
+printf '%s\n' '#!/bin/sh' 'exit "${DOCKER_STUB_EXIT:-0}"' > "$TMPD/stub/docker"; chmod +x "$TMPD/stub/docker"
+check "(c) the Docker build line reports the command's own exit status: failed when it fails, passed when it passes" \
+  'proj c6 && ! DOCKER_STUB_EXIT=1 STUBPATH="$TMPD/stub:$PATH" at c6 "$L_DOCKER" && out "CHECK docker-build | (project folder) | docker compose build | FAILED | exit status 1" && STUBPATH="$TMPD/stub:$PATH" at c6 "$L_DOCKER" && out "CHECK docker-build | (project folder) | docker compose build | PASSED | it finished without an error"'
+check "(tests not run) everything fixed and the build green, but no tests ran: the bottom line is not an all-clear" \
+  'proj d && rm -rf "$TMPD/d/backend/tests" "$TMPD/d/backend/pytest.ini" "$TMPD/d/frontend/app.test.js" && sed "/\"test\":/d; s/\"node build.js\",/\"node build.js\"/" "$FX/project/frontend/package.json" > "$TMPD/d/frontend/package.json" && at d "$(fill "$L_SCOPE" DEP-NPM-001 CRITICAL "Remote code execution in the web framework (next)")" && rec d DEP-NPM-001 changed "upgraded next" && { at d "$B_TESTS" || true; } && at d "$B_BUILD" && rescan d report-after.md && gone d DEP-NPM-001 && at d "$B_SUM" && out "The 1 finding I set out to fix is fixed: each change is kept, and the new scan ran the same check and no longer reports it." && out "Tests: no tests ran. I found no test suite in this project. That is not a pass." && out "Bottom line: everything I set out to fix is fixed and nothing failed, but not every check ran (see above), so this is not a full all-clear." && noout "every check I ran passed|Tests: passed"'
+
+# ---- the words in fix-it.md --------------------------------------------------------------------------------
+# the bash blocks of the verify step
+VER="$(awk '/^<step name="verify">/{on=1} on && /^<\/step>/{on=0} on && /^```bash/{b=1; next} b && /^```/{b=0} on && b' "$F")"
+check "fix-it.md: the old fall-through test line, the wrong build folder and the subtraction are gone" \
+  'hasnt "|| echo \"No test suite found\"" && hasnt "cd src/web-ui" && hasnt "delta = original_count - new_count" && hasnt "All tests still pass" && hasnt "All fixes verified" && hasnt "| Severity      | Before | After | Fixed | Remaining |"'
+check "fix-it.md: no check in the verify step hides its errors or falls through to another command" \
+  '[ -n "$VER" ] && [ "$(printf "%s\n" "$VER" | grep -cE "2>/dev/null|\|\| *(echo|true|:)")" = 0 ]'
+check "fix-it.md: the three results, and 'not run' is never a pass" \
+  'has "**Every check has one of three results: PASSED, FAILED or NOT RUN.** The result is the one the check command prints, taken from the real command'"'"'s exit status and output." && has "NOT RUN (no test suite, no build step, a tool that is not installed, a folder that is not there) is never a pass and is never worded as one." && has "then say \"the build was not checked\", never \"the app still builds\"."'
+check "fix-it.md: counts come from the record, one outcome per finding, never from subtraction" \
+  'has "Every count and every result /fix-it reports later comes from this record, never from memory and never from subtracting one report'"'"'s totals from another'"'"'s." && has "**Never work a \"fixed\" count out by subtracting the new report'"'"'s totals from the old one'"'"'s.**" && has "\`changed\` is not \"fixed\". Nothing is called fixed before the re-scan (Phase 4). A finding with no line stays \"not attempted\", and is reported that way." && has "**Every in-scope finding has exactly one outcome:** fixed / changed, not re-checked / failed / needs a person / not attempted. The five counts add up to the findings in scope."'
+check "fix-it.md: the report says the summary's sentences and never a better result" \
+  'has "**Say the sentences under \"SAY THIS TO THE PERSON\" as they are printed.**" && has "You may not turn a result into a better one: \"not re-checked\" is never \"fixed\", \"no tests ran\" and \"not checked\" are never \"pass\" or \"still builds\", and a failed check is never left out." && has "11. **Report what happened, not what was hoped.**"'
+
+# ---- controls (this repo only): a copy with the old behaviour back must fail the checks above ---------------
+if [ -z "${1:-}" ]; then
+  # opp FILE PERL: a copy of fix-it.md, the results script and the fixtures with one edit must fail this script
+  opp() {
+    local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"
+    tar -cf - "$F" "$PY" "$FX" | tar -xf - -C "$d"
+    perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! FIRST_FAIL_STOPS=1 bash "$SELF" "$d" >/dev/null 2>&1
+  }
+  check "(control) passes on an untouched copy" \
+    'd="$TMPD/c"; mkdir -p "$d" && tar -cf - "$F" "$PY" "$FX" | tar -xf - -C "$d" && bash "$SELF" "$d" >/dev/null 2>&1'
+  check "(control, fault a) fails when a finding the re-scan did not check counts as fixed (the old subtraction)" \
+    'opp "$PY" "s/if st in RAN:/if True:/"'
+  check "(control, fault a) fails when a finding nobody touched starts out as fixed" \
+    'opp "$PY" "s/, .not attempted., ..\]/, \x27changed\x27, \x27\x27]/"'
+  check "(control, fault b) fails with the old test line back in fix-it.md" \
+    'opp "$F" "s/^[^\n]*fix-it-results[.]py\" check tests\n/pytest 2>\/dev\/null || npm test 2>\/dev\/null || echo \"No test suite found\"\n/m"'
+  check "(control, fault b) fails when 'no tests ran' is recorded as passed, and when a timeout is" \
+    'opp "$PY" "s/return \x27not run\x27, \x27the test command ran but found no tests\x27/return \x27passed\x27, \x27ok\x27/" && opp "$PY" "s/return \x27failed\x27, \x27it did not finish/return \x27passed\x27, \x27it did not finish/"'
+  check "(control, fault c) fails with the old build lines back in fix-it.md" \
+    'opp "$F" "s/^[^\n]*fix-it-results[.]py\" check build\n/cd src\/web-ui && npm run build 2>\/dev\/null\n/m"'
+  check "(control, fault c) fails when a build that exits non-zero is passed, and when 'no build step' is worded as still builds" \
+    'opp "$PY" "s/if rc == 0 else \(.failed., .exit status %d. % rc\)/if True else 0/" && opp "$PY" "s/.no tests ran. if name == .tests. else .not checked./\x27no tests ran\x27 if name == \x27tests\x27 else \x27the app still builds\x27/"'
+fi
+
+check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
+  '[ ! -s "$ERRF" ] || { sed "s/^/  stderr: /" "$ERRF"; false; }'
+
+[ "$fail" = 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
