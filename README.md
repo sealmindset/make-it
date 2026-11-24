@@ -1005,6 +1005,36 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.24 -- the logs say who and from where and keep sign-in codes out; the hostile-code check confirms an old copy by its bytes; each /nemo-it scan has its own temp folder
+
+Three fixes in one release.
+
+**The scaffold's activity log**
+- **It names the signed-in user** (id and e-mail) on every request, including a refused one,
+  and records the visitor's address where it used to record the front end's.
+- **Sign-in codes stay out of the console.** The server's console line no longer prints query
+  strings. Tokens, cookies and codes are absent from the log, its API and its page. Logs
+  already written keep what they hold.
+- **A visitor's address is believed only from proxies you name** in `TRUSTED_PROXIES`. Compose
+  names the front end. On Kubernetes, name the ingress's network and the front-end pods'
+  network together; otherwise the proxy's address is recorded.
+- **Personal data:** the log holds e-mail and visitor addresses in memory (10,000 events,
+  emptied on restart). The visitor's address now also appears in the console line.
+- **Apps already built** get these through /resume-it's catch-up (L09, L10, L11).
+- **Not proven:** /argo-it does not set `TRUSTED_PROXIES` yet, and no cluster run was made.
+
+**The hostile-code check**
+- **An old copy counts only when its bytes match.** The check finds a possible old copy by
+  git's id for the file, then compares the bytes git holds with the file on disk. Only an
+  exact match softens a stop. The same id with different bytes keeps the stop and adds a note.
+- The id's hash is now marked as not used for security, which is true: the bytes decide.
+
+**/nemo-it**
+- **Each scan makes its own private temp folder** and removes only that one. Before, a second
+  scan started while the first was running deleted the first one's files.
+- **The cleanup cannot widen,** and folders left by an earlier version are named, never
+  deleted.
+
 ### v1.71.23 -- the board's helpers work under any locale, and a task brief takes a task number only
 
 - **The six board helpers no longer crash on a non-ASCII title** when the computer's locale
