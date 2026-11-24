@@ -254,6 +254,8 @@ case "$1" in
 esac
 exit 0''')
 stub("yq", "exit 0")
+# kubectl: `kubectl kustomize DIR` prints DIR's YAML files, as an assembled version (the live-version step needs one)
+stub("kubectl", '[ "$1" = kustomize ] || exit 1; [ -f "$2/kustomization.yaml" ] || { echo "no kustomization in $2" >&2; exit 1; }; cat "$2"/*.yaml')
 stub("rsync", "exit 0")
 stub("sudo", "exit 0")
 stub("git", 'exit 0')
@@ -328,6 +330,9 @@ def simulate(ref_name, steps=None, mode="ok", event="push"):
     work = tempfile.mkdtemp(dir=TMP)
     shutil.copytree(scaffold, os.path.join(work, "src"))
     src = os.path.join(work, "src")
+    os.makedirs(os.path.join(src, "env/prod"))     # the live version's folder, as set-up writes it (clean)
+    open(os.path.join(src, "env/prod/kustomization.yaml"), "w").write("resources:\n- backend.yaml\n")
+    open(os.path.join(src, "env/prod/backend.yaml"), "w").write("image: x/backend:prod-latest\n")
     log = os.path.join(work, "docker.log")
     open(log, "w").close()
     R = {"outputs": {}, "problems": [], "pushed": {}, "ran": [], "failed": None, "out": {}, "meta": {}, "ctx": ctx}
@@ -549,16 +554,17 @@ if live:
         d = tempfile.mkdtemp(dir=TMP)
         for rel, txt in files.items():
             os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True); open(os.path.join(d, rel), "w").write(txt)
-        r = run_bash(["-euo", "pipefail", "-c", ST[live[0]]["run"]], d, dict(os.environ))
+        r = run_bash(["-euo", "pipefail", "-c", ST[live[0]]["run"]], d, dict(os.environ, PATH=STUBS + ":" + os.environ["PATH"]))
         shutil.rmtree(d, ignore_errors=True)
         return r.returncode
-    check("that step passes a clean live folder and stops on the practice sign-in in it (a hand edit too)",
-          run_live({"env/prod/a.yaml": "image: x/backend:prod-latest\n", "env/dev/mock-oidc.yaml": "x\n"}) == 0
-          and run_live({"env/prod/a.yaml": "image: x/mock-oidc:sha-1\n"}) != 0)
+    check("that step passes a clean live folder, stops on the practice sign-in in it (a hand edit too), and fails when there is no live folder",
+          run_live({"env/prod/kustomization.yaml": "resources:\n- a.yaml\n", "env/prod/a.yaml": "image: x/backend:prod-latest\n", "env/dev/mock-oidc.yaml": "x\n"}) == 0
+          and run_live({"env/prod/kustomization.yaml": "resources:\n- a.yaml\n", "env/prod/a.yaml": "image: x/mock-oidc:sha-1\n"}) == 1
+          and run_live({"env/dev/mock-oidc.yaml": "x\n"}) == 2)
 mr_txt = ST[mirror_at[0]]["run"] if mirror_at else ""
 check("the workflow patches and fills the practice sign-in only in the test copy's folder, never the live version's",
       ("mock-oidc" not in mr_txt) or ("deploy/env/dev/mock-oidc.yaml" in mr_txt and "env/prod" not in mr_txt
-      and "cp scripts/seed-mock-services.sh deploy/env/dev/seed-mock-services.sh" in mr_txt), mr_txt[-600:])
+      and not re.search(r"(?m)^(?!\s*#).*(seed-mock-services|mock-oidc-people)", mr_txt)), mr_txt[-600:])
 
 # the migration check on fixtures
 vstep = next((s for s in ST if "run" in s and "MIGRATIONS_DIR" in s["run"]), None)

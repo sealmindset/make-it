@@ -31,7 +31,7 @@ MOCK="${2:-$root/.claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oid
 ERRF="$(mktemp)"; exec 4>&2 2>"$ERRF"; trap 'cat "$ERRF" >&4; rm -f "$ERRF"' EXIT
 fail=0
 python3 -I - "$DOC" "$root" "$MOCK" <<'PY' || fail=1
-import http.client, json, os, re, shutil, socket, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+import http.client, http.server, json, os, re, shutil, socket, subprocess, sys, tempfile, textwrap, threading, time, urllib.parse, urllib.request
 try:
     import yaml
 except ImportError:
@@ -115,74 +115,17 @@ def seed(m, people=(("mock-admin", "admin@example.test", "Alex Admin"),)):
     m.req("PUT", "/api/clients/mock-oidc-client/redirect_uris", js=dict(redirect_uris=[REDIR]))
 hdr = lambda hs, k: [v for n, v in hs if n.lower() == k]
 
-# --- local development: no code, as before
-m = Mock({})
-try:
-    check("local mode: mock-oidc starts with no access code (as before)", m.up, m.output()[-300:])
-    if m.up:
-        seed(m)
-        st, hs, body = m.req("GET", "/authorize?" + QS)
-        check("local mode: the sign-in page lists the pretend people (as before)", st == 200 and "Alex Admin" in body)
-        st, hs, _ = m.req("GET", "/authorize?" + QS + "&login_hint=mock-admin")
-        check("local mode: login_hint signs in at once (as before)", st == 302 and hdr(hs, "location")[0].startswith(REDIR))
-        st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client", state="s"))
-        check("local mode: picking a person signs in (as before)", st == 302 and hdr(hs, "location")[0].startswith(REDIR + "?code="))
-finally:
-    m.stop()
-
-# --- cluster mode: refuses to start without a long-enough code, and never prints the code
-SHORT = "short-code-1234"
-m = Mock({"MOCK_OIDC_REQUIRE_ACCESS_CODE": "true", "MOCK_OIDC_ACCESS_CODE": SHORT})
-try:
-    time.sleep(1)
-    out = m.output()
-    check("cluster mode: with a code under 16 characters it refuses to start, in a plain line without the code",
-          not m.up and m.p.poll() not in (None, 0) and "not starting" in out and SHORT not in out, out[-300:])
-finally:
-    m.stop()
-m = Mock({"MOCK_OIDC_REQUIRE_ACCESS_CODE": "true"})
-try:
-    time.sleep(1)
-    check("cluster mode: with no code it refuses to start", not m.up and m.p.poll() not in (None, 0))
-finally:
-    m.stop()
-
-# --- with a code
-CODE = "right-code-0123456789"
-m = Mock({"MOCK_OIDC_REQUIRE_ACCESS_CODE": "true", "MOCK_OIDC_ACCESS_CODE": CODE})
-try:
-    check("with a code: it starts", m.up, m.output()[-300:])
-    if m.up:
-        seed(m)
-        st, hs, body = m.req("GET", "/authorize?" + QS)
-        check("with a code: the sign-in page asks for the code and lists no one", st == 200 and "access_code" in body and "Alex Admin" not in body)
-        st, hs, body = m.req("GET", "/authorize?" + QS + "&login_hint=mock-admin")
-        check("with a code: login_hint is no way round it", st == 200 and "access_code" in body and not hdr(hs, "location"))
-        st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client"))
-        check("with a code: picking a person without the code is refused", st == 403, st)
-        st, hs, body = m.req("POST", "/authorize", form=dict(access_code="wrong-" + CODE, return_query=QS))
-        check("with a code: a wrong code is refused, and no cookie is given", st == 401 and not hdr(hs, "set-cookie"), st)
-        st, hs, _ = m.req("POST", "/authorize", form=dict(access_code=CODE, return_query=QS))
-        ck = (hdr(hs, "set-cookie") or [""])[0]
-        check("with a code: the right code is remembered in a cookie: HttpOnly, SameSite=Lax, Secure (https), for /authorize only",
-              st == 303 and "httponly" in ck.lower() and "samesite=lax" in ck.lower() and "secure" in ck.lower()
-              and "path=/authorize" in ck.lower() and CODE not in ck, ck)
-        cookie = ck.split(";")[0]
-        st, hs, body = m.req("GET", "/authorize?" + QS, cookie=cookie)
-        check("with the cookie: the sign-in page lists the people", st == 200 and "Alex Admin" in body)
-        st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client", state="s"), cookie=cookie)
-        check("with the cookie: a person signs in: 302 to the app's return address with a code",
-              st == 302 and hdr(hs, "location")[0].startswith(REDIR + "?code="), (st, hdr(hs, "location")))
-        st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client"),
-                          cookie=cookie.split("=")[0] + "=" + str(int(time.time()) + 600) + ".forged")
-        check("a forged cookie is refused", st == 403, st)
-        for _ in range(5):
-            m.req("POST", "/authorize", form=dict(access_code="nope", return_query=QS))
-        st, hs, body = m.req("POST", "/authorize", form=dict(access_code=CODE, return_query=QS))
-        check("after five wrong codes, even the right one is refused for a while (in memory)", st == 401 and not hdr(hs, "set-cookie"), st)
-        check("the code never appears in mock-oidc's own output", CODE not in m.output())
-finally:
-    m.stop()
+# --- mock-oidc's own checks, in each scaffold (local mode as before; cluster mode: the access code, its cookie,
+# the admin API from its own pod only, the not-set-up page, the page headers, no lock-out)
+tests = []
+for sc in ("fastapi-nextjs", "nextjs-fullstack"):
+    d = os.path.join(root, ".claude/make-it/scaffolds", sc, "mock-services/mock-oidc")
+    tests.append(open(os.path.join(d, "test_app.py")).read())
+    r = subprocess.run([PYEXE, "-I", "-B", "test_app.py"], cwd=d, capture_output=True, text=True, timeout=300)
+    fails = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+    check("mock-oidc's own checks pass in %s (%d checks)" % (sc, r.stdout.count("\nok ") + r.stdout.startswith("ok ")),
+          r.returncode == 0 and "RESULT: ok" in r.stdout, "\n".join(fails) or (r.stdout + r.stderr)[-400:])
+check("both scaffolds carry the same mock-oidc checks", tests[0] == tests[1])
 
 # ======================================================================= the address rule
 sec = doc.split("### Addresses in the app's settings (the address rule)", 1)
@@ -297,24 +240,153 @@ for label, phrase in (("only in env/dev", "Generate it ONLY in `env/dev/`, and o
                       ("never without its code", "NEVER run the practice sign-in on a cluster without its access code"),
                       ("the question's last line", "The live version of your app always uses your organisation's sign-in, never the practice one.")):
     says(label, phrase)
-chk = re.search(r"\*\*Before PHASE 5: the live version holds no practice sign-in\.\*\*.*?```bash\n(.*?)```", doc, re.S)
-check("PHASE 2 has a check that the live version holds no practice sign-in", chk is not None)
-if chk:
-    def run_check(files):
-        d = tempfile.mkdtemp()
+def blk(after, lang="bash"):
+    m_ = re.search(re.escape(after) + r".*?```" + lang + r"\n(.*?)```", doc, re.S)
+    return m_.group(1) if m_ else ""
+def py_of(b):
+    m_ = re.search(r"<<'PY'\n(.*?)\n[ ]*PY\n", b, re.S)
+    return textwrap.dedent(m_.group(1)) + "\n" if m_ else ""
+g = blk("**Before PHASE 5: the live version holds no practice sign-in.**")
+GUARD = py_of(g)
+check("PHASE 2 has the live-version check, run on the live version's folder", 'python3 -I - "{manifest_dir}/prod" <<\'PY\'' in g and GUARD)
+wf = doc.split('<step name="generate-workflow">', 1)[1].split("</step>", 1)[0]
+wstep = re.search(r"\n      - name: Refuse the practice sign-in in the live version\n(.*?)```", wf, re.S)
+wstep = wstep.group(1) if wstep else ""
+check("on a runner without kubectl or kustomize the step fetches a pinned kustomize and checks its published checksum, or fails (exit 2)",
+      "command -v kubectl" in wstep and "sha256sum -c -" in wstep and wstep.count("exit 2") >= 3 and "kustomize%2Fv5.8.1" in wstep)
+check("the workflow's live-version step runs the same lines, with --assembled (the assembled version is required there)",
+      GUARD and py_of(wstep + "\n").strip() == GUARD.strip() and '"{manifest_dir}/prod" --assembled' in wstep, wstep[:200])
+KUBE = shutil.which("kubectl") or shutil.which("kustomize")
+check("kubectl or kustomize is here, so the assembled checks run (GitHub's ubuntu runners have both)", KUBE or not os.environ.get("CI"))
+KZ = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n"
+def dep(name, image, env=""):
+    return ("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\nspec:\n  selector:\n    matchLabels:\n      app: %s\n"
+            "  template:\n    metadata:\n      labels:\n        app: %s\n    spec:\n      containers:\n      - name: %s\n        image: %s\n%s"
+            % (name, name, name, name, image, env))
+ING = ("apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: bedapp-ingress\nspec:\n  rules:\n  - host: live.example.test\n"
+       "    http:\n      paths:\n      - path: /authorize\n        pathType: Prefix\n        backend:\n          service:\n            name: %s\n"
+       "            port:\n              number: 8000\n")
+DEVMOCK = dep("mock-oidc", "registry.example.test/app/mock-oidc:sha-1")
+CLEAN = {"env/prod/kustomization.yaml": KZ + "- backend.yaml\n- ingress.yaml\n- adapter.yaml\n",
+         "env/prod/backend.yaml": dep("bedapp-backend", "registry.example.test/app/backend:prod-latest",
+                                      "        env:\n        - name: OIDC_ISSUER_URL\n          valueFrom:\n            secretKeyRef:\n              name: bedapp-oidc-prod\n              key: OIDC_ISSUER_URL\n"),
+         "env/prod/ingress.yaml": ING % "backend",
+         "env/prod/adapter.yaml": dep("mock-oidc-adapter", "registry.example.test/app/mock-oidc-adapter:1.2"),
+         "env/dev/kustomization.yaml": KZ + "- mock-oidc.yaml\n", "env/dev/mock-oidc.yaml": DEVMOCK}
+def guard(files, links=(), args=(), path_env=None, folder="env/prod", chmod=None):
+    d = tempfile.mkdtemp()
+    try:
         for rel, txt in files.items():
-            os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True); open(os.path.join(d, rel), "w").write(txt)
-        r = subprocess.run(["bash", "-c", chk.group(1).replace("{manifest_dir}", "env")], cwd=d, capture_output=True, text=True)
+            os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
+            open(os.path.join(d, rel), "w").write(txt)
+        for rel, target in links:
+            os.symlink(target, os.path.join(d, rel))
+        if chmod:
+            os.chmod(os.path.join(d, chmod), 0)
+        env = dict(os.environ)
+        if path_env is not None:
+            env["PATH"] = path_env
+        r = subprocess.run([sys.executable, "-I", "-c", GUARD, folder] + list(args), cwd=d, capture_output=True, text=True, env=env)
+        return r.returncode, r.stdout + r.stderr
+    finally:
+        if chmod:
+            os.chmod(os.path.join(d, chmod), 0o644)
         shutil.rmtree(d, ignore_errors=True)
-        return r.returncode, r.stdout
-    clean = {"env/prod/backend.yaml": "image: registry/app/backend:prod-latest\n", "env/dev/mock-oidc.yaml": "name: mock-oidc\n"}
-    rc, out = run_check(clean)
-    check("the live-version check passes a clean live folder (the test copy may hold the practice sign-in)", rc == 0, out)
-    for label, txt in (("its image", "image: registry/app/mock-oidc:sha-1\n"), ("its address", "value: http://mock-oidc:10090\n"),
-                       ("its access code", "key: PRACTICE_ACCESS_CODE\n"), ("its route", "- path: /authorize\n"),
-                       ("its people", "- seed-mock-services.sh\n")):
-        rc, out = run_check(dict(clean, **{"env/prod/x.yaml": txt}))
-        check("the live-version check stops on %s in the live folder" % label, rc != 0 and "PRACTICE SIGN-IN IN THE LIVE VERSION" in out, out)
+def add(extra_name, txt, kz_line=None):
+    f = dict(CLEAN, **{"env/prod/" + extra_name: txt})
+    f["env/prod/kustomization.yaml"] = CLEAN["env/prod/kustomization.yaml"] + (kz_line or "- %s\n" % extra_name)
+    return f
+NOKUBE = tempfile.mkdtemp()     # a PATH with neither kubectl nor kustomize
+if GUARD:
+    rc, out = guard(CLEAN)
+    check("the live-version check passes a clean live version: a real /authorize route and a mock-oidc-adapter are no traces",
+          rc == 0 and "LIVE VERSION CLEAN" in out, out[-300:])
+    if KUBE:
+        check("a clean run says the assembled version was checked", "assembled by" in out, out[-200:])
+    SVC = "apiVersion: v1\nkind: Service\nmetadata:\n  name: mock-oidc\nspec:\n  ports:\n  - port: 10090\n"
+    PEOPLE_KZ = "configMapGenerator:\n- name: mock-oidc-people\n  files:\n  - mock-oidc-people.json\n"
+    for label, files in (
+            ("its image", add("x.yaml", dep("bedapp-x", "registry.example.test/app/mock-oidc:sha-1"))),
+            ("its Service", add("x.yaml", SVC)),
+            ("a route to it", add("x.yaml", ING.replace("bedapp-ingress", "x") % "mock-oidc")),
+            ("its address", add("x.yaml", dep("bedapp-x", "r/x:1", "        env:\n        - name: OIDC_ISSUER_URL\n          value: http://mock-oidc:10090\n"))),
+            ("its access code's key", add("x.yaml", dep("bedapp-x", "r/x:1", "        env:\n        - name: X\n          valueFrom:\n            secretKeyRef:\n              name: bedapp-oidc-prod\n              key: PRACTICE_ACCESS_CODE\n"))),
+            ("its start-up hook's setting", add("x.yaml", dep("bedapp-x", "r/x:1", "        env:\n        - name: MOCK_OIDC_REDIRECT_URIS\n          value: https://live.example.test/cb\n"))),
+            ("its people listed in the live kustomization", dict(CLEAN, **{"env/prod/mock-oidc-people.json": "[]\n",
+                                                                          "env/prod/kustomization.yaml": CLEAN["env/prod/kustomization.yaml"] + PEOPLE_KZ}))):
+        for mode, pe in (("assembled", None), ("text only", NOKUBE)):
+            if mode == "assembled" and not KUBE:
+                continue
+            rc, out = guard(files, path_env=pe)
+            check("the live-version check (%s) stops on %s" % (mode, label), rc == 1 and "PRACTICE SIGN-IN IN THE LIVE VERSION" in out, out[-300:])
+    viadev = dict(CLEAN, **{"env/prod/kustomization.yaml": CLEAN["env/prod/kustomization.yaml"] + "- ../dev\n"})
+    if KUBE:
+        rc, out = guard(viadev)
+        check("the assembled check stops on the practice sign-in pulled in from another folder (no trace in the live folder's text)",
+              rc == 1 and "assembled by" in out, out[-300:])
+    rc, out = guard(viadev, path_env=NOKUBE)
+    check("without kubectl or kustomize the check reads the text only, and says so", rc == 0 and "only the files' text was checked" in out, out[-300:])
+    rc, out = guard(viadev, path_env=NOKUBE, args=["--assembled"])
+    check("with --assembled (the workflow) and no kubectl or kustomize it fails (exit 2), never skips", rc == 2 and "NOT CHECKED" in out, out[-300:])
+    rc, out = guard(CLEAN, links=[("env/prod/extra.yaml", "../dev/mock-oidc.yaml")])
+    check("a linked file in the live folder is followed", rc == 1, out[-300:])
+    rc, out = guard(CLEAN, links=[("env/prod/sub", "../dev")])
+    check("a linked folder in the live folder is followed", rc == 1, out[-300:])
+    rc, out = guard(CLEAN, links=[("env/prod/gone.yaml", "../nowhere.yaml")])
+    check("a file it can't read stops it (exit 2): an error is a failure, never a pass", rc == 2 and "NOT CHECKED" in out, out[-300:])
+    if KUBE:
+        rc, out = guard(dict(CLEAN, **{"env/prod/kustomization.yaml": CLEAN["env/prod/kustomization.yaml"] + "- missing.yaml\n"}))
+        check("a live version that can't be assembled stops it (exit 2)", rc == 2 and "can't assemble" in out, out[-300:])
+    rc, out = guard(CLEAN, folder="k8s/prod")
+    check("a live-version folder that isn't there stops it (exit 2), naming the folder", rc == 2 and "k8s/prod" in out, out[-300:])
+shutil.rmtree(NOKUBE, ignore_errors=True)
+
+# --- the workflow runs it first, unconditionally; a refused run builds, labels and writes nothing
+order = re.findall(r"(?m)^(\d+)\. (.+)$", wf.split("Its steps run in this order", 1)[-1].split("```yaml", 1)[0])
+names = [t for _, t in order]
+check("the workflow's order puts the live-version check right after the checkout, before anything is built or labelled",
+      len(names) > 2 and names[0].startswith("Checkout source branch") and names[1].startswith("Refuse the practice sign-in in the live version"), names[:3])
+def step_block(name):
+    m_ = re.search(r"\n      - name: %s\n((?:        .*\n|\s*\n)*)" % re.escape(name), wf)
+    return m_.group(1) if m_ else ""
+gs = step_block("Refuse the practice sign-in in the live version")
+check("the live-version step has no if: and no continue-on-error (every run passes it or stops)",
+      gs and not re.search(r"(?m)^        (if|continue-on-error):", gs), gs[:200])
+later = [l for f_ in re.findall(r"```yaml\n(.*?)```", wf, re.S) for l in f_.splitlines()
+         if re.search(r"\b(always|failure|cancelled)\(\)|continue-on-error", l)]
+check("no step of the workflow runs after a failed step (no always(), failure(), cancelled() or continue-on-error)", not later, later)
+mirror = step_block("Mirror source to deploy branch and patch image tags") + wf.split("**yq patch for split-service apps", 1)[-1].split("**Note:**", 1)[0]
+check("the workflow never copies the pretend people or anything of the practice sign-in into the deploy copy by hand",
+      not re.search(r"\b(cp|install|rsync|tee)\b[^\n]*(people|seed-mock|mock-oidc)", mirror) and "/prod" not in mirror.split("The practice sign-in", 1)[-1],
+      [l for l in mirror.splitlines() if "people" in l or "seed" in l])
+
+# --- every placeholder is filled
+ph = blk("**Before PHASE 5: every placeholder is filled.**")
+PH = py_of(ph)
+check("PHASE 2 checks that no generated file keeps a placeholder", PH and "{manifest_dir} .github/workflows/build-and-deploy.yml ONBOARDING-K8S.md" in ph)
+def ph_run(files):
+    d = tempfile.mkdtemp()
+    for rel, txt in files.items():
+        os.makedirs(os.path.dirname(os.path.join(d, rel)) or d, exist_ok=True); open(os.path.join(d, rel), "w").write(txt)
+    r = subprocess.run([sys.executable, "-I", "-c", PH, "env", ".github/workflows/build-and-deploy.yml", "ONBOARDING-K8S.md"],
+                       cwd=d, capture_output=True, text=True)
+    shutil.rmtree(d, ignore_errors=True)
+    return r.returncode, r.stdout
+if PH:
+    rc, out = ph_run({"env/dev/a.yaml": "name: {app}-backend\n", ".github/workflows/build-and-deploy.yml": "x: ${{ github.sha }} ${VAR} ${#A[@]}\n",
+                      "ONBOARDING-K8S.md": "psql -U {db_user}\njsonpath='{.data.X}' {\"auths\":{} | {VAR_NAME} |\n"})
+    check("the placeholder check lists what is left ({app}, {db_user}, {VAR_NAME}) and not ${...}, ${{ }}, '{.x}' or JSON",
+          rc == 1 and all(x in out for x in ("{app}", "{db_user}", "{VAR_NAME}")) and "github" not in out and "{.data" not in out and "auths" not in out, out)
+    FILL = {"{app}": "bedapp", "{env}": "dev", "{namespace}": "bedapp", "{hostname}": HOST, "{prod_hostname}": PHOST,
+            "{registry_host}": "registry.example.test", "{manifest_dir}": "env", "{deploy_branch}": "deploy-nonprod",
+            "{repo_url}": "https://git.example.test/team/bedapp.git", "{tls_secret_name}": "bedapp-tls", "{app_db_name}": "bedapp",
+            "{provider}": "oidc"}
+    onb_t = doc.split('<step name="generate-onboarding">', 1)[-1].split("</step>", 1)[0]
+    onb_t = "\n".join(l for l in onb_t.splitlines() if "{VAR_NAME}" not in l)     # the rows the run writes, one per setting
+    for k, v in FILL.items():
+        onb_t = onb_t.replace(k, v)
+    rc, out = ph_run({"env/dev/a.yaml": "a: 1\n", ".github/workflows/build-and-deploy.yml": "a: 1\n", "ONBOARDING-K8S.md": onb_t})
+    check("ONBOARDING's template uses only placeholders a run fills (no {db_user} with nothing to fill it)", rc == 0, out[-400:])
 
 # ======================================================================= the practice sign-in's manifest
 mt = fence_after(r"### mock-oidc\.yaml \(the practice sign-in")
@@ -336,7 +408,7 @@ if mt:
     check("the browser's address of it is the app's public address; the server's is its Service",
           val("MOCK_OIDC_EXTERNAL_BASE_URL") == "https://" + HOST and val("MOCK_OIDC_INTERNAL_BASE_URL") == "http://mock-oidc:10090")
     check("its client secret and its access code are secret references to bedapp-oidc-dev",
-          ref("MOCK_OIDC_CLIENT_SECRET").get("name") == "bedapp-oidc-dev" and ref("MOCK_OIDC_ACCESS_CODE") == {"name": "bedapp-oidc-dev", "key": "PRACTICE_ACCESS_CODE"}
+          ref("MOCK_OIDC_CLIENT_SECRET").get("name") == "bedapp-oidc-dev" and {k: ref("MOCK_OIDC_ACCESS_CODE").get(k) for k in ("name", "key")} == {"name": "bedapp-oidc-dev", "key": "PRACTICE_ACCESS_CODE"}
           and "mock-oidc-secret" not in mt)
     check("it runs in cluster mode (no code, no start)", val("MOCK_OIDC_REQUIRE_ACCESS_CODE") == "true")
     sc, csc = pod.get("securityContext", {}), c.get("securityContext", {})
@@ -347,51 +419,137 @@ if mt:
           c.get("resources", {}).get("requests") and c.get("resources", {}).get("limits") and c.get("imagePullPolicy") == "Always")
     check("its image is the workflow's own, by the commit's tag", c.get("image") == "registry.example.test/team/bedapp/mock-oidc:sha-0123456", c.get("image"))
     vols = {v["name"]: v for v in pod.get("volumes", [])}
-    check("its people come from a ConfigMap made from scripts/seed-mock-services.sh",
-          vols.get("people", {}).get("configMap", {}).get("name") == "mock-oidc-people" and "seed-mock-services.sh" in (kz or ""))
+    check("its people come from a ConfigMap made from mock-oidc-people.json (written at set-up), never from the shell script",
+          vols.get("people", {}).get("configMap", {}).get("name") == "mock-oidc-people"
+          and re.findall(r"(?m)^#\s+-\s+(\S+)\s*$", (kz or "").split("configMapGenerator", 1)[-1])[:1] == ["mock-oidc-people.json"])
+    check("only the access code's key may be missing (the not-set-up page); the client secret is required",
+          ref("MOCK_OIDC_ACCESS_CODE").get("optional") is True and not ref("MOCK_OIDC_CLIENT_SECRET").get("optional"))
     hook = (((c.get("lifecycle") or {}).get("postStart") or {}).get("exec") or {}).get("command") or []
     check("a start-up hook with an isolated python registers the return address from its settings",
           hook[:3] == ["python3", "-I", "-c"] and val("MOCK_OIDC_REDIRECT_URIS") == REDIR)
-    # the hook against the real mock-oidc, with the scaffold's seed script as the people's file
-    if len(hook) == 4:
-        tmp = tempfile.mkdtemp()
-        seedsrc = open(os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh")).read()
-        for i, (s_, e_, n_) in enumerate((("mock-superadmin", "sa@example.test", "Sarah SuperAdmin"), ("mock-admin", "admin@example.test", "Alex Admin"),
-                                          ("mock-analyst", "an@example.test", "Ana Analyst"), ("mock-viewer", "vi@example.test", "Victor Viewer")), 1):
-            seedsrc = seedsrc.replace("[ROLE_%d_OIDC_SUB]" % i, s_).replace("[ROLE_%d_EMAIL]" % i, e_).replace("[ROLE_%d_DISPLAY_NAME]" % i, n_)
-        open(os.path.join(tmp, "seed-mock-services.sh"), "w").write(seedsrc)
-        script = hook[3].replace("/people/", tmp + "/")      # the volume's mount, here a folder
-        CODE2 = "cluster-code-abcdef0123"
-        m = Mock({"MOCK_OIDC_REQUIRE_ACCESS_CODE": "true", "MOCK_OIDC_ACCESS_CODE": CODE2, "MOCK_OIDC_REDIRECT_URIS": REDIR})
-        try:
-            if not m.up:
-                check("the scaffold's mock-oidc starts here", False, m.output()[-300:])
-            else:
-                st0, _, _ = m.req("GET", "/authorize?" + QS)
-                h = subprocess.run([PYEXE, "-I", "-c", script], env=m.env, capture_output=True, text=True, timeout=120)
-                check("the hook runs: it loads the people and registers the return address", h.returncode == 0, h.stderr[-300:])
-                users = json.loads(m.req("GET", "/api/users")[2])
-                check("after the hook the practice sign-in holds the seed script's people (one source)",
-                      [u["sub"] for u in users] == ["mock-superadmin", "mock-admin", "mock-analyst", "mock-viewer"], users)
-                st, hs, _ = m.req("POST", "/authorize", form=dict(access_code=CODE2, return_query=QS))
-                cookie = (hdr(hs, "set-cookie") or [""])[0].split(";")[0]
-                st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client", state="s"), cookie=cookie)
-                check("a seeded person signs in through the access code: 302 to the app's return address with a code",
-                      st0 == 400 and st == 302 and hdr(hs, "location")[0].startswith(REDIR + "?code="), (st0, st, hdr(hs, "location")))
-                disc = json.loads(m.req("GET", "/.well-known/openid-configuration")[2])
-                check("the browser is sent to the app's public address for the sign-in page", disc.get("authorization_endpoint") == "https://%s/authorize" % HOST)
-        finally:
-            m.stop(); shutil.rmtree(tmp, ignore_errors=True)
-np_ = fence_after(r"### mock-oidc-network-policy\.yaml")
-if np_:
-    npd = yaml.safe_load(fill(np_))
-    froms = npd["spec"]["ingress"][0]["from"]
-    check("a NetworkPolicy lets only the app's backend and the ingress controller reach the practice sign-in",
-          npd["spec"]["podSelector"]["matchLabels"] == {"app": "mock-oidc"}
-          and {"podSelector": {"matchLabels": {"app": "bedapp-backend"}}} in froms
-          and {"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}} in froms and len(froms) == 2, froms)
-else:
-    check("PHASE 2 has the practice sign-in's NetworkPolicy", False)
+    check("the hook reads the people as data (JSON), with no shell parsing and no regular expression",
+          len(hook) == 4 and "json.load(open(\"/people/mock-oidc-people.json\"" in hook[3] and "shlex" not in hook[3] and "re." not in hook[3])
+    check("the hook calls the admin API from inside its own pod (127.0.0.1)", len(hook) == 4 and '"http://127.0.0.1:%s"' in hook[3])
+
+# ======================================================================= the pretend people's file (one parser)
+pb = blk("### mock-oidc-people.json (the pretend people")
+PEOPLE = py_of(pb)
+check("PHASE 2 writes the pretend people's file at set-up with one block (PHASE 1 runs the same block to read only)",
+      PEOPLE and 'scripts/seed-mock-services.sh "{manifest_dir}/dev/mock-oidc-people.json"' in pb
+      and "run PHASE 2's people block" in F and "without its second argument" in F)
+def people_run(seed_text, out=None, old=None):
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "scripts")); open(os.path.join(d, "scripts/seed-mock-services.sh"), "w").write(seed_text)
+    if old is not None:
+        open(os.path.join(d, "people.json"), "w").write(old)
+    args = ["scripts/seed-mock-services.sh"] + (["people.json"] if out else [])
+    r = subprocess.run([sys.executable, "-I", "-c", PEOPLE] + args, cwd=d, capture_output=True, text=True)
+    data = open(os.path.join(d, "people.json")).read() if out and os.path.exists(os.path.join(d, "people.json")) else None
+    shutil.rmtree(d, ignore_errors=True)
+    return r.returncode, r.stdout + r.stderr, data
+SEED_T = open(os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh")).read()
+FOUR = (("mock-superadmin", "sa@example.test", "Sarah SuperAdmin"), ("mock-admin", "admin@example.test", "Alex Admin"),
+        ("mock-analyst", "an@example.test", "Ana Analyst"), ("mock-viewer", "vi@example.test", "Victor Viewer"))
+SEED = SEED_T
+for i, (s_, e_, n_) in enumerate(FOUR, 1):
+    SEED = SEED.replace("[ROLE_%d_OIDC_SUB]" % i, s_).replace("[ROLE_%d_EMAIL]" % i, e_).replace("[ROLE_%d_DISPLAY_NAME]" % i, n_)
+if PEOPLE:
+    rc, out, data = people_run(SEED, out=True)
+    want = [dict(sub=s_, email=e_, name=n_) for s_, e_, n_ in FOUR]
+    check("the people block writes the seed script's people as data: sub, email and name, nothing else of the script",
+          rc == 0 and data and json.loads(data) == want and "MOCK_OIDC_URL" not in data and "PEOPLE WRITTEN" in out, out[-300:])
+    rc, out, _ = people_run(SEED, out=True, old=data)
+    rc2, out2, _ = people_run(SEED.replace("Ana Analyst", "Ana Analyst-Smith"), out=True, old=data)
+    check("a re-run says whether the people changed (UNCHANGED / CHANGED)", "PEOPLE UNCHANGED" in out and "PEOPLE CHANGED" in out2, out + out2)
+    rc, out, data = people_run(SEED)
+    check("without the second argument it only reads (PHASE 1's question)", rc == 0 and "PEOPLE OK: 4" in out and data is None, out)
+    A = lambda subs, emails='"a@x" "b@x"', names='"A" "B"': "declare -a USER_SUBS=(%s)\ndeclare -a USER_EMAILS=(%s)\ndeclare -a USER_NAMES=(%s)\n" % (subs, emails, names)
+    for label, text, want_rc, want_out in (
+            ("comments and an array over several lines", 'USER_SUBS=(\n  "a"   # the first\n  \'b\'\n)\ndeclare -a USER_EMAILS=("a@x" "b@x") # c\ndeclare -a USER_NAMES=("A (one)" "B \\"q\\"")\n', 0, "2 people (a, b)"),
+            ("quotes, a ) and a # inside a name", A('"a" "b"', names='"A ) #1" \'B\'\'s\''), 0, "2 people (a, b)"),
+            ("$(...) in a name", A('"a" "$(whoami)"'), 2, "PEOPLE STOP: scripts/seed-mock-services.sh:1:"),
+            ("a variable", A('"a" $USER'), 2, "PEOPLE STOP: scripts/seed-mock-services.sh:1:"),
+            ("backquotes", A('"a" `id`'), 2, "PEOPLE STOP"),
+            ("a quote never closed", 'declare -a USER_SUBS=("a" "b)\n', 2, "PEOPLE STOP"),
+            ("an array never closed", 'declare -a USER_SUBS=("a" "b"\n', 2, "PEOPLE STOP"),
+            ("a different number of emails", A('"a" "b"', emails='"a@x"'), 2, "PEOPLE STOP"),
+            ("an array set twice", A('"a" "b"') + 'USER_SUBS=("c")\n', 2, "PEOPLE STOP"),
+            ("no people", A(''), 2, "PEOPLE STOP"),
+            ("/make-it's placeholders still there", SEED_T, 2, "PEOPLE STOP: scripts/seed-mock-services.sh:39:"),
+            ("a ; where a name should be", A('"a"; "b"'), 2, "PEOPLE STOP")):
+        rc, out, data = people_run(text, out=True)
+        check("the people block, %s: %s" % (label, "read" if want_rc == 0 else "a plain stop naming the line, nothing written"),
+              rc == want_rc and want_out in out and "Traceback" not in out and (want_rc == 0 or data is None), out[-300:])
+    # the generated dev tree assembles with no workflow run (Argo CD can show the first send at once)
+    if KUBE and mt:
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "env/dev"))
+        rc, out, data = people_run(SEED, out=True)
+        open(os.path.join(d, "env/dev/mock-oidc-people.json"), "w").write(data)
+        open(os.path.join(d, "env/dev/mock-oidc.yaml"), "w").write(fill(mt))
+        kzt = "\n".join(l[2:] if l.startswith("# ") and re.search(r"configMapGenerator|mock-oidc-people|files:|mock-oidc-people\.json", l) else l
+                        for l in (kz or "").splitlines() if not re.match(r"^- \{", l))
+        kzt = re.sub(r"(?m)^resources:\n(#.*\n)*", "resources:\n- mock-oidc.yaml\n", kzt)
+        open(os.path.join(d, "env/dev/kustomization.yaml"), "w").write(fill(kzt))
+        r = subprocess.run([KUBE, "kustomize", "env/dev"] if KUBE.endswith("kubectl") else [KUBE, "build", "env/dev"],
+                           cwd=d, capture_output=True, text=True)
+        shutil.rmtree(d, ignore_errors=True)
+        check("the test copy's files, as set-up writes them, assemble with no workflow run (the people's ConfigMap included)",
+              r.returncode == 0 and "kind: ConfigMap" in r.stdout and "mock-oidc-people-" in r.stdout, (r.stderr or r.stdout)[-400:])
+if mt and len(hook) == 4 and PEOPLE:
+    # the hook against the real mock-oidc, with the people's file the block wrote from the scaffold's seed script
+    tmp = tempfile.mkdtemp()
+    rc, out, data = people_run(SEED, out=True)
+    open(os.path.join(tmp, "mock-oidc-people.json"), "w").write(data or "")
+    script = hook[3].replace("/people/", tmp + "/")      # the volume's mount, here a folder
+    CODE2 = "cluster-code-abcdef0123"
+    m = Mock({"MOCK_OIDC_REQUIRE_ACCESS_CODE": "true", "MOCK_OIDC_ACCESS_CODE": CODE2, "MOCK_OIDC_REDIRECT_URIS": REDIR})
+    try:
+        if not m.up:
+            check("the scaffold's mock-oidc starts here", False, m.output()[-300:])
+        else:
+            st0, _, _ = m.req("GET", "/authorize?" + QS)
+            h = subprocess.run([PYEXE, "-I", "-c", script], env=m.env, capture_output=True, text=True, timeout=120)
+            check("the hook runs (from 127.0.0.1, inside the pod): it loads the people and registers the return address", h.returncode == 0, h.stderr[-300:])
+            users = json.loads(m.req("GET", "/api/users")[2])
+            check("after the hook the practice sign-in holds the seed script's people (one source)",
+                  [u["sub"] for u in users] == [p_[0] for p_ in FOUR], users)
+            st, hs, _ = m.req("POST", "/authorize", form=dict(access_code=CODE2, return_query=QS))
+            cookie = (hdr(hs, "set-cookie") or [""])[0].split(";")[0]
+            st, hs, _ = m.req("POST", "/authorize", form=dict(sub="mock-admin", redirect_uri=REDIR, client_id="mock-oidc-client", state="s"), cookie=cookie)
+            check("a seeded person signs in through the access code: 302 to the app's return address with a code",
+                  st0 == 400 and st == 302 and hdr(hs, "location")[0].startswith(REDIR + "?code="), (st0, st, hdr(hs, "location")))
+            disc = json.loads(m.req("GET", "/.well-known/openid-configuration")[2])
+            check("the browser is sent to the app's public address for the sign-in page", disc.get("authorization_endpoint") == "https://%s/authorize" % HOST)
+    finally:
+        m.stop(); shutil.rmtree(tmp, ignore_errors=True)
+check("no NetworkPolicy is generated or mentioned any more (the admin API answers only its own pod)",
+      "NetworkPolicy" not in doc and "network-policy" not in doc and "ingress_controller_namespace" not in doc)
+
+# ======================================================================= the backend's own seeding stops at once on a cluster
+ep = open(os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/backend/entrypoint.sh")).read()
+seed_part = ep[ep.index('OIDC_URL="'):ep.index('echo "Mock-oidc users seeded."')]
+def ep_run(status):
+    seen = []
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.command); self.send_response(status); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b"[]")
+        do_POST = do_GET
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    t0 = time.monotonic()
+    r = subprocess.run(["bash", "-e", "-c", seed_part], env=dict(os.environ, OIDC_ISSUER_URL="http://127.0.0.1:%d" % srv.server_address[1]),
+                       capture_output=True, text=True, timeout=60)
+    took = time.monotonic() - t0
+    srv.shutdown()
+    return r.returncode, seen, took
+rc, seen, took = ep_run(403)
+check("the backend's start: the practice sign-in's 403 ends its seeding at once (one request, nothing posted, %.1f s)" % took,
+      rc == 0 and seen == ["GET"] and took < 3, (rc, seen))
+rc, seen, took = ep_run(200)
+check("the backend's start, local development: it still registers its four people (as before)", rc == 0 and seen == ["GET"] + ["POST"] * 4, (rc, seen))
 
 # ======================================================================= the question, the sentences, ONBOARDING
 q = flat(doc.split("**Sign-in** (only if the app signs people in", 1)[-1].split("**Split-service ingress**", 1)[0])
@@ -401,11 +559,14 @@ for phrase in ("**The practice sign-in** -- pretend people, no passwords, behind
                "On a re-run, read `deployment.signin_dev` from app-context.json and use it: don't ask again",
                "the app has a separate front end and backend (split-service)",
                "its `mock-services/mock-oidc/app.py` contains `MOCK_OIDC_ACCESS_CODE` (read the file; never guess from a version)",
-               "/resume-it updates it first", "the app's pretend people are in `scripts/seed-mock-services.sh`"):
+               "/resume-it updates it first", "the app's pretend people can be read from `scripts/seed-mock-services.sh`: run PHASE 2's people block",
+               "[the block's `PEOPLE STOP` line in plain words: the line and why]"):
     check("the sign-in question says: %s" % phrase[:72], flat(phrase) in q)
 say = flat(doc.split("### What sign-in will do", 1)[-1].split("\n### ", 1)[0])
 for phrase in ("pretend people, no passwords, behind an access code your DevOps team sets. Anyone who has the code can sign in as any of them, an administrator included",
-               "The test copy won't start until your DevOps team adds the access code and the sign-in password",
+               "The test copy won't start until your DevOps team adds the sign-in password, and nobody can sign in until they add the access code",
+               "until then Sign in shows a page saying so",
+               "a browser that typed it is remembered for 15 minutes",
                "The live version never uses it",
                "the app won't start until your DevOps team adds its settings, and people can't sign in until they also register {hostname} with it"):
     check("the sentence the person hears says: %s" % phrase[:72], phrase in say)
@@ -415,26 +576,40 @@ p5 = doc.split("<!-- PHASE 5: DEPLOY", 1)[-1]
 check("the send ask and the report both say the sign-in sentence", p5.count('sign-in sentence from PHASE 2 "What sign-in will do"') >= 2)
 check("the settings copied as is are listed at the send ask", "These settings were copied as they are" in p5.split("**What would you like to do?**", 1)[0])
 check("the report says app-context.json was left changed, and names its keys", "left it changed, not saved" in flat(p5) and "deployment.signin_dev" in p5)
-for label, phrase in (("ONBOARDING: the admin routes", "Its admin routes are reachable only inside the cluster"),
+for label, phrase in (("ONBOARDING: the admin warning", "The practice sign-in lets anyone who has the access code sign in as any pretend person, an administrator included: keep `{hostname}` reachable only from your organisation's network too."),
+                      ("ONBOARDING: the admin routes", "answer only its own pod -- every other address, inside the cluster or out, gets 403"),
+                      ("ONBOARDING: 15 minutes", "a browser that typed it is remembered for 15 minutes"),
+                      ("ONBOARDING: no lock-out", "A wrong code waits a second and is never counted: nobody can lock testers out"),
+                      ("ONBOARDING: what testers see before the code", "**Sign in** opens a page that says \"The practice sign-in isn't set up yet. Ask your DevOps team to finish setting it up\""),
+                      ("ONBOARDING: where DevOps looks", "a line starting `mock-oidc: the practice sign-in isn't set up`"),
+                      ("ONBOARDING: what a code must be", "The code must be at least 16 characters, not only spaces or one repeated character"),
+                      ("ONBOARDING: cluster mode stays on", "Any value other than `false`, `0`, `no` or empty keeps these rules on"),
+                      ("ONBOARDING: which shells", "Every command below works in any shell (sh, bash, zsh) and keeps each value off the command line"),
+                      ("ONBOARDING: no trailing newline", "A value read from a prompt never keeps a trailing newline"),
                       ("ONBOARDING: the code out of band", "when you hand it to your testers -- out of band"),
                       ("ONBOARDING: never in a ticket", "never in a ticket, chat or email"),
-                      ("ONBOARDING: no value in history", "--from-file=PRACTICE_ACCESS_CODE=<(openssl rand -hex 12 | tr -d '\\n')"),
+                      ("ONBOARDING: the access code generated into a private file", "openssl rand -hex 12 | tr -d '\\n' > \"$d/PRACTICE_ACCESS_CODE\""),
                       ("ONBOARDING: the organisation's Secret", "kubectl create secret generic {app}-oidc-{env} -n {namespace}"),
                       ("ONBOARDING: the test address only for the organisation's sign-in", "only when the test copy uses your organisation's sign-in too"),
-                      ("ONBOARDING: pull access follows the registry", "--docker-server={registry_host}"),
+                      ("ONBOARDING: pull access follows the registry", "printf '{\"auths\":{\"%s\":{\"auth\":\"%s\"}}}' '{registry_host}'"),
                       ("ONBOARDING: the app won't start without the Secret", "The app won't start until this Secret exists.")):
     says(label, phrase)
 check("ONBOARDING no longer hard-codes ghcr.io for pull access", "--docker-server=ghcr.io" not in doc)
 # ONBOARDING's sign-in commands, as generated, must pass the skill's own secret check (PHASE 5 scans every
 # generated file: a hit there stops the send). Found by the bed run: `SECRET="$(...)"` read as a secret.
 onb = doc.split('<step name="generate-onboarding">', 1)[-1].split("</step>", 1)[0]
-cmds = "\n".join(re.findall(r"```bash\n(.*?)```", onb.split("**{app}-oidc-{env}:**", 1)[-1].split("**Option A", 1)[0], re.S))
+devops = onb.split("## For DevOps", 1)[-1].split("## For Developers", 1)[0]
+cmds = "\n".join(re.findall(r"```(?:bash|sh)\n(.*?)```", devops, re.S))
+literal = [l.strip() for l in cmds.splitlines() if re.search(r"--from-literal=\w*(SECRET|PASSWORD|TOKEN|KEY|CODE|DATABASE_URL)|--docker-password|/dev/stdin|<<<", l)]
+check("ONBOARDING never puts a secret on a command line (no --from-literal secret, --docker-password, pasted stdin or here-string)", not literal, literal)
+check("every ONBOARDING block that creates a Secret writes its values into a private folder and deletes it",
+      all("umask 077" in b_ and 'rm -rf "$d"' in b_ for b_ in re.findall(r"```sh\n(.*?)```", devops, re.S) if "create secret" in b_))
 d = tempfile.mkdtemp()
 subprocess.run(["git", "init", "-q"], cwd=d)
 open(os.path.join(d, "ONBOARDING-K8S.md"), "w").write(fill(cmds))
 r = subprocess.run([sys.executable, "-I", os.path.join(root, ".claude/make-it/scripts/secret-scan.py")], cwd=d, capture_output=True, text=True)
 shutil.rmtree(d, ignore_errors=True)
-check("ONBOARDING's sign-in commands pass the skill's own secret check (else the send stops on its own file)",
+check("ONBOARDING's DevOps commands pass the skill's own secret check (else the send stops on its own file)",
       cmds.strip() and r.returncode == 0, r.stdout[-300:])
 
 # ======================================================================= one reading only
@@ -457,8 +632,27 @@ check("the workflow never uses {service} (the workload's name) where it means th
 bs = open(os.path.join(root, ".claude/make-it/references/build-standards.md")).read()
 ri = open(os.path.join(root, ".claude/commands/resume-it.md")).read()
 check("build-standards has M05: an older mock-oidc is brought up to the scaffold's (read by its source)",
-      re.search(r"\*\*M05\*\* \[Tier 1, 5\] \[FIX\] \*\*The practice sign-in can ask for an access code\*\*.*MOCK_OIDC_ACCESS_CODE", bs) is not None)
+      re.search(r"\*\*M05\*\* \[Tier 1, 5\] \[WARN\] \*\*The practice sign-in can ask for an access code\*\*.*MOCK_OIDC_ACCESS_CODE", bs) is not None)
+m05 = flat(bs.split("**M05**", 1)[-1].split("\n", 1)[0])
+for phrase in ("first compare the app's copy with the scaffold versions it can have come from",
+               "its sha256 is in `~/.claude/make-it/scaffolds/mock-oidc-releases.sha256`",
+               "Listed there (the same apart from the `redirect_uris` list): replace it with the scaffold's, keeping only that list",
+               "show the person the differences in plain words and ask one select: **Update it**", "**Keep mine**",
+               "Either way a copy of the app's file is kept before anything is written"):
+    check("M05 says: %s" % phrase[:72], phrase in m05)
 check("/resume-it's catch-up runs M05", "Mock Services (M01-M05)" in ri and "M05" in ri)
+import hashlib
+def m05_hash(t):
+    t = re.sub(r'CLIENT_ID: \{"redirect_uris": \[.*?\]\},', 'CLIENT_ID: {"redirect_uris": []},', t, count=1, flags=re.S)
+    return hashlib.sha256(t.encode()).hexdigest()
+rel = open(os.path.join(root, ".claude/make-it/scaffolds/mock-oidc-releases.sha256")).read()
+known = re.findall(r"(?m)^([0-9a-f]{64})\s", rel)
+cur = [m05_hash(open(os.path.join(root, ".claude/make-it/scaffolds", sc, "mock-services/mock-oidc/app.py")).read())
+       for sc in ("fastapi-nextjs", "nextjs-fullstack")]
+check("M05's list of released mock-oidc copies has this scaffold's copy (both scaffolds; add a line when it changes)",
+      all(c in known for c in cur), cur)
+check("M05's list keeps the earlier releases (an app built on one is updated without asking)",
+      {"7ed5dcc152ffe80268c8b94e617bc7a0e236048681dcdcaf2b59f8d3e2350b64", "28a97b0cb14aaa20bd4ed4a072eb4a6d3dc8fa244304b1df8655de7877e6abae"} <= set(known))
 
 # ======================================================================= the redeploy's setting check (5b step 3b)
 b3 = re.search(r"\*\*3b\. Cross-check env vars against K8s manifests:\*\*\n```bash\n(.*?)```(.*?)\*\*3c\.", doc, re.S)

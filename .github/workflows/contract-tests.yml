@@ -57,6 +57,13 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/mock-oidc-venv"
           "$RUNNER_TEMP/mock-oidc-venv/bin/pip" install --quiet -r .claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
+      # Each scaffold's mock-oidc carries its own checks (access code, cookie, admin API from its own pod only).
+      - name: mock-oidc's own checks, in each scaffold
+        run: |
+          for d in .claude/make-it/scaffolds/*/mock-services/mock-oidc; do
+            echo "== $d"
+            (cd "$d" && "$RUNNER_TEMP/mock-oidc-venv/bin/python" -I -B test_app.py)
+          done
       - name: Run every scripts/test-*.sh
         env:
           REQUIRE_SCAFFOLD_PYTEST: "1"
