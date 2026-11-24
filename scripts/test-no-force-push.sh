@@ -17,6 +17,10 @@ fail=0
 ok()  { echo "ok    $*"; }
 bad() { echo "FAIL  $*"; fail=1; }
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+# pwsh stops at startup ("Process terminated ... CultureNotSupported") when LANG or LC_ALL holds a name
+# .NET can't make a culture of (LC_ALL=UTF-8, say), and that read here as failed merges and "install.ps1
+# has parse errors". The helper doesn't depend on the language settings, so pwsh gets fixed ones.
+if command -v pwsh >/dev/null 2>&1; then pwsh() { LC_ALL=C LANG=C command pwsh "$@"; }; fi
 
 # --- Part 1: the hook ---------------------------------------------------------------------------
 payload() { python3 -c 'import json,sys; print(json.dumps({"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1],"description":"run it"}}))' "$1"; }
@@ -54,7 +58,70 @@ blocked=(
   'git push -o ci.skip -f origin main'
   'git push origin main --force 2>&1'
   $'git fetch\ngit push --force'
+  # every way a real force push is still written (E02-S107): each one refused before and after the fix
+  'git push --force-if-includes --force'
+  'GIT_TRACE=1 git push -f'
+  'true && git push -f'
+  'true; git push -f'
+  '$(git push -f)'
+  'echo `git push -f`'
+  $'git \\\npush \\\n--force'
+  $'git push \\\n  -f origin main'
+  '{ git push -f; }'
+  'if true; then git push -f; fi'
+  'for r in a b; do git push -f $r; done'
+  'time git push -f'
+  '! git push -f'
+  'git push --no-thin -f'
+  'git push -f 2>&1 | tail'
+  'git push origin main --force-with-lease -f'
+  'git push --no-force-with-lease --force'
+  'git push -4f'
+  'git push -vf'
+  'git push --mi'
+  'git push $FLAGS -f'
+  "FOO='a b' git push -f"
+  "git push origin '+refs/heads/*:refs/heads/*'"
+  "echo 'a' 'b' && git push --force"
+  'echo hi > /tmp/x; git push -f'
+  # a here-doc first, then a real force push: the here-doc must not hide it
+  $'cat > f <<EOF\nit\'s text\nEOF\ngit push --force'
+  $'cat > f <<\'EOF\'\nit\'s text\nEOF\ngit push -f origin main'
+  $'cat <<-EOF\n\tit\'s\n\tEOF\ngit push -f'
+  $'cat <<EOF\nx\nEOF\n\ngit push -f'
+  $'git push -f <<EOF\nx\nEOF'
+  $'cat > a <<A; cat > b <<\'B\'\nit\'s a\nA\nit\'s b\nB\ngit push -f'
 )
+# read on purpose since E02-S107 (17 of these 23 got through before; the here-doc ones were refused by
+# luck): a force push run by a shell string, eval, xargs or timeout, inside $(...) or backticks in
+# double quotes or in a here-doc that expands, in a here-doc or here-string fed to a shell, a flag
+# written after $(...), and a flag in $'...'
+newly_blocked=(
+  "bash -c 'git push -f'"
+  'bash -c "git push --force origin main"'
+  "sh -c 'cd x && git push -f'"
+  "bash -lc 'git push -f'"
+  "sudo bash -c 'git push -f'"
+  "bash -c 'bash -c \"git push -f\"'"
+  "eval 'git push -f'"
+  'eval git push --force'
+  'eval "git push" --force'
+  'echo x | xargs git push -f'
+  'timeout 30 git push -f'
+  'echo "$(git push -f)"'
+  'echo "`git push --force`"'
+  'git push origin $(git branch --show-current) -f'
+  'git push origin "$(git branch --show-current)" --force'
+  'git push origin `git branch --show-current` -f'
+  $'cat <<EOF\n$(git push -f)\nEOF'
+  $'cat <<EOF | bash\ngit push --force\nEOF'
+  $'bash <<\'EOF\'\ngit push -f\nEOF'
+  $'sh <<EOF\ngit push --force\nEOF'
+  $'cat <<EOF |\ngit push -f\nEOF\nbash'
+  "bash <<< 'git push -f'"
+  "git push \$'--force'"
+)
+blocked+=("${newly_blocked[@]}")
 allowed=(
   'git push'
   'git push origin main'
@@ -78,6 +145,32 @@ allowed=(
   'rm -rf build && git push origin feat'
   'git push -o ci.skip origin feat'
   'git push origin feat # --force'
+  # a command that only mentions a force push (E02-S107): quoted, searched for, in a file name
+  "echo 'git push -f'"
+  "grep -rn 'git push --force' ."
+  'grep -n "push -f" scripts/test-no-force-push.sh'
+  "printf '%s\n' 'git push --force' > note.txt"
+  'ls docs/force-push-notes.md && git push origin main'
+  'cat .claude/make-it/hooks/no-force-push.sh'
+  'git add force/file.txt && git commit -m x && git push'
+  'gh pr merge 5 --squash && echo "do not git push --force"'
+  'echo "it is about git push --force" >> log && rm -rf tmp && git push origin feat'
+  "bash -c 'echo \"git push --force\"'"
+  'bash scripts/test-no-force-push.sh'
+  'echo "$(date): git push --force was refused" >> log'
+  'git push origin "$(git branch --show-current)" --force-with-lease'
+  'git push --force-with-lease origin feat 2>&1 | tail -3'
+  # the card: here-docs whose text has an apostrophe, a + or a force push in it, then a normal push
+  $'cat > card.md <<\'EOF\'\nIt\'s a card. Don\'t worry.\nEOF\ncat > c2.md <<\'EOF\'\nrm -rf nothing; a + b\nEOF\ngit add . && git commit -m cards && git push'
+  $'cat > card.md <<EOF\nIt\'s a card about git push --force\nEOF\ngit push origin main'
+  $'cat >> log.txt <<\'EOF\'\nthe agent\'s push: git push --force was refused\nEOF'
+  $'git commit -F - <<\'EOF\'\nfix: don\'t allow git push --force (it\'s refused)\nEOF\ngit push'
+  $'git commit -m "$(cat <<\'EOF\'\nfix: the guard\'s message\n\nIt mentions git push --force and -f, "quoted (too.\nEOF\n)" && git push --force-with-lease'
+  $'gh pr create --title x --body "$(cat <<\'EOF\'\nMerged; don\'t use git push --force, it\'s refused. a + b\nEOF\n)"'
+  $'cat <<-\'EOF\' > n.md\n\tit\'s + git push -f\n\tEOF\ngit push'
+  $'python3 - <<\'PY\'\nprint(\'it\\\'s git push --force\')\nPY'
+  $'cat > run.sh <<\'EOF\'\ngit push --force\nEOF'
+  $'cat > a <<A; cat > b <<\'B\'\nit\'s a + git push -f\nA\nit\'s b\nB\ngit push'
 )
 nb=0; na=0
 for c in "${blocked[@]}"; do
@@ -96,6 +189,7 @@ grep -qF -- '--force-with-lease' "$T/err" && ok "the refusal names --force-with-
 if run_hook '{"tool_name":"Bash","tool_input":{"command":"git push --force'; then bad "an unterminated command string with a force push was allowed"; else ok "unreadable input with a force push: refused"; fi
 if run_hook '{"tool_name":"Bash","tool_input":{"command":"git push origin main'; then ok "unreadable input without a force sign: allowed"; else bad "unreadable input without a force sign was refused"; fi
 if run_hook 'not json at all: git push -f'; then bad "non-JSON input with a force push was allowed"; else ok "non-JSON input with a force push: refused"; fi
+grep -qF 'run it as its own command' "$T/err" && ok "a refusal of a command it couldn't read says so and gives the way out" || bad "a refusal of an unreadable command doesn't give the way out"
 if run_hook 'not json at all'; then ok "non-JSON input with no push: allowed"; else bad "non-JSON input with no push was refused"; fi
 if run_hook "$(payload "git push 'unterminated --force")"; then bad "an unterminated quote with a force push was allowed"; else ok "an unterminated quote with a force push: refused"; fi
 if run_hook "$(payload "echo 'unterminated")"; then ok "an unterminated quote and no push: allowed"; else bad "an unterminated quote and no push was refused"; fi
@@ -122,7 +216,7 @@ s=$(python3 -c 'import time;print(time.time())'); bash "$HOOK" < "$T/big-force.j
 e=$(python3 -c "import time;print(round(time.time()-$s,2))")
 [ "$rc1" = 2 ] && [ "$rc2" = 0 ] && python3 -c "import sys; sys.exit(0 if $e < 2 else 1)" && ok "two 2 MB commands judged by the raw-text rule in ${e}s: force refused, plain push allowed" || bad "2 MB commands: exits $rc1/$rc2 in ${e}s"
 # the hook header names what it does not catch
-for w in 'bash -c' 'eval' 'xargs' 'aliases' 'remote.*.push' '$(...)' "pu''sh"; do
+for w in 'script file' 'aliases' 'remote.*.push' '$VARIABLE' '$(echo git)' 'ssh' 'case pattern' "pu''sh"; do
   grep -qF -- "$w" "$HOOK" && ok "the hook's header names a bypass it doesn't catch: $w" || bad "the hook's header doesn't name: $w"
 done
 
