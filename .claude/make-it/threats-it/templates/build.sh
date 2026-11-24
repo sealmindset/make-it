@@ -5,6 +5,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 SKILL="${THREATS_IT:-$HOME/.claude/make-it/threats-it}"
+# Whatever step fails below, no PDF from an earlier run may be left looking like this run's result.
+rm -f dist/briefing.pdf dist/technical.pdf dist/appendix.pdf dist/test-plan.pdf
 
 # Project-specific derivation steps (create these per threat; each reads data/raw and writes data/derived)
 for step in scripts/extract.py scripts/assess.py scripts/appendix.py; do
@@ -26,7 +28,6 @@ fi
 mkdir -p dist
 for doc in briefing technical appendix test-plan; do
   [ -f "$doc.md" ] || continue
-  rm -f "dist/$doc.pdf"   # a failed build must not leave the previous PDF looking current
   log=$(mktemp)
   if ! pandoc "$doc.md" --from markdown+pipe_tables+yaml_metadata_block --standalone \
     --css scripts/pdf.css --metadata pagetitle="$doc" --pdf-engine=weasyprint -o "dist/$doc.pdf" 2>"$log"; then

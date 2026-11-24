@@ -23,6 +23,7 @@ else
 fi
 printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$code" "$bytes" "$sha" "$url" >> "$out/FETCH-LOG.tsv"
 if [ "$code" -ge 400 ] 2>/dev/null || [ "$code" = "000" ]; then
+  rm -f "$out/$name.html"   # a refused or half-arrived page is not the source: the log line above keeps its size and hash
   echo "REFUSED: HTTP $code for $url (see references/sources.md for fallbacks)" >&2
   exit 2
 fi

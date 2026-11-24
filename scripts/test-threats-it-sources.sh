@@ -56,7 +56,11 @@ fs.graph_all = lambda u: (calls.append(u), (403, {"error": "denied"}))[1]
 fs.arg = lambda q: (calls.append(q), (403, {"error": "denied"}))[1]
 d = tempfile.mkdtemp(); sys.argv = ["x", d, "--since", "2026-08-01"]
 for k in ("AUDITGITHUB_API_URL", "AUDITGITHUB_API_KEY"): os.environ.pop(k, None)
-sys.stdout = open(os.devnull, "w"); fs.main(); sys.stdout = sys.__stdout__
+sys.stdout = open(os.devnull, "w")
+try: fs.main(); ended = 0
+except SystemExit as e: ended = e.code   # the shared rule (E02-S110): a failed query ends the script with exit 3
+sys.stdout = sys.__stdout__
+check("refused sources end the run with exit 3, after every record is written", ended == 3)
 want = ["secure_score", "secure_score_profiles", "defender_xdr_alerts", "defender_xdr_incidents", "defender_cloud_assessments", "auditgithub_findings"]
 recs = {n: json.load(open(os.path.join(d, n + ".json"))) for n in want if os.path.exists(os.path.join(d, n + ".json"))}
 check("every source leaves a record even when refused", sorted(recs) == sorted(want))
