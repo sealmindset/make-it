@@ -160,6 +160,72 @@ check "no document still says /nemo-it does not use the app's suite, or that no 
 check "what stays: the build runs no NeMo test, /fix-it still runs the suite, and step 0b keeps its two-model rule" \
   'has "$BS" "Checked by reading the files: AI09 runs no NeMo Guardrails test." && has .claude/commands/fix-it.md "pytest guardrails/tests/ -v" && has "$NM" "The overall AI-safety result is the worse of the two blocks." && has "$NM" "Code-level results are never a PASS: the behavioral tests did not run."'
 
+# 8. each scan's own temp folder: nothing shared under /tmp, and a scan removes only its own folder. The blocks are
+# extracted from nemo-it.md and run in a sandbox where /tmp is a folder under $TMPD; no scanner is ever run.
+SETL='NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started'
+GUARD='[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan'"'"'s folder: stop" >&2; exit 1; }'
+AN='[A-Za-z0-9]'
+DEL="case \"\$NEMO_TMP\" in /tmp/nemo-it.$AN$AN$AN$AN$AN$AN) [ -d \"\$NEMO_TMP\" ] && rm -rf \"\$NEMO_TMP\" ;; *) echo \"not removing: \$NEMO_TMP\" >&2 ;; esac"
+BLK="$TMPD/blocks"; mkdir -p "$BLK"
+awk -v d="$BLK" '/^```bash/{n++; on=1; next} on && /^```/{on=0; close(f); next} on{f = sprintf("%s/%03d.sh", d, n); print > f}' "$NM"
+REFS="$(grep -oE '~/[.]claude/make-it/(references|templates)/[A-Za-z0-9._-]+[.]md' "$NM" | sort -u | sed 's|^~/||')"
+UNDO="$(for b in "$BLK"/*.sh; do gq -F 'NEMO_TMP' "$b" && echo "$b"; done || true)"
+check "no /tmp/nemo-it- path is left in nemo-it.md or the files it reads: every scan file is under the scan's own folder" \
+  'M="$(grep -nF "/tmp/nemo-it-" "$NM" $REFS || true)"; [ -n "$REFS" ] && [ -z "$M" ] || { printf "%s\n" "$M" | sed "s/^/  shared path: /"; false; }'
+check "nemo-it.md deletes a temp folder in one place only: the guarded line that removes this scan's folder" \
+  'D="$(grep -nE "(^|[^-[:alnum:]])rm +-|-exec +rm|-delete\b|rmtree" "$NM" || true)"; [ "$(printf "%s\n" "$D" | grep -c .)" = 1 ] && printf "%s\n" "$D" | cut -d: -f2- | gq -xF -- "$DEL" || { printf "%s\n" "$D" | sed "s/^/  delete: /"; false; }'
+# every block that uses the folder: one creates it; each other one sets it, then runs the guard, before anything else
+blocks_set_and_guard() {
+  local b head made=0 gone="$TMPD/not-there" here="$TMPD/here"; mkdir -p "$here"
+  [ -n "$UNDO" ] || return 1
+  for b in $UNDO; do
+    if gq -xF 'NEMO_TMP=$(mktemp -d /tmp/nemo-it.XXXXXX) && echo "NEMO_TMP=$NEMO_TMP"' "$b"; then made=$((made + 1)); continue; fi
+    head="$(grep -vE '^[[:space:]]*(#|$)' "$b" | head -n 2)"
+    [ "$head" = "$(printf '%s\n%s' "$SETL" "$GUARD")" ] || { echo "  $(basename "$b"): starts with: $head"; return 1; }
+    # the guard, run: a folder that is not there stops the block; this scan's folder lets it go on
+    ! printf '%s\n' "$head" | sed "s#/tmp/nemo-it[.]XXXXXX#$gone#" | bash 2>/dev/null || { echo "  $(basename "$b"): the guard let a missing folder through"; return 1; }
+    printf '%s\n' "$head" | sed "s#/tmp/nemo-it[.]XXXXXX#$here#" | bash || return 1
+  done
+  [ "$made" = 1 ] || { echo "  $made blocks create the folder"; return 1; }
+}
+check "every bash block that uses \$NEMO_TMP sets it and runs the guard first, and only the first one creates it" 'blocks_set_and_guard'
+# two scans in a sandbox: scan A's folder and files, and an earlier version's leftover, survive scan B's start and end
+SB="$TMPD/sb"; STUB="$TMPD/stub"; RMLOG="$TMPD/rm.log"
+tmp_in_sandbox() { SB="$SB" perl -pe 's{/tmp(?=[/\s"\x27)])}{$ENV{SB}}g'; }
+# rm, logged: it deletes only inside the sandbox, so a wrong block can never reach the real /tmp or /
+mkdir -p "$STUB"; printf '%s\n' '#!/bin/sh' 'echo "$*" >> "$RMLOG"' 'for a; do case "$a" in -*) ;; "$SB"/*) ;; *) exit 0 ;; esac; done' 'exec /bin/rm "$@"' > "$STUB/rm"; chmod +x "$STUB/rm"
+sandboxed() { HOME="$TMPD/home" TMPDIR="$TMPD/home" SB="$SB" RMLOG="$RMLOG" PATH="$STUB:$PATH" bash -c "$1" 2>/dev/null; }
+snap() { (cd "$SB" && find . | sort); }
+two_scans() {
+  local setup clean a b before t
+  setup="$(for f in $UNDO; do gq -F 'mktemp -d /tmp/nemo-it.XXXXXX' "$f" && awk '/^# Tools for ALL modes/{exit} {print}' "$f"; done | tmp_in_sandbox)"
+  clean="$(sed -n '/^\*\*3[.] Clean up temporary files/,/^```$/p' "$NM" | sed -n '/^```bash/,/^```$/p' | sed '1d;$d' | tmp_in_sandbox)"
+  rm -rf "$SB" "$TMPD/home"; mkdir -p "$SB/nemo-it-old" "$TMPD/home"; : > "$RMLOG"
+  [ -n "$setup" ] && [ -n "$clean" ] || { echo "  set-up or cleanup block not found"; return 1; }
+  a="$(sandboxed "$setup" | sed -n 's/^NEMO_TMP=//p')"; [ -d "$a" ] && [ "${a#"$SB"/nemo-it.}" != "$a" ] || { echo "  scan A got no folder: $a"; return 1; }
+  # scan A's files: every path the blocks write, as scan A would have it
+  for t in $(cat $UNDO | grep -oE '(\$NEMO_TMP|/tmp/nemo-it)[A-Za-z0-9._/-]*' | grep -v 'XXXXXX\|[.]$' | sort -u | awk '{print length, $0}' | sort -rn | cut -d" " -f2- | tmp_in_sandbox); do
+    t="${t/\$NEMO_TMP/$a}"; mkdir -p "$(dirname "$t")"; [ -e "$t" ] || touch "$t"
+  done
+  before="$(snap)"
+  b="$(sandboxed "$setup" > "$TMPD/b.out"; sed -n 's/^NEMO_TMP=//p' "$TMPD/b.out")"
+  [ -d "$b" ] && [ "$b" != "$a" ] || { echo "  scan B got no folder of its own: $b"; return 1; }
+  [ "$(snap | grep -vF "./${b#"$SB"/}")" = "$before" ] || { echo "  scan B's start changed what scan A has"; return 1; }
+  gq -xF "LEFTOVER: $SB/nemo-it-old" "$TMPD/b.out" || { echo "  an earlier version's leftover folder was not named"; return 1; }
+  sandboxed "$(printf '%s\n' "$clean" | V="NEMO_TMP=$(printf %q "$b")" awk '/^NEMO_TMP=.*XXXXXX/{print ENVIRON["V"]; next} {print}')"
+  [ ! -e "$b" ] || { echo "  scan B's cleanup left its own folder"; return 1; }
+  [ "$(snap)" = "$before" ] || { echo "  scan B's cleanup changed what scan A has"; return 1; }
+  # cleanup with a value that is not one of these folders deletes nothing at all
+  mkdir -p "$SB/nemo-it.x" "$SB/nemo-it.ab cdx"; before="$(snap)"
+  for v in "" UNSET "/tmp" "/" "$SB" "$SB/nemo-it.x/../." "$SB/nemo-it.x/.." "$SB/nemo-it.ab cdx" "$a/.."; do
+    : > "$RMLOG"
+    if [ "$v" = UNSET ]; then t="unset NEMO_TMP"; else t="NEMO_TMP=$(printf %q "$v")"; fi
+    sandboxed "$(printf '%s\n' "$clean" | V="$t" awk '/^NEMO_TMP=.*XXXXXX/{print ENVIRON["V"]; next} {print}')" || true
+    [ ! -s "$RMLOG" ] && [ "$(snap)" = "$before" ] || { echo "  cleanup with NEMO_TMP=[$v] deleted: $(cat "$RMLOG")"; return 1; }
+  done
+}
+check "two scans: B's start and B's cleanup leave A's folder and files, and an old leftover, alone; a cleanup given an empty, unset, /tmp, /, .. or spaced path deletes nothing" 'two_scans'
+
 # 7. controls (this repo only): each opposite fails the checks above
 if [ -z "${1:-}" ]; then
   # opp FILE PERL: a copy of the Markdown files with one edit must fail this script
@@ -236,6 +302,13 @@ if [ -z "${1:-}" ]; then
     'swap "$NM" "when the project has one, is NOT TESTED (production detected)" "when the project has one, when picked, still runs"'
   check "(control) fails when a preflight tool check runs python from the project folder again, or the ask claims the scan only reads the code" \
     'swap "$NM" "(cd \"\$T\" && python -m pytest --version 2>/dev/null) || echo" "python -m pytest --version 2>/dev/null || echo" && swap "$NM" "python3 -I -c \"import json; p = json.load" "python3 -c \"import json; p = json.load" && swap "$NM" "runs your project'"'"'s code on this computer'"'"' /" "runs your project'"'"'s code on this computer; the rest of this scan only reads your code'"'"' /"'
+  # the temp-folder review's mutants: the shared cleanup back, and a shared semgrep path with the up-front sweep back
+  check "(control) t1: fails when the cleanup removes every /tmp/nemo-it folder again" \
+    'swap "$NM" "$DEL" "rm -rf /tmp/nemo-it* 2>/dev/null"'
+  check "(control) t2: fails when semgrep writes to a shared /tmp path and the scan starts by sweeping /tmp/nemo-it-*" \
+    'A="NEMO_TMP=\$(mktemp" T="find /tmp/ -maxdepth 1 -name '"'"'nemo-it-*'"'"' -exec rm -rf {} + 2>/dev/null" opp "$NM" "s/\\Q\$ENV{A}\\E/\$ENV{T}\\n\$ENV{A}/; s{\\\$NEMO_TMP/semgrep[.]json}{/tmp/nemo-it-semgrep.json}g"'
+  check "(control) t3: fails with the loose ?????? pattern back, and with a leftover swept instead of named" \
+    'A="[A-Za-z0-9]" opp "$NM" "s/(\\Q\$ENV{A}\\E){6}/??????/" && swap "$NM" "| sed '"'"'s/^/LEFTOVER: /'"'"'" "-exec rm -rf {} +"'
   check "(control) fails when the user-facing page drops the pick" \
     'swap "$CF" " — only when you pick it, because that runs your app'"'"'s own code." "." && swap "$CF" "run only if you pick it, every time." "run on every scan."'
 fi
