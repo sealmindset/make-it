@@ -1371,6 +1371,11 @@ spec:
         imagePullPolicy: Always
         ports:
           - containerPort: {container_port}
+        # Only when the Compose service has a healthcheck: the same check, so no request reaches it before it answers
+        readinessProbe:
+          exec:
+            command: {healthcheck_exec}
+          periodSeconds: 5
         env:
           # SECRET env vars -> secretKeyRef
           - name: {VAR_NAME}
@@ -1404,6 +1409,13 @@ spec:
         persistentVolumeClaim:
           claimName: {app}-pvc
 ```
+
+**Readiness rule:** when the Compose service has a `healthcheck:`, its Deployment gets that check as a
+`readinessProbe`, so nobody is sent to it until it answers -- after a deploy or a restart the app's address
+answers only once the service is up, never with an error while it is still starting. `{healthcheck_exec}`
+is the check's `test:` as a JSON list: the words after `CMD`; for `CMD-SHELL`, `["sh", "-c", "<its string>"]`
+(make-it's backend: `["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]`).
+No `healthcheck:`: leave the probe out.
 
 **Init container rules:**
 - Use init containers for DB migrations (preferred over K8s Jobs -- no cluster-level RBAC needed)
