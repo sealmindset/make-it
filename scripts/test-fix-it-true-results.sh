@@ -135,8 +135,11 @@ if [ -z "${1:-}" ]; then
   ctl "(control, folders) fails when every folder of tests is run on its own, and when a folder with its own configuration is not" \
     "$PY" "s/        if not has_pytest_config\(d\):   # rule 2\n/        if True:\n/; s/            while d != root and \(set/            while False and (set/" \
     "$PY" "s/        runs\.add\(d\)\n/        runs.add(root)\n/"
+  ctl "(control, folders) fails when a configured tests folder is run from inside itself, and when cargo's line is not read" \
+    "$PY" "s/            inside = d != root and /            inside = False and /" \
+    "$PY" "s/ or line\.startswith\(.test result:.\)//"
   ctl "(control, minor b, c) fails when any line with the word 'failed' counts, and when any severity table is read" \
-    "$PY" "s/        if SUMMARY\.match\(line\):/        if True:/" \
+    "$PY" "s/        if SUMMARY\.match\(line\) or /        if True or /" \
     "$PY" "s/heading\.startswith\(.severity distribution.\) and sev_tables == 1 and //"
   # one background shell starts them all, a few at a time, so the checks below do not wait for them
   ( launch 0; n=1; while [ "$n" -le "$NJ" ]; do launch "$n" "${JOBF[$n]}" "${JOBP[$n]}"; n=$((n + 1)); done; wait ) &
@@ -333,6 +336,10 @@ check "(folders) the scaffold's layout (its own root pyproject.toml and backend/
   'lay f5 && SC=.claude/make-it/scaffolds/fastapi-nextjs && { [ ! -d "$SC" ] || { cp "$SC/pyproject.toml" "$TMPD/f5/" && mkdir -p "$TMPD/f5/backend" && cp "$SC/backend/pytest.ini" "$TMPD/f5/backend/"; }; } && { [ -f "$TMPD/f5/backend/pytest.ini" ] || { mkdir -p "$TMPD/f5/backend" && printf "[pytest]\ntestpaths = tests\n" > "$TMPD/f5/backend/pytest.ini"; }; } && app f5/backend && uses_app f5/backend/tests health && : > "$TMPD/f5/backend/tests/conftest.py" && pj f5/frontend "\"build\":\"true\"" && tests f5 && gq -E "^Tests: passed in backend/ \(\`python3 -m pytest -q -p no:cacheprovider\`: 1 passed\)\.$" "$TMPD/out" && ntests 1'
 check "(folders) installed and vendored folders are never run: red tests in node_modules, a venv and vendor change nothing" \
   'lay f6 && pyt f6/tests root True && pyt f6/node_modules/pkg/tests v1 False && pyt f6/backend/.venv/lib/tests v2 False && pyt f6/venv/x v3 False && pyt f6/vendor/lib/tests v4 False && tests f6 && out "Tests: passed in the project folder (\`python3 -m pytest -q -p no:cacheprovider --ignore=backend/.venv --ignore=node_modules --ignore=vendor --ignore=venv\`: 1 passed)." && ntests 1'
+check "(folders) a configuration kept inside the tests folder (tests/pytest.ini), package at the root: run from the project folder as 'pytest tests', and it passes" \
+  'lay f7 && app f7 && uses_app f7/tests/unit core && : > "$TMPD/f7/tests/pytest.ini" && tests f7 && out "Tests: passed in the project folder (\`python3 -m pytest -q -p no:cacheprovider tests\`: 1 passed)." && ntests 1'
+check "(minor) cargo's own summary line is read: a green cargo run is passed, a red one is not" \
+  'lay cg && printf "%s\n" "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s" > "$TMPD/cg/ok.txt" && printf "%s\n" "test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s" > "$TMPD/cg/red.txt" && at cg "$(fill "$L_OWN" . "cat")  ok.txt" && out "CHECK tests | (project folder) | cat ok.txt | PASSED | 3 passed" && ! at cg "$(fill "$L_OWN" . "cat")  red.txt" && out "CHECK tests | (project folder) | cat red.txt | FAILED | 1 failed, 2 passed; exit status 0"'
 check "(minor b) a green run whose output has a log line with the word 'failed' is still passed: counts come from the summary line" \
   'proj mb && rm -rf "$TMPD/mb/backend" && pj mb/frontend "\"test\":\"echo retry: 1 failed attempt; echo 5 passed\"" && tests mb && out "Tests: passed in frontend/ (\`npm test\`: 5 passed)."'
 check "(minor c) only the table under 'Severity Distribution' is read: a later severity table, or a second one, does not replace it" \
@@ -348,7 +355,7 @@ check "fix-it.md: no check in the verify step hides its errors or falls through 
 check "fix-it.md: the three results, and 'not run' is never a pass" \
   'has "**Every check has one of three results: PASSED, FAILED or NOT RUN.** The result is the one the check command prints, taken from the real command'"'"'s exit status and output." && has "NOT RUN (no test suite, no build step, a tool that is not installed, a folder that is not there) is never a pass and is never worded as one." && has "For NOT RUN, say \"the build was not checked\", never \"the app still builds\"."'
 check "fix-it.md: counts come from the record, one outcome per finding, never from subtraction" \
-  'has "Every count and every result /fix-it reports later comes from this record, never from memory and never from subtracting one report'"'"'s totals from another'"'"'s." && has "**Never work a \"fixed\" count out by subtracting the new report'"'"'s totals from the old one'"'"'s.**" && has "\`changed\` is not \"fixed\". Nothing is called fixed before the re-scan (Phase 4). A finding with no line stays \"not attempted\", and is reported that way." && has "A finding is **fixed** only when the scanner that found it ran in the re-scan and no longer reports it:" && has "A FAIL row alone is not enough: it only says something was found, perhaps by another scanner in the same row." && has "A folder below another gets its own \`pytest\` run and its own line only when it has its own test configuration (\`pytest.ini\`, or a pytest section in \`pyproject.toml\`, \`setup.cfg\` or \`tox.ini\`); otherwise its tests stay in the run of the folder above." && has "**Every in-scope finding has exactly one outcome:** fixed / changed, not re-checked / failed / needs a person / not attempted. The five counts add up to the findings in scope."'
+  'has "Every count and every result /fix-it reports later comes from this record, never from memory and never from subtracting one report'"'"'s totals from another'"'"'s." && has "**Never work a \"fixed\" count out by subtracting the new report'"'"'s totals from the old one'"'"'s.**" && has "\`changed\` is not \"fixed\". Nothing is called fixed before the re-scan (Phase 4). A finding with no line stays \"not attempted\", and is reported that way." && has "A finding is **fixed** only when the scanner that found it ran in the re-scan and no longer reports it:" && has "A FAIL row alone is not enough: it only says something was found, perhaps by another scanner in the same row." && has "\`pytest\` tests anywhere in the project, up to six folders down; \`npm test\` in the project folder and up to two folders down" && hasnt "any folder up to two levels down), runs" && has "A folder below another gets its own \`pytest\` run and its own line only when it has its own test configuration (\`pytest.ini\`, or a pytest section in \`pyproject.toml\`, \`setup.cfg\` or \`tox.ini\`); otherwise its tests stay in the run of the folder above." && has "**Every in-scope finding has exactly one outcome:** fixed / changed, not re-checked / failed / needs a person / not attempted. The five counts add up to the findings in scope."'
 check "fix-it.md: the report says the summary's sentences and never a better result" \
   'has "**Say the sentences under \"SAY THIS TO THE PERSON\" as they are printed.**" && has "You may not turn a result into a better one: \"not re-checked\" is never \"fixed\", \"no tests ran\" and \"not checked\" are never \"pass\" or \"still builds\", and a failed check is never left out." && has "11. **Report what happened, not what was hoped.**"'
 
@@ -357,7 +364,7 @@ if [ -z "${1:-}" ]; then
   wait
   check "(control) passes on an untouched copy" '[ "$(cat "$TMPD/ctl/0.res")" = passed ] || { tail -n 20 "$TMPD/ctl/0.log"; false; }'
   for i in "${!LABELS[@]}"; do
-    check "${LABELS[$i]}" 'for n in ${IDS[$i]}; do [ "$(cat "$TMPD/ctl/$n.res")" = failed ] || { echo "  edit $n: $(cat "$TMPD/ctl/$n.res")"; false; }; done'
+    check "${LABELS[$i]}" '( for n in ${IDS[$i]}; do [ "$(cat "$TMPD/ctl/$n.res")" = failed ] || { echo "  edit $n (${JOBP[$n]}): $(cat "$TMPD/ctl/$n.res")"; exit 1; }; done )'
   done
 fi
 
