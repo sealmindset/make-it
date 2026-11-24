@@ -50,7 +50,7 @@ no7() { ! printf "%s" "$S7" | gq -iE -- "$1" || { echo "  must not be in step 7b
 
 # 1. the step exists, where it belongs, and is the reviewed text
 S7RAW="$(awk '/^\*\*7b[.] Run the app.s own generated guardrail suite/{on=1} on && /^\*\*8[.] Compile AI safety results/{on=0} on' "$NM")"
-S7HASH=0262c2f36ad614ea066fac4eef420ecedb7dc1b8
+S7HASH=fc93e06ea4412a25711326a9b2d8607bd63892e1
 check "nemo-it.md has step 7b, after its own six categories and before the results are compiled" \
   '[ -n "$S7" ] && [ "$(grep -cE "^\*\*7b[.] Run the app.s own generated guardrail suite" "$NM")" = 1 ] && [ "$(grep -nE "^\*\*7[.] Test Category 6" "$NM" | cut -d: -f1)" -lt "$(grep -nE "^\*\*7b[.] " "$NM" | cut -d: -f1)" ]'
 check "step 7b is the reviewed text, word for word (changed on purpose? read the change, then put the new hash in S7HASH)" \
@@ -74,7 +74,7 @@ check "step 7b: condition 2 claims no more than step 0 found, and a run with no 
 check "step 7b: nothing is installed there, and never from the project's requirements files" \
   'sen "Nothing is installed in this step: the only installs are the ones picked in preflight step 7'"'"'s ask (guardrail 9), and nothing is ever installed from the project'"'"'s own requirements files." && no7 "(pip3?|pipx|uv|conda|poetry|npm|brew) (install|add)|-r [^ ]*requirements"'
 check "nemo-it.md: one pytest run, with flags that keep its files out of the project, and one broken file does not stop the rest" \
-  'L="$(grep -F "python -m pytest guardrails/tests/" "$NM" | grep -vF "\`")" && [ "$(printf "%s\n" "$L" | grep -c .)" = 1 ] && printf "%s\n" "$L" | gq -xF "  PYTHONDONTWRITEBYTECODE=1 python -m pytest guardrails/tests/ -v -p no:cacheprovider --continue-on-collection-errors \\" && gq -F -- "--junitxml=/tmp/nemo-it-app-suite/results.xml" "$NM"'
+  'L="$(grep -F "python -m pytest guardrails/tests/" "$NM" | grep -vF "\`")" && [ "$(printf "%s\n" "$L" | grep -c .)" = 1 ] && printf "%s\n" "$L" | gq -xF "  PYTHONDONTWRITEBYTECODE=1 python -m pytest guardrails/tests/ -v -p no:cacheprovider --continue-on-collection-errors \\" && gq -F -- "--junitxml=\$NEMO_TMP/app-suite/results.xml" "$NM"'
 
 # 3. the preflight ask (step 7): the pick, each run
 P7="$(awk '/^\*\*7[.] Install required tools and start the app/{on=1} on && /^\*\*8[.] Create scan workspace/{on=0} on' "$NM" | flat)"
@@ -99,7 +99,7 @@ check "preflight step 7's ask is the reviewed text, word for word (changed on pu
 check "step 7b: what ran comes from the test runner's own result file, the exit code decides nothing, and no result file counts as 0" \
   'sen "What ran is read from the test runner'"'"'s own result file, never from the command having been issued (guardrail 11). \`APP_SUITE_EXIT\` decides nothing: every outcome is read from the result file." && sen "\`APP_SUITE_RAN=0\`: the whole block is NOT TESTED"'
 check "step 7b: the readers run outside the project and load nothing from it" \
-  'gq -xF "P=\"\$(pwd -P)\"; cd /tmp/nemo-it-app-suite" "$NM" && gq -xF "python3 -I - results.xml <<'"'"'PY'"'"' 2>/dev/null || echo \"APP_SUITE_RAN=0\"" "$NM" && gq -xF "python3 -I manifest.py \"\$P\" after.txt && python3 -I - before.txt after.txt <<'"'"'PY'"'"' || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && gq -xF "P=\"\$(pwd -P)\"; (cd /tmp/nemo-it-app-suite && python3 -I manifest.py \"\$P\" before.txt) || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && [ "$(printf "%s\n" "$S7RAW" | grep -E "^[^#]*python3 " | grep -vcF "python3 -I ")" = 0 ]'
+  'gq -xF "P=\"\$(pwd -P)\"; cd \$NEMO_TMP/app-suite" "$NM" && gq -xF "python3 -I - results.xml <<'"'"'PY'"'"' 2>/dev/null || echo \"APP_SUITE_RAN=0\"" "$NM" && gq -xF "python3 -I manifest.py \"\$P\" after.txt && python3 -I - before.txt after.txt <<'"'"'PY'"'"' || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && gq -xF "P=\"\$(pwd -P)\"; (cd \$NEMO_TMP/app-suite && python3 -I manifest.py \"\$P\" before.txt) || echo \"PROJECT_CHANGES=not-checked\"" "$NM" && [ "$(printf "%s\n" "$S7RAW" | grep -E "^[^#]*python3 " | grep -vcF "python3 -I ")" = 0 ]'
 # the reader itself, run on a small result file: one case of each kind, and a second file with a failure
 printf '%s\n' '<testsuites><testsuite>' '<testcase classname="guardrails.tests.test_jailbreak" name="test_a"/>' '<testcase classname="guardrails.tests.test_jailbreak.TestK" name="test_b"><failure message="AssertionError: not blocked">x</failure></testcase>' '<testcase classname="" name="guardrails.tests.test_jailbreak"><error message="collection failure">x</error></testcase>' '<testcase classname="guardrails.tests.test_jailbreak" name="test_d"><skipped message="no key sk-abcdefghijklmnopqrstuvwxyz0123">x</skipped></testcase>' '<testcase classname="guardrails.tests.test_extra" name="test_x"><failure message="AssertionError: leaked">x</failure></testcase>' '</testsuite></testsuites>' > "$TMPD/results.xml"
 printf "%s\n" "$S7RAW" | awk '/^python3 -I - results[.]xml <<.PY. /{on=1; next} on && /^PY$/{on=0} on' > "$TMPD/reader.py"
@@ -160,6 +160,72 @@ check "no document still says /nemo-it does not use the app's suite, or that no 
 check "what stays: the build runs no NeMo test, /fix-it still runs the suite, and step 0b keeps its two-model rule" \
   'has "$BS" "Checked by reading the files: AI09 runs no NeMo Guardrails test." && has .claude/commands/fix-it.md "pytest guardrails/tests/ -v" && has "$NM" "The overall AI-safety result is the worse of the two blocks." && has "$NM" "Code-level results are never a PASS: the behavioral tests did not run."'
 
+# 8. each scan's own temp folder: nothing shared under /tmp, and a scan removes only its own folder. The blocks are
+# extracted from nemo-it.md and run in a sandbox where /tmp is a folder under $TMPD; no scanner is ever run.
+SETL='NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started'
+GUARD='[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan'"'"'s folder: stop" >&2; exit 1; }'
+AN='[A-Za-z0-9]'
+DEL="case \"\$NEMO_TMP\" in /tmp/nemo-it.$AN$AN$AN$AN$AN$AN) [ -d \"\$NEMO_TMP\" ] && rm -rf \"\$NEMO_TMP\" ;; *) echo \"not removing: \$NEMO_TMP\" >&2 ;; esac"
+BLK="$TMPD/blocks"; mkdir -p "$BLK"
+awk -v d="$BLK" '/^```bash/{n++; on=1; next} on && /^```/{on=0; close(f); next} on{f = sprintf("%s/%03d.sh", d, n); print > f}' "$NM"
+REFS="$(grep -oE '~/[.]claude/make-it/(references|templates)/[A-Za-z0-9._-]+[.]md' "$NM" | sort -u | sed 's|^~/||')"
+UNDO="$(for b in "$BLK"/*.sh; do gq -F 'NEMO_TMP' "$b" && echo "$b"; done || true)"
+check "no /tmp/nemo-it- path is left in nemo-it.md or the files it reads: every scan file is under the scan's own folder" \
+  'M="$(grep -nF "/tmp/nemo-it-" "$NM" $REFS || true)"; [ -n "$REFS" ] && [ -z "$M" ] || { printf "%s\n" "$M" | sed "s/^/  shared path: /"; false; }'
+check "nemo-it.md deletes a temp folder in one place only: the guarded line that removes this scan's folder" \
+  'D="$(grep -nE "(^|[^-[:alnum:]])rm +-|-exec +rm|-delete\b|rmtree" "$NM" || true)"; [ "$(printf "%s\n" "$D" | grep -c .)" = 1 ] && printf "%s\n" "$D" | cut -d: -f2- | gq -xF -- "$DEL" || { printf "%s\n" "$D" | sed "s/^/  delete: /"; false; }'
+# every block that uses the folder: one creates it; each other one sets it, then runs the guard, before anything else
+blocks_set_and_guard() {
+  local b head made=0 gone="$TMPD/not-there" here="$TMPD/here"; mkdir -p "$here"
+  [ -n "$UNDO" ] || return 1
+  for b in $UNDO; do
+    if gq -xF 'NEMO_TMP=$(mktemp -d /tmp/nemo-it.XXXXXX) && echo "NEMO_TMP=$NEMO_TMP"' "$b"; then made=$((made + 1)); continue; fi
+    head="$(grep -vE '^[[:space:]]*(#|$)' "$b" | head -n 2)"
+    [ "$head" = "$(printf '%s\n%s' "$SETL" "$GUARD")" ] || { echo "  $(basename "$b"): starts with: $head"; return 1; }
+    # the guard, run: a folder that is not there stops the block; this scan's folder lets it go on
+    ! printf '%s\n' "$head" | sed "s#/tmp/nemo-it[.]XXXXXX#$gone#" | bash 2>/dev/null || { echo "  $(basename "$b"): the guard let a missing folder through"; return 1; }
+    printf '%s\n' "$head" | sed "s#/tmp/nemo-it[.]XXXXXX#$here#" | bash || return 1
+  done
+  [ "$made" = 1 ] || { echo "  $made blocks create the folder"; return 1; }
+}
+check "every bash block that uses \$NEMO_TMP sets it and runs the guard first, and only the first one creates it" 'blocks_set_and_guard'
+# two scans in a sandbox: scan A's folder and files, and an earlier version's leftover, survive scan B's start and end
+SB="$TMPD/sb"; STUB="$TMPD/stub"; RMLOG="$TMPD/rm.log"
+tmp_in_sandbox() { SB="$SB" perl -pe 's{/tmp(?=[/\s"\x27)])}{$ENV{SB}}g'; }
+# rm, logged: it deletes only inside the sandbox, so a wrong block can never reach the real /tmp or /
+mkdir -p "$STUB"; printf '%s\n' '#!/bin/sh' 'echo "$*" >> "$RMLOG"' 'for a; do case "$a" in -*) ;; "$SB"/*) ;; *) exit 0 ;; esac; done' 'exec /bin/rm "$@"' > "$STUB/rm"; chmod +x "$STUB/rm"
+sandboxed() { HOME="$TMPD/home" TMPDIR="$TMPD/home" SB="$SB" RMLOG="$RMLOG" PATH="$STUB:$PATH" bash -c "$1" 2>/dev/null; }
+snap() { (cd "$SB" && find . | sort); }
+two_scans() {
+  local setup clean a b before t
+  setup="$(for f in $UNDO; do gq -F 'mktemp -d /tmp/nemo-it.XXXXXX' "$f" && awk '/^# Tools for ALL modes/{exit} {print}' "$f"; done | tmp_in_sandbox)"
+  clean="$(sed -n '/^\*\*3[.] Clean up temporary files/,/^```$/p' "$NM" | sed -n '/^```bash/,/^```$/p' | sed '1d;$d' | tmp_in_sandbox)"
+  rm -rf "$SB" "$TMPD/home"; mkdir -p "$SB/nemo-it-old" "$TMPD/home"; : > "$RMLOG"
+  [ -n "$setup" ] && [ -n "$clean" ] || { echo "  set-up or cleanup block not found"; return 1; }
+  a="$(sandboxed "$setup" | sed -n 's/^NEMO_TMP=//p')"; [ -d "$a" ] && [ "${a#"$SB"/nemo-it.}" != "$a" ] || { echo "  scan A got no folder: $a"; return 1; }
+  # scan A's files: every path the blocks write, as scan A would have it
+  for t in $(cat $UNDO | grep -oE '(\$NEMO_TMP|/tmp/nemo-it)[A-Za-z0-9._/-]*' | grep -v 'XXXXXX\|[.]$' | sort -u | awk '{print length, $0}' | sort -rn | cut -d" " -f2- | tmp_in_sandbox); do
+    t="${t/\$NEMO_TMP/$a}"; mkdir -p "$(dirname "$t")"; [ -e "$t" ] || touch "$t"
+  done
+  before="$(snap)"
+  b="$(sandboxed "$setup" > "$TMPD/b.out"; sed -n 's/^NEMO_TMP=//p' "$TMPD/b.out")"
+  [ -d "$b" ] && [ "$b" != "$a" ] || { echo "  scan B got no folder of its own: $b"; return 1; }
+  [ "$(snap | grep -vF "./${b#"$SB"/}")" = "$before" ] || { echo "  scan B's start changed what scan A has"; return 1; }
+  gq -xF "LEFTOVER: $SB/nemo-it-old" "$TMPD/b.out" || { echo "  an earlier version's leftover folder was not named"; return 1; }
+  sandboxed "$(printf '%s\n' "$clean" | V="NEMO_TMP=$(printf %q "$b")" awk '/^NEMO_TMP=.*XXXXXX/{print ENVIRON["V"]; next} {print}')"
+  [ ! -e "$b" ] || { echo "  scan B's cleanup left its own folder"; return 1; }
+  [ "$(snap)" = "$before" ] || { echo "  scan B's cleanup changed what scan A has"; return 1; }
+  # cleanup with a value that is not one of these folders deletes nothing at all
+  mkdir -p "$SB/nemo-it.x" "$SB/nemo-it.ab cdx"; before="$(snap)"
+  for v in "" UNSET "/tmp" "/" "$SB" "$SB/nemo-it.x/../." "$SB/nemo-it.x/.." "$SB/nemo-it.ab cdx" "$a/.."; do
+    : > "$RMLOG"
+    if [ "$v" = UNSET ]; then t="unset NEMO_TMP"; else t="NEMO_TMP=$(printf %q "$v")"; fi
+    sandboxed "$(printf '%s\n' "$clean" | V="$t" awk '/^NEMO_TMP=.*XXXXXX/{print ENVIRON["V"]; next} {print}')" || true
+    [ ! -s "$RMLOG" ] && [ "$(snap)" = "$before" ] || { echo "  cleanup with NEMO_TMP=[$v] deleted: $(cat "$RMLOG")"; return 1; }
+  done
+}
+check "two scans: B's start and B's cleanup leave A's folder and files, and an old leftover, alone; a cleanup given an empty, unset, /tmp, /, .. or spaced path deletes nothing" 'two_scans'
+
 # 7. controls (this repo only): each opposite fails the checks above
 if [ -z "${1:-}" ]; then
   # opp FILE PERL: a copy of the Markdown files with one edit must fail this script
@@ -218,7 +284,7 @@ if [ -z "${1:-}" ]; then
   check "(control) fails when a yes is kept for the next run, and when the pick is no longer offered through the ask" \
     'swap "$NM" "A yes here is never kept: it is not written to any file, and the next run asks again." "A yes here is kept for the next run." && swap "$NM" "It never runs without a pick made here, in this run." "It runs without a pick when the hostile-code check is clean."'
   check "(control) fails with a reader run without -I, or from inside the project" \
-    'swap "$NM" "python3 -I - results.xml" "python3 - results.xml" && swap "$NM" "python3 -I manifest.py \"\$P\" after.txt" "python3 manifest.py \"\$P\" after.txt" && swap "$NM" "P=\"\$(pwd -P)\"; cd /tmp/nemo-it-app-suite" "P=\"\$(pwd -P)\""'
+    'swap "$NM" "python3 -I - results.xml" "python3 - results.xml" && swap "$NM" "python3 -I manifest.py \"\$P\" after.txt" "python3 manifest.py \"\$P\" after.txt" && swap "$NM" "P=\"\$(pwd -P)\"; cd \$NEMO_TMP/app-suite" "P=\"\$(pwd -P)\""'
   check "(control) fails when a failure in an extra test file does not affect the block" \
     'swap "$NM" "and it counts toward the block exactly as the six do." "and it does not affect the block." && swap "$NM" "over every test file that was collected, the six and any other" "over its six categories" && swap "$AT" "Every row counts toward the block status." "Extra rows do not count toward the block status."'
   check "(control) fails when ignored files are left out of the before-and-after list, when the no-key reason goes generic, and when a no-suite project gets a NOT TESTED block" \
@@ -236,6 +302,13 @@ if [ -z "${1:-}" ]; then
     'swap "$NM" "when the project has one, is NOT TESTED (production detected)" "when the project has one, when picked, still runs"'
   check "(control) fails when a preflight tool check runs python from the project folder again, or the ask claims the scan only reads the code" \
     'swap "$NM" "(cd \"\$T\" && python -m pytest --version 2>/dev/null) || echo" "python -m pytest --version 2>/dev/null || echo" && swap "$NM" "python3 -I -c \"import json; p = json.load" "python3 -c \"import json; p = json.load" && swap "$NM" "runs your project'"'"'s code on this computer'"'"' /" "runs your project'"'"'s code on this computer; the rest of this scan only reads your code'"'"' /"'
+  # the temp-folder review's mutants: the shared cleanup back, and a shared semgrep path with the up-front sweep back
+  check "(control) t1: fails when the cleanup removes every /tmp/nemo-it folder again" \
+    'swap "$NM" "$DEL" "rm -rf /tmp/nemo-it* 2>/dev/null"'
+  check "(control) t2: fails when semgrep writes to a shared /tmp path and the scan starts by sweeping /tmp/nemo-it-*" \
+    'A="NEMO_TMP=\$(mktemp" T="find /tmp/ -maxdepth 1 -name '"'"'nemo-it-*'"'"' -exec rm -rf {} + 2>/dev/null" opp "$NM" "s/\\Q\$ENV{A}\\E/\$ENV{T}\\n\$ENV{A}/; s{\\\$NEMO_TMP/semgrep[.]json}{/tmp/nemo-it-semgrep.json}g"'
+  check "(control) t3: fails with the loose ?????? pattern back, and with a leftover swept instead of named" \
+    'A="[A-Za-z0-9]" opp "$NM" "s/(\\Q\$ENV{A}\\E){6}/??????/" && swap "$NM" "| sed '"'"'s/^/LEFTOVER: /'"'"'" "-exec rm -rf {} +"'
   check "(control) fails when the user-facing page drops the pick" \
     'swap "$CF" " — only when you pick it, because that runs your app'"'"'s own code." "." && swap "$CF" "run only if you pick it, every time." "run on every scan."'
 fi

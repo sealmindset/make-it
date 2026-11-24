@@ -269,9 +269,21 @@ If no production indicators were found: `PASSIVE_ONLY=false`. Either way, each B
 
 Build a list of tools needed for the selected scan mode, then check which are missing:
 
+**This scan's temp folder.** The first command below creates it and prints `NEMO_TMP=<path>`.
+Each Bash call is a new shell, so every later command that uses it starts with that exact
+line, then `[ -d "$NEMO_TMP" ] || exit 1` (the commands below show both, with `XXXXXX` standing
+for the printed path). Files you write for the scan -- test scripts, configs -- go under it.
+Never touch another `/tmp/nemo-it.*` folder: it may be another project's scan in progress.
+If the first command prints `LEFTOVER:` lines, those are temp folders an earlier version of
+/nemo-it left in /tmp. Tell the person in one plain line, naming them: nothing uses them now,
+and they may delete them. Never delete them yourself.
+
 ```bash
-# Results from an earlier scan never count for this one (guardrail 11); find stays quiet when there are none
-find /tmp/ -maxdepth 1 -name 'nemo-it-*' -exec rm -rf {} + 2>/dev/null
+# A new folder for every scan: results from an earlier scan never count for this one (guardrail 11),
+# and another project's scan in progress is never touched. Prints NEMO_TMP=<path>.
+NEMO_TMP=$(mktemp -d /tmp/nemo-it.XXXXXX) && echo "NEMO_TMP=$NEMO_TMP"
+# Folders an earlier version left (named nemo-it- and a word): listed, never removed
+find -H /tmp -maxdepth 1 -name 'nemo-it-*' 2>/dev/null | sed 's/^/LEFTOVER: /'
 
 # Tools for ALL modes except audit (audit needs none of the tools below; Phase 1.7 checks its own)
 command -v semgrep 2>/dev/null || echo "MISSING: semgrep"
@@ -288,8 +300,8 @@ command -v pip-audit 2>/dev/null || echo "MISSING: pip-audit (Python dependency 
 # Tools for OWASP/DAST mode
 docker image inspect ghcr.io/zaproxy/zaproxy:stable 2>/dev/null || echo "MISSING: OWASP ZAP Docker image"
 command -v sqlmap 2>/dev/null || echo "MISSING: sqlmap (SQL injection detection)"
-# The browser tests run from /tmp/nemo-it-playwright and import @playwright/test: check it loads there (downloads nothing)
-(cd /tmp/nemo-it-playwright 2>/dev/null && node -e "require.resolve('@playwright/test')" 2>/dev/null) || echo "MISSING: playwright (@playwright/test in the scan's temp folder, plus its browsers)"
+# The browser tests run from $NEMO_TMP/playwright and import @playwright/test: check it loads there (downloads nothing)
+(cd $NEMO_TMP/playwright 2>/dev/null && node -e "require.resolve('@playwright/test')" 2>/dev/null) || echo "MISSING: playwright (@playwright/test in the scan's temp folder, plus its browsers)"
 # The API tests run as `python -m pytest --json-report`: check that python and that plugin.
 # Every `python -m` check runs from an empty temp folder: run from the project, a pytest.py or pip.py there would run instead
 T="$(mktemp -d)"
@@ -344,6 +356,8 @@ Wait for the pick(s). "Run the [N] test files" picked: `APP_SUITE_PICKED=true` f
 Install commands (run only the ones picked):
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # semgrep
 pip install semgrep
 
@@ -366,7 +380,7 @@ docker pull ghcr.io/zaproxy/zaproxy:stable
 pip install sqlmap
 
 # playwright: @playwright/test in the scan's temp folder (removed with it after the scan), then its browsers (they stay)
-npm install --prefix /tmp/nemo-it-playwright @playwright/test && (cd /tmp/nemo-it-playwright && npx --no-install playwright install)
+npm install --prefix $NEMO_TMP/playwright @playwright/test && (cd $NEMO_TMP/playwright && npx --no-install playwright install)
 
 # pytest + pytest-json-report (the same python the API tests run with; from an empty temp folder, as the checks above)
 (cd "$(mktemp -d)" && python -m pip install pytest pytest-json-report)
@@ -412,14 +426,16 @@ Tell the user: "Starting static analysis. I am scanning your code for security i
 **1. Semgrep scan with security rulesets:**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Run semgrep with OWASP and security rulesets
 semgrep scan --config p/owasp-top-ten --config p/security-audit \
-  --json --output /tmp/nemo-it-semgrep.json \
+  --json --output $NEMO_TMP/semgrep.json \
   --exclude="node_modules" --exclude=".venv" --exclude="venv" --exclude="__pycache__" \
   . 2>/dev/null
 
 # Count findings by severity
-cat /tmp/nemo-it-semgrep.json | python3 -c "
+cat $NEMO_TMP/semgrep.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 results = data.get('results', [])
@@ -441,13 +457,15 @@ Update user: [semgrep wrote its report: "Semgrep scan complete. Found [N] issues
 
 For Python projects:
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Bandit scan
-bandit -r . -f json -o /tmp/nemo-it-bandit.json \
+bandit -r . -f json -o $NEMO_TMP/bandit.json \
   --exclude=".venv,venv,node_modules,__pycache__,tests" \
   2>/dev/null
 
 # Parse results
-cat /tmp/nemo-it-bandit.json | python3 -c "
+cat $NEMO_TMP/bandit.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 results = data.get('results', [])
@@ -460,9 +478,11 @@ for sev in ['HIGH', 'MEDIUM', 'LOW']:
 
 For JavaScript/TypeScript projects:
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # ESLint security scan
 npx --no-install eslint --no-eslintrc --plugin security --rule '{"security/detect-object-injection": "warn", "security/detect-non-literal-regexp": "warn", "security/detect-unsafe-regex": "warn", "security/detect-buffer-noassert": "warn", "security/detect-eval-with-expression": "warn", "security/detect-no-csrf-before-method-override": "warn", "security/detect-possible-timing-attacks": "warn", "security/detect-pseudoRandomBytes": "warn"}' \
-  --format json --output-file /tmp/nemo-it-eslint.json \
+  --format json --output-file $NEMO_TMP/eslint.json \
   --ext .js,.jsx,.ts,.tsx \
   --ignore-pattern "node_modules/**" \
   --ignore-pattern "dist/**" \
@@ -531,11 +551,13 @@ Tell the user: "Scanning your project dependencies and container images for know
 **1. npm audit (Node.js projects):**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Run npm audit
-npm audit --json > /tmp/nemo-it-npm-audit.json 2>/dev/null
+npm audit --json > $NEMO_TMP/npm-audit.json 2>/dev/null
 
 # Summarize
-cat /tmp/nemo-it-npm-audit.json | python3 -c "
+cat $NEMO_TMP/npm-audit.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 vulns = data.get('vulnerabilities', {})
@@ -553,11 +575,13 @@ for sev, count in severity_counts.items():
 **2. pip-audit (Python projects):**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Run pip-audit
-pip-audit --format=json --output=/tmp/nemo-it-pip-audit.json 2>/dev/null
+pip-audit --format=json --output=$NEMO_TMP/pip-audit.json 2>/dev/null
 
 # Summarize
-cat /tmp/nemo-it-pip-audit.json | python3 -c "
+cat $NEMO_TMP/pip-audit.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 vulns = data if isinstance(data, list) else data.get('dependencies', [])
@@ -572,14 +596,16 @@ for dep in vuln_deps:
 **3. Trivy container scanning:**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Scan Dockerfile if present
 if [ -f "Dockerfile" ]; then
-  trivy config --format json --output /tmp/nemo-it-trivy-config.json Dockerfile 2>/dev/null \
+  trivy config --format json --output $NEMO_TMP/trivy-config.json Dockerfile 2>/dev/null \
     && echo "Dockerfile scan complete" || echo "Dockerfile scan NOT RUN (trivy missing or failed)"
 fi
 
 # Scan filesystem for dependency vulnerabilities
-trivy fs --format json --output /tmp/nemo-it-trivy-fs.json \
+trivy fs --format json --output $NEMO_TMP/trivy-fs.json \
   --skip-dirs node_modules --skip-dirs .venv --skip-dirs venv \
   . 2>/dev/null
 
@@ -588,7 +614,7 @@ IMAGES=$(docker compose ps --format '{{.Image}}' 2>/dev/null)
 if [ -n "$IMAGES" ]; then
   for img in $IMAGES; do
     SAFE_NAME=$(echo "$img" | tr '/:' '__')
-    trivy image --format json --output "/tmp/nemo-it-trivy-image-${SAFE_NAME}.json" "$img" 2>/dev/null \
+    trivy image --format json --output "$NEMO_TMP/trivy-image-${SAFE_NAME}.json" "$img" 2>/dev/null \
       && echo "Scanned image: $img" || echo "Image scan NOT RUN: $img (trivy missing or failed)"
   done
 fi
@@ -597,10 +623,12 @@ fi
 **4. License compliance check (informational):**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Check for copyleft or problematic licenses in dependencies
 if [ -f "package.json" ]; then
-  npx --no-install license-checker --json --production > /tmp/nemo-it-licenses.json 2>/dev/null
-  cat /tmp/nemo-it-licenses.json | python3 -c "
+  npx --no-install license-checker --json --production > $NEMO_TMP/licenses.json 2>/dev/null
+  cat $NEMO_TMP/licenses.json | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 risky = ['GPL', 'AGPL', 'SSPL', 'EUPL']
@@ -719,6 +747,8 @@ Tell the user: "Starting dynamic analysis. I am now testing your running applica
 **1. OWASP ZAP spider and scan:**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Target: the port preflight step 5 confirmed is this project's app -- never just any listener
 TARGET_URL="http://localhost:${DETECTED_PORT}"
 
@@ -726,7 +756,7 @@ TARGET_URL="http://localhost:${DETECTED_PORT}"
 # Fail closed: the crawler submits forms only when PASSIVE_ONLY is exactly "false"
 ZAP_PASSIVE_OPTS=(); [ "$PASSIVE_ONLY" = "false" ] || ZAP_PASSIVE_OPTS=(-z "-config spider.processform=false")
 docker run --rm --pull=never --network host \
-  -v /tmp/nemo-it-zap:/zap/wrk:rw \
+  -v $NEMO_TMP/zap:/zap/wrk:rw \
   ghcr.io/zaproxy/zaproxy:stable \
   zap-baseline.py \
   -t "$TARGET_URL" \
@@ -742,7 +772,7 @@ if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yam
   SPEC_FILE=$(ls openapi.json openapi.yaml swagger.json 2>/dev/null | head -1)
   docker run --rm --pull=never --network host \
     -v "$(pwd):/zap/wrk:ro" \
-    -v /tmp/nemo-it-zap:/zap/wrk/output:rw \
+    -v $NEMO_TMP/zap:/zap/wrk/output:rw \
     ghcr.io/zaproxy/zaproxy:stable \
     zap-api-scan.py \
     -t "$SPEC_FILE" \
@@ -753,7 +783,7 @@ if [ "$PASSIVE_ONLY" = "false" ] && { [ -f "openapi.json" ] || [ -f "openapi.yam
 fi
 
 # Did the baseline scan produce its report?
-[ -s /tmp/nemo-it-zap/zap-report.json ] && echo "ZAP_RAN=true" || echo "ZAP_RAN=false"
+[ -s $NEMO_TMP/zap/zap-report.json ] && echo "ZAP_RAN=true" || echo "ZAP_RAN=false"
 ```
 
 Parse ZAP results and collect: alert name, risk level, URL, description, solution, CWE ID.
@@ -765,8 +795,10 @@ Update user: [ZAP_RAN=true: "ZAP scan complete. Found [N] alerts ([X] high risk,
 Generate and execute Playwright test scripts for the detected application:
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Create temporary test directory
-mkdir -p /tmp/nemo-it-playwright
+mkdir -p $NEMO_TMP/playwright
 ```
 
 Generate Playwright test file dynamically based on detected endpoints and pages:
@@ -807,12 +839,14 @@ Generate Playwright test file dynamically based on detected endpoints and pages:
 - Check for DOM-based XSS sinks
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Execute Playwright tests
-cd /tmp/nemo-it-playwright
-npx --no-install playwright test --reporter=json > /tmp/nemo-it-playwright-results.json 2>/dev/null
+cd $NEMO_TMP/playwright
+npx --no-install playwright test --reporter=json > $NEMO_TMP/playwright-results.json 2>/dev/null
 
 # How many tests ran? Fail closed: no report, or one that doesn't parse, counts as 0
-python3 -c "import json; s=json.load(open('/tmp/nemo-it-playwright-results.json')).get('stats',{}); print('PLAYWRIGHT_TESTS_RAN=%d' % (s.get('expected',0)+s.get('unexpected',0)+s.get('flaky',0)))" 2>/dev/null || echo "PLAYWRIGHT_TESTS_RAN=0"
+python3 -c "import json; s=json.load(open('$NEMO_TMP/playwright-results.json')).get('stats',{}); print('PLAYWRIGHT_TESTS_RAN=%d' % (s.get('expected',0)+s.get('unexpected',0)+s.get('flaky',0)))" 2>/dev/null || echo "PLAYWRIGHT_TESTS_RAN=0"
 ```
 
 Update user: [PLAYWRIGHT_TESTS_RAN above 0: "Browser-based security testing complete. [PASSIVE_ONLY=false: 'Tested authentication, authorization, input handling, and error responses.' / PASSIVE_ONLY=true: 'Read-only, so I only looked at what your app sends back to plain page visits: [each check that ran, such as security headers and error pages]. Skipped because this is your live system: signing in and the session tests, the access tests, and every test that types into a form or sends data.']" / PLAYWRIGHT_TESTS_RAN=0: "The browser tests did not run ([the reason, such as 'Playwright is not set up here' or the error it gave]), so none of them passed. The attestation records them as NOT RUN."]
@@ -848,12 +882,14 @@ Generate and execute pytest scripts for API endpoint testing:
   endpoint tests are not blocked by the rate limiter from Phase 2.
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Execute pytest
-cd /tmp/nemo-it-pytest
-python -m pytest --json-report --json-report-file=/tmp/nemo-it-pytest-results.json -v 2>/dev/null
+cd $NEMO_TMP/pytest
+python -m pytest --json-report --json-report-file=$NEMO_TMP/pytest-results.json -v 2>/dev/null
 
 # How many tests ran? Fail closed: no report (exit code 4 = the plugin is missing), or one that doesn't parse, counts as 0
-python3 -c "import json; s=json.load(open('/tmp/nemo-it-pytest-results.json')).get('summary',{}); print('PYTEST_TESTS_RAN=%d' % (s.get('passed',0)+s.get('failed',0)))" 2>/dev/null || echo "PYTEST_TESTS_RAN=0"
+python3 -c "import json; s=json.load(open('$NEMO_TMP/pytest-results.json')).get('summary',{}); print('PYTEST_TESTS_RAN=%d' % (s.get('passed',0)+s.get('failed',0)))" 2>/dev/null || echo "PYTEST_TESTS_RAN=0"
 ```
 
 Update user: [PYTEST_TESTS_RAN above 0: "API security testing complete. [PASSIVE_ONLY=false: 'Tested [N] endpoints for authentication bypass, parameter tampering, and rate limiting.' / PASSIVE_ONLY=true: 'Read-only, so I only sent plain read requests to [N] endpoints and looked at what came back: [each check that ran, such as CORS settings and error messages]. Skipped because this is your live system: calls without a login or with a fake one, changed IDs and extra fields, the business-logic tests, and the rate-limit test.']" (N counts only endpoints a test that ran requested) / PYTEST_TESTS_RAN=0: "The API tests did not run ([the reason, such as 'pytest-json-report is not installed' or pytest's exit code]), so no endpoint was tested. The attestation records them as NOT RUN."]
@@ -861,6 +897,8 @@ Update user: [PYTEST_TESTS_RAN above 0: "API security testing complete. [PASSIVE
 **4. SQLMap passive detection:**
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # PASSIVE MODE ONLY -- detect, do not exploit
 # Only run against detected API endpoints that accept parameters
 # Fail closed: the probes run only when PASSIVE_ONLY is exactly "false" (unset = read-only, skipped)
@@ -871,7 +909,7 @@ Update user: [PYTEST_TESTS_RAN above 0: "API security testing complete. [PASSIVE
   --crawl=0 \
   --technique=B \
   --skip-waf \
-  --output-dir=/tmp/nemo-it-sqlmap \
+  --output-dir=$NEMO_TMP/sqlmap \
   2>/dev/null
 
 # NEVER use: --os-shell, --os-pwn, --dump, --risk=3, --level=5
@@ -966,7 +1004,7 @@ updates and the summary say which model each result is for.
   1. Find the one service that makes the AI calls by reading the compose file and the code. Stop only
      that service: `docker compose stop <service>`, never the whole project. Other services, the
      database included, stay as they are. Nothing is removed.
-  2. Write an override file in `/tmp/nemo-it-fallback/` that sets, on that service, `AI_PROVIDER` to
+  2. Write an override file in `$NEMO_TMP/fallback/` (this scan's own folder) that sets, on that service, `AI_PROVIDER` to
      `FALLBACK_MODEL` and `AI_FAILOVER_PROVIDER` to empty. Start the service again with every compose file `START_COMMAND` uses
      (the default pair, `docker-compose.yml` and `docker-compose.override.yml` when it exists, when
      it names none) repeated as `-f`, and the temp file last. No file in the project is changed: never `.env`, never a compose file.
@@ -1006,8 +1044,10 @@ Analyze the project's AI integration to understand:
 - What the expected topic domain is
 
 ```bash
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 # Create temporary NeMo test configuration
-mkdir -p /tmp/nemo-it-guardrails/config
+mkdir -p $NEMO_TMP/guardrails/config
 ```
 
 Generate a test configuration that targets the project's AI endpoints.
@@ -1139,10 +1179,12 @@ Test cases include:
 
 ```bash
 # PASSIVE_ONLY=true or PASSIVE_ONLY=false goes on the first line, as in every Phase 3 command
-mkdir -p /tmp/nemo-it-app-suite
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
+mkdir -p $NEMO_TMP/app-suite
 # The tool checks run from the scan's temp folder, so they load nothing from the project
-(cd /tmp/nemo-it-app-suite && python -m pytest --version >/dev/null 2>&1) || echo "MISSING: pytest"
-(cd /tmp/nemo-it-app-suite && python -c "import nemoguardrails" 2>/dev/null) || echo "MISSING: nemoguardrails"
+(cd $NEMO_TMP/app-suite && python -m pytest --version >/dev/null 2>&1) || echo "MISSING: pytest"
+(cd $NEMO_TMP/app-suite && python -c "import nemoguardrails" 2>/dev/null) || echo "MISSING: nemoguardrails"
 for n in pytest.py pytest nemoguardrails.py nemoguardrails; do [ -e "$n" ] && echo "SHADOW: $n is at the project root"; done
 ls guardrails/config.yml guardrails/rails/ guardrails/tests/ 2>&1
 # The project before the run: path, size, permissions and content hash of every file in the project folder, ignored
@@ -1150,7 +1192,7 @@ ls guardrails/config.yml guardrails/rails/ guardrails/tests/ 2>&1
 # from .git/hooks and .git/config (a hook written there runs on the next commit). A file over 50 MB, and anything that
 # is not a plain file, is listed by size, permissions and time, not read.
 # The list stays in the scan's temp folder and is never printed: a hash of a secrets file is not shown either.
-cat > /tmp/nemo-it-app-suite/manifest.py <<'PY'
+cat > $NEMO_TMP/app-suite/manifest.py <<'PY'
 import hashlib, os, stat, sys
 root, out = sys.argv[1], sys.argv[2]
 def keep(d, x):
@@ -1177,7 +1219,7 @@ with open(out, 'w') as o:
             except OSError:
                 o.write('%s\t-1 0 unreadable\n' % os.path.relpath(p, root))
 PY
-P="$(pwd -P)"; (cd /tmp/nemo-it-app-suite && python3 -I manifest.py "$P" before.txt) || echo "PROJECT_CHANGES=not-checked"
+P="$(pwd -P)"; (cd $NEMO_TMP/app-suite && python3 -I manifest.py "$P" before.txt) || echo "PROJECT_CHANGES=not-checked"
 ```
 
 When all seven hold, run the command `guardrails/README.md` gives (Prompt #10d: `python -m pytest guardrails/tests/ -v`) from the project root. The added flags change no test: they keep pytest's cache and `__pycache__` out of the project, let the other files run when one cannot be loaded, and put the result file in the scan's temp folder. If the README gives some other command, do not run that one: run this one and say so in the block. The project's own pytest settings are left to apply, because a generated suite can need them.
@@ -1185,9 +1227,11 @@ When all seven hold, run the command `guardrails/README.md` gives (Prompt #10d: 
 ```bash
 # PASSIVE_ONLY and APP_SUITE_PICKED go on the first two lines. APP_SUITE_PICKED=true only when the user picked
 # "run them" in this run's preflight ask. Fail closed: the suite runs only when both are exactly as below
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
 if [ "$PASSIVE_ONLY" = "false" ] && [ "$APP_SUITE_PICKED" = "true" ]; then
   PYTHONDONTWRITEBYTECODE=1 python -m pytest guardrails/tests/ -v -p no:cacheprovider --continue-on-collection-errors \
-    --junitxml=/tmp/nemo-it-app-suite/results.xml > /tmp/nemo-it-app-suite/output.txt 2>&1
+    --junitxml=$NEMO_TMP/app-suite/results.xml > $NEMO_TMP/app-suite/output.txt 2>&1
   echo "APP_SUITE_EXIT=$?"
 else
   echo "APP_SUITE_EXIT=not-run"
@@ -1195,7 +1239,7 @@ fi
 
 # What ran, per test file, from pytest's own result file. The reader runs outside the project and loads nothing
 # from it (-I). Fail closed: no file, or one that doesn't parse, counts as 0
-P="$(pwd -P)"; cd /tmp/nemo-it-app-suite
+P="$(pwd -P)"; cd $NEMO_TMP/app-suite
 python3 -I - results.xml <<'PY' 2>/dev/null || echo "APP_SUITE_RAN=0"
 import collections, re, sys, xml.etree.ElementTree as ET
 c, notes = collections.defaultdict(collections.Counter), []
@@ -1634,8 +1678,11 @@ The JUnit XML maps: test suite = scan phase, test case = individual check, failu
 **3. Clean up temporary files:**
 
 ```bash
-# Remove temporary scan artifacts
-rm -rf /tmp/nemo-it-* 2>/dev/null
+# Remove this scan's temporary files -- only its own folder
+NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
+# Only a folder mktemp made: six letters or digits after the dot, so never /tmp, /, a .. path or a path with a space
+case "$NEMO_TMP" in /tmp/nemo-it.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]) [ -d "$NEMO_TMP" ] && rm -rf "$NEMO_TMP" ;; *) echo "not removing: $NEMO_TMP" >&2 ;; esac
 ```
 
 **4. Present summary to user:**
