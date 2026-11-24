@@ -187,7 +187,7 @@ plant "L10 downgraded to [WARN]" "$REL_BS" 's.replace("**L10** [Tier 1, 5] [FIX]
 plant "L11 removed" "$REL_BS" 's[:s.index("**L11** ")] + s[s.index("\n", s.index("**L11** ")) + 1:]'
 plant "L11 marked [SECURITY FIX]" "$REL_BS" 's.replace("**L11** [Tier 1, 5] [FIX] ", "**L11** [Tier 1, 5] [FIX] [SECURITY FIX] ", 1)'
 plant "the watermark note dropped from L09's fix" "$REL_BS" 's.replace(", and note it with `watermark.py note backend/app/middleware/auth.py \"L09: the activity log names the signed-in user, <commit>\"`", "", 1)'
-plant "the Kubernetes gap dropped from L11" "$REL_BS" 's.replace(" Not covered: the value for a Kubernetes deployment, which /argo-it does not set yet (with the compose value there, the ingress is not trusted and its address is recorded, as before).", "", 1)'
+plant "the Kubernetes gap dropped from L11" "$REL_BS" 's.replace(" Not covered: the value for a Kubernetes deployment, which /argo-it does not set yet (with the compose value there, no proxy is believed and the address that connected is recorded, that of the ingress controller or a frontend pod, as before).", "", 1)'
 plant "a stale L01-L09 range back in resume-it" "$REL_RS" 's.replace("**Activity Logs (L01-L11):**", "**Activity Logs (L01-L09):**", 1)'
 plant "a stale L01-L10 range back in the pentest doc" "$REL_PR" 's.replace("(L01-L11) provide audit trail", "(L01-L10) provide audit trail", 1)'
 plant "the governance count left at 9" "$REL_GV" 's.replace("| Activity Logs | L01-L11 | 11 |", "| Activity Logs | L01-L11 | 9 |", 1)'

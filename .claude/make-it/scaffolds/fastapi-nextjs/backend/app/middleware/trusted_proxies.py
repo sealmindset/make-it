@@ -1,9 +1,11 @@
 """Take the visitor's address from X-Forwarded-For, but only from a proxy this app trusts.
 
-Every browser request reaches the backend through a proxy -- the same-origin frontend (compose) or
-an ingress (Kubernetes) -- so the address that connects is the proxy's. TRUSTED_PROXIES names the
-proxies whose X-Forwarded-For is believed: IP addresses, networks (10.0.0.0/8) or host names
-(`frontend`, the compose service). Host names are looked up again every REFRESH_SECONDS, so a proxy
+Every browser request reaches the backend through a proxy -- the same-origin frontend (compose), or
+in Kubernetes the ingress (/api/*) and the frontend pods (the frontend's own calls) -- so the address
+that connects is the proxy's. TRUSTED_PROXIES names the proxies whose X-Forwarded-For is believed: IP
+addresses, networks (10.0.0.0/8) or host names (`frontend`, the compose service). In Kubernetes a
+Service name resolves to the Service's address, never a pod's, so name the ingress controller's and
+the frontend pods' networks instead. Host names are looked up again every REFRESH_SECONDS, so a proxy
 that restarts with a new address is trusted again within that time; a name that does not resolve
 trusts no one until it does. Empty (the default) trusts no proxy. "*" is refused: it would let any
 caller choose the address the app records.

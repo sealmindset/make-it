@@ -76,8 +76,11 @@ services:
       - BACKEND_URL=http://localhost:${BACKEND_PORT:-[BACKEND_PORT]}
       - ENFORCE_SECRETS=false
       - LOG_BUFFER_SIZE=10000
-      # The proxy whose X-Forwarded-For is believed: the frontend, by service name. Deployed behind
-      # an ingress, set it to the ingress controller's addresses or network instead.
+      # The proxy whose X-Forwarded-For is believed: the frontend, by service name. In Kubernetes the
+      # name `frontend` resolves to the Service's address, which never connects, so it matches nothing:
+      # name the ingress controller's network together with the frontend pods' network (/api/* comes
+      # from the ingress, the frontend's own calls from its pods). Unset or matching nothing, no proxy
+      # is believed and the log records the address that connected: the proxy's, not the visitor's.
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-frontend}
       # [ADDITIONAL_SERVICE_URLS]
       # - JIRA_BASE_URL=http://mock-jira:8443
