@@ -149,11 +149,19 @@ jobs:
       - name: Install Node deps
         run: cd frontend && npm ci
 
+      # Its own step, without continue-on-error: a download that doesn't match the pinned hash fails the job.
+      - name: Download gitleaks (checked against its published hash)
+        run: |
+          GITLEAKS_VERSION=v8.29.1   # the same version as the gitleaks hook's rev in .pre-commit-config.yaml
+          # the archive's sha256 from gitleaks' published gitleaks_8.29.1_checksums.txt: a download that differs never runs
+          GITLEAKS_SHA256=e4eb209d04e20339d77122a3bdf9cd41351255cfb27ebcb75e85325e04f88924
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar xzf gitleaks.tar.gz gitleaks
+
       - name: gitleaks
         id: gitleaks
         run: |
-          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name)
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" | tar xz
           ./gitleaks detect --config .gitleaks.toml --source . --no-banner
         continue-on-error: true
 

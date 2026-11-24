@@ -641,9 +641,21 @@ else
     sk=ruff,ruff-format,black,isort,flake8,pylint,mypy,eslint,prettier,stylelint,tsc
     sk=$sk,trailing-whitespace,end-of-file-fixer,mixed-line-ending,no-commit-to-branch
     git diff --cached --quiet || SKIP="$sk" git commit -q -m "Save pre-retrofit state" >"$bak/save.log" 2>&1 || {
-      h=$(sed -n 's/^- hook id: //p' "$bak/save.log" | head -1); rm -f "$bak/save.log"
-      case $h in *leak*|*hog*|*secret*|*private-key*|*credential*) fail "what looks like a password or key is in your unsaved changes" ;;
-        ?*) fail "the check '$h' your project runs before every save stopped it" ;; esac
+      log="$bak/save.log"
+      hs=$(sed -n 's/^- hook id: //p' "$log"); h=$(printf '%s\n' "$hs" | head -1)
+      s=$(printf '%s\n' "$hs" | grep -iE 'leak|hog|secret|private-key|credential' | head -1)
+      # a key only when the scan names one (git-operations.md, A crash is not a finding); never "no leaks found"
+      # ...counted only inside the secret hooks' own output: a header line ends a hook's part, "- hook id:" starts one
+      found=$(awk '/\.\.\.\.+.*(Passed|Failed|Skipped)$/ {h=""} /^- hook id: / {h=$4} h ~ /leak|hog|secret|private-key|credential/' "$log" |
+        grep -cE '^RuleID:|leaks found: [1-9]|[1-9][0-9]* leaks found in partial scan|Found (un)?verified result|Private key found|Potential secrets about to be committed')
+      # the scanner pre-commit was fetching (no network) or installing when it stopped
+      env=$(sed -nE 's/^\[INFO\] (Initializing|Installing) environment for (.*)\.$/\2/p' "$log" | tail -1)
+      grep -q '^An unexpected error has occurred' "$log" && setup=1 || setup=0; rm -f "$log"
+      [ -n "$s" ] && [ "$found" -gt 0 ] && fail "what looks like a password or key is in your unsaved changes"
+      [ -n "$s" ] && fail "the scan for passwords and keys stopped without a result I can read"
+      [ -z "$hs" ] && [ "$setup" = 1 ] && case $env in *leak*|*hog*|*secret*|*private-key*|*credential*)
+        fail "the tool that checks for passwords and keys couldn't be set up, so nothing was checked" ;; esac
+      [ -n "$h" ] && fail "the check '$h' your project runs before every save stopped it"
       fail "could not save the unsaved changes"; }
     rm -f "$bak/save.log"
   fi
@@ -665,7 +677,14 @@ files, so I haven't changed anything. [the reason, in plain words -- e.g. 'Git d
 name and email yet; run `git config --global user.name "Your Name"` and `git config --global
 user.email "you@example.com"`, then run /retrofit-it again.' / for a password or key: 'Something
 in your unsaved changes looks like a password or key, so I didn't save it. Move it into your .env
-file, then run /retrofit-it again.' / for another check: 'The check [its name] that your project runs
+file, then run /retrofit-it again.' / when the scan for passwords and keys stopped without a result: 'I
+couldn't check your changes for passwords and keys: the checking tool stopped without a result I can
+read. Nothing was saved and nothing was changed. Run /retrofit-it again; if it keeps happening, ask a
+developer to look at the secret scan (gitleaks) in your project's checks.' / when that tool couldn't
+be set up: 'I couldn't set up the tool that checks your changes for passwords and keys, so nothing
+was checked, saved or changed. It usually means the tool couldn't be downloaded or built on this
+computer. Run /retrofit-it again; if it keeps happening, ask a developer to look at the secret scan
+(gitleaks) in your project's checks.' / for another check: 'The check [its name] that your project runs
 before every save stopped the snapshot, so nothing was changed. Fix what it found, or ask a
 developer, then run /retrofit-it again.']" Never go on as if a snapshot
 exists when it does not.

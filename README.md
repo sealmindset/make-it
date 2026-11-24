@@ -1005,6 +1005,27 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.22 -- a crash in the secret scan is reported as a crash, and the version that crashed is replaced
+
+Every app built with make-it pinned gitleaks v8.22.1. Built with a recent Go, that version
+crashes on Intel processors that have a fast string-copy feature. Every save was then
+refused, and the person was told a password or key had been found when none had.
+
+- **The scan is pinned to v8.29.1** in both scaffolds, which carries the upstream fix and
+  still builds with the Go most people have. On the affected processors the old version
+  crashed 310 times out of 310; the new one, 0 out of 310.
+- **A found key is reported only when the scan names one.** A crash, a scan that stopped
+  partway, or a tool that could not be set up each gets its own true sentence. The save is
+  still refused in every case.
+- **A found key outranks a lint failure** when both stop the same save.
+- **Apps already built get the new version at their next /resume-it,** as one changed line,
+  saved on its own, with a one-line note. It never lowers a newer version, leaves a
+  customised hook alone, and puts the old line back if the new version cannot be set up.
+- **The scaffold's CI check downloads the same pinned version** and verifies it against the
+  publisher's checksum.
+- **Not reproduced on a developer machine:** the crash needs the affected processor. The
+  figures above come from probe runs on GitHub's runners.
+
 ### v1.71.21 -- /threats-it's fetch, build and hunt scripts report a failure as a failure
 
 Four places in /threats-it's scripts could turn a failure into something that looked like a

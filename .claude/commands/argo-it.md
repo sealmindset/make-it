@@ -837,7 +837,8 @@ about what's there now."
 "I couldn't save your changes, so nothing was sent and nothing is deploying. [the reason, in
 plain words -- e.g. 'Git doesn't know your name and email yet; run `git config --global
 user.name "Your Name"` and `git config --global user.email "you@example.com"`, then run /argo-it
-again.']" Never push as if the save had worked.
+again.' / a scan for passwords and keys that stopped without naming one: the "couldn't check" line, never a found key
+(`git-operations.md`, After the save: A crash is not a finding)]" Never push as if the save had worked.
 
 That's it. The CI workflow will:
 1. Build and push container images to the registry
