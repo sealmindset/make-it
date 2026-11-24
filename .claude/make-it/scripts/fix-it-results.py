@@ -37,7 +37,7 @@ EVENTS = ['changed', 'failed', 'person', 'unsaved', 'skipped', 'gone', 'still']
 OUTCOMES = ['fixed', 'unchecked', 'failed', 'person', 'not attempted']
 HEAD = {'fixed': 'Fixed', 'unchecked': 'Changed, not re-checked', 'failed': 'Failed',
         'person': 'Needs a person', 'not attempted': 'Not attempted'}
-SKIP_DIRS = {'node_modules', 'venv', '.venv', 'dist', 'build', '.next', '__pycache__', 'site-packages', 'guardrails'}
+SKIP_DIRS = {'node_modules', 'venv', '.venv', 'env', 'vendor', 'third_party', 'dist', 'build', '.next', '__pycache__', 'site-packages', 'guardrails'}
 
 
 def die(msg):
@@ -194,14 +194,21 @@ def run(cmd, cwd, ci=False):
         return None, out
 
 
+# a test runner's own summary line: nothing on it but counts ("1 failed, 2 passed in 0.1s", "Tests: 3 passed, 3 total",
+# "3 passing (12ms)", "test result: ok. 3 passed; 0 failed;"), so a log line such as "retry: 1 failed attempt" is not one
+SUMMARY = re.compile(r'^[=\s]*(?:Test Suites:|Test Files|Tests?:?|test result: \w+\.)?\s*'
+                     r'(?:\d+ [a-z]+(?: \([\w.]+\))?[,;]?\s*)+(?:in [\d.]+ ?m?s\b.*?)?[=\s]*$')
+
+
 def count(out, word):
-    """The biggest 'N passed' / 'pass N' style number in a test runner's output (pytest, jest, vitest, mocha, node --test, tape)."""
+    """The biggest 'N passed' / 'pass N' style number in a test runner's summary lines (pytest, jest, vitest, mocha, cargo, node --test, tape, unittest)."""
     stem = {'pass': r'pass(?:ed|ing)', 'fail': r'fail(?:ed|ing|ures?)'}[word]
-    nums = re.findall(r'(\d+) ' + stem + r'\b', out) + re.findall(r'(?m)^(?:\S\s+)?' + word + r'\s+(\d+)\s*$', out)
-    if word == 'pass':
-        nums += re.findall(r'(?m)^Ran (\d+) tests? in ', out)   # unittest
-    else:
-        nums += re.findall(r'\bfailures=(\d+)', out)
+    nums = []
+    for line in out.splitlines():
+        if SUMMARY.match(line):
+            nums += re.findall(r'(\d+) ' + stem + r'\b', line)
+        nums += re.findall(r'^(?:\S\s+)?' + word + r'\s+(\d+)\s*$', line)   # TAP and node --test: "# pass 3"
+        nums += re.findall(r'^Ran (\d+) tests? in ', line) if word == 'pass' else re.findall(r'^FAILED \(.*\b(?:failures|errors)=(\d+)', line)   # unittest
     return max([int(n) for n in nums] or [0])
 
 
@@ -263,22 +270,48 @@ def npm_script(d, script):
     return bool(s) and 'no test specified' not in s
 
 
-def has_pytest_suite(d):
-    def tests_in(p, deep):
-        for base, dirs, files in os.walk(p):
-            dirs[:] = [x for x in dirs if deep and not x.startswith('.') and x not in SKIP_DIRS]
-            if any(re.match(r'(test_.*|.*_test)\.py$', f) for f in files):
-                return True
-        return False
-    if os.path.isfile(os.path.join(d, 'pytest.ini')):
-        return True
-    try:
-        with open(os.path.join(d, 'pyproject.toml'), encoding='utf-8') as f:
-            if '[tool.pytest' in f.read():
-                return True
-    except OSError:
-        pass
-    return tests_in(d, False) or any(tests_in(os.path.join(d, t), True) for t in ('tests', 'test'))
+PYTEST_CONFIG = (('pytest.ini', ''), ('pyproject.toml', '[tool.pytest'), ('setup.cfg', '[tool:pytest]'), ('tox.ini', '[pytest]'))
+
+
+def has_pytest_config(d):
+    """Does this folder have its own pytest configuration?"""
+    for name, mark in PYTEST_CONFIG:
+        try:
+            with open(os.path.join(d, name), encoding='utf-8', errors='replace') as f:
+                if mark in f.read():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def pytest_runs(root):
+    """The folders pytest is run in, one run each. For every folder that holds test files (test_*.py, *_test.py):
+      1. the nearest folder at or above it that has its own pytest configuration is its run folder -- so a nested
+         folder gets its OWN run only when it has its own configuration, and otherwise stays in the run above it;
+      2. with no configuration anywhere above it, the run folder is the one just above its `tests` folder and above
+         the package it sits in (a folder with `__init__.py`): the place `python -m pytest` makes imports work from.
+         `tests/unit/` -> the project folder; `backend/app/tests/` -> `backend/`.
+    Installed and vendored folders (node_modules, a venv, vendor, hidden folders) are never looked in, and are
+    handed to pytest as folders to leave out. Returns (the run folders, the left-out folders)."""
+    runs, left_out = set(), []
+    for base, dirs, files in os.walk(root):
+        deep = base != root and os.path.relpath(base, root).count(os.sep) >= 5
+        left_out += [os.path.join(base, x) for x in dirs if x in SKIP_DIRS]
+        dirs[:] = [] if deep else sorted(x for x in dirs if not x.startswith('.') and x not in SKIP_DIRS
+                                         and not os.path.islink(os.path.join(base, x)))
+        if not any(re.match(r'(test_.*|.*_test)\.py$', f) for f in files):
+            continue
+        d = base
+        while d != root and not has_pytest_config(d):
+            d = os.path.dirname(d)
+        if not has_pytest_config(d):   # rule 2
+            d = base
+            while d != root and (set(os.path.relpath(d, root).split(os.sep)) & {'tests', 'test'}
+                                 or os.path.isfile(os.path.join(d, '__init__.py'))):
+                d = os.path.dirname(d)
+        runs.add(d)
+    return sorted(runs), sorted(left_out)
 
 
 def pytest_python(d, root):
@@ -292,15 +325,13 @@ def pytest_python(d, root):
 def check_auto(ledger, root, name):
     add(ledger, ['checkrun', name])
     results, dirs = [], project_dirs(root)
-    # every folder with its own tests is its own run; a "tests" folder belongs to the folder above it
-    suites = [d for d in dirs if has_pytest_suite(d)] if name == 'tests' else []
-    suites = [d for d in suites if not (os.path.basename(d) in ('tests', 'test') and os.path.dirname(d) in suites)]
-    for d in dirs:
+    suites, left_out = pytest_runs(root) if name == 'tests' else ([], [])
+    for d in sorted(set(dirs) | set(suites)):
         if d in suites:
             py = pytest_python(d, root)
-            # a suite further down gets its own run and its own line, so this run leaves it out
+            # a run folder further down has its own run and its own line, so this run leaves it out
             cmd = [py or 'python3', '-m', 'pytest', '-q', '-p', 'no:cacheprovider'] + [
-                '--ignore=' + os.path.relpath(x, d) for x in suites if x.startswith(d + os.sep)]
+                '--ignore=' + os.path.relpath(x, d) for x in suites + left_out if x.startswith(d + os.sep)]
             results.append(record_check(ledger, root, name, d, cmd, *(run(cmd, d, True) if py else (127, 'pytest is not installed')), auto=True))
         if npm_script(d, 'test' if name == 'tests' else 'build'):
             cmd = ['npm', 'test'] if name == 'tests' else ['npm', 'run', 'build']
@@ -493,25 +524,29 @@ def read_report(path):
       cats     {category id: status} from the Category Breakdown table (the columns named ID and Status)
       notrun   the text under "**Not run:**" and "**Skipped -- production detected:**" (one line each, nemo-it.md Phase 5)
       tools    the "**Tools used:**" / "Tools:" lines: only the tools that produced a result
-      critical, high   the Count column of the Severity Distribution table (None when it cannot be read)"""
+      critical, high   the Count column of the table under the "Severity Distribution" heading (None when it cannot be read)"""
     try:
         with open(path, encoding='utf-8', errors='replace') as f:
             lines = f.read().splitlines()
     except OSError as e:
         die('cannot read %s: %s' % (path, e.strerror))
     facts = {'cats': {}, 'notrun': '', 'tools': '', 'critical': None, 'high': None}
-    head, listing = None, 0
+    head, listing, heading, sev_tables = None, 0, '', 0
     for line in lines:
         t = line.strip()
+        if t.startswith('#'):
+            heading = t.lstrip('# ').lower()
         if t.startswith('|'):
             cells = [c.strip().strip('*') for c in t.strip('|').split('|')]
             if head is None:
                 head = cells
+                sev_tables += heading.startswith('severity distribution') and 'Severity' in head and 'Count' in head
             elif set(''.join(cells)) <= set('-: '):
                 pass
             elif 'ID' in head and 'Status' in head and len(cells) > max(head.index('ID'), head.index('Status')):
                 facts['cats'][cells[head.index('ID')]] = cells[head.index('Status')].upper()
-            elif 'Severity' in head and 'Count' in head and len(cells) > max(head.index('Severity'), head.index('Count')):
+            elif (heading.startswith('severity distribution') and sev_tables == 1 and 'Severity' in head and 'Count' in head
+                  and len(cells) > max(head.index('Severity'), head.index('Count'))):   # that table, by its heading, and only the first
                 key, num = cells[head.index('Severity')].lower(), cells[head.index('Count')]
                 if key in ('critical', 'high') and num.isdigit():
                     facts[key] = int(num)
