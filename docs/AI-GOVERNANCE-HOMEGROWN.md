@@ -81,7 +81,7 @@ The NIST AI RMF organizes AI risk management into four functions: **Govern, Map,
 | **9.1** | Monitoring, measurement, analysis | Build-standards.md provides measurable criteria. Build-verify generates internal security scan summary. /nemo-it generates formal attestation documents |
 | **9.2** | Internal audit | /resume-it catch-up scan functions as automated internal audit against latest standards. Gaps surfaced automatically |
 | **10.1** | Continual improvement | build-standards.md is the single source of truth. When updated, all three skills (/make-it, /retrofit-it, /resume-it) detect and enforce new checks |
-| **A.2** | AI policy for the organization | Guardrails enforce organizational policy: no secrets in code, no hardcoded config, input validation at boundaries, latest stable dependencies, no Java |
+| **A.2** | AI policy for the organization | Guardrails enforce organizational policy: no secrets in code, no hardcoded config, input validation at boundaries, latest stable dependencies |
 | **A.5** | AI system impact assessment | Design phase classifies project type and activates appropriate guardrails. AI apps get mandatory additional controls (rate limiting, prompt management) and a NeMo Guardrails test suite, run when someone runs it (not a runtime filter) |
 | **A.7** | Data for AI systems | PII masking before AI submission. Conversation history depth limits. Session isolation. Document analysis stores raw text and AI analysis separately |
 | **A.10** | AI providers | Provider abstraction layer (lib/ai/) with factory pattern. AI_PROVIDER env var. No provider SDK imports in business logic. Supports: Anthropic (direct + Azure AI Foundry), OpenAI, Ollama |
@@ -517,13 +517,13 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | File Upload | F01-F17 | 17 | 1 (Web App) |
 | Data Integration | DI01-DI08 | 8 | 1 (Web App) |
 | Application Settings | G01-G07 | 7 | 1 (Web App) |
-| Security | X01-X06 | 6 | 0-1 |
+| Security | X01-X03, X05-X09 | 8 | 0-1 |
 | Test Infrastructure | T01-T05 | 5 | 0-1 |
 | Live Verification | V01-V15 | 15 | 0-1 |
 | AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |
 | AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~202** | |
+| **Total** | | **~204** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)

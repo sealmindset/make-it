@@ -1861,7 +1861,7 @@ Other external integrations? (Salesforce, ServiceNow, Oracle, etc.)
 Default OIDC client: `mock-oidc-client` / `mock-oidc-secret`
 
 **mock-oidc architecture:**
-- Python 3.12 + FastAPI (NO Java -- see guardrails.md Tier 0 no-Java policy)
+- Python 3.12 + FastAPI
 - Built-in internal/external URL split: discovery document returns browser-facing
   endpoints (authorization) with MOCK_OIDC_EXTERNAL_BASE_URL and server-to-server
   endpoints (token, userinfo, JWKS) with MOCK_OIDC_INTERNAL_BASE_URL

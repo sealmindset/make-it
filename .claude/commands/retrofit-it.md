@@ -1320,7 +1320,7 @@ For Tier 1 (web-app), this includes checks across all categories:
 - **N01-N08**: Notifications
 - **F01-F08**: File upload & document processing (if app has Documents page or uploads)
 - **G01-G07**: Application settings
-- **X01-X09**: Security (X09 is the hostile-code check: re-run it, because this retrofit added code)
+- **X01-X03, X05-X09**: Security (X09 is the hostile-code check: re-run it, because this retrofit added code)
 - **T01-T05**: Test infrastructure
 - **AI01-AI30**: AI features (if ai_features.needed = true; AI30 runs on every app)
 - **AC01-AC16**: AI accounting (if ai_features.needed = true)

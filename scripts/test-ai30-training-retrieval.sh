@@ -227,9 +227,10 @@ if [ -z "${1:-}" ]; then
     'opp "$GV" "s/; its CI half is not built[.]/; the CI pipeline enforces it on every pull request./" && opp "$BS" "s/The CI half \(the same scan in the organization.s pipeline, with its own exceptions list\) is not built; only this build check exists./make-it-verify runs AI30 in CI too./"'
   check "(control) fails with a claim that AI30 protects against poisoning" \
     'opp "$GV" "s/a boundary check, not protection against poisoning/a boundary check that protects against poisoning/"'
-  # L09-L11 (activity log: the user, the console log, the visitor's address) moved the total from 198 to 201; M05 (the practice sign-in's access code) to 202.
-  check "(control) fails with the checks table count left at 33, and with the total left one short (201)" \
-    'opp "$GV" "s/[|] AI01-AI30 \(incl. AI01a-AI01d\) [|] 34 [|]/| AI01-AI30 (incl. AI01a-AI01d) | 33 |/" && opp "$GV" "s/[*][*]~202[*][*]/**~201**/"'
+  # L09-L11 (activity log: the user, the console log, the visitor's address) moved the total from 198 to 201; M05 (the practice sign-in's access code) to 202;
+  # the Security row, once the no-Java row X04 was removed (2026-11-24), reads X01-X03, X05-X09, 8 (it had read X01-X06, 6): 204.
+  check "(control) fails with the checks table count left at 33, and with the total left one short (203)" \
+    'opp "$GV" "s/[|] AI01-AI30 \(incl. AI01a-AI01d\) [|] 34 [|]/| AI01-AI30 (incl. AI01a-AI01d) | 33 |/" && opp "$GV" "s/[*][*]~204[*][*]/**~203**/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
