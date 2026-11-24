@@ -102,10 +102,11 @@ tail = web[web.index("hits = {k: v"):]
 summary = {"workspaces": {
     "ws-ok": {"web_tables_mb_30d": 5, "results": {"web_ioc": {"status": 200, "rows": []}}},
     "ws-broken": {"web_tables_mb_30d": 7, "results": {"web_ioc": {"status": 400, "rows": None}}}}}
-out = io.StringIO()
+out, ended = io.StringIO(), []
 with contextlib.redirect_stdout(out):
-    exec(tail, {"summary": summary})
+    exec(tail, {"summary": summary, "finish": lambda: ended.append(1)})  # finish(): the shared last line (E02-S110)
 said = out.getvalue()
+check("the summary ends with the shared finish(), which names every failed query and exits 3", ended == [1])
 check("a failed IOC query is named as FAILED", "IOC query FAILED in: {'ws-broken': 400}" in said)
 check("and the summary no longer reads a plain 'IOC hits: none'", re.search(r"IOC hits: none( \||$)", said, re.M) is None)
 sys.exit(1 if failed else 0)

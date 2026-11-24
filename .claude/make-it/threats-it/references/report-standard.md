@@ -24,6 +24,8 @@ It must not read like a newspaper. Order:
 1. **Header**: internal/confidential marking, snapshot date, read-only, names `technical.md`, `appendix.md`, OpenVEX file.
 2. **Bottom line** (5–6 bullets): IOC verdict for the organisation; what could not be checked; the detection-gap
    headline; "we do need to act — N items now" with sub-bullets; VEX status count.
+   With any workspace or part not assessed (a failed query, a workspace with no access, a partial answer),
+   the verdict line is scoped ("in the workspaces searched") and names what was not assessed; it never reads as clean for the whole organisation.
 3. **What the attackers did, and where <Org> stands** — one row per attacker *behaviour* (not product):
    `Attacker behaviour | Seen at <Org>? | Would we be alerted? | Our exposure`. Then one paragraph "Indicators checked"
    and one line on workspace-wide detection coverage. Then **Who could do this now**, one line per chain, from

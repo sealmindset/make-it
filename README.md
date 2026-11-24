@@ -797,7 +797,7 @@ Both scaffolds provide the same core foundations:
 - DataTable with Excel-like column filtering
 - Sidebar, breadcrumbs, command palette, dark mode toggle
 - Docker Compose with health checks and migration auto-run
-- Mock OIDC provider (Python, no Java dependencies)
+- Mock OIDC provider (Python)
 
 ---
 
@@ -1004,6 +1004,43 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.71.27 -- /threats-it names a failed search as failed; Java is allowed; the force-push guard stops refusing harmless commands
+
+Three changes in one release.
+
+**/threats-it never reads a failed search as "nothing found"**
+- **One rule in every script:** each search is answered or FAILED. A failed one is named
+  (which search, where, the status), and what it covers reads NOT ASSESSED, never "none",
+  "no licence", "missing" or zero. Results that did come back are kept.
+- **Later scripts carry earlier failures forward,** so a gap found early cannot read as clean
+  later in the run.
+- **A workspace you have no access to** is named "not assessed (no access)" everywhere and the
+  run goes on. The run stops and asks only when nothing can be read at all, or when the failure
+  is one a re-run can fix (too many requests, a server error, a time-out, a partial answer, an
+  expired sign-in).
+- **In the report:** anything not assessed says so in both documents; a statement that rests on
+  it is "under investigation", never "not affected"; the verdict line is scoped to what was
+  searched.
+- **Safer by the way:** a sign-in token is never sent on to another server by a redirect, and no
+  error text from a service is printed or stored.
+- **Proven against a stand-in** for the services these scripts call, on this computer only. Not
+  proven against a real tenant.
+
+**Java is allowed**
+- The rule that kept Java out of apps and tools (rulebook check X04, guardrail 12) is removed.
+  It was there to limit licence scope, which is no longer a concern. Nothing replaces it, and
+  nothing is moved onto Java: the practice sign-in service stays the Python one.
+- Every other check keeps its number. The rulebook now has 249 checks, 87 of them must-pass.
+
+**The force-push guard**
+- **It no longer refuses commands that only mention a force push:** a commit message, a
+  pull-request description, a note written to a file.
+- **It refuses more real ones than before:** a force push run inside another command, through
+  a shortened option, or hidden behind a planted end line. Nothing the earlier guard refused
+  gets through, with one deliberate exception: writing the words into an ordinary file.
+- **It is a guard against mistakes, not against hiding a push.** Its own header lists what it
+  does not see.
 
 ### v1.71.26 -- /argo-it: people can sign in on the test copy on a cluster, and /argo-it says what sign-in will do
 
