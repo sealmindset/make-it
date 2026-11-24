@@ -53,8 +53,10 @@ cat > "$TMPD/partb.pin" <<'PIN'
 it checks, and every row marked `[LIVE]` in `build-standards.md` is named by one of them. A row
 or step whose feature the app doesn't have ("Skip unless", "Only when") is N/A: reported as N/A,
 never as NOT RUN, and not written to TODO.md. A check that could not run goes in TODO.md as NOT
-RUN with its reason, never as passed. "As User" means signed in as that role's test user, the way
-step 25 signs in. Never print a key or token value: not in a command, a log or the results.
+RUN with its reason, never as passed. A check today's scaffold itself can't pass (step 28 b's
+page guard, step 31 f's known pages) is KNOWN, from the scaffold: counted and said plainly, not a
+FAIL, and the fix cycle doesn't touch it. "As User" means signed in as that role's test user, the
+way step 25 signs in. Never print a key or token value: not in a command, a log or the results.
 
 **Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
 shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
@@ -136,21 +138,29 @@ build goes on.
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
 
-22b. **Install the browser for the browser items (once, as /try-it's smoke test does):**
+22b. **Install the browser for the browser items, once:** the same Chromium /try-it's smoke
+    test downloads. No `e2e/package.json` in the app (a Next.js full-stack app has none) → install
+    nothing: every browser item is NOT RUN with the reason "no browser here: this app has no
+    browser test setup (no `e2e/` folder)". Otherwise, in a sub-shell, so the next step still
+    runs in the app's folder:
     ```bash
-    cd e2e
-    if npx --no-install playwright --version >/dev/null 2>&1 &&
-       node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
-    then echo "browser ready"   # already installed: nothing is downloaded
-    else npm install && npx playwright install chromium   # the app's own Playwright, then Chromium
-    fi
+    (
+      cd e2e || exit 1
+      if node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
+      then echo "browser ready"   # already installed: nothing is downloaded
+      elif [ -f package-lock.json ]; then npm ci && npx --no-install playwright install chromium
+      else npm install --no-save --no-package-lock && npx --no-install playwright install chromium
+      fi
+    )
     ```
-    Then run the `node -e` launch line again. It works → the browser items run. It fails (the
-    install failed, Node.js or npm isn't on this computer, or Chromium won't start) → every
-    browser item is NOT RUN with the reason "no browser here: [the install's reason]", never
-    FAIL, and the build goes on. Only when it downloads, tell the user: "Downloading a test
-    browser (Chromium, about 150 MB, once) so I can check your app's pages the way a person sees
-    them." Nothing is asked.
+    `npm ci` installs the exact Playwright version `e2e/package-lock.json` names and writes no
+    new file; an app built before the scaffold shipped that lock file installs without writing
+    one. Then run the launch line again, `(cd e2e && node -e "...")`. It works → the browser
+    items run. It fails (the install failed, Node.js or npm isn't on this computer, or Chromium
+    won't start) → every browser item is NOT RUN with the reason "no browser here: [the install's
+    reason]", never FAIL, and the build goes on. Only when it downloads, tell the user:
+    "Downloading a test browser (Chromium, about 300 MB, once) so I can check your app's pages
+    the way a person sees them." Nothing is asked.
 
 23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
@@ -189,6 +199,25 @@ build goes on.
     a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
        update, then delete of this step's own test record per resource, its name or title starting
        `live-check-test-`, never a seed record; a resource with no create route isn't written.
+       Before the first write, sweep leftovers from a run that was cut off and count every
+       table's rows; after the last, sweep again and count again. Every count must equal the
+       first one: a table that grew is a mark the writes left (a notification, an audit row)
+       that the sweep couldn't find, a FAIL naming the table, at the top of TODO.md.
+       ```bash
+       # <db> is the database service in docker-compose.yml (db in the scaffold)
+       q() { docker compose exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
+       # sweep: every row whose text mentions live-check-test-, in any table (run it twice:
+       # a row another row points at goes on the second pass)
+       printf '%s\n' "SELECT format('DELETE FROM %I.%I WHERE %I::text LIKE %L', table_schema,
+         table_name, column_name, '%live-check-test-%') FROM information_schema.columns WHERE
+         table_schema = 'public' AND data_type IN ('text', 'character varying', 'json', 'jsonb')
+         \gexec" | q
+       # count: one line per table, name|rows
+       printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+         table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
+         information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+         \gexec" | q
+       ```
        Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
        a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
        aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
@@ -212,24 +241,32 @@ build goes on.
     a. Can access pages/endpoints they SHOULD access
     b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
        browser) a page that shows a refusal and none of its data or working controls. A page
-       that renders its normal shell with an empty table is a FAIL. On apps built from today's
-       scaffold that FAIL is expected: report it as "the page isn't guarded, only its data (a
-       known scaffold gap)". Part C doesn't add a page guard for it: the scaffold has no page-guard pattern
+       that renders its normal shell with an empty table isn't refused. On an app from today's
+       scaffold it is KNOWN, from the scaffold: "the page isn't guarded, only its data". Part C
+       doesn't add a page guard for it: the scaffold has no page-guard pattern
        (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
        signed-out person to the sign-in page).
     c. Write refusals. The expected answer never comes from the route's own code, which is what
-       is being checked. For each POST, PUT, PATCH and DELETE route in `/openapi.json`, sent to
-       the exact path it declares (trailing slash included) with an empty JSON body `{}`, and an
-       id or slug no record has where the path takes one:
+       is being checked. A write route R04's file check (Part A) named as unguarded is a FAIL
+       from the file alone and gets no request: with no guard, a request would run. Never sent
+       either, and reported "not probed: an empty request could act": a DELETE; a route whose
+       path takes no id or slug and whose request body has no required field in `/openapi.json`
+       (an empty request could run it, like "mark all read"); and a route whose path has
+       `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `email`, `notify`, `mark`,
+       `run`, `replay`, `test`, `curation`, `statement`, `messages`, `chat`, `agents`, `revert`,
+       `restore`, `archive`, `publish` or `bulk`. R04's file check is their check. Every other
+       POST, PUT and PATCH route gets these requests, sent to the exact path it declares
+       (trailing slash included) with an empty JSON body `{}`, and an id or slug no record has
+       where the path takes one:
        - Signed out: expect 401.
-       - As the seeded role with the fewest permissions: map the route to a permission from its
+       - As the seeded role with the fewest permissions, sent only when that role LACKS the
+         route's permission: map the route to a permission from its
          path and method: the first path segment after `/api/` (after `/api/admin/`, with
          `admin.` in front) is the resource, and POST is `create`, PUT or PATCH `update`, DELETE
          `delete` -- `POST /api/notes/` is `notes.create`, `PUT /api/admin/settings/{key}` is
          `admin.settings.update`. Look it up in the app's own permission list (its seed, or
          `app-context.json`'s permission matrix); not there, try `admin.<resource>` (the scaffold
-         guards `/api/users` with `admin.users`). When the role's `/auth/me` permissions don't
-         have it, expect 403. A route whose permission can't be found that way is NOT RUN for
+         guards `/api/users` with `admin.users`). Expect 403. A route whose permission can't be found that way is NOT RUN for
          that route, named in the results with the reason "no permission matches this route";
          never skipped silently.
        A 308 is the frontend's proxy moving a trailing-slash path: follow it with the same method
@@ -238,11 +275,7 @@ build goes on.
        Fail: 422 (it got past a missing guard to the body check; nothing was written), 404 (past
        it to the lookup), or 2xx (it wrote a record: name it from the response, delete it as
        Super Admin through its own route, and if it can't be deleted, put it at the top of
-       TODO.md). Routes that would do something if their guard were missing -- every DELETE, and
-       a path with `run`, `replay`, `test`, `curation`, `statement`, `send`, `email`, `notify`,
-       `messages`, `chat` or `agents` -- get only the signed-out request, and only when their
-       path takes an id or slug (none exists, so nothing runs); R04's file check (Part A) covers
-       them otherwise. In a stack whose permission check doesn't come first, this item is NOT RUN
+       TODO.md). In a stack whose permission check doesn't come first, this item is NOT RUN
        with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
@@ -275,8 +308,8 @@ build goes on.
        scaffold is fixed, its own admin pages have raw tables: a match in
        `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
        or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
-       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is reported once as
-       "known, from the scaffold", not a FAIL and not fixed. A raw table in any
+       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is KNOWN, from the
+       scaffold (reported once, not a FAIL, not fixed). A raw table in any
        page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
@@ -371,8 +404,9 @@ provider, which the scaffold doesn't have yet.
 33c. **Test upload failures, AI analysis and file layouts (F09, F10, F14)** -- Skip a row whose
     feature the app doesn't have (F10 needs file upload and AI features).
     - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF
-      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 for the
-      empty file and 422 for the corrupt one, each with a plain message. Fail: any 500, or a body
+      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 or 422 for the
+      empty file (its rulebook row allows either) and 422 for the corrupt one, each with a plain
+      message. Fail: any 500, or a body
       naming a library, a stack trace or a file path.
     - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect:
       the stored document has its extracted text and, kept apart from it, an AI analysis. Then,
@@ -540,8 +574,10 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
    "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
    configured, priced AI provider" (their check expects no call).
-5. **Each row's result is PASS, FAIL, NOT RUN with its reason, N/A, or LEFT OUT (your choice).**
-   N/A is a row whose feature the app doesn't have: reported, not written to TODO.md. A row
+5. **Each row's result is PASS, FAIL, NOT RUN with its reason, KNOWN (from the scaffold), N/A,
+   or LEFT OUT (your choice).** KNOWN is what make-it's Part B calls a check today's scaffold
+   can't pass: counted and said, never a FAIL, never fixed here. N/A is a row whose feature the
+   app doesn't have: reported, not written to TODO.md. A row
    that belongs to an item in `## Left out by your choice` (read as
    `~/.claude/make-it/references/left-out-record.md`'s read steps say) is LEFT OUT: reported,
    never run and never fixed. A check that could not run -- the app didn't start, the step needs
@@ -553,13 +589,13 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    has one TODO.md line with its reason: when its line is already there, update its date and
    reason; never add a second line for it.
 7. **Tell the user one plain line**, the one that fits what happened:
+   Said after the fix rounds. [The results sentence] is make-it step 40's: its parts and their
+   rules, so it says how many weren't run and why, for every reason, and "everything I checked
+   works" only when nothing failed, nothing is known and nothing was left unrun.
    - It ran, and the pass started the app: "I started your app and checked [the areas, in plain
-     words] on it: [everything passed / N things failed and I'm fixing them][; N checks weren't
-     run here because they'd call the AI or leave test records]. I've left it running; /wrap-it
-     stops it."
+     words] on it: [the results sentence]. I've left it running; /wrap-it stops it."
    - It ran, and the app was already running: "Your app was already running, so I checked [the
-     areas, in plain words] on it: [everything passed / N things failed and I'm fixing them][; N
-     checks weren't run here because they'd call the AI or leave test records]."
+     areas, in plain words] on it: [the results sentence]."
    - Docker isn't running: "I couldn't check [the areas] on your app because Docker isn't
      running, so those checks are marked not run."
    - The settings point elsewhere: "I didn't start your app to check [the areas]: its settings
@@ -724,9 +760,12 @@ check("Part B never prints a key: it tests for set or empty", "printenv" not in 
 check("browser items use the app's own e2e/ Playwright on the host, never a container route",
       "npx --no-install playwright" in fpb and "--network host" not in fpb and "mcr.microsoft.com/playwright" not in fpb)
 s22b = "\n".join(next((s["body"] for s in steps if s["n"] == "22b"), []))
-check("step 22b installs the browser only when it isn't already there",
-      bool(re.search(r"^\s*if npx --no-install playwright --version[^\n]*&&\s*\n\s*node -e .*?\n\s*then echo \"browser ready\".*?\n\s*else npm install && npx playwright install chromium", s22b, re.S | re.M))
-      and s22b.count("playwright install") == 1)
+check("step 22b installs the browser only when it isn't already there, in a sub-shell, from the lock file",
+      bool(re.search(r"^\s*\(\n\s*cd e2e \|\| exit 1\n\s*if node -e .*?\n\s*then echo \"browser ready\".*?\n\s*elif \[ -f package-lock\.json \]; then npm ci && npx --no-install playwright install chromium\n\s*else npm install --no-save --no-package-lock && npx --no-install playwright install chromium\n\s*fi\n\s*\)", s22b, re.M | re.S))
+      and "npm install &&" not in s22b and "cd e2e\n" not in s22b)
+check("step 22b installs nothing in an app with no e2e/ folder: its browser items are NOT RUN with the plain reason",
+      'No `e2e/package.json` in the app' in flat(s22b) and 'install nothing: every browser item is NOT RUN with the reason "no browser here: this app has no browser test setup (no `e2e/` folder)"' in flat(s22b))
+check("step 22b's download line gives the true size", "about 300 MB" in s22b and "150 MB" not in s22b)
 check("a failed browser install or launch makes the browser items NOT RUN, never FAIL, and the build goes on",
       'NOT RUN with the reason "no browser here: [the install\'s reason]", never FAIL, and the build goes on' in flat(s22b))
 s28 = next((flat("\n".join(s["body"])) for s in steps if s["n"] == "28"), "")
@@ -789,6 +828,68 @@ tab_dup = sorted({i for i in tab if tab.count(i) > 1})
 tab_stray = sorted(i for i in tab if i not in live)
 check("the table puts each row in one group only (run here, AI, records), and names only [LIVE] rows",
       not tab_dup and not tab_stray, "in two groups: " + " ".join(tab_dup) + "; not [LIVE]: " + " ".join(tab_stray))
+mk_all = open(mk_path, encoding="utf-8").read()
+parts = {}
+mt = re.search(r"\*\*The results sentence\*\*.*?\n\n((?:\|.*\n)+)", mk_all, re.S)
+for l in (mt.group(1).splitlines() if mt else []):
+    c = [x.strip() for x in l.strip().strip("|").split("|")]
+    if len(c) == 3 and c[0] not in ("Part", "") and not c[0].startswith("-"): parts[c[0]] = (c[1], c[2].strip('"'))
+def render(f):
+    """The sentence the table gives for fixture f: counts of passed, failed, known and a dict of not-run reasons."""
+    out = []
+    if f["passed"]: out.append(parts["passed"][1].replace("[N]", str(f["passed"])))
+    if f["failed"]: out.append(parts["failed"][1].replace("[N]", str(f["failed"])))
+    if f["known"]: out.append(parts["known"][1].replace("[N]", str(f["known"])))
+    nr = sum(f["notrun"].values())
+    if nr: out.append(parts["not run"][1].replace("[N]", str(nr)).replace("[each reason with its count, in plain words, e.g. '3 need an AI key', '2 need a browser']", ", ".join(f"{v} {k}" for k, v in f["notrun"].items())))
+    if "only when failed, known and not run are all 0" in parts.get("all clear", ("", ""))[0] and not (f["failed"] or f["known"] or nr):
+        out.append(parts["all clear"][1])
+    return "; ".join(out)
+FIX = {"all passed": dict(passed=9, failed=0, known=0, notrun={}),
+       "a known scaffold gap": dict(passed=8, failed=0, known=1, notrun={}),
+       "browser not run": dict(passed=6, failed=0, known=0, notrun={"need a browser": 3}),
+       "no AI key and a route not mapped": dict(passed=5, failed=0, known=1, notrun={"need an AI key": 4, "have no matching permission": 1}),
+       "a failure left after the fixes": dict(passed=7, failed=1, known=0, notrun={"need a browser": 1})}
+bad_fx = []
+for name, f in FIX.items():
+    s = render(f) if set(parts) >= {"passed", "failed", "known", "not run", "all clear"} else ""
+    clear = not (f["failed"] or f["known"] or f["notrun"])
+    if not s: bad_fx.append(f"{name}: the table is missing"); continue
+    if ("everything I checked works" in s) != clear: bad_fx.append(f"{name}: says everything works = {not clear}")
+    if f["notrun"] and not all(k in s for k in f["notrun"]): bad_fx.append(f"{name}: a not-run reason missing")
+    if f["known"] and "known gaps" not in s: bad_fx.append(f"{name}: the known gap not said")
+    if f["known"] and not f["failed"] and "failed" in s: bad_fx.append(f"{name}: a known gap said as a failure")
+    if "fixing them" in s: bad_fx.append(f"{name}: says it is fixing")
+check("the results sentence is true in every case: known gaps, not-run reasons, failures, all clear", not bad_fx, "; ".join(bad_fx))
+check("the build's last message and /resume-it's line use the results sentence, never \"Everything is working\" or \"I'm fixing them\"",
+      "Everything is working" not in mk_all and "Your app is built and verified" not in mk_all and "[The results sentence.]" in mk_all
+      and "I'm fixing them" not in lp and lp.count("[the results sentence]") >= 2)
+
+# step 28 c: which routes get a request, decided from the step's own words, on a fixture route list
+s28raw = "\n".join(next((s["body"] for s in steps if s["n"] == "28"), []))
+mw = re.search(r"a route whose\s+path has\s+(.*?)\s+or\s+`([a-z]+)`\.", s28raw, re.S)
+words = re.findall(r"`([a-z]+)`", mw.group(1)) + [mw.group(2)] if mw else []
+def probed(r, unguarded):
+    if r["path"] in unguarded or r["method"] == "DELETE": return False
+    if any(w in r["path"] for w in words): return False
+    takes_id = "{" in r["path"]
+    if not takes_id and not r["required_body"]: return False
+    return True
+ROUTES = [dict(method="PATCH", path="/api/notifications", required_body=False),            # mark all read: acts with no body
+          dict(method="POST", path="/api/admin/purge-cache", required_body=False),
+          dict(method="POST", path="/api/admin/sync", required_body=False),
+          dict(method="POST", path="/api/notes/", required_body=True),                     # unguarded by R04 in this fixture
+          dict(method="DELETE", path="/api/notes/{id}", required_body=False),
+          dict(method="POST", path="/api/admin/prompts/{slug}/tests/run", required_body=False),
+          dict(method="POST", path="/api/categories/", required_body=True),
+          dict(method="PUT", path="/api/roles/{role_id}", required_body=True)]
+UNGUARDED = {"/api/notes/"}
+sent = [r["method"] + " " + r["path"] for r in ROUTES if probed(r, UNGUARDED)]
+check("step 28 c sends nothing to a route an empty request could act on, a DELETE, or a route R04 named unguarded",
+      bool(words) and "R04's file check (Part A) named as unguarded is a FAIL" in flat(s28raw)
+      and "has no required field" in flat(s28raw) and sent == ["POST /api/categories/", "PUT /api/roles/{role_id}"],
+      f"words: {words}; would send: {sent}")
+check("step 28 c sends the role's request only when it LACKS the permission", "sent only when that role LACKS the route's permission" in flat(s28raw))
 check("/resume-it never installs the browser: it uses the app's e2e/ Playwright only when it's there",
       "playwright install" not in lp and "npm install" not in lp and "the live pass never installs it" in flat(lp))
 check("/resume-it gives AC12 and ACV02 the build's reason, not \"it would call the AI provider\"",
@@ -902,9 +1003,21 @@ if [ -z "${1:-}" ]; then
   check "(control) V05 back to calling every route, deletes of seed records included" \
     'opp "$MK" "s/    a\. Call the read routes \(GET\).*?(?=\n    b\. Verify 2xx)/    a. Call the endpoint, as a role allowed to use it/s" "Part B is exactly the pinned text"'
   check "(control) the browser installed every time (the readiness check removed)" \
-    'opp "$MK" "s/    if npx --no-install playwright --version.*?\n    then echo \"browser ready\"[^\n]*\n    else (npm install && npx playwright install chromium)/    \$1/s" "step 22b installs the browser only when"'
+    'opp "$MK" "s/      if node -e .*?\n      then echo \"browser ready\"[^\n]*\n      elif/      if/s" "step 22b installs the browser only when"'
+  check "(control) step 22b back to installing in the app's root when there is no e2e/" \
+    'opp "$MK" "s/No \`e2e\/package\.json\` in the app.*?Otherwise, in a sub-shell, so the next step still\n    runs in the app.s folder:/Run it in \`e2e\/\`:/s" "step 22b installs nothing in an app with no e2e/"'
   check "(control) a failed browser install counted as a FAIL" \
-    'opp "$MK" "s/browser item is NOT RUN with the reason \"no browser here: \[the install.s reason\]\", never\n    FAIL, and the build goes on/browser item is a FAIL/" "a failed browser install or launch"'
+    'opp "$MK" "s/every browser item is NOT RUN with the reason \"no browser here: \[the install.s\n    reason\]\", never FAIL, and the build goes on/every browser item is a FAIL/" "a failed browser install or launch"'
+  check "(control) the build says \"Everything is working\" again" \
+    'opp "$MK" "s/\[The results sentence\.\] Now let/Everything is working -- login, permissions, data, and all your pages. Now let/" "the build'"'"'s last message"'
+  check "(control) the results sentence says all clear whatever the results" \
+    'opp "$MK" "s/only when failed, known and not run are all 0/always/" "the results sentence is true in every case"'
+  check "(control) the not-run part removed from the results sentence" \
+    'opp "$MK" "s/^\| not run \|.*\n//m" "the results sentence is true in every case"'
+  check "(control) step 28 c probes routes an empty request could act on" \
+    'opp "$MK" "s/ a route whose path takes no id or slug and whose request body has no required field in \`\/openapi\.json\`\n       \(an empty request could run it, like \"mark all read\"\); and/ and/" "step 28 c sends nothing to a route"'
+  check "(control) step 28 c probes a route R04 named unguarded" \
+    'opp "$MK" "s/ and gets no request: with no guard, a request would run\.//" "step 28 c sends nothing to a route"'
   check "(control) /resume-it's live pass installs the browser" \
     'opp "$RS" "s/the\n   live pass never installs it, and without it/the\n   live pass runs npx playwright install chromium first, and without it/" "/resume-it never installs the browser"'
   check "(control) the [LIVE] definition removed" \
