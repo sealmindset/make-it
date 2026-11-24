@@ -16,7 +16,7 @@ check "guardrails rule 12 is marked removed, and rules 11, 13 and 14 keep their 
 check "no range in a skill, reference or doc still counts X04 (X01-X04 ... X01-X09)" \
   '[ "$(git grep -I -cE "X0[1-3] ?(-|to|through) ?X0[4-9]" -- .claude desktop README.md CLAUDE.md docs presentation | wc -l | tr -d " ")" = 0 ]'
 J='(^|[^a-z])java([^a-z]|$)'
-BAN="(^|[^a-z])(no|not|never|without|avoid|prohibit[a-z]*|forbid[a-z]*|ban[a-z]*)[^.a-z][^.]{0,60}$J|$J[^.]{0,80}(prohibited|forbidden|banned|not allowed|not permitted)|no-java"
+BAN="(^|[^a-z])(no|not|never|without|avoid|prohibit[a-z]*|forbid[a-z]*|ban[a-z]*)([^.a-z][^.]{0,60})?[^a-z]java([^a-z]|\$)|$J[^.]{0,80}(prohibited|forbidden|banned|not allowed|not permitted)|no-java"
 check "no skill, reference, scaffold, desktop copy or doc forbids Java" \
   '[ "$(git grep -I -i -E "$BAN" -- .claude desktop README.md CLAUDE.md docs presentation | wc -l | tr -d " ")" = 0 ]'
 exit $fail
