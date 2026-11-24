@@ -917,9 +917,12 @@ build-verify runs them, in its temporary copy; the live pass starts no copy.
 2. **Only when it can start here.** `docker info` fails → start nothing: every row of the pass is
    NOT RUN, with the reason "Docker isn't running". Then read the database, queue and cache URLs
    in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
-   does: `docker compose config --format json | python3 -I
-   "$HOME/.claude/make-it/scripts/stack-check.py" local` (the rule make-it's write test shares;
-   it prints the host only, never a setting's value). One whose host isn't a compose service
+   does, with the profile step 3 starts the app with (the rule make-it's write test shares; it
+   prints the host only, never a setting's value):
+   ```bash
+   docker compose --profile dev config --format json | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" local
+   ```
+   One whose host isn't a compose service
    name, `localhost` or `127.0.0.1` → start nothing: every row of the pass is NOT RUN, with the
    reason it printed, "your settings point at <host>". Settings it can't read → the same, with
    its reason.
