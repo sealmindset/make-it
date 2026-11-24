@@ -87,7 +87,7 @@ POINTERS = {'.claude/make-it/threats-it/references/fact-check.md': (P_MSG, P_REV
             '.claude/make-it/references/backlog-board.md': (P_MSG,), '.claude/make-it/resolve-it/writer-prompt.md': (P_MSG,)}
 for p, want in POINTERS.items():
     ok(f'{os.path.basename(p)}: its brief points at the message rule' + (' and the review rule' if len(want) > 1 else ''), all(w in flat(raw(p)) for w in want))
-ok('the fact-check pointer sits inside the prompt it hands over', P_MSG in flat(re.search(r'^## Prompt template\n(.*?)^## ', raw('.claude/make-it/threats-it/references/fact-check.md'), re.M | re.S).group(1)))
+ok('the fact-check pointer sits inside the prompt it hands over', P_MSG in flat((re.search(r'^## Prompt template\n(.*?)(?=^## |\Z)', raw('.claude/make-it/threats-it/references/fact-check.md'), re.M | re.S) or [0, ''])[1]))
 ok('groom\'s grounders get the plain-report line, in the groom section', P_MSG in flat(re.search(r'^### `groom \[filter\].*?(?=^### )', raw(BB), re.M | re.S).group(0)))
 known = set(TEMPLATES) | set(POINTERS) | {PD}
 found = []

@@ -8,7 +8,7 @@
 #     can start and a lane is free -> start it; the plan is stale (ran out, stuck, or most cards that can start are
 #     not in it) -> plan; the pile grew two weeks running, or the last groom is old -> groom; else the next safe
 #     card; else wait. Each run checks the sentence, the cards or pull requests it names (title with id), and the
-#     choices: 2-4, each `Name -- what happens`, exactly one Recommended with its `against:`, the next branches of
+#     choices: 2-4, each `Name -- what happens`, exactly one Recommended with `against:` on the line under it, the next branches of
 #     the rule as the other choices.
 #   - The screen: four parts in order, at most 25 lines; only what needs the owner (each question one line; held
 #     high-stakes cards as a count with the few that free the most other work); what changed since the last look
@@ -69,7 +69,7 @@ def parts(out):  # the sentence, the choices, and the section headings in order
     heads = [l.split('  ')[0].split(' (')[0] for l in lines if re.match(r'[A-Z][A-Z 0-9]+\b', l) and not l.startswith(' ')]
     i = lines.index('DO NEXT') if 'DO NEXT' in lines else -1
     body = lines[i + 1:lines.index('NEEDS YOU')] if i >= 0 and 'NEEDS YOU' in lines else []
-    sent = ' '.join(l.strip() for l in body if not re.match(r'  \d\. ', l))  # the sentence and the short lines under it
+    sent = ' '.join(l.strip() for l in body if not re.match(r'  \d\. |     against: ', l))  # the sentence and the short lines under it
     opts = [l.strip() for l in body if re.match(r'  \d\. ', l)]
     return heads, sent, opts
 def shape(name, out, label, second=None):
@@ -79,7 +79,7 @@ def shape(name, out, label, second=None):
     ok(f'{name}: no line is longer than 110 characters', max(map(len, out.splitlines())) <= 110, [l for l in out.splitlines() if len(l) > 110])
     rec = [o for o in opts if 'Recommended' in o]
     ok(f'{name}: 2-4 choices, each `Name -- what happens`, one Recommended with its against:',
-       2 <= len(opts) <= 4 and all(re.match(r'\d\. [A-Z][^-]+ -- \S', o) for o in opts) and len(rec) == 1 and rec[0] == opts[0] and '(Recommended; against: ' in rec[0]
+       2 <= len(opts) <= 4 and all(re.match(r'\d\. [A-Z][^-]+ -- \S', o) for o in opts) and len(rec) == 1 and rec[0] == opts[0] and re.search(r'\n  ' + re.escape(opts[0]) + r'\n     against: \S.*\n  2\. ', out) is not None and rec[0].endswith(' (Recommended)')
        and opts[-1].startswith(f'{len(opts)}. Full status -- '), out)
     ok(f'{name}: the recommended choice is "{label}"' + (f', then "{second}"' if second else ''),
        bool(opts) and opts[0].startswith(f'1. {label} -- ') and (not second or opts[1].startswith(f'2. {second} -- ')), out)
@@ -241,7 +241,7 @@ ok('the skill: the old compact board stays under `list`, and `status` is unchang
 ok('the reference: the first screen and its rule are written down, in order', '### The first screen' in ref and all(x in ref for x in
    ('**The next-thing rule**', 'answer it', 'release it', 'sort them', 'start that wave', 'plan', 'groom', 'the next safe card', '.last-seen.json', '.git/info/exclude')), '')
 ok('the reference says what "ready" can and cannot know, and where a review is recorded', 'no longer a draft, no conflict with main, every check finished and passed, and not behind main' in ref
-   and 'never says a pull request is reviewed unless its card says so' in ref and 'card.py set <id> reviewed="<date> ready"' in ref and '| `reviewed` |' in ref, '')
+   and 'never says a pull request is reviewed unless its card says so' in ref and 'card.py set <id> reviewed="<date> ready"' in ref and 'reviewed: 2026-11-24 ready # optional: the pull request passed its review' in ref, '')
 ok('the skill: starting the others is a pick', '| Start the others |' in cmd, '')
 for h in ('status.py', 'regen-board.py', 'sync-prs.py'):
     r = subprocess.run([sys.executable, f'{BIN}/{h}', '--self-test'], capture_output=True, text=True, encoding='utf-8')

@@ -132,6 +132,7 @@ decision:  3 import rows failed twice; the rest went in. Retry them, or refile b
 answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
+reviewed:  2026-11-24 ready   # optional: the pull request passed its review, and when; the lead writes it. The first screen says "reviewed" only from this
 checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
@@ -497,20 +498,26 @@ Bare `/backlog-it` (and `board`) prints one screen of at most about 25 short lin
 `status.py --first`: read-only facts and a written rule, no AI call, so the same board gives the same
 answer. The skill prints it as-is and asks the choices as one select; it never picks for itself.
 
-1. **DO NEXT** -- one plain sentence: what the board recommends now, and why, naming the cards or
-   pull requests it means by title with id. Then the choices, 2-4, each `Name -- what happens`: the
-   recommendation first, marked Recommended with the strongest argument against it; then the next
-   steps of the rule that also hold; `Full status` last.
+1. **DO NEXT** -- one plain sentence: what the board recommends now, and why, with the count in the
+   sentence and each card or pull request it means on its own short line beneath, by title with id.
+   Then the choices, 2-4, each `Name -- what happens`: the recommendation first, marked
+   Recommended, with the strongest argument against it on the line under it (`against: …`); then
+   the next steps of the rule that also hold; `Full status` last. No line is longer than about 110
+   characters.
 2. **NEEDS YOU** -- each question waiting on you as one line (the card's title with its id, then its
    `decision:`: what waits, and the question), the first three, or "nothing waits on you". Held
    high-stakes cards are a count, then the three to five that free the most other cards (the ones
-   for the weekly sitting), never the whole list.
+   for the weekly sitting), never the whole list. Then one line counting the running list: its
+   open lines and how many areas they are in.
 3. **SINCE YOU LAST LOOKED** -- three lines: what shipped (cards closed as not needed are counted
    apart), what was found, what got stuck. "Last looked" is the last time the skill showed this
    screen: `--seen` writes `<board>/.last-seen.json` (the time, and the ids that were open, done and
    stuck). The file never reaches the board's git: a new board's `.gitignore` names it, and for an
    older board the helper adds the one line to the repo's own `.git/info/exclude`, which is local
-   and never committed. With no such file, the three lines cover the last 24 hours.
+   and never committed. With no such file, or one that cannot be read, the three lines cover the
+   last 24 hours; when the look cannot be recorded (a read-only folder), the screen still prints and
+   says so in one line. A card closed as done or as `shipped-tests-pass` counts as shipped; only
+   `closed_as: not-needed` counts as not needed; any other `closed_as` value is named as it is.
 4. **TREND** -- one line: cards opened and closed this week, whether the pile grew or shrank, and the
    single biggest reason ("mostly new bugs (70 of 135)", "with 6 fixes shipped").
 
@@ -519,9 +526,9 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
 | # | When | The board says |
 |---|------|----------------|
 | 1 | A card has a question for you (`decision:`) | answer it |
-| 2 | An open pull request is ready: no longer a draft, no changes asked for, every check finished and passed, up to date with main | release it |
+| 2 | An open pull request is ready as far as GitHub shows: no longer a draft, no conflict with main, every check finished and passed, and not behind main | release it: confirm its review, bring it up to date if needed, then release |
 | 3 | Open pull requests are stuck or out of date: behind or in conflict with main, or a draft, a failing check or a running check with no change for 2 days | sort them |
-| 4 | `PLAN.md`'s next wave can start (no card in it held, waiting, blocked or already running) and a lane is free | start that wave |
+| 4 | `PLAN.md`'s next wave can start (no card in it held, waiting, blocked or already running) and a lane is free | start that wave; if an open pull request changes a file one of its cards names, say so and offer to start the others |
 | 5 | The plan is stale: every wave is done, or its next wave is stuck, or more than half the cards that can start are not in it | plan |
 | 6 | More cards were opened than closed two weeks running (and the last groom is at least 7 days old), or the last groom is over 14 days old | groom |
 | 7 | A card can start and a lane is free. While a plan is in force only a card it does not list: the plan keeps the order of the ones it does | start the next safe card |
@@ -532,6 +539,18 @@ The numbers are named constants at the top of `status.py`, each with its reason 
 in `repo`; a pull request named in a card's `pr:` is called by that card's title. With no `repo` or
 no `gh`, steps 2 and 3 are skipped and the screen says so. A pull request that is simply moving (a
 fresh draft, checks running) is not mentioned.
+
+**What "ready" can and cannot know.** The screen says only what it can read. "Behind main" is worked
+out by comparing the pull request's head with main (`gh api …/compare`), because a repo with no
+branch rule never reports it; a pull request that is behind goes to step 3 with how far, and when
+the comparison cannot be read the screen says "could not tell whether it is up to date". GitHub
+holds no review in a repo where the owner's own agents review, so the screen never says a pull request is reviewed unless its card says so:
+when a pull request passes its review the lead records it with
+`card.py set <id> reviewed="<date> ready"`, and the screen then reads "Review: recorded on its
+card". Otherwise it reads "none recorded, so confirm it first". Step 4 says what is running in plain
+words ("No bug fix is running; 1 other piece of work is in progress: …"), and checks the files each
+wave card names in `PLAN.md` against the files of every open pull request (`gh pr view --json
+files`); when either cannot be read it says so.
 
 ### Plain words on the board
 
@@ -547,16 +566,17 @@ owner: a few plain lines, one update a day unless the owner is needed, every que
 
 A review finds faults that were there before the change (`approval-block.md`, A review sorts its
 findings). One that can lose data, leak a secret, send something wrong, or tell the person
-something untrue becomes a card. Any other goes on the **running list**: the `## Running list`
-section of the epic card the work's card sits under, one line each, written with
-`card.py append <epic id> "Running list"`:
+something untrue becomes a card. Any other goes on the **running list**: one `## Running list: <skill or area>` section per skill or area, on the epic card the work's card sits under
+(the area is the card's `category:`), one line each, written with
+`card.py append <epic id> "Running list: <skill or area>"`:
 
-`- <skill or area>: <the fault, in plain words> (<file>) · found <date> in "<the work's title> (<its id>)"`
+`- <the fault, in plain words> (<file>) · found <date> in "<the work's title> (<its id>)"`
 
-A lane starts by reading its epic's running list. It fixes the lines that sit in files it is
-changing anyway, inside its own work, and clears each one by appending a line under the same
-section: `- fixed <date>: "<the first words of the line>" · <the pull request or commit>`. A line
-is open until a `fixed` line quotes it. The list is never turned into cards in bulk; `groom` reads
+A lane starts by reading the running list for the area it is working in. It fixes the lines that
+sit in files it is changing anyway, inside its own work, and clears each one by appending a line
+under the same section: `- fixed <date>: "<the first words of the line>" · <the pull request or
+commit>`. A line is open until a `fixed` line quotes it. The first screen counts the open lines
+and their areas. The list is never turned into cards in bulk; `groom` reads
 it as evidence. With no board, the line goes in the lane's report under "Already there" and stops
 there.
 
@@ -893,7 +913,7 @@ only under `--apply` and not re-grounded this run (the next `plan --with-deps` p
 
 **AI-powered by default.** Running `groom` (or `groom strategy`) is itself the opt-in to
 multi-agent, high-effort reasoning: fan out one grounder per card with the **Workflow** tool (model
-`ground`), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
+`ground`; each grounder's brief ends: "Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id."), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
 ([Which model does what](#which-model-does-what)). Don't ask permission for it; the user doesn't need any extra keyword.
 
 1. **Ground in code (reuse `reconcile`).** Run the reconcile ladder for every card in scope --

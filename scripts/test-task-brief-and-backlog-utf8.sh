@@ -113,7 +113,7 @@ tmps = lambda: [f for f in os.listdir(S) if f.endswith('.tmp')]
 card = lambda n: f'{S}/{n}'
 r = run('card.py', '--board', B, 'new', 'E01', stdin=U(f'---\nid: NEW\ntitle: "{title}"\ntype: breakfix\nstatus: backlog\ncategory: Ménage\n---\n\n## Goal\nrésumé 中文 🚀\n'))
 new = [f for f in os.listdir(S) if f.startswith('S1-')]
-ok('card.py new: exit 0, says the new card, commits, writes the title as UTF-8', r.returncode == 0 and U(f'new E01-S1: "{title}" · committed') in r.stdout
+ok('card.py new: exit 0, says the new card, commits, writes the title as UTF-8', r.returncode == 0 and U(f'new: {title} (E01-S1) · committed') in r.stdout
    and len(new) == 1 and U(title) in open(card(new[0]), 'rb').read(), r.stdout + r.stderr)
 S1 = card(new[0]) if new else card('missing')
 log = subprocess.run(['git', '-C', B, 'log', '-1', '--format=%s'], capture_output=True, env=env).stdout

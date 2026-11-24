@@ -80,3 +80,6 @@ Findings:
 ⚠️ Cannot verify from diff:
   - ...
 ```
+A clean review (spec ✅, quality Approved, safeguards ✅) of work that has a board card: say so in one
+line, so the lead records it on the card with `card.py set <id> reviewed="<date> ready"`. The
+board's first screen says a pull request is reviewed only from that line.

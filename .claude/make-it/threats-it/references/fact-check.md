@@ -9,6 +9,8 @@ found 29–30 issues each; the high ones were all **scope** — a claim broader 
 ## Prompt template
 ```
 You are fact-checking a security report before it reaches leadership. Do NOT edit any files. Report findings only.
+Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id.
+Sort what you find (`approval-block.md`, A review sorts its findings): important, at most five minor, already there; file no follow-up cards.
 Folder: <project path>
 Under review: briefing.md (whole file); technical.md <part/sections>.
 Evidence (the ONLY acceptable evidence): data/derived/*.json; data/raw/** (archived source, MSRC, KEV, tenant

@@ -138,7 +138,7 @@ def main(args):
         except UnicodeDecodeError: sys.exit('card: the text on stdin is not UTF-8, nothing written')
         return t if t.strip() else sys.exit('card: empty text on stdin, nothing written')
     if verb == 'append' and len(rest) == 2:
-        t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'
+        t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'; said = f'{R.name(R.fm(p))}: {rest[1]}'
     elif verb == 'set' and len(rest) >= 2 and all('=' in a for a in rest[1:]):
         fields = dict(a.split('=', 1) for a in rest[1:])
         if 'id' in fields: sys.exit('card: id is not settable')
@@ -146,11 +146,13 @@ def main(args):
         lock(B); pull(B); p = find(B, rest[0])
         if 'decision' in fields and v(R.fm(p), 'answers'): fields.setdefault('answers', '')  # answers belong to their question: a new or cleared one drops the old
         write(p, {k: (x or None) for k, x in fields.items()})
-        what = f'{v(R.fm(p), "id")}: ' + ', '.join(f'{k}={x}' if x else f'-{k}' for k, x in fields.items())
+        change = ', '.join(f'{k}={x}' if x else f'-{k}' for k, x in fields.items())
+        what, said = f'{v(R.fm(p), "id")}: {change}', f'{R.name(R.fm(p))}: {change}'
     elif verb == 'new' and len(rest) == 1:
-        t = stdin(); lock(B); pull(B); cid, p = new(B, rest[0], t); what = f'new {cid}: {v(R.fm(p), "title")}'
+        t = stdin(); lock(B); pull(B); cid, p = new(B, rest[0], t); what = f'new {cid}: {v(R.fm(p), "title")}'; said = f'new: {R.name(R.fm(p))}'
     else: sys.exit(__doc__)
-    print(f'{what} · {"not synced (--no-sync)" if nosync else sync(B, [p], f"card: {what}"[:72], opts.get("--project"))}')
+    # `said` is what the person reads (the card by its title with its id); `what` stays the commit subject, unchanged
+    print(f'{said} · {"not synced (--no-sync)" if nosync else sync(B, [p], f"card: {what}"[:72], opts.get("--project"))}')
 
 def self_test():
     import tempfile
@@ -195,11 +197,11 @@ def self_test():
         B2 = f'{t}/b'; subprocess.run(['git', 'clone', '-q', f'{t}/remote.git', B2], check=True, capture_output=True)  # a stale clone
         card = '---\nid: NEW\ntitle: "Fix the 100% * case"\ntype: breakfix\nstatus: backlog\n---\n\n## Goal\nx\n'
         out = run('--board', A, 'new', 'e01', stdin=card).stdout
-        assert 'new E01-S2' in out and os.path.exists(f'{A}/items/EPIC-01-x/stories/S2-fix-the-100-case.md'), out
+        assert '(E01-S2) · ' in out and out.startswith('new: ') and os.path.exists(f'{A}/items/EPIC-01-x/stories/S2-fix-the-100-case.md'), out
         n = R.fm(f'{A}/items/EPIC-01-x/stories/S2-fix-the-100-case.md')
         assert (v(n, 'id'), v(n, 'parent'), v(n, 'created')) == ('E01-S2', 'E01', T), n
         out = run('--board', B2, 'new', 'E01', stdin=card.replace('100% * case', 'other')).stdout  # pulls first: no clash
-        assert 'new E01-S3' in out, out
+        assert '(E01-S3) · ' in out and out.startswith('new: '), out
         assert 'needs `id: NEW`' in run('--board', A, 'new', 'E01', stdin='---\ntitle: x\n---\n', ok=False).stderr
         open(f'{A}/items/EPIC-01-x/stories/S9-dup.md', 'w', encoding='utf-8').write('---\nid: E01-S1\n---\n')
         assert 'matches 2 cards' in run('--board', A, 'set', 'E01-S1', 'status=done', ok=False).stderr
@@ -245,7 +247,7 @@ def self_test():
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8') for _ in range(4)]
         outs = [q.communicate(f'- line {i}\n' if i < 8 else card)[0] for i, q in enumerate(ps)]
         assert all(f'- line {i}' in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md') for i in range(8)), outs
-        ids = [re.search(r'new (E01-S\d+)', o).group(1) for o in outs[8:]]
+        ids = [re.search(r'^new: .*\((E01-S\d+)\) · ', o).group(1) for o in outs[8:]]
         assert len(set(ids)) == 4, ids
         import fcntl, time  # the lock is really taken: a writer waits while another holds it
         fd = os.open(f'{PB}/items', os.O_RDONLY); fcntl.flock(fd, fcntl.LOCK_EX)

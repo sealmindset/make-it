@@ -93,15 +93,16 @@ and print its output as-is, in a code block. **The helper decides; you present a
 recommendation under DO NEXT comes from its written rule (the reference's "The first screen"), never
 from your own reading of the board. Then ask its choices with AskUserQuestion, exactly as printed:
 one question ("What next?"), one option per numbered choice, the label before ` -- ` and what
-happens after it, the Recommended one first with its `against:`. Add no option and drop none. Then
+happens after it, the Recommended one first with the `against:` line under it as its counter-argument. Add no option and drop none. Then
 do what was picked, with every gate that step already has:
 
 | Pick | What runs |
 |------|-----------|
 | Answer now | Each waiting card's `decision:` as its own AskUserQuestion with its `answers:`, most urgent first; the answer goes on the card, which clears `decision:` and `answers:` |
-| Release it | The project's own release steps for the pull request named, with their gates; the pick names the pull request, so it is the go for that one only |
+| Release it | First what the screen could not know: confirm the pull request's review (unless the screen says it is recorded on its card) and bring it up to date with main if it is behind. Then the project's own release steps for the pull request named, with their gates; the pick names the pull request, so it is the go for that one only |
 | Sort them | `reconcile --prs`, then one plain line per pull request named: what it needs (bring up to date, fix its check, close with a note) |
 | Start the wave | `dispatch` |
+| Start the others | `dispatch`, for the wave's cards that share no file with an open pull request; the card named as sharing one waits |
 | Plan | `plan` |
 | Groom | `groom` |
 | Start it | `start <id>` for the card named |

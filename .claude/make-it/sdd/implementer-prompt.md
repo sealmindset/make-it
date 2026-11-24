@@ -36,6 +36,7 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
 3. Build only what the brief requires — no extra flags, options, or scope (YAGNI).
 4. Run the tests; iterate until they pass.
 5. Self-review your own diff for spec gaps, dead code, and quality before reporting.
+   Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).
    Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
    not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
    something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most

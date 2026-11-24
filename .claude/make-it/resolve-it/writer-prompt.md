@@ -22,5 +22,7 @@ person can do today, follow-ups. Everything here is already verified.]
 - For the incident report, follow the format in [REPORT_FORMAT_PATH] exactly, and keep technical
   detail there (that report is for the team).
 
+- An owner summary follows the same rule as every message to the owner. Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id.
+
 ## Return
 The text only, ready to paste.
