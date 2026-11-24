@@ -950,9 +950,9 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    never run and never fixed. A check that could not run -- the app didn't start, the step needs
    something this app lacks, a request couldn't be made -- is NOT RUN, never passed. A FAIL is
    fixed like any test failure in this session (diagnose, fix, re-run that row, up to 3 rounds);
-   one still failing after that goes in TODO.md.
+   one still failing after that goes at the top of TODO.md, where the results sentence says it is.
 6. **Record it** under `## Test Status` in `.make-it-state.md`: "Live pass [date] ([areas]):
-   [n] passed, [n] failed, [n] not run ([row]: [reason], ...), [n] left out". Each NOT RUN row
+   [n] passed, [n] failed, [n] known, [n] not run ([row]: [reason], ...), [n] left out". Each NOT RUN row
    has one TODO.md line with its reason: when its line is already there, update its date and
    reason; never add a second line for it.
 7. **Tell the user one plain line**, the one that fits what happened:

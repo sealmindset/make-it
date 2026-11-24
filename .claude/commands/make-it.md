@@ -1367,24 +1367,70 @@ build goes on.
     a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
        update, then delete of this step's own test record per resource, its name or title starting
        `live-check-test-`, never a seed record; a resource with no create route isn't written.
-       Before the first write, sweep leftovers from a run that was cut off and count every
-       table's rows; after the last, sweep again and count again. Every count must equal the
-       first one: a table that grew is a mark the writes left (a notification, an audit row)
-       that the sweep couldn't find, a FAIL naming the table, at the top of TODO.md.
+       The database may hold a person's real data (/retrofit-it runs this step on an app that
+       already exists), so the clean-up deletes only rows this step made:
+       - **Own rows only.** A row is this step's when it is in a table the step writes to and
+         its own name or title column STARTS WITH `live-check-test-`. Never "contains", never a
+         JSON column, never a table the step doesn't write to.
+       - **A mark goes by id.** A side effect a write left (a notification, an audit row) is
+         deleted only when it was made BY a test record: its column is a foreign key to that
+         record's table and holds a test record's id, or its own title starts with the prefix.
+         A shared id column (one that can point at several kinds of record) counts only with
+         the test on its type column beside it; with no type column it is no match. A row that
+         only mentions the words stays.
+       - **Nothing cascades.** `del` never deletes a row another row still points at. Sweep the
+         marks first, then child tables, then their parents, so the step's own rows clear each
+         other. A test row that a real row points at is left: `left` names it; report it by
+         name as "left behind, referenced by real data", a FAIL of the clean-up, not of the
+         app, at the top of TODO.md. Never delete the real row.
+       - **Count three times.** Count every table BEFORE the first sweep, again after it, and
+         again after the last sweep. After the first sweep a table may be smaller only by the
+         rows `del` printed for it (the leftovers of a run that was cut off). The last count
+         must equal the second: a table that grew holds a mark the writes left that the sweep
+         couldn't find; a table that shrank lost a row this step didn't make. Either is a FAIL
+         naming the table, at the top of TODO.md.
+       - **Mentions are named, not swept.** `mentions` lists the tables that still hold the
+         words anywhere: name them in the results and delete nothing in them.
+       - **No safe way, no writes.** A resource whose table has no name or title column the
+         step sets, or a database `q` can't reach this way (it isn't Postgres), has its write
+         routes NOT RUN with the reason "no safe way to tell a test record from a real one";
+         its GET routes still run.
        ```bash
        # <db> is the database service in docker-compose.yml (db in the scaffold)
        q() { docker compose exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
-       # sweep: every row whose text mentions live-check-test-, in any table (run it twice:
-       # a row another row points at goes on the second pass)
-       printf '%s\n' "SELECT format('DELETE FROM %I.%I WHERE %I::text LIKE %L', table_schema,
-         table_name, column_name, '%live-check-test-%') FROM information_schema.columns WHERE
-         table_schema = 'public' AND data_type IN ('text', 'character varying', 'json', 'jsonb')
-         \gexec" | q
+       P="live-check-test-"
        # count: one line per table, name|rows
-       printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+       count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
          table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
          information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-         \gexec" | q
+         \gexec" | q; }
+       # del TABLE CONDITION: delete the rows of TABLE (t) that match CONDITION, except a row any
+       # other row points at through a foreign key (so nothing cascades); prints TABLE|DELETE n
+       del() { printf '%s|' "$1"; printf '%s\n' "SELECT format('DELETE FROM %s AS t WHERE (%s)%s',
+         '$1'::regclass, \$c\$$2\$c\$, coalesce(string_agg(format(' AND NOT EXISTS (SELECT 1 FROM %s AS k WHERE %s)',
+         c.conrelid::regclass, (SELECT string_agg(format('k.%I = t.%I', a.attname, f.attname),
+         ' AND ') FROM unnest(c.conkey, c.confkey) AS u(ck, fk) JOIN pg_attribute a ON a.attrelid =
+         c.conrelid AND a.attnum = u.ck JOIN pg_attribute f ON f.attrelid = c.confrelid AND
+         f.attnum = u.fk)), ''), '')) FROM pg_constraint c WHERE c.contype = 'f' AND
+         c.confrelid = '$1'::regclass \gexec" | q; }
+       # sweep TABLE COL: the step's own rows in a table it writes to; COL is its name or title
+       sweep() { del "$1" "t.$2 LIKE '$P%'"; }
+       # mark TABLE REF OWNER COL [TYPE-TEST]: rows of TABLE whose REF holds the id of a test row
+       # of OWNER (COL is OWNER's name or title); TYPE-TEST for a shared id: "t.kind = 'note'"
+       mark() { del "$1" "CAST(t.$2 AS text) IN (SELECT CAST(id AS text) FROM $3 WHERE $4 LIKE '$P%')${5:+ AND ($5)}"; }
+       # left TABLE COL: the test rows still there after a sweep (a real row points at them)
+       left() { printf '%s\n' "SELECT '$1', $2 FROM $1 WHERE $2 LIKE '$P%'" | q; }
+       # mentions: name|rows for each table that still holds the words anywhere (it only reads)
+       mentions() { printf '%s\n' "SELECT format('SELECT %L, count(*) FROM %I.%I WHERE %s HAVING count(*) > 0',
+         table_name, table_schema, table_name, string_agg(format('%I::text LIKE %L', column_name,
+         '%$P%'), ' OR ')) FROM information_schema.columns WHERE table_schema = 'public' AND
+         data_type IN ('text', 'character varying', 'json', 'jsonb') GROUP BY table_schema,
+         table_name \gexec" | q; }
+       # the order, for a notes table whose create route also writes a notification:
+       #   count; mark notifications note_id notes title; sweep notes title; count
+       #   ...this step's writes...
+       #   mark notifications note_id notes title; sweep notes title; left notes title; count
+       #   mentions
        ```
        Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
        a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
@@ -1422,7 +1468,12 @@ build goes on.
        (an empty request could run it, like "mark all read"); and a route whose path has
        `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `email`, `notify`, `mark`,
        `run`, `replay`, `test`, `curation`, `statement`, `messages`, `chat`, `agents`, `revert`,
-       `restore`, `archive`, `publish` or `bulk`. R04's file check is their check. Every other
+       `restore`, `archive`, `publish` or `bulk`. A word counts only as a whole word of the path
+       (the path split at `/`, `-`, `_`, `.`, `{`, `}` and each capital letter; a plural `s` still
+       counts), never as letters inside a longer word: `/api/notes/{id}/mark-read` and
+       `/api/emails/{id}` are skipped, `/api/bookmarks/{id}` is not. R04's file check is their
+       check, and each counts as not run in the results sentence, with the reason "an empty
+       request could act". Every other
        POST, PUT and PATCH route gets these requests, sent to the exact path it declares
        (trailing slash included) with an empty JSON body `{}`, and an id or slug no record has
        where the path takes one:
