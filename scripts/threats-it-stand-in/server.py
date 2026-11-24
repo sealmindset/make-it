@@ -12,7 +12,8 @@ A scenario is a list of rules; the first whose "when" strings are ALL in the req
   {"when": [...], "mode": "empty"}    HTTP 200, a successful answer with nothing in it
   {"when": [...], "mode": "null"}     HTTP 200 whose whole body is `null`
   {"when": [...], "mode": "partial"}  Log Analytics: HTTP 200 with rows AND error PartialError (some of the answer is missing)
-  {"when": [...], "mode": "echo"}     HTTP 403 whose error text repeats the caller's Authorization header (a leaky service)
+  {"when": [...], "mode": "partial_empty"}  the same, with no rows at all
+  {"when": [...], "mode": "echo"}     HTTP 403 whose error text repeats the caller's Authorization header or X-API-Key (a leaky service)
   {"when": [...], "mode": "redirect"} HTTP 302 to /elsewhere; a request that arrives there with credentials is noted in <scenario>.seen
   {"when": [...], "mode": "blocked"}  HTTP 200 with a block page ("Access Denied") where the real page should be
   {"when": [...], "mode": "pass"}     the fixture, as if no rule matched (put it before a wider rule to exempt a call)
@@ -127,14 +128,14 @@ class Handler(BaseHTTPRequestHandler):
         if mode == "blocked":
             return self.answer(200, b"<html><head><title>Access Denied</title></head><body>blocked</body></html>", "text/html")
         if mode == "echo":
-            return self.answer(403, {"error": {"code": "Forbidden", "message": "denied: " + (self.headers.get("Authorization") or "")[-60:]}})
+            return self.answer(403, {"error": {"code": "Forbidden", "message": "denied: " + (self.headers.get("Authorization") or self.headers.get("X-API-Key") or "")[-60:]}})
         if mode == "redirect":
             self.send_response(302)
             self.send_header("Location", f"http://127.0.0.1:{self.server.server_address[1]}/elsewhere")
             self.send_header("Content-Length", "0")
             return self.end_headers()
-        if mode == "partial":
-            return self.answer(200, dict(log_analytics(query, False), error={"code": "PartialError", "message": "some rows are missing"}))
+        if mode in ("partial", "partial_empty"):
+            return self.answer(200, dict(log_analytics(query, mode == "partial_empty" and "Usage" not in query), error={"code": "PartialError", "message": "some rows are missing"}))
         if "status" in rule:
             return self.answer(rule["status"], {"error": {"code": "StandIn", "message": f"stand-in answered {rule['status']}"}})
         if self.path.startswith("/attack/"):

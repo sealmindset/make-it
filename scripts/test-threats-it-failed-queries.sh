@@ -171,6 +171,10 @@ try:
     got = run(W, wargs, [{"when": ["cid-ws-a", "search in"], "mode": "partial"}], base)
     failed("hunt_web, the IOC search answers in part", got, "IOC search", "ws-a", "not fully assessed", start="PARTIAL: ")
     check("hunt_web, the IOC search answers in part: the rows that came are shown", "'ws-a': [{" in got[1])
+    got = run(W, wargs, [{"when": ["search in"], "mode": "partial_empty"}], base)
+    failed("hunt_web, the IOC search answers in part with no rows", got, "IOC search", "ws-a", start="PARTIAL: ", never=("IOC hits: none |",))
+    check("hunt_web, the IOC search answers in part with no rows: the verdict says not fully assessed",
+          "IOC search not fully assessed in: ['ws-a', 'ws-b']" in got[1])
     failed("hunt_web, only the crash-signals query 500", run(W, wargs, [{"when": ["cid-ws-a", "matches regex @'"], "status": 500}], base),
            "crash signals", "ws-a", "HTTP 500")
     failed("hunt_web, only the large-upload query 429", run(W, wargs, [{"when": ["cid-ws-b", "CsMethod"], "status": 429}], base),
@@ -211,6 +215,10 @@ try:
     failed("exposure, the tenant id was not read", got, "tenant", "from tenant_access.py", never=("own takeover: 0",))
     check("exposure, the tenant id was not read: exposure.json says NOT ASSESSED for own_takeover",
           str(js(got[2] + "/exposure.json", "own_takeover")).startswith("NOT ASSESSED"))
+    got = run(E, eargs, [{"when": ["cid-ws-a", "Kind='interactive'"], "mode": "partial_empty"}], base)
+    failed("exposure, a sign-in query answers in part with no rows", got, "sign-ins", "ws-a", start="PARTIAL: ")
+    check("exposure, a sign-in query answers in part with no rows: the workspace stays on the sign-in line, not fully assessed",
+          "'ws-a': '0 (not fully assessed)'" in got[1])
     got = run(E, eargs, [{"when": ["/applications"], "mode": "redirect"}], base)
     failed("exposure, a call is redirected", got, "graph_applications", "HTTP 302")
     check("exposure, a call is redirected: the credentials did not follow it", not os.path.exists(scen + ".seen"))
@@ -264,6 +272,10 @@ try:
     for k in ("blind_rules", "ingested"):
         check(f"sentinel_coverage, the ingestion query 500: '{k}' says NOT ASSESSED, not an empty list",
               js(got[2] + "/sentinel-coverage.json", "workspaces", "ws-a", k) == "NOT ASSESSED")
+    got = run(S, ["@"], [{"when": ["cid-ws-a", "Usage"], "mode": "partial"}], base)
+    failed("sentinel_coverage, the ingestion query answers in part", got, "ingestion", "ws-a", start="PARTIAL: ", never=("{'live': 1}",))
+    check("sentinel_coverage, the ingestion query answers in part: the rule state and blind_rules say not fully assessed",
+          "'not fully assessed': 1" in got[1] and js(got[2] + "/sentinel-coverage.json", "workspaces", "ws-a", "blind_rules") == "NOT FULLY ASSESSED")
     sent = run(T, ["@"], [{"when": ["ResourceGraph", "SecurityInsights"], "status": 403}])[2]
     failed("sentinel_coverage, after a failed Sentinel query", run(S, ["@"], [], sent), "Sentinel onboarding", "from tenant_access.py",
            never=("not onboarded to Sentinel: ['ws-a'",))
@@ -287,6 +299,9 @@ try:
           "'ws-b': 'NOT ASSESSED (no access)'" in run(E, eargs, [], noacc[2])[1])
     got = run("findings_sources.py", ["@"], [], AUDITGITHUB_API_URL="http://127.0.0.1:9", AUDITGITHUB_API_KEY="STANDIN-KEY-MARKER")
     check("the stand-in refuses a script's own opener too (the AuditGitHub key goes nowhere)", "stand-in: refused" in got[1])
+    got = run("findings_sources.py", ["@"], [{"when": ["/agh/"], "mode": "echo"}], AUDITGITHUB_API_URL=f"http://127.0.0.1:{port}/agh", AUDITGITHUB_API_KEY="STANDIN-KEY-MARKER")
+    failed("findings_sources, AuditGitHub refuses and repeats the key in its error", got, "auditgithub_findings", "HTTP 403")
+    check("findings_sources, AuditGitHub refuses: only a reason code is stored", js(got[2] + "/auditgithub_findings.json", "result", "error", "code") == "Forbidden")
     failed("findings_sources, Secure Score 403", run("findings_sources.py", ["@"], [{"when": ["secureScores"], "status": 403}]),
            "secure_score", "HTTP 403")
 
@@ -295,6 +310,7 @@ try:
     check("no run printed the token", "STANDIN-TOKEN-MARKER" not in everything)
     check("no run stored the token in a file", not any("STANDIN-TOKEN-MARKER" in f for f in stored))
     check("no run printed a key", "STANDIN-KEY-MARKER" not in everything)
+    check("no run stored a key in a file", not any("STANDIN-KEY-MARKER" in f for f in stored))
 
     # ---- the stand-in stops when whoever started it has gone ---------------------------------------------------
     starter = "import subprocess, sys; print(subprocess.Popen([sys.executable, '-I', sys.argv[1], sys.argv[2], sys.argv[3]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid)"
@@ -339,6 +355,9 @@ has 'Ask once, as a select' "$SK" "skill: the ask is one select"
 has '"not assessed" in both documents' "$SK" "skill: not assessed goes in both documents"
 has '`under_investigation`' "$SK" "skill: a VEX statement resting on something not assessed is under_investigation"
 has 'never `not_affected`' "$SK" "skill: and never not_affected"
+VERDICT='the verdict line is scoped ("in the workspaces searched") and names what was not assessed; it never reads as clean for the whole organisation'
+has "$VERDICT" "$SK" "skill: a verdict with anything not assessed is scoped and names it"
+has "$VERDICT" "$RF/report-standard.md" "report-standard: the same verdict rule"
 has 'not assessed (no access)' "$RF/tenant-assessment.md" "tenant-assessment: the no-access sentence"
 has 'exit 4' "$RF/tenant-assessment.md" "tenant-assessment: the continue status"
 has 'exit 3' "$RF/tenant-assessment.md" "tenant-assessment: the stop status"
