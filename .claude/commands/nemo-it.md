@@ -274,11 +274,16 @@ Each Bash call is a new shell, so every later command that uses it starts with t
 line, then `[ -d "$NEMO_TMP" ] || exit 1` (the commands below show both, with `XXXXXX` standing
 for the printed path). Files you write for the scan -- test scripts, configs -- go under it.
 Never touch another `/tmp/nemo-it.*` folder: it may be another project's scan in progress.
+If the first command prints `LEFTOVER:` lines, those are temp folders an earlier version of
+/nemo-it left in /tmp. Tell the person in one plain line, naming them: nothing uses them now,
+and they may delete them. Never delete them yourself.
 
 ```bash
 # A new folder for every scan: results from an earlier scan never count for this one (guardrail 11),
 # and another project's scan in progress is never touched. Prints NEMO_TMP=<path>.
 NEMO_TMP=$(mktemp -d /tmp/nemo-it.XXXXXX) && echo "NEMO_TMP=$NEMO_TMP"
+# Folders an earlier version left (named nemo-it- and a word): listed, never removed
+find -H /tmp -maxdepth 1 -name 'nemo-it-*' 2>/dev/null | sed 's/^/LEFTOVER: /'
 
 # Tools for ALL modes except audit (audit needs none of the tools below; Phase 1.7 checks its own)
 command -v semgrep 2>/dev/null || echo "MISSING: semgrep"
@@ -1675,7 +1680,9 @@ The JUnit XML maps: test suite = scan phase, test case = individual check, failu
 ```bash
 # Remove this scan's temporary files -- only its own folder
 NEMO_TMP=/tmp/nemo-it.XXXXXX   # the exact path printed when this scan started
-case "$NEMO_TMP" in /tmp/nemo-it.??????) rm -rf "$NEMO_TMP" ;; *) echo "not removing: $NEMO_TMP" >&2 ;; esac
+[ -d "$NEMO_TMP" ] || { echo "NEMO_TMP is not this scan's folder: stop" >&2; exit 1; }
+# Only a folder mktemp made: six letters or digits after the dot, so never /tmp, /, a .. path or a path with a space
+case "$NEMO_TMP" in /tmp/nemo-it.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]) [ -d "$NEMO_TMP" ] && rm -rf "$NEMO_TMP" ;; *) echo "not removing: $NEMO_TMP" >&2 ;; esac
 ```
 
 **4. Present summary to user:**
