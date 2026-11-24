@@ -71,6 +71,7 @@ WHY = {
     "program-file": "is a program file committed to the project",
     "unreadable": "could not be read as Python",
     "link-not-followed": "is a link to something outside the project, which was not read",
+    "git-id-clash": "has the same git id as the branch's starting copy but different bytes, so it is not an old copy",
 }
 # Shapes an attacker uses. These stop in every project, the owner's own included.
 # read-then-run is the one shape honest code shares: a test loading the code it checks, or a
@@ -567,17 +568,17 @@ def stale_copies(root, gitsha):
     root = os.path.realpath(root)  # git is started from the top folder, never from inside the project
     exe = git_exe(root)
     if not exe:
-        return {}
+        return {}, set()
     # Before 2.45 git ignores GIT_NO_LAZY_FETCH, and a repository set up to fetch missing objects on
     # demand could then run its own command. Older git: no lookup, so nothing is softened.
     try:
         v = subprocess.run([exe, "--version"], cwd=os.sep, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL, timeout=20).stdout.decode("utf-8", "replace")
     except (OSError, subprocess.SubprocessError):
-        return {}
+        return {}, set()
     m = re.search(r"(\d+)\.(\d+)", v)
     if not m or (int(m.group(1)), int(m.group(2))) < (2, 45):
-        return {}
+        return {}, set()
 
     def one(*args):
         out = run_git(exe, root, *args)
@@ -593,12 +594,12 @@ def stale_copies(root, gitsha):
     head = one("rev-parse", "-q", "--verify", "HEAD^{commit}")
     fork = one("merge-base", head, tip) if head and tip else ""
     if not fork or fork == tip:
-        return {}
+        return {}, set()
     prefix = run_git(exe, root, "rev-parse", "--show-prefix")
     if prefix is None:
-        return {}
+        return {}, set()
     prefix = prefix.decode("utf-8", "replace").strip()
-    out = {}
+    out, clashes = {}, set()
     for rel, ours in gitsha.items():
         path = prefix + rel.replace(os.sep, "/")
         if "\n" in path or path.startswith(":"):  # a leading colon is git's own path syntax
@@ -612,6 +613,22 @@ def stale_copies(root, gitsha):
 
         if plain_file(fork) != ours:
             continue
+        # SHA-1 only locates; bytes decide. Python's SHA-1 has no collision detection, so the old
+        # copy counts only when git's bytes for that id are exactly the file's bytes on disk.
+        try:
+            disk = os.path.join(root, rel)
+            if os.path.getsize(disk) > MAX_BYTES:
+                continue
+            with open(disk, "rb") as f:
+                here = f.read()
+        except OSError:
+            continue
+        size = one("cat-file", "-s", ours)  # read the blob only when it is as long as the file
+        then = run_git(exe, root, "cat-file", "blob", ours) if size == str(len(here)) else None
+        if then != here:
+            if then is not None or (size and size != str(len(here))):
+                clashes.add(rel)  # git has this id with other bytes; a failed read is just not an old copy
+            continue
         now = plain_file(tip)
         if not now or now == ours:
             continue
@@ -621,7 +638,7 @@ def stale_copies(root, gitsha):
         commit = one("rev-list", "-1", tip, "--", path)
         if commit:
             out[rel] = commit[:8]
-    return out
+    return out, clashes
 
 
 def tracked_folders(raw):
@@ -768,8 +785,9 @@ def scan(root, cleared, projects=None):
             with open(path, "rb") as f:
                 raw = f.read()
             hashes[rel] = hashlib.sha256(raw).hexdigest()
-            # git's own name for the file (git names blobs by SHA-1), used only to match git's records in
-            # stale_copies. Cleared files are matched by the SHA-256 above, never by this.
+            # git's own name for the file (git names blobs by SHA-1). It only locates the file's old copy in
+            # git's records; stale_copies then compares the bytes, and bytes decide. Cleared files are
+            # matched by the SHA-256 above, never by this.
             gitsha[rel] = hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
             report["checked"] += 1
             if not is_py:
@@ -793,7 +811,9 @@ def scan(root, cleared, projects=None):
     # Old copies, looked up in git only for a project its owner marked as their own.
     held = {rel for rel in set(report["not_checked"]) | {r for r in flagged if any(st for _, _, st in found[r])}
             if rel in gitsha and not is_cleared(rel) and not foreign(rel)}
-    stale = stale_copies(root, {rel: gitsha[rel] for rel in held}) if mine and held else {}
+    stale, clashes = stale_copies(root, {rel: gitsha[rel] for rel in held}) if mine and held else ({}, set())
+    for rel in clashes:
+        found[rel].append(("git-id-clash", 1, False))
     # An old copy stays in `flagged`: a file that starts it on import is still a stop.
     extras = {}
     for rel, tree in trees.items():
