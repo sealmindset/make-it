@@ -876,7 +876,7 @@ That's it. The CI workflow will:
 
 "Done! Your changes are being deployed now.
 
-- Your app will update automatically in about 2-3 minutes
+- Your app will update automatically in a few minutes
 - You can check {hostname} to see the changes once it's done
 - If anything looks wrong, just run /argo-it again and I'll help
 
@@ -1375,7 +1375,9 @@ spec:
         readinessProbe:
           exec:
             command: {healthcheck_exec}
-          periodSeconds: 5
+          periodSeconds: {healthcheck_interval}
+          timeoutSeconds: {healthcheck_timeout}
+          failureThreshold: {healthcheck_retries}
         env:
           # SECRET env vars -> secretKeyRef
           - name: {VAR_NAME}
@@ -1415,7 +1417,13 @@ spec:
 answers only once the service is up, never with an error while it is still starting. `{healthcheck_exec}`
 is the check's `test:` as a JSON list: the words after `CMD`; for `CMD-SHELL`, `["sh", "-c", "<its string>"]`
 (make-it's backend: `["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]`).
-No `healthcheck:`: leave the probe out.
+Its timing comes from the same `healthcheck:`, in whole seconds rounded up (`5s` is 5, `1m30s` is 90,
+`500ms` is 1): `{healthcheck_interval}` from `interval:`, `{healthcheck_timeout}` from `timeout:` (Kubernetes
+would otherwise give the check only 1 second), `{healthcheck_retries}` from `retries:`; one that isn't set
+takes Compose's own default (30, 30 and 3). No probe -- and the report names the service and says why ("no
+readiness check: its health check is off / is written as one string") -- when there is no `healthcheck:`,
+when it has `disable: true`, when `test:` is `["NONE"]`, or when `test:` is a plain string instead of a
+list.
 
 **Init container rules:**
 - Use init containers for DB migrations (preferred over K8s Jobs -- no cluster-level RBAC needed)
@@ -1511,8 +1519,11 @@ like the app's services (PHASE 3). It runs in cluster mode:
 - Until DevOps sets the code, the app's **Sign in** opens a plain page: "The practice sign-in isn't set up
   yet. Ask your DevOps team to finish setting it up" -- never an error -- and the practice sign-in's own
   log says why, without the code.
-- Its admin API (adding people, changing its return address) and its API docs answer only requests from
-  inside its own pod: anything else gets 403. Only `/authorize` is routed to it from outside.
+- Its admin API (adding people, changing its return address) and its API docs answer only a request from
+  inside its own pod that also carries the client secret as its bearer token (`{app}-oidc-dev`'s
+  `OIDC_CLIENT_SECRET`, which the pod already has): anything else gets 403, a proxy in the same pod
+  included. Its image runs with `--no-proxy-headers`, so no forwarded header changes who is asking. Only
+  `/authorize` is routed to it from outside.
 When it starts, its start-up hook -- inside its own pod -- loads the pretend people from
 `mock-oidc-people.json` (below: written at set-up from `scripts/seed-mock-services.sh`, their single
 source) and registers the app's own return address (`https://{hostname}/api/auth/callback`). So after any
@@ -1597,7 +1608,8 @@ spec:
           postStart:
             exec:
               # Loads the pretend people (mock-oidc-people.json, mounted at /people) and registers the
-              # app's return address, through its own admin API (inside the pod: 127.0.0.1), on every start
+              # app's return address, through its own admin API (inside the pod: 127.0.0.1, with the client
+              # secret as its bearer token), on every start
               # (it keeps both in memory); a start where that fails is stopped and retried.
               command:
               - python3
@@ -1616,6 +1628,7 @@ spec:
                         try:
                             req = urllib.request.Request(base + path, data=json.dumps(payload).encode(), method=method)
                             req.add_header("Content-Type", "application/json")
+                            req.add_header("Authorization", "Bearer " + os.environ["MOCK_OIDC_CLIENT_SECRET"])
                             urllib.request.urlopen(req, timeout=5)
                             return
                         except Exception:
@@ -2007,7 +2020,7 @@ spec:
           - name: POSTGRES_USER
             valueFrom:
               secretKeyRef:
-                name: {secret_pattern_resolved}    # e.g., {app}-secrets-{env}
+                name: {secret_pattern_resolved}    # the app's secrets, e.g. myapp-secrets-dev
                 key: POSTGRES_USER
           - name: POSTGRES_PASSWORD
             valueFrom:
@@ -2881,8 +2894,10 @@ These secrets must exist in the `{namespace}` namespace before pods can start.
 Every command below works in any shell (sh, bash, zsh) and keeps each value off the command line, so it is
 never in your shell history or the list of running programs: a value is generated, or read from a prompt
 that doesn't show it, into a private folder only you can read (`umask 077`), loaded from there into the
-Secret, and the folder is deleted. A value read from a prompt never keeps a trailing newline. Run each
-block as it is (it runs in its own `( ... )`, so the `umask` doesn't stay in your shell).
+Secret, and the folder is deleted -- also when you stop a block with Ctrl-C, which turns the prompt's
+hidden typing back on too. A value read from a prompt never keeps a trailing newline. Run each block as it
+is (it runs in its own `( ... )`, so the `umask` and the traps don't stay in your shell). Each block ends by
+listing the Secret's key names, never a value.
 
 **{app}-secrets-{env}:**
 | Key | Description | Where to get it |
@@ -2907,16 +2922,20 @@ The app won't start until this Secret exists.
 | PRACTICE_ACCESS_CODE | The code testers type before they can sign in (16+ characters; without it nobody can sign in) | Generate (below) |
 
 ```sh
-( umask 077; d="$(mktemp -d)"
+( umask 077; d="$(mktemp -d)"; trap 'stty echo 2>/dev/null; rm -rf "$d"' EXIT; trap 'exit 130' INT TERM
   openssl rand -hex 32 | tr -d '\n' > "$d/OIDC_CLIENT_SECRET"
   openssl rand -hex 12 | tr -d '\n' > "$d/PRACTICE_ACCESS_CODE"
   kubectl create secret generic {app}-oidc-dev -n {namespace} \
     --from-file="$d/OIDC_CLIENT_SECRET" --from-file="$d/PRACTICE_ACCESS_CODE"
   rm -rf "$d" )
-# Read the access code when you hand it to your testers -- out of band (in person, or your team's
-# password manager), never in a ticket, chat or email:
-kubectl get secret {app}-oidc-dev -n {namespace} -o jsonpath='{.data.PRACTICE_ACCESS_CODE}' | base64 -d; echo
+kubectl get secret {app}-oidc-dev -n {namespace} -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 ```
+
+Hand the access code to your testers out of band (in person, or your team's password manager), never in a
+ticket, chat or email -- and never on screen, where a recorded terminal would keep it: copy it straight to
+the clipboard, `kubectl get secret {app}-oidc-dev -n {namespace} -o jsonpath='{.data.PRACTICE_ACCESS_CODE}'
+| base64 -d | pbcopy` (macOS; on Linux `| xclip -selection clipboard`), and paste it into the password
+manager.
 
 What testers see, and what you can change:
 - The app's **Sign in** asks for the access code first; a browser that typed it is remembered for 15
@@ -2932,8 +2951,10 @@ What testers see, and what you can change:
 
 The practice sign-in lets anyone who has the access code sign in as any pretend person, an
 administrator included: keep `{hostname}` reachable only from your organisation's network too. Its admin
-routes (adding people, changing where it sends people after sign-in) answer only its own pod -- every
-other address, inside the cluster or out, gets 403 -- so its people come only from the app's seed script.
+routes (adding people, changing where it sends people after sign-in) answer only its own pod, and only with
+the client secret as a bearer token -- every other address, inside the cluster or out, gets 403 -- so its
+people come only from the app's seed script. A `kubectl port-forward` to the practice sign-in reaches it as
+its own pod, and still gets 403 without that secret.
 
 [Organisation's sign-in -- `{app}-oidc-dev` when picked for the test copy, and always `{app}-oidc-prod`:]
 | Key | Description | Where to get it |
@@ -2944,7 +2965,7 @@ other address, inside the cluster or out, gets 403 -- so its people come only fr
 | OIDC_CLIENT_SECRET | This app's password there | The same registration |
 
 ```sh
-( umask 077; d="$(mktemp -d)"
+( umask 077; d="$(mktemp -d)"; trap 'stty echo 2>/dev/null; rm -rf "$d"' EXIT; trap 'exit 130' INT TERM
   printf "The app's password at the sign-in service (not shown): "; stty -echo; IFS= read -r v; stty echo; echo
   printf %s "$v" > "$d/OIDC_CLIENT_SECRET"; unset v
   kubectl create secret generic {app}-oidc-{env} -n {namespace} \
@@ -2953,6 +2974,7 @@ other address, inside the cluster or out, gets 403 -- so its people come only fr
     --from-literal=OIDC_CLIENT_ID="<the app's ID there>" \
     --from-file="$d/OIDC_CLIENT_SECRET"
   rm -rf "$d" )
+kubectl get secret {app}-oidc-{env} -n {namespace} -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 ```
 (The address and the ID aren't secrets; the password is read at the prompt.)
 
@@ -2965,7 +2987,7 @@ for the live version, and -- only when the test copy uses your organisation's si
 [In-cluster database:] the database user is `{app}`, its password is generated, and `DATABASE_URL` is
 built from both:
 ```sh
-( umask 077; d="$(mktemp -d)"
+( umask 077; d="$(mktemp -d)"; trap 'stty echo 2>/dev/null; rm -rf "$d"' EXIT; trap 'exit 130' INT TERM
   printf %s '{app}' > "$d/POSTGRES_USER"
   openssl rand -hex 24 | tr -d '\n' > "$d/POSTGRES_PASSWORD"
   printf 'postgresql+asyncpg://%s:%s@{app}-db-service:5432/{app_db_name}' "$(cat "$d/POSTGRES_USER")" "$(cat "$d/POSTGRES_PASSWORD")" > "$d/DATABASE_URL"
@@ -2974,16 +2996,18 @@ built from both:
     --from-file="$d/DATABASE_URL" --from-file="$d/JWT_SECRET" \
     --from-file="$d/POSTGRES_USER" --from-file="$d/POSTGRES_PASSWORD"
   rm -rf "$d" )
+kubectl get secret {app}-secrets-{env} -n {namespace} -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 ```
 [Managed or external database:] `DATABASE_URL` is read at a prompt that doesn't show it:
 ```sh
-( umask 077; d="$(mktemp -d)"
+( umask 077; d="$(mktemp -d)"; trap 'stty echo 2>/dev/null; rm -rf "$d"' EXIT; trap 'exit 130' INT TERM
   printf 'DATABASE_URL (not shown): '; stty -echo; IFS= read -r v; stty echo; echo
   printf %s "$v" > "$d/DATABASE_URL"; unset v
   openssl rand -hex 32 | tr -d '\n' > "$d/JWT_SECRET"
   kubectl create secret generic {app}-secrets-{env} -n {namespace} \
     --from-file="$d/DATABASE_URL" --from-file="$d/JWT_SECRET"
   rm -rf "$d" )
+kubectl get secret {app}-secrets-{env} -n {namespace} -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 ```
 [Each other key of the table above: one more `--from-file="$d/KEY"` line, its value generated with
 `openssl rand -hex 32 | tr -d '\n' > "$d/KEY"` or read at a prompt like `DATABASE_URL`.]
@@ -3036,7 +3060,7 @@ This is typically a CNAME to the ingress controller's load balancer hostname.
 If the cluster needs credentials to pull from `{registry_host}` (the user and token are read at prompts;
 the token isn't shown):
 ```sh
-( umask 077; d="$(mktemp -d)"
+( umask 077; d="$(mktemp -d)"; trap 'stty echo 2>/dev/null; rm -rf "$d"' EXIT; trap 'exit 130' INT TERM
   printf 'Registry user: '; IFS= read -r u
   printf 'Registry token (not shown): '; stty -echo; IFS= read -r v; stty echo; echo
   printf '{"auths":{"%s":{"auth":"%s"}}}' '{registry_host}' "$(printf '%s:%s' "$u" "$v" | base64 | tr -d '\n')" > "$d/config.json"
@@ -3044,6 +3068,7 @@ the token isn't shown):
   kubectl create secret generic {app}-registry-pull -n {namespace} \
     --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson="$d/config.json"
   rm -rf "$d" )
+kubectl get secret {app}-registry-pull -n {namespace} -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
 ```
 
 Or configure org-wide image pull secrets if not already done.
@@ -3114,7 +3139,7 @@ That's it. There is no manual step between pushing code and your app being live.
 2. **Push to GitHub** -- CI automatically:
    - Builds container images from your code
    - Deploys them to the dev environment
-   - Your app updates in ~2-3 minutes
+   - Your app updates a few minutes later (the first build is the slowest)
 3. **Check your app** at `{hostname}`
 
 ### What happens under the hood (you don't need to do any of this)
@@ -3673,7 +3698,7 @@ has already said that.
 "Pushed! Here's what happens next:
 - CI is building your container images now
 - Once built, CI will deploy them to your dev environment automatically
-- Your app will be live in about 3-5 minutes
+- Your app will be live a few minutes later (the first build is the slowest)
 
 **Before it will actually work, DevOps needs to complete the one-time setup
 in ONBOARDING-K8S.md** (namespace, secrets, TLS cert, DNS, Argo Application).
@@ -3709,7 +3734,12 @@ stop here. Skip step 5.
 **How it works from now on:**
 - You push code to any branch
 - CI builds, publishes, and deploys automatically
-- Your app updates at **{hostname}** in ~3 minutes
+- Your app updates at **{hostname}** a few minutes later
+
+**The first build:** it takes a few minutes -- the first build is the slowest. Until it finishes (and
+until DevOps has done the one-time set-up below), **{hostname}** answers with a bare "no available server"
+page (error 503): that is expected, nothing is broken. It has finished when **{hostname}** shows your
+app's own page; your project's online home shows the build itself (its Actions page) as done.
 
 **One-time setup needed (share ONBOARDING-K8S.md with DevOps):**
 - [ ] Create namespace `{namespace}`
@@ -3923,7 +3953,7 @@ jobs:
           1. You push code to any branch
           2. CI builds container images automatically
           3. CI deploys to the dev environment
-          4. Your app updates in ~3 minutes
+          4. Your app updates a few minutes later (the first build is the slowest)
 
           **Before it will work, DevOps must complete the one-time setup in ONBOARDING-K8S.md.**
 

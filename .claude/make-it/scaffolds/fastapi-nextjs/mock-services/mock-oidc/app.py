@@ -24,8 +24,9 @@ Config via environment variables:
   - nobody signs in without an access code of at least 16 characters that isn't only spaces or one repeated
     character: without one, the sign-in page says the practice sign-in isn't set up yet (a plain page, not an
     error), and a plain line at start says why, without the code;
-  - the admin API (/api/...) and the API docs answer only requests from this machine itself (127.0.0.1 or ::1:
-    the start-up hook that loads the people runs in the same pod); from anywhere else they answer 403.
+  - the admin API (/api/...) and the API docs answer only a request from this machine itself (127.0.0.1 or ::1:
+    the start-up hook that loads the people runs in the same pod) that also carries "Authorization: Bearer
+    <MOCK_OIDC_CLIENT_SECRET>"; anything else gets 403 (the scaffold's default secret never opens them).
 Unset, both leave local development exactly as it was.
 """
 
@@ -135,16 +136,21 @@ AUTH_CODE_TTL = 300  # 5 minutes
 
 app = FastAPI(title="Mock OIDC Provider", version="1.0.0")
 
-# In cluster mode only these answer requests from outside this machine; everything else (the admin API, the
-# API docs) answers only 127.0.0.1 / ::1 -- the start-up hook in the same pod.
+# In cluster mode only these answer anyone; everything else (the admin API, the API docs) needs BOTH a request from
+# this machine (127.0.0.1 / ::1 -- the start-up hook in the same pod; the image runs uvicorn with --no-proxy-headers,
+# so that is the real peer) AND "Authorization: Bearer <the client secret>", which the hook sends. A proxy in the
+# same pod (a service mesh's, a port-forward) forwards from 127.0.0.1, so the token is what keeps it shut.
 PUBLIC_ROUTES = {"/.well-known/openid-configuration", "/jwks", "/authorize", "/token", "/userinfo", "/health"}
 LOOPBACK = {"127.0.0.1", "::1"}
 
 
 @app.middleware("http")
-async def _cluster_admin_from_loopback_only(request: Request, call_next):
-    if CLUSTER and request.url.path not in PUBLIC_ROUTES and _client(request) not in LOOPBACK:
-        return JSONResponse({"detail": "Not available here."}, status_code=403)
+async def _cluster_admin_only(request: Request, call_next):
+    if CLUSTER and request.url.path not in PUBLIC_ROUTES:
+        sent = request.headers.get("authorization", "").encode()
+        token_ok = CLIENT_SECRET != "mock-oidc-secret" and hmac.compare_digest(sent, ("Bearer " + CLIENT_SECRET).encode())
+        if _client(request) not in LOOPBACK or not token_ok:
+            return JSONResponse({"detail": "Not available here."}, status_code=403)
     return await call_next(request)
 
 
