@@ -80,34 +80,41 @@ containers, volumes and database are never written to, never stopped and never r
        database's own count of inserts, updates and deletes for it.
     2. Put the write steps' commands in one script and run it with `wt_run bash <script>`. It
        checks first, and starts and removes nothing when the check refuses. The copy is used
-       only on make-it's standard set-up
-       (`~/.claude/make-it/scripts/stack-check.py`, an allow-list): only the services the
-       scaffolds define, with no `network_mode`, `extra_hosts` or links; one network, the
+       only on a set-up make-it's build produces
+       (`~/.claude/make-it/scripts/stack-check.py`, an allow-list): the scaffolds' services and
+       the mock services the build generates (`mock-<name>`, in the dev profile, built from
+       `./mock-services/mock-<name>`), using only the options those use; one network, the
        project's own; every volume the project's own, and no folder of this computer mounted;
-       only the address settings the scaffolds know, each read for certain and pointing at one
-       of the copy's own services or its own published port; no cloud storage named by its
-       keys. Anything else, or anything it can't read, is not standard: `NOT RUN: your app's
-       set-up has been changed from make-it's standard one ([the first reason]), so I did not
-       run the test that creates, changes and deletes a record`. Then it removes a copy left by
+       the address settings the scaffolds know, each read for certain and pointing at one of
+       the copy's own services or its own published port; any other setting that holds an
+       address only when it points at one of the copy's generated mocks; no cloud storage named
+       by its keys. Anything else, or anything it can't read, gets `NOT RUN: your app's set-up
+       isn't one make-it's build produces ([the first reason]), so I did not run the test that
+       creates, changes and deletes a record`. The copy is started with every AI-provider
+       address and key setting emptied, so it can never call a paid or outside AI service: the
+       write steps that need the AI provider (the rows "No reachable AI provider" lists) are
+       NOT RUN in the copy, with the reason "needs your AI provider; not tested in the
+       temporary copy", and the rest of the write steps run. Then it removes a copy left by
        a session that died, starts the copy, runs the script inside it (`docker compose` and
        the ports are the copy's, the app is at `http://localhost:$FRONTEND_PORT`; sign in there
        as step 25 does) with a time limit of 30 minutes, and removes the copy on every way out:
-       finished, failed, interrupted or out of time. `NOT RUN: [reason]` (not standard, the
-       copy didn't start, the time ran out): every write step not yet done is NOT RUN with that
-       reason, and the build goes on.
+       finished, failed, interrupted or out of time. `NOT RUN: [reason]` (the set-up isn't one
+       the build produces, the copy didn't start, the time ran out): every write step not yet
+       done is NOT RUN with that reason, and the build goes on.
     3. `count > after`, then compare the two: they must be identical, rows and counters. A
        difference is a FAIL naming the table, "the write test wrote to your own database,
        where it must never write", at the top of TODO.md.
 Say in the results what happened, never more:
 - `copy removed`, and no `NOT RUN`: "I tested creating, changing and deleting a record in a
   temporary copy of your app, then removed the copy."
-- `NOT RUN: your app's set-up has been changed ...`: say that sentence as it is.
+- `NOT RUN: your app's set-up isn't one make-it's build produces ...`: say that sentence as it is.
 - any other `NOT RUN: [reason]`: "I didn't test creating, changing or deleting a record: [reason]."
 - `COPY LEFT: [name]`: "I could not remove the temporary copy of your app ([name]). Remove it
   with: docker compose -p [name] --profile dev down -v", at the top of TODO.md.
 ```bash
 # Run in the app's folder. <db> is the database service in docker-compose.yml (db in the scaffold).
-APP="$(env -u COMPOSE_PROJECT_NAME docker compose config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
+# Every `docker compose` here that reads or starts the stack uses the profile the build starts the app with (step 22).
+APP="$(env -u COMPOSE_PROJECT_NAME docker compose --profile dev config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
 q() { docker compose -p "$APP" exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
 # count: for each table of the person's database, name|rows, then the database's own counters,
 # name|inserts|updates|deletes (it only reads; the wait lets Postgres write its counters down)
@@ -127,13 +134,15 @@ wt_check() {
   [ -n "$APP" ] && [ "$WT" != "$APP" ] || { echo "NOT RUN: a temporary copy can't be told apart from your app"; return 1; }
   off=$(( ($(printf '%s' "$WT" | cksum | awk '{print $1}') % 80 + 1) * 100 ))
   { echo "export COMPOSE_PROJECT_NAME=$WT"
+    # every AI-provider address and key setting, emptied: the copy can never call a paid or outside AI service
+    python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" ai-settings | while read -r var; do echo "export $var="; done
     grep -oE '\$\{[A-Z0-9_]*PORT:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
       | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
-  # the copy is used only on make-it's standard set-up (an allow-list, in stack-check.py): the first
-  # thing that isn't standard is named in plain words, never a setting's value
+  # the copy is used only on a set-up make-it's build produces (an allow-list, in stack-check.py):
+  # the first thing that isn't is named in plain words, never a setting's value
   why="$( . "$WTENV"; docker compose -p "$WT" --profile dev config --format json 2>/dev/null \
     | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" copy "$WT" )" \
-    || { echo "NOT RUN: your app's set-up has been changed from make-it's standard one (${why:-its settings could not be read}), so I did not run the test that creates, changes and deletes a record"; rm -f "$WTENV"; return 1; }
+    || { echo "NOT RUN: your app's set-up isn't one make-it's build produces (${why:-its settings could not be read}), so I did not run the test that creates, changes and deletes a record"; rm -f "$WTENV"; return 1; }
   wt_ok=1
 }
 # wt_stop: remove the copy with its volume. Only after wt_check has passed here (down -v removes a
@@ -633,9 +642,12 @@ build-verify runs them, in its temporary copy; the live pass starts no copy.
 2. **Only when it can start here.** `docker info` fails → start nothing: every row of the pass is
    NOT RUN, with the reason "Docker isn't running". Then read the database, queue and cache URLs
    in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
-   does: `docker compose config --format json | python3 -I
-   "$HOME/.claude/make-it/scripts/stack-check.py" local` (the rule make-it's write test shares;
-   it prints the host only, never a setting's value). One whose host isn't a compose service
+   does, with the profile step 3 starts the app with (the rule make-it's write test shares; it
+   prints the host only, never a setting's value):
+   ```bash
+   docker compose --profile dev config --format json | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" local
+   ```
+   One whose host isn't a compose service
    name, `localhost` or `127.0.0.1` → start nothing: every row of the pass is NOT RUN, with the
    reason it printed, "your settings point at <host>". Settings it can't read → the same, with
    its reason.
