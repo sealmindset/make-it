@@ -71,6 +71,11 @@ def unread(query="workspace"):
     return {f["where"]: "NOT ASSESSED (no access)" if f["kind"] == "no access" else "FAILED" for f in _failed if f["query"] == query}
 
 
+def was_partial(query, where):
+    """True when this query in this place answered only in part (la() recorded it)."""
+    return any(f["kind"] == "partial" and f["query"] == query and f["where"] == where for f in _failed)
+
+
 def read_access(outdir, *needs):
     """access.json, for every script that runs after tenant_access.py: the ONE way to read it. What tenant_access.py
     could not read is carried forward here (unreadable workspaces and a failed workspace list always; "tenant" and

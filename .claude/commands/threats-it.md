@@ -169,7 +169,8 @@ the user the severity counts and top issues; fix all of them (re-query for scope
 pass if the first found high-severity scope errors.
 
 **9 — Deliver.** Commit locally (baseline commit before any restructure; conventional message). Reply to the user:
-IOC verdict, what must happen now, what changed after fact-check, file paths. If asked, draft the covering email per
+IOC verdict, what must happen now, what changed after fact-check, file paths. With any workspace or part not
+assessed, the verdict line is scoped ("in the workspaces searched") and names what was not assessed; it never reads as clean for the whole organisation. If asked, draft the covering email per
 `references/email.md` with its factual pass. Update the organisation profile with anything newly learned about the
 environment.
 

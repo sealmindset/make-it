@@ -27,7 +27,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import ARM, failed, failures, finish, http, la, read_access, save, unread, workspace_unread  # noqa: E402
+from _common import ARM, failed, failures, finish, http, la, read_access, save, unread, was_partial, workspace_unread  # noqa: E402
 
 TABLES = ["SigninLogs", "AADNonInteractiveUserSignInLogs", "AADServicePrincipalSignInLogs", "AADManagedIdentitySignInLogs", "AuditLogs",
           "MicrosoftGraphActivityLogs", "OfficeActivity", "DeviceProcessEvents", "DeviceEvents", "DeviceNetworkEvents", "DeviceFileEvents",
@@ -66,20 +66,22 @@ for w in [x for x in cov if x["sentinel"]]:
     elif st2 != 200:
         failed("ingestion (Usage)", w["name"], st2)
     ingest = {r["DataType"]: float(r["MB"]) for r in usage} if st2 == 200 else {}
+    # no figures: "not assessed"; figures that came only in part: "not fully assessed". Neither proves live or blind.
+    gap = "not assessed" if st2 != 200 else "not fully assessed" if was_partial("ingestion (Usage)", w["name"]) else ""
     rows = []
     for r in rules:
         t = [x for x in TABLES if re.search(r"(?<![\w])" + re.escape(x) + r"(?![\w])", r.get("query") or "")]
         live = [x for x in t if ingest.get(x, 0) > 0]
-        state = ("disabled" if not r["enabled"] else "not assessed" if st2 != 200 else "tables not recognised" if not t else "blind" if not live
+        state = ("disabled" if not r["enabled"] else gap if gap else "tables not recognised" if not t else "blind" if not live
                  else "partial" if len(live) < len(t) else "live")
         rows.append({"rule": r["displayName"], "kind": r["kind"], "enabled": r["enabled"], "state": state, "tables": t, "live_tables": live})
     sched = [x for x in rows if x["enabled"] and x["kind"] == "Scheduled"]
     out["workspaces"][w["name"]] = {
         "rules_total": len(rows), "enabled_scheduled": len(sched), "disabled": sum(1 for x in rows if not x["enabled"]),
         "enabled_by_state": dict(collections.Counter(x["state"] for x in sched)),
-        "ingested": sorted(k for k, v in ingest.items() if v > 0) if st2 == 200 else "NOT ASSESSED",
+        "ingested": sorted(k for k, v in ingest.items() if v > 0) if not gap else gap.upper(),
         "chains": {c: sorted([x for x in rows if re.search(p, x["rule"] or "", re.I)], key=lambda x: (x["state"], x["rule"])) for c, p in chains.items()},
-        "blind_rules": sorted(x["rule"] for x in sched if x["state"] == "blind") if st2 == 200 else "NOT ASSESSED",
+        "blind_rules": sorted(x["rule"] for x in sched if x["state"] == "blind") if not gap else gap.upper(),
     }
     s = out["workspaces"][w["name"]]
     print(w["name"], "| rules", s["rules_total"], "| enabled scheduled", s["enabled_scheduled"], "|", s["enabled_by_state"])

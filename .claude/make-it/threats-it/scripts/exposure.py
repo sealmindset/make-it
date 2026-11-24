@@ -26,7 +26,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, arg, failed, failures, finish, graph_cached, http, la, owner_class, read_access, unread  # noqa: E402
+from _common import GRAPH, arg, failed, failures, finish, graph_cached, http, la, owner_class, read_access, unread, was_partial  # noqa: E402
 
 TAKEOVER_VERIFIED = ["RoleManagement.ReadWrite.Directory", "Application.ReadWrite.All", "Directory.ReadWrite.All"]
 TAKEOVER_COMMON = ["AppRoleAssignment.ReadWrite.All", "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All",
@@ -143,7 +143,7 @@ for product, pat in presence.items():
             failed(f"{product}: Azure resources", "Resource Graph", st)
             resources = "NOT ASSESSED (Resource Graph query failed)"
     names = sorted({s["displayName"] for s in sps if pat.get("app_names") and re.search(pat["app_names"], s.get("displayName") or "", re.I)})
-    usage, usage_failed = [], []
+    usage, usage_failed, usage_partial = [], [], []
     if pat.get("app_names"):
         for w in signin_ws:
             t = w["security_tables_mb_30d"]
@@ -158,9 +158,11 @@ for product, pat in presence.items():
                 failed(f"{product}: sign-ins", w["name"], st)
                 usage_failed.append(w["name"])
                 continue
+            if was_partial(f"{product}: sign-ins", w["name"]):
+                usage_partial.append(w["name"])
             usage += [dict(r, workspace=w["name"], in_directory=part(r["AppId"] in {s["appId"] for s in sps}, "graph_service_principals")) for r in res]
     products[product] = {"azure_resources": resources, "enterprise_apps": part(names, "graph_service_principals"),
-                         "signins": usage, "signins_failed_in": usage_failed,
+                         "signins": usage, "signins_failed_in": usage_failed, "signins_not_fully_assessed_in": usage_partial,
                          # workspaces tenant_access.py could not read were never asked: not assessed, not zero sign-ins
                          "signins_not_assessed_in": (unread() | ({"every workspace": "NOT ASSESSED (workspace list not read)"} if unread("workspace list") else {})) if pat.get("app_names") else {}}
 
@@ -214,7 +216,7 @@ for p, v in products.items():
         per_ws[x["workspace"]] += int(x["SignIns"])
     # workspaces can overlap in time: report per workspace, never summed
     print(f"  {p}: resources={n(v['azure_resources'])} apps={n(v['enterprise_apps'])} "
-          f"signins_by_workspace={dict(per_ws) | {w: 'FAILED' for w in v['signins_failed_in']} | v['signins_not_assessed_in']}")
+          f"signins_by_workspace={dict(per_ws) | {w: f'{per_ws.get(w, 0)} (not fully assessed)' for w in v['signins_not_fully_assessed_in']} | {w: 'FAILED' for w in v['signins_failed_in']} | v['signins_not_assessed_in']}")
 if servers:
     print("servers:", servers["counts"], *(["| NOT ASSESSED:", servers["not_assessed"]] if servers["not_assessed"] else []))
 finish()

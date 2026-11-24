@@ -102,7 +102,12 @@ verdict = hits or ("NOT ASSESSED, the workspace list was not read" if no_list
                    else "NOT ASSESSED, no workspace answered" if gap and not searched
                    else "none in the workspaces that answered" if gap
                    else "none" if searched else "not searched (no web tables, or no search terms)")
+# an IOC search that answered only in part did not look at everything, even when no rows came
+part_ioc = sorted(f["where"] for f in summary.get("failed_queries", []) if f.get("kind") == "partial" and f["query"].startswith("IOC search"))
+if part_ioc and verdict == "none":
+    verdict = "none in the rows that came"
 print("workspaces with web tables:", "NOT ASSESSED" if no_list else sum(1 for v in summary["workspaces"].values() if v.get("web_tables_mb_30d")),
       "| IOC hits:", verdict, *(["| IOC query FAILED in:", ioc_failed or "none"] if searched or ioc_failed else []),
-      *(["| workspaces not read:", not_read] if not_read else []))
+      *(["| workspaces not read:", not_read] if not_read else []),
+      *(["| IOC search not fully assessed in:", part_ioc] if part_ioc else []))
 finish()

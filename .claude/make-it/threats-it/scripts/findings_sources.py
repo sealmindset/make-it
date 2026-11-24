@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, NoRedirect, arg, failed, finish, graph_all, http, save  # noqa: E402
+from _common import GRAPH, NoRedirect, arg, failed, finish, graph_all, http, reason, save  # noqa: E402
 
 ASSESSMENTS = """securityresources
 | where type == 'microsoft.security/assessments'
@@ -49,9 +49,10 @@ def auditgithub(outdir, url, key, max_pages=200):
             with opener.open(req, timeout=120) as resp:
                 body = json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            return save(outdir, name, "auditgithub", shown, e.code, {"message": e.read().decode(errors="replace")[:500], "page": page})
+            # never the service's error text (it can repeat the key): the status and a reason code only
+            return save(outdir, name, "auditgithub", shown, e.code, {"error": reason(e.read().decode(errors="replace")), "page": page})
         except (urllib.error.URLError, ValueError) as e:
-            return save(outdir, name, "auditgithub", shown, 0, {"message": str(e)[:500], "page": page})
+            return save(outdir, name, "auditgithub", shown, 0, {"error": {"code": type(e).__name__}, "page": page})
         counts = {k: body.get(k) for k in ("total", "total_actionable", "total_false_positive")}
         items += [{k: v for k, v in f.items() if k != "code_snippet"} for f in body.get("items", [])]
         if not body.get("has_next"):
