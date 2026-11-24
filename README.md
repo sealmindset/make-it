@@ -502,6 +502,8 @@ claude
 
 `/fix-it` reads the most recent `/nemo-it` attestation, classifies each finding as auto-fixable or manual-only, applies all safe fixes, verifies nothing broke, and re-scans to produce an updated attestation showing the improvement.
 
+Its closing report says what really happened. Every in-scope finding ends with exactly one outcome -- fixed, changed but not re-checked, failed, needs a person, or not attempted -- and the counts add up; none of them is worked out by subtracting one report from the other. "Fixed" means the change was kept and the new scan ran the same check and no longer reports it: if a scanner did not run the second time, its findings are "not re-checked". The tests and the build run where they live (`backend/`, `frontend/`, ...), and each is passed, failed or not run from the command's own exit status: "no tests ran" and "the build was not checked" are never worded as a pass. The record is `.claude/make-it/scripts/fix-it-results.py`; `scripts/test-fix-it-true-results.sh` runs it against a small stand-in project and report (`scripts/fix-it-fixtures/`).
+
 ### Severity Modes
 
 | Command | What It Fixes |
