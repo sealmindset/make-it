@@ -1,6 +1,15 @@
 # Security attestation -- first scan
 
-> A stand-in for a /nemo-it report, for /fix-it's tests (scripts/test-fix-it-true-results.sh). Eight findings, every check ran.
+> A stand-in for a /nemo-it report, for /fix-it's tests (scripts/test-fix-it-true-results.sh). Eight findings, every scanner ran.
+
+## Scan Coverage
+
+| Phase | Status | Findings |
+|-------|--------|----------|
+| Static Analysis (SAST) | Completed | 3 |
+| Dependency Scanning | Completed | 4 |
+
+**Tools used:** npm audit 10.8.2, pip-audit 2.7.3, Trivy 0.50.1, Semgrep 1.70.0, Bandit 1.7.8, ESLint 9.1.0, Playwright 1.44.0
 
 ## Summary Dashboard
 
@@ -14,6 +23,16 @@
 | 4 | Static Analysis | Semgrep | SAST-SEMGREP | FAIL | 2 | see below |
 | 5 | Static Analysis | Bandit / ESLint Security | SAST-LINT | FAIL | 1 | see below |
 | 6 | OWASP Testing Guide | Authorization | OTG-AUTHZ | FAIL | 1 | see below |
+
+### Severity Distribution
+
+| Severity      | Count | Trend vs. Prior |
+|---------------|-------|-----------------|
+| Critical | 1 | - |
+| High | 7 | - |
+| Medium | 0 | - |
+| Low | 0 | - |
+| Informational | 0 | - |
 
 ## Findings
 
