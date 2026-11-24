@@ -44,7 +44,7 @@ fe261b6d845596f86b106e14bfefd1c2b9ec579becef3c261df102dcf0cb6686  make-it/conflu
 cf3c7e9a34e134cb5f865a39dc34ba16f53fc8413ff2d86672288e7e12b5dd6f  make-it/confluence-docs/17-threats-it.md
 6e8f9f7d9f20289c05c33f09f8deeb9252da4126d3aef3eb360146d0fd3a42c8  make-it/confluence-docs/18-deadcode-it.md
 978cf45051562eb422fff781df7eb7833099fa63d298011e7b6d52bc3b431a3b  make-it/confluence-docs/19-resolve-it.md
-99f32b076064d76722ec678bf7b432ae5190214c384c0559c044b0f4e8b02385  make-it/hooks/no-force-push.sh
+f74d6a6d19c0c4da2447ee96c18f337a08c61ed0f2cfa63df849daab711bc184  make-it/hooks/no-force-push.sh
 47585ed64bca667adf5d35531b72e3fc78248af07bef9839ca6804b2e5f66355  make-it/references/adoption-scan.md
 c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/references/ai-accounting.md
 343605fc91c37aac81c95e69b51e16d10cd863c566be538036edfb0f447aa67e  make-it/references/approval-block.md

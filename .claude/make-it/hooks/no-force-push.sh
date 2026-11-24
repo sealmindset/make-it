@@ -39,7 +39,9 @@
 # A guard against mistakes, not against hiding a push. It does NOT see: a script file written by an
 # EARLIER command, or by this one with echo / printf, and then run; text an interpreter runs
 # (python -c, perl -e, awk, make, node -e) when it is given as a quoted string (in a here-doc, see
-# (3) below); a whole git push given as ONE quoted string to a command that is not a shell (ssh or
+# (3) below), also through a clustered or unusual option (perl -E, perl -le, python3 -Ic, awk
+# "$(cat ...)"); a tool that takes a whole command as one string (parallel "..."); a gh alias
+# set and used in the same command (gh alias set p "..."; gh p); a whole git push given as ONE quoted string to a command that is not a shell (ssh or
 # docker with '...', env -S, su -c); git aliases and a force refspec already set in git config
 # (remote.*.push, remote.*.mirror), also when this command sets them with git config; a hook folder
 # with another name than hooks or .husky, a link that leads into one, or a program on the PATH,
