@@ -1005,6 +1005,21 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.23 -- the board's helpers work under any locale, and a task brief takes a task number only
+
+- **The six board helpers no longer crash on a non-ASCII title** when the computer's locale
+  is not UTF-8. Before, a card could be written and the helper would then crash while
+  printing, so a save that worked looked like one that failed.
+- **Input is strict; output never crashes.** Text that is not UTF-8 is refused with nothing
+  written, so a card is never stored with garbled characters.
+- **Odd cards are handled plainly.** A card that cannot be read is named, left out of
+  listings, and never written to. A card keeps its own line endings on a one-field change.
+- **`task-brief` takes a task number and nothing else.** Before, a pattern in its place could
+  copy the whole plan into one task's brief.
+- **On a plain ASCII board nothing changes:** output, exit codes, commits and files are
+  byte-identical to the last release.
+- **Checked on Linux and macOS, not Windows.** Card writes do not run on Windows today.
+
 ### v1.71.22 -- a crash in the secret scan is reported as a crash, and the version that crashed is replaced
 
 Every app built with make-it pinned gitleaks v8.22.1. Built with a recent Go, that version
