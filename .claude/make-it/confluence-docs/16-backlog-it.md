@@ -39,6 +39,10 @@ and waiting to be checked, and what's next.
   you* list at the top of the board, each with its title, what waits and why, and 2–4 answers to
   pick from. `dispatch` ends by showing you that list, plus any high-stakes card it rightly
   won't start on its own.
+- **Knowing what to do next**: `/backlog-it` on its own opens a short first screen: the one thing
+  to do next with one-click choices, only what needs you, what changed since you last looked, and
+  whether the list is growing or shrinking. A written rule in a script picks the next thing, not AI.
+  Every card is named by its title with its number.
 - **Seeing where things stand**: `status` prints one report: what's in flight, what's next,
   whether the list is shrinking, what needs you, and what has drifted (a fix that has stopped
   moving shows up within 2 days). It's a script, not AI, so it gives the same answer every time,
@@ -70,7 +74,7 @@ we?". With one, every session -- and every AI helper -- works from the same list
 ## How to use it
 
 ```
-/backlog-it                        # show the board
+/backlog-it                        # the first screen: what to do next, what needs you, what changed
 /backlog-it list                   # what's on the board
 /backlog-it status                 # where things stand: in flight, next, burn-down, what needs you
 /backlog-it reconcile --prs        # move bugs forward from their PRs on GitHub (merged → Live)
