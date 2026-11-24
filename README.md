@@ -1005,6 +1005,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.25 -- `.env` stays out of every image, and a worktree gets its own database port
+
+- **Every image an app builds leaves `.env` files out.** Before, the backend image and both
+  front-end images shipped the project's `.env` inside them, and so did the practice sign-in's
+  image. Each build folder now has its own ignore file, and `.env.example` is still included.
+- **The check finds every build folder by reading the Compose files,** so a service added
+  later is covered without anyone remembering to add it.
+- **A worktree gets its own database port.** Before, a second checkout of the same app pointed
+  at the first one's database. The project name is also lower-cased, as Docker requires.
+- **Apps already built:** the existing rulebook check already flags an image that can pick up
+  `.env`, so /resume-it catches that part. Their `.env` still has the database port written
+  in, so a new worktree of an older app points at the main checkout's database until that
+  line reads the port from `DB_PORT`.
+- **Not yet true, on the board as a card:** a worktree's other ports can still land on the
+  main checkout's, and the seed script still uses the main checkout's ports.
+
 ### v1.71.24 -- the logs say who and from where and keep sign-in codes out; the hostile-code check confirms an old copy by its bytes; each /nemo-it scan has its own temp folder
 
 Three fixes in one release.
