@@ -48,6 +48,14 @@ Move the outputs into the project as `data/raw/tenant-<date>/`; derive figures w
 - Retention clocks: compute when the attack window falls out of each workspace and put the date in both documents.
   IOCs older than the oldest log cannot be checked from logs at all — say so.
 - "Not checked" is not clean. Name the missing telemetry and the owner who has it.
+- **A failed query is not checked.** Each script ends with `FAILED: <query> in <workspace or service> (<status>)`
+  for every query that did not answer, exits 3, and lists them in its JSON as `failed_queries`; the fields built on
+  them read `NOT ASSESSED` (`exposure.json`, `hunt-summary.json`, `access.json` licences), `null` (Sentinel
+  onboarding in `workspace_coverage.json`) or carry a non-200 `status`. Stop and tell the user (the skill's "A failed
+  query is not a result"). If the run goes on, write that part as "not assessed" with the query, the place and the
+  status: a workspace that answered 403 was not searched, an app list that was not read is not "no outside apps",
+  a licence query that failed is not "no licence". A 429 or a timeout is usually worth one more run later; a 403
+  needs a role (Log Analytics Reader on the workspace, Global Reader or Directory Readers for Graph).
 - **The organisation's own security testing is not an attacker.** AuditGitHub and the scanners it runs, and any
   other tool the profile lists under "Own security tooling", exist to find weaknesses: their test scripts, probes
   and scan traffic look like an attack and are not one. Never report them as attacker behaviour, as an indicator,

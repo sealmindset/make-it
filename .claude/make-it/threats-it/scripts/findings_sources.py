@@ -4,7 +4,8 @@
 
 For the finding-chains step (references/finding-chains.md). Low and informational findings are the point, so
 nothing is filtered by severity. Each source is saved with its HTTP status, so a source that could not be read
-is on record and is never read as "nothing found".
+is on record and is never read as "nothing found": it is printed as FAILED and the script exits 3.
+(AuditGitHub left unconfigured is on record as status 0 and is not a failure.)
   secure_score, secure_score_profiles   Graph v1.0 /security/secureScores, /security/secureScoreControlProfiles
   defender_cloud_assessments            Resource Graph: microsoft.security/assessments that are not healthy
   defender_xdr_alerts, _incidents       Graph v1.0 /security/alerts_v2, /security/incidents since --since (default 90 days)
@@ -22,7 +23,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, arg, graph_all, http, save  # noqa: E402
+from _common import GRAPH, arg, failed, finish, graph_all, http, save  # noqa: E402
 
 ASSESSMENTS = """securityresources
 | where type == 'microsoft.security/assessments'
@@ -78,14 +79,22 @@ def main():
     a = ap.parse_args()
     gb, since = f"{GRAPH}/v1.0/security", f"$filter=createdDateTime ge {a.since}T00:00:00Z"
     url = f"{gb}/secureScores?$top=1"
+    def keep(name, kind, request, where, status, result):
+        save(a.outdir, name, kind, request, status, result)
+        if status != 200:
+            failed(name, where, status)
+
     status, res = http("GET", url, GRAPH)
-    save(a.outdir, "secure_score", "graph", url, status, res.get("value", res) if status == 200 else res)
+    keep("secure_score", "graph", url, "Microsoft Graph", status, res.get("value", res) if status == 200 and isinstance(res, dict) else res)
     for name, url in (("secure_score_profiles", f"{gb}/secureScoreControlProfiles"),
                       ("defender_xdr_alerts", f"{gb}/alerts_v2?{since}"),
                       ("defender_xdr_incidents", f"{gb}/incidents?{since}")):
-        save(a.outdir, name, "graph", url, *graph_all(url.replace(" ", "%20")))
-    save(a.outdir, "defender_cloud_assessments", "arg", ASSESSMENTS, *arg(ASSESSMENTS))
-    auditgithub(a.outdir, os.environ.get("AUDITGITHUB_API_URL"), os.environ.get("AUDITGITHUB_API_KEY"))
+        keep(name, "graph", url, "Microsoft Graph", *graph_all(url.replace(" ", "%20")))
+    keep("defender_cloud_assessments", "arg", ASSESSMENTS, "Resource Graph", *arg(ASSESSMENTS))
+    rec = auditgithub(a.outdir, os.environ.get("AUDITGITHUB_API_URL"), os.environ.get("AUDITGITHUB_API_KEY"))
+    if rec["http_status"] != 200 and not str(rec["result"].get("message", "")).startswith("not configured"):
+        failed("auditgithub_findings", "AuditGitHub", rec["http_status"] or "no answer")
+    finish()
 
 
 if __name__ == "__main__":

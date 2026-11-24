@@ -37,6 +37,10 @@ Check claim by claim. Flag:
 9. AI systems: one called present from its name alone; one called vulnerable from what AI systems can do in general,
    with no evidence about its own access, inputs, actions or logging; "none" where the run could not see; an ATLAS
    id with no archived page; a prompt or payload that would work, anywhere.
+10. Failed queries: read `failed_queries` in every tenant JSON (`access.json`, `hunt-summary.json`,
+   `web-hunt-summary.json`, `exposure.json`, `sentinel-coverage.json`) and the `failed` list in `attack-ids.json`.
+   Flag as high any statement of "none", "no hits", "not present", "no licence", "not onboarded" or a count that
+   covers something a failed query was meant to read, and any failed query missing from "what could not be checked".
 Be adversarial and specific; skip style. Output a severity-ordered list (high/medium/low): file:line, quoted claim,
 problem, evidence. End with "checked N claims, flagged M".
 ```

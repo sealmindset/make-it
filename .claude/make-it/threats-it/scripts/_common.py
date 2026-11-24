@@ -2,12 +2,20 @@
 
 Tokens come from the signed-in Azure CLI (`az login`). Every helper here is read-only:
 GET requests, or POSTs to *query* endpoints (Log Analytics, Resource Graph).
+
+The one rule every script follows: a query either answered (status 200) or it FAILED. A failed query is recorded
+with failed(), the part of the output built on it says NOT ASSESSED (never "none", an empty list or a zero), the
+script's summary JSON carries failures(), and the script ends with finish(): one FAILED line per query, then exit 3.
+A query that answered with nothing in it is a real "none".
 """
 import base64
 import datetime as dt
+from http.client import HTTPException
 import json
 import os
+import socket
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 
@@ -16,6 +24,38 @@ ARM = "https://management.azure.com"
 LA = "https://api.loganalytics.io"
 MICROSOFT_OWNER_TENANTS = {"f8cdef31-a31e-4b4a-93e4-5f571e91255a", "72f988bf-86f1-41af-91ab-2d7cd011db47"}
 _tokens = {}
+_failed = []
+
+
+def status_text(status):
+    return f"HTTP {status}" if isinstance(status, int) else str(status)
+
+
+def no_answer(e):
+    """Why a request got no HTTP answer at all, as a status word."""
+    return "timeout" if isinstance(getattr(e, "reason", e), (TimeoutError, socket.timeout)) else "no answer"
+
+
+def failed(query, where, status):
+    """Record one query that did not answer. `query` is a short name, never the query text; `where` is a workspace
+    name or a service, never an id; no token comes near here."""
+    _failed.append({"query": query, "where": where, "status": status_text(status)})
+
+
+def failures():
+    return list(_failed)
+
+
+def finish():
+    """Last line of every script. Nothing failed: return. Otherwise name each failed query and exit 3."""
+    if not _failed:
+        return
+    for f in _failed:
+        print(f"FAILED: {f['query']} in {f['where']} ({f['status']})")
+    n = len(_failed)
+    print(f"NOT ASSESSED: {n} quer{'y' if n == 1 else 'ies'} failed (exit 3). What {'it covers' if n == 1 else 'they cover'} "
+          "was not looked at: report it as \"not assessed\", never as \"none\" or clean.")
+    sys.exit(3)
 
 
 def token(resource):
@@ -41,13 +81,19 @@ def http(method, url, resource, body=None, extra=None, timeout=660):
         req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status, json.loads(resp.read().decode() or "null")
+            status, txt = resp.status, resp.read().decode(errors="replace")
     except urllib.error.HTTPError as e:
         txt = e.read().decode(errors="replace")
         try:
             return e.code, json.loads(txt)
         except ValueError:
             return e.code, {"raw": txt[:2000]}
+    except (OSError, HTTPException) as e:  # no HTTP answer: a timeout, a refused or dropped connection
+        return no_answer(e), {"error": {"code": "NoAnswer", "message": type(e).__name__}}
+    try:
+        return status, json.loads(txt or "null")
+    except ValueError:  # an answer that is not the JSON it claims to be is not a result
+        return "malformed JSON", {"raw": txt[:2000]}
 
 
 def graph_all(url):
@@ -57,9 +103,27 @@ def graph_all(url):
         status, page = http("GET", url, GRAPH, extra={"ConsistencyLevel": "eventual"})
         if status != 200:
             return status, page
+        if not isinstance(page, dict):
+            return "malformed answer", page
         items += page.get("value", [])
         url = page.get("@odata.nextLink")
     return 200, items
+
+
+def graph_cached(outdir, name, url):
+    """A Graph list, read once per run: this run's saved copy when that copy answered, else fetched and saved.
+    Returns the list, or None when the call failed (recorded with failed())."""
+    p = os.path.join(outdir, f"{name}.json")
+    if os.path.exists(p):
+        rec = load(outdir, name)
+        if rec.get("http_status") == 200:
+            return rec["result"]
+    status, res = graph_all(url)
+    save(outdir, name, "graph", url, status, res)
+    if status != 200:
+        failed(name, "Microsoft Graph", status)
+        return None
+    return res
 
 
 def arg(query):
@@ -73,6 +137,8 @@ def arg(query):
         status, res = http("POST", url, ARM, body)
         if status != 200:
             return status, res
+        if not isinstance(res, dict):
+            return "malformed answer", res
         rows += res.get("data", [])
         skip = res.get("$skipToken")
         if not skip:
@@ -84,9 +150,12 @@ def la(workspace_id, query):
     status, res = http("POST", f"{LA}/v1/workspaces/{workspace_id}/query", LA, {"query": query}, extra={"Prefer": "wait=600"})
     if status != 200:
         return status, res
-    t = res["tables"][0]
-    cols = [c["name"] for c in t["columns"]]
-    return 200, [dict(zip(cols, r)) for r in t["rows"]]
+    try:
+        t = res["tables"][0]
+        cols = [c["name"] for c in t["columns"]]
+        return 200, [dict(zip(cols, r)) for r in t["rows"]]
+    except (KeyError, IndexError, TypeError):
+        return "malformed answer", res
 
 
 def save(outdir, name, kind, request, status, result):

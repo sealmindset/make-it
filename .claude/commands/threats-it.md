@@ -62,10 +62,10 @@ and `weasyprint` for PDFs. No tenant access → run phases 0–4 and 6–9 as a 
 | Script | Does |
 |---|---|
 | `new_project.sh <date> <slug>` | Scaffold the project (dirs, build.sh, pdf.css, README, git init) |
-| `fetch_source.sh <url> <dir> <name>` | Archive a page raw (browser UA) + text; logs status/SHA-256; exit 2 on refusal |
+| `fetch_source.sh <url> <dir> <name>` | Archive a page raw (browser UA) + text; logs status/SHA-256; exit 2 on refusal (no page is kept, not even a partial one) |
 | `kev.py <dir> --cves … --since … --as-of …` | CISA KEV lookups (archives the feed) |
 | `msrc.py <dir> --cves … \| --window A B` | MSRC vulnerability + affected products, fixed builds, Preview-Pane FAQ, revisions |
-| `attack_ids.py <out.json> T… …` | Verify ATT&CK IDs/names and version on attack.mitre.org |
+| `attack_ids.py <out.json> T… …` | Verify ATT&CK IDs/names and version on attack.mitre.org; "missing" only when the site answers 404, anything else is FAILED (not checked) |
 | `tenant_access.py <dir>` | Identity, roles, probes (with error text), licences, every workspace's retention / Sentinel / tables |
 | `hunt.py <dir> ioc.json` | IOC + behaviour hunts in every readable workspace; audit sweep of every app-initiated op; owner classification |
 | `hunt_web.py <dir> ioc.json [--big-post-bytes N]` | Web-request tables (gateways, API Management, App Service, containers): IOC terms, large POSTs, crash signals; coverage denominator |
@@ -75,6 +75,23 @@ and `weasyprint` for PDFs. No tenant access → run phases 0–4 and 6–9 as a 
 | `findings_sources.py <dir> [--since D]` | Findings the organisation's tools already hold, every rating: Secure Score, Defender for Cloud assessments, Defender XDR alerts and incidents, AuditGitHub (`AUDITGITHUB_API_URL` / `AUDITGITHUB_API_KEY`); each source saved with its status |
 | `check_paths.py <project>` | Paths built from small findings: every link in evidence and confirmed, status "not exercised" unless a person's test record says otherwise, a break and a test plan per path |
 | `check_pair.py briefing.md technical.md [headline.json]` | Briefing figures/dates/CVEs ⊂ companion; headline values pinned |
+
+**A failed query is not a result.** `attack_ids.py`, `tenant_access.py`, `hunt.py`, `hunt_web.py`, `exposure.py`,
+`sentinel_coverage.py` and `findings_sources.py` follow one rule: a query that did not answer (403, 429, 500, a
+timeout, a broken answer) is printed at the end as `FAILED: <query> in <workspace or service> (<status>)`, then
+`NOT ASSESSED: …`, and the script exits 3. The same list is in the script's summary JSON as `failed_queries`, and
+whatever was built on the failed query reads `NOT ASSESSED` or `FAILED` there, never an empty list, a zero or
+"false". Exit 3 is not a crash: the parts that answered were written and can be used. When a script exits 3:
+1. Stop before the next script. Tell the user in plain words which queries failed, where, with what status, and
+   which part of the report each one covers (for example "the sign-in hunt in workspace X" or "who holds takeover
+   permissions").
+2. Ask once, as a select: fix the access and run that script again, or go on with those parts not assessed. Do not
+   choose for them, and do not re-run the same failing query in a loop.
+3. If they go on: that part is written **"not assessed"** in both documents, under what could not be checked, with
+   the query, the workspace or service, and the status. It is never "none", "no hits", "not present", "no licence",
+   "not onboarded" or "clean", and it never counts toward "N workspaces searched". `assess.py` copies every
+   `failed_queries` list into the derived JSON so the fact-check can see it.
+A query that answered with nothing in it is a real "none" and is reported as one.
 
 ## Phases
 
@@ -105,7 +122,8 @@ assessment, never a claim that AI was used unless a source says so. Close with "
 The organisation's own security testing (AuditGitHub and its scanners, anything under "Own security tooling" in
 the profile) is never a chain, an indicator or a finding: `references/tenant-assessment.md`.
 
-**5 — Organisation assessment (read-only).** Follow `references/tenant-assessment.md`: `tenant_access.py` →
+**5 — Organisation assessment (read-only).** A script that exits 3 had a failed query: follow "A failed query is not
+a result" above before the next one. Follow `references/tenant-assessment.md`: `tenant_access.py` →
 `ioc.json` → `hunt.py` (+ `hunt_web.py` for web-borne threats) → `presence.json` + `exposure.py` (with the MSRC fix map for any exploited Windows CVE) →
 `chains.json` + `sentinel_coverage.py` → targeted follow-ups (a project `scripts/tenant/collect.py` for anything the
 standard scripts do not reach, such as runtime versions or web-server logs). Copy outputs to
@@ -144,6 +162,8 @@ environment.
 - Raw evidence archived with hashes; every figure traceable; `check_pair.py` passes.
 - Each attack has a diagram, a verified-ATT&CK stage table, organisation telemetry/result and rule state.
 - IOC verdict states exactly which tables, windows and workspaces were searched, and what could not be.
+- Every failed query (`failed_queries` in any script's output) is in both documents as "not assessed", with its
+  workspace or service and status; nothing a failed query covers is reported as none or clean.
 - Paths built from small findings pass `check_paths.py`; each is marked not exercised and has a break and a test plan.
 - VEX validates; OpenVEX written; briefing VEX table matches it.
 - Markdown and PDFs for briefing, technical companion and appendix in `dist/`.

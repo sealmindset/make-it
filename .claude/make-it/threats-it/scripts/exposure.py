@@ -12,6 +12,8 @@ Outputs <outdir>/exposure.json with:
   per product: Azure resources (regex on publisher/offer/type — never KQL `has` for IDs), enterprise apps whose
   display name matches, and their interactive / service-principal sign-ins in every readable workspace
   servers (with --fixmap): Arc and Azure VM Windows builds against the MSRC fixed build for --cve
+A query that failed is printed as FAILED and listed under "failed_queries", and the script exits 3. Whatever was built
+on it reads "NOT ASSESSED (...)" in the output and in exposure.json, never an empty list or a zero.
 """
 import argparse
 import collections
@@ -22,7 +24,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, arg, graph_all, http, la, owner_class, save  # noqa: E402
+from _common import GRAPH, arg, failed, failures, finish, graph_cached, http, la, owner_class  # noqa: E402
 
 TAKEOVER_VERIFIED = ["RoleManagement.ReadWrite.Directory", "Application.ReadWrite.All", "Directory.ReadWrite.All"]
 TAKEOVER_COMMON = ["AppRoleAssignment.ReadWrite.All", "UserAuthenticationMethod.ReadWrite.All", "Domain.ReadWrite.All",
@@ -44,15 +46,21 @@ od = a.outdir
 gb = f"{GRAPH}/v1.0"
 access = json.load(open(os.path.join(od, "access.json")))
 own = (access.get("tenant") or {}).get("id")
+if not own:  # every app would be classed as outside
+    failed("own tenant id", "access.json (tenant_access.py)", "not read")
+bad = set()  # reads that failed: whatever is built on one is NOT ASSESSED, never an empty list
 
 
-def fetch(name, url):
-    p = os.path.join(od, name + ".json")
-    if os.path.exists(p):
-        return json.load(open(p))["result"]
-    st, res = graph_all(url)
-    save(od, name, "graph", url, st, res)
-    return res if st == 200 else []
+def fetch(name, url, group=None):
+    res = graph_cached(od, name, url)
+    if res is None:
+        bad.add(group or name)
+    return res or []
+
+
+def part(value, *needs):
+    miss = sorted(bad.intersection(needs))
+    return f"NOT ASSESSED ({', '.join(miss)} not read)" if miss else value
 
 
 sps = fetch("graph_service_principals", f"{gb}/servicePrincipals?$top=999&$select=id,appId,displayName,appOwnerOrganizationId,accountEnabled,servicePrincipalType,passwordCredentials,keyCredentials,verifiedPublisher")
@@ -66,10 +74,14 @@ role_name = {d["id"]: d["displayName"] for d in rds} | {d["templateId"]: d["disp
 perms = collections.defaultdict(set)
 for key, app_id in RESOURCES.items():
     st, sp = http("GET", f"{gb}/servicePrincipals(appId='{app_id}')?$select=id,appRoles", GRAPH)
+    if st == 404:  # this API has no service principal in the tenant, so nothing holds its permissions
+        continue
     if st != 200:
+        failed(f"graph_resource_{key}", "Microsoft Graph", st)
+        bad.add("permissions")
         continue
     values = {r["id"]: r["value"] for r in sp.get("appRoles", [])}
-    for x in fetch(f"graph_assignedto_{key}", f"{gb}/servicePrincipals/{sp['id']}/appRoleAssignedTo?$top=999"):
+    for x in fetch(f"graph_assignedto_{key}", f"{gb}/servicePrincipals/{sp['id']}/appRoleAssignedTo?$top=999", "permissions"):
         if x.get("principalType") == "ServicePrincipal" and values.get(x["appRoleId"]):
             perms[x["principalId"]].add(values[x["appRoleId"]])
 aud = {x["appId"]: x.get("signInAudience") for x in apps}
@@ -125,9 +137,11 @@ for product, pat in presence.items():
 | where {' or '.join(conds)}
 | project type, name, resourceGroup, subscriptionId, pub, offer, sku=tostring(coalesce(properties.storageProfile.imageReference.sku, plan.name)),
           imageVersion=tostring(properties.storageProfile.imageReference.exactVersion), powerState=tostring(properties.extended.instanceView.powerState.code)""")
-        resources = resources if st == 200 else [{"error": resources}]
+        if st != 200:
+            failed(f"{product}: Azure resources", "Resource Graph", st)
+            resources = "NOT ASSESSED (Resource Graph query failed)"
     names = sorted({s["displayName"] for s in sps if pat.get("app_names") and re.search(pat["app_names"], s.get("displayName") or "", re.I)})
-    usage = []
+    usage, usage_failed = [], []
     if pat.get("app_names"):
         for w in signin_ws:
             t = w["security_tables_mb_30d"]
@@ -138,8 +152,13 @@ for product, pat in presence.items():
                 parts.append(f"AADServicePrincipalSignInLogs | where ServicePrincipalName matches regex @\"(?i){pat['app_names']}\" | extend Kind='service principal', Name=ServicePrincipalName, Who=ServicePrincipalName")
             q = "union " + ", ".join(f"({x})" for x in parts) + " | summarize SignIns=count(), Accounts=dcount(Who), First=min(TimeGenerated), Last=max(TimeGenerated) by Kind, Name, AppId"
             st, res = la(w["customerId"], q)
-            usage += [dict(r, workspace=w["name"], in_directory=r["AppId"] in {s["appId"] for s in sps}) for r in (res if st == 200 else [])]
-    products[product] = {"azure_resources": resources, "enterprise_apps": names, "signins": usage}
+            if st != 200:
+                failed(f"{product}: sign-ins", w["name"], st)
+                usage_failed.append(w["name"])
+                continue
+            usage += [dict(r, workspace=w["name"], in_directory=part(r["AppId"] in {s["appId"] for s in sps}, "graph_service_principals")) for r in res]
+    products[product] = {"azure_resources": resources, "enterprise_apps": part(names, "graph_service_principals"),
+                         "signins": usage, "signins_failed_in": usage_failed}
 
 servers = None
 if a.fixmap and a.cve:
@@ -153,8 +172,12 @@ if a.fixmap and a.cve:
                 need[(pre, "Server" in prod)] = int(rev)
     st, arc = arg("resources | where type =~ 'microsoft.hybridcompute/machines' and tostring(properties.osType) =~ 'windows' | project name, os=tostring(properties.osSku), v=tostring(properties.osVersion), agent=tostring(properties.status)")
     st2, vms = arg("resources | where type =~ 'microsoft.compute/virtualmachines' and tostring(properties.storageProfile.osDisk.osType) =~ 'windows' | project name, os=coalesce(tostring(properties.extended.instanceView.osName), tostring(properties.storageProfile.imageReference.sku)), v=tostring(properties.extended.instanceView.osVersion), agent=tostring(properties.extended.instanceView.powerState.code)")
-    machines = []
-    for src, lst in (("arc", arc if st == 200 else []), ("vm", vms if st2 == 200 else [])):
+    machines, src_failed = [], []
+    for src, st_, lst in (("arc", st, arc), ("vm", st2, vms)):
+        if st_ != 200:
+            failed(f"servers: {src} Windows machines", "Resource Graph", st_)
+            src_failed.append(src)
+            continue
         for m in lst:
             is_server = bool(re.search(r"server|datacenter|20\d\d", m["os"] or "", re.I))
             reporting = (m["agent"] == "Connected") if src == "arc" else bool(m["v"])
@@ -165,22 +188,29 @@ if a.fixmap and a.cve:
                 status = "build not in fix map" if fixed is None else ("fixed" if int(rev) >= fixed else "below fix")
             machines.append({"name": m["name"], "source": src, "os": m["os"], "version": m["v"], "agent": m["agent"], "server": is_server,
                              "status": status, "fixed_revision": fixed})
-    servers = {"cve": a.cve, "counts": dict(collections.Counter(m["status"] for m in machines)), "machines": machines}
+    servers = {"cve": a.cve, "counts": dict(collections.Counter(m["status"] for m in machines)), "machines": machines, "not_assessed": src_failed}
 
+PERMS, SPS, ROLES = "permissions", "graph_service_principals", ("graph_role_assignments", "graph_role_definitions")
 out = {"own_tenant": own,
-       "third_party_takeover": [r for r in rows if r["class"] == "third-party" and tk(r)],
-       "third_party_bulk_only": [r for r in rows if r["class"] == "third-party" and r["bulk"] and not tk(r)],
-       "own_takeover": [r for r in rows if r["class"] == "own" and tk(r)],
-       "foreign_sp_credentials": foreign_creds, "sp_roles": sp_roles, "group_roles": dict(group_roles),
-       "long_lived_certs": long_certs, "creds_since": {"since": a.since, "items": new_creds}, "products": products, "servers": servers}
+       "third_party_takeover": part([r for r in rows if r["class"] == "third-party" and tk(r)], PERMS, SPS),
+       "third_party_bulk_only": part([r for r in rows if r["class"] == "third-party" and r["bulk"] and not tk(r)], PERMS, SPS),
+       "own_takeover": part([r for r in rows if r["class"] == "own" and tk(r)], PERMS, SPS),
+       "foreign_sp_credentials": part(foreign_creds, SPS), "sp_roles": part(sp_roles, SPS, *ROLES), "group_roles": part(dict(group_roles), *ROLES),
+       "long_lived_certs": part(long_certs, "graph_applications"),
+       "creds_since": {"since": a.since, "items": part(new_creds, "graph_applications")}, "products": products, "servers": servers,
+       "failed_queries": failures()}
 json.dump(out, open(os.path.join(od, "exposure.json"), "w"), indent=1, ensure_ascii=False)
-print("third-party takeover:", [r["name"] for r in out["third_party_takeover"]])
-print("own takeover:", len(out["own_takeover"]), "| foreign SP creds:", len(foreign_creds), "| SP roles:", len(sp_roles), "| long certs:", len(long_certs))
+n = lambda v: v if isinstance(v, str) else len(v)  # a count, or the NOT ASSESSED text in its place
+print("third-party takeover:", n(out["third_party_takeover"]) if isinstance(out["third_party_takeover"], str) else [r["name"] for r in out["third_party_takeover"]])
+print("own takeover:", n(out["own_takeover"]), "| foreign SP creds:", n(out["foreign_sp_credentials"]), "| SP roles:", n(out["sp_roles"]),
+      "| long certs:", n(out["long_lived_certs"]))
 for p, v in products.items():
     per_ws = collections.defaultdict(int)
     for x in v["signins"]:
         per_ws[x["workspace"]] += int(x["SignIns"])
     # workspaces can overlap in time: report per workspace, never summed
-    print(f"  {p}: resources={len(v['azure_resources'])} apps={len(v['enterprise_apps'])} signins_by_workspace={dict(per_ws)}")
+    print(f"  {p}: resources={n(v['azure_resources'])} apps={n(v['enterprise_apps'])} "
+          f"signins_by_workspace={dict(per_ws) | {w: 'FAILED' for w in v['signins_failed_in']}}")
 if servers:
-    print("servers:", servers["counts"])
+    print("servers:", servers["counts"], *(["| NOT ASSESSED:", servers["not_assessed"]] if servers["not_assessed"] else []))
+finish()

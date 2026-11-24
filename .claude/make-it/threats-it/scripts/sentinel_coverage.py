@@ -13,7 +13,9 @@ Uses <outdir>/access.json (tenant_access.py) to find Sentinel-onboarded workspac
       tables not recognised   (parser/function-based rules; check by hand)
 chains.json (optional) maps a chain label to a regex over rule display names, e.g.
   {"C1 vendor app key abuse": "^service principal (authentication|assigned)|credential added"}
-Writes sentinel-coverage.json and one raw file per workspace.
+Writes sentinel-coverage.json and one raw file per workspace. A query that failed is printed as FAILED, listed
+under "failed_queries", and the script exits 3: rules that could not be listed read NOT ASSESSED (not "rules 0"), and
+with no ingestion figures an enabled rule's state is "not assessed" (not "blind").
 """
 import collections
 import datetime as dt
@@ -23,7 +25,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import ARM, http, la, save  # noqa: E402
+from _common import ARM, failed, failures, finish, http, la, save  # noqa: E402
 
 TABLES = ["SigninLogs", "AADNonInteractiveUserSignInLogs", "AADServicePrincipalSignInLogs", "AADManagedIdentitySignInLogs", "AuditLogs",
           "MicrosoftGraphActivityLogs", "OfficeActivity", "DeviceProcessEvents", "DeviceEvents", "DeviceNetworkEvents", "DeviceFileEvents",
@@ -50,14 +52,21 @@ for w in [x for x in cov if x["sentinel"]]:
                   for r in res.get("value", [])]
         url = res.get("nextLink")
     save(od, f"sentinel_rules_{w['name']}", "arm", w["resourceId"], st, rules if st == 200 else res)
+    if st != 200:
+        failed("analytics rules", w["name"], st)
+        out["workspaces"][w["name"]] = {"not_assessed": "the analytics rules could not be listed"}
+        print(w["name"], "| rules NOT ASSESSED")
+        continue
     st2, usage = la(w["customerId"], f"Usage | where TimeGenerated > datetime({since}) | summarize MB = sum(Quantity) by DataType")
     save(od, f"sentinel_usage_{w['name']}", "log_analytics", "Usage MB by DataType", st2, usage)
+    if st2 != 200:
+        failed("ingestion (Usage)", w["name"], st2)
     ingest = {r["DataType"]: float(r["MB"]) for r in usage} if st2 == 200 else {}
     rows = []
     for r in rules:
         t = [x for x in TABLES if re.search(r"(?<![\w])" + re.escape(x) + r"(?![\w])", r.get("query") or "")]
         live = [x for x in t if ingest.get(x, 0) > 0]
-        state = ("disabled" if not r["enabled"] else "tables not recognised" if not t else "blind" if not live
+        state = ("disabled" if not r["enabled"] else "not assessed" if st2 != 200 else "tables not recognised" if not t else "blind" if not live
                  else "partial" if len(live) < len(t) else "live")
         rows.append({"rule": r["displayName"], "kind": r["kind"], "enabled": r["enabled"], "state": state, "tables": t, "live_tables": live})
     sched = [x for x in rows if x["enabled"] and x["kind"] == "Scheduled"]
@@ -72,7 +81,13 @@ for w in [x for x in cov if x["sentinel"]]:
     print(w["name"], "| rules", s["rules_total"], "| enabled scheduled", s["enabled_scheduled"], "|", s["enabled_by_state"])
     for c, rr in s["chains"].items():
         print("  ", c, dict(collections.Counter(x["state"] for x in rr)))
-not_onboarded = [x["name"] for x in access["workspaces_with_security_tables"] if not x["sentinel"]]
+not_onboarded = [x["name"] for x in access["workspaces_with_security_tables"] if x["sentinel"] is False]
+unknown = [x["name"] for x in cov if x["sentinel"] is None]  # tenant_access.py could not read Sentinel onboarding
+if unknown:
+    failed("Sentinel onboarding", ", ".join(unknown), "not read by tenant_access.py")
 out["security_workspaces_not_in_sentinel"] = not_onboarded
+out["sentinel_onboarding_not_assessed"] = unknown
+out["failed_queries"] = failures()
 json.dump(out, open(os.path.join(od, "sentinel-coverage.json"), "w"), indent=1, ensure_ascii=False)
-print("security workspaces not onboarded to Sentinel:", not_onboarded)
+print("security workspaces not onboarded to Sentinel:", "NOT ASSESSED" if unknown else not_onboarded)
+finish()

@@ -17,6 +17,8 @@ Per workspace, only the queries whose tables exist are run, each over that works
   graph_appwrites MicrosoftGraphActivityLogs: app-only POST/PATCH/PUT to privileged endpoints
   vendor_new_asn / vendor_tested  outside apps signing in from an ASN unseen before window_start
 Writes one JSON per query and hunt-summary.json (counts, owner classification of initiators).
+A query that failed is printed as FAILED (not a total), listed under "failed_queries", and the script exits 3; an owner
+classification that could not be built reads NOT ASSESSED. A workspace tenant_access.py could not read counts as failed.
 """
 import collections
 import datetime as dt
@@ -25,12 +27,18 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, graph_all, la, owner_class, save  # noqa: E402
+from _common import GRAPH, failed, failures, finish, graph_cached, la, load, owner_class, save, status_text  # noqa: E402
 
 od, cfg_path = sys.argv[1], sys.argv[2]
 cfg = json.load(open(cfg_path))
 access = json.load(open(os.path.join(od, "access.json")))
 own = (access.get("tenant") or {}).get("id")
+if not own:  # every app would be classed as outside
+    failed("own tenant id", "access.json (tenant_access.py)", "not read")
+for name in access.get("workspaces_unreadable", []):
+    failed("every hunt", name, "workspace not readable")
+if not access["workspaces_with_security_tables"]:
+    failed("every hunt", "every workspace", "no readable workspace holds a security table")
 today = dt.datetime.now(dt.timezone.utc).date()
 tomorrow = (today + dt.timedelta(days=1)).isoformat()
 J = lambda k: json.dumps(cfg.get(k, []))
@@ -125,25 +133,28 @@ AADServicePrincipalSignInLogs
         st, rows = la(w["customerId"], LETS + q)
         name = f"hunt_{w['name']}_{qn}"
         save(od, name, "log_analytics", {"workspace": w["name"], "query": LETS + q}, st, rows)
+        if st != 200:
+            failed(qn, w["name"], st)
         ws_sum["queries"][qn] = {"status": st, "rows": len(rows) if isinstance(rows, list) else None,
                                  "total": sum(int(r.get("Count") or r.get("SuccessfulSignIns") or 0) for r in rows) if isinstance(rows, list) else None}
     ws_sum["not_run"] = sorted({"signin_ioc", "graph_ioc", "graph_appwrites", "office_ioc", "audit_sweep", "network_ioc", "endpoint_ioc"} - set(queries))
     summary["workspaces"][w["name"]] = ws_sum
 
 # classify app initiators and writers by owner tenant
-sp_path = os.path.join(od, "graph_service_principals.json")
-if not os.path.exists(sp_path):
-    st, sps = graph_all(f"{GRAPH}/v1.0/servicePrincipals?$top=999&$select=id,appId,displayName,appOwnerOrganizationId,accountEnabled,servicePrincipalType,passwordCredentials,keyCredentials,verifiedPublisher")
-    save(od, "graph_service_principals", "graph", "servicePrincipals", st, sps)
-sps = json.load(open(sp_path))["result"]
+sps = graph_cached(od, "graph_service_principals", f"{GRAPH}/v1.0/servicePrincipals?$top=999&$select=id,appId,displayName,appOwnerOrganizationId,accountEnabled,servicePrincipalType,passwordCredentials,keyCredentials,verifiedPublisher")
+sps_read, sps = sps is not None, sps or []
 by_id, by_app = {s["id"]: s for s in sps}, {s["appId"]: s for s in sps}
+NA = "NOT ASSESSED"
 for wname, ws_sum in summary["workspaces"].items():
-    p = os.path.join(od, f"hunt_{wname}_audit_sweep.json")
-    if os.path.exists(p):
-        rows = json.load(open(p))["result"]
+    # classify only what answered: a failed sweep, or no service principals to classify by, is not an empty table
+    answered = lambda qn: sps_read and ws_sum["queries"][qn]["status"] == 200
+    if "audit_sweep" in ws_sum["queries"] and not answered("audit_sweep"):
+        ws_sum["audit_sweep_events_by_owner"] = ws_sum["audit_sweep_third_party"] = NA
+    elif "audit_sweep" in ws_sum["queries"]:
+        rows = load(od, f"hunt_{wname}_audit_sweep")["result"]
         cls = collections.Counter()
         third = []
-        for r in rows if isinstance(rows, list) else []:
+        for r in rows:
             sp = by_id.get(r["SpId"]) or by_app.get(r["AppId"])
             c = owner_class(sp.get("appOwnerOrganizationId"), own) if sp else "unresolved"
             cls[c] += int(r["Count"])
@@ -152,14 +163,19 @@ for wname, ws_sum in summary["workspaces"].items():
                               "ops": json.loads(r["Ops"]) if isinstance(r["Ops"], str) else r["Ops"]})
         ws_sum["audit_sweep_events_by_owner"] = dict(cls)
         ws_sum["audit_sweep_third_party"] = third
-    p = os.path.join(od, f"hunt_{wname}_graph_appwrites.json")
-    if os.path.exists(p):
-        rows = json.load(open(p))["result"]
+    if "graph_appwrites" in ws_sum["queries"] and not answered("graph_appwrites"):
+        ws_sum["graph_appwrites_by_owner"] = NA
+    elif "graph_appwrites" in ws_sum["queries"]:
+        rows = load(od, f"hunt_{wname}_graph_appwrites")["result"]
         ws_sum["graph_appwrites_by_owner"] = [{"app": (by_app.get(r["AppId"]) or {}).get("displayName", r["AppId"]),
                                                "class": owner_class((by_app.get(r["AppId"]) or {}).get("appOwnerOrganizationId"), own) if r["AppId"] in by_app else "unresolved",
-                                               "count": int(r["Count"])} for r in rows] if isinstance(rows, list) else rows
+                                               "count": int(r["Count"])} for r in rows]
+summary["failed_queries"] = failures()
 json.dump(summary, open(os.path.join(od, "hunt-summary.json"), "w"), indent=1, ensure_ascii=False)
 for wname, s in summary["workspaces"].items():
-    print(wname, {q: v["total"] for q, v in s["queries"].items()}, "| not run:", s["not_run"])
-    if s.get("audit_sweep_third_party"):
+    print(wname, {q: v["total"] if v["status"] == 200 else f"FAILED ({status_text(v['status'])})" for q, v in s["queries"].items()}, "| not run:", s["not_run"])
+    if s.get("audit_sweep_third_party") == NA:
+        print("   initiators by owner:", NA)
+    elif s.get("audit_sweep_third_party"):
         print("   third-party initiators:", [(x["app"], x["events"]) for x in s["audit_sweep_third_party"]])
+finish()
