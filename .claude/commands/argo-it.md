@@ -1522,7 +1522,8 @@ like the app's services (PHASE 3). It runs in cluster mode:
 - Its admin API (adding people, changing its return address) and its API docs answer only a request from
   inside its own pod that also carries the client secret as its bearer token (`{app}-oidc-dev`'s
   `OIDC_CLIENT_SECRET`, which the pod already has): anything else gets 403, a proxy in the same pod
-  included. Its image runs with `--no-proxy-headers`, so no forwarded header changes who is asking. Only
+  included. On the cluster it starts with `--no-proxy-headers`, so no forwarded header changes who is asking (its
+  image, a sealed file of the app, stays as it is). Only
   `/authorize` is routed to it from outside.
 When it starts, its start-up hook -- inside its own pod -- loads the pretend people from
 `mock-oidc-people.json` (below: written at set-up from `scripts/seed-mock-services.sh`, their single
@@ -1556,6 +1557,8 @@ spec:
       - name: mock-oidc
         image: {registry}/{image_base_path}/mock-oidc:{tag}
         imagePullPolicy: Always            # the same as the app's own workloads
+        # The image's own start, with --no-proxy-headers: the peer address is the real one, never a forwarded header
+        command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "10090", "--no-proxy-headers"]
         ports:
           - containerPort: 10090
         securityContext:

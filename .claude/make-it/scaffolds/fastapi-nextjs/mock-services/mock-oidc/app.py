@@ -137,8 +137,8 @@ AUTH_CODE_TTL = 300  # 5 minutes
 app = FastAPI(title="Mock OIDC Provider", version="1.0.0")
 
 # In cluster mode only these answer anyone; everything else (the admin API, the API docs) needs BOTH a request from
-# this machine (127.0.0.1 / ::1 -- the start-up hook in the same pod; the image runs uvicorn with --no-proxy-headers,
-# so that is the real peer) AND "Authorization: Bearer <the client secret>", which the hook sends. A proxy in the
+# this machine (127.0.0.1 / ::1 -- the start-up hook in the same pod; on a cluster uvicorn runs with
+# --no-proxy-headers, so that is the real peer) AND "Authorization: Bearer <the client secret>", which the hook sends. A proxy in the
 # same pod (a service mesh's, a port-forward) forwards from 127.0.0.1, so the token is what keeps it shut.
 PUBLIC_ROUTES = {"/.well-known/openid-configuration", "/jwks", "/authorize", "/token", "/userinfo", "/health"}
 LOOPBACK = {"127.0.0.1", "::1"}

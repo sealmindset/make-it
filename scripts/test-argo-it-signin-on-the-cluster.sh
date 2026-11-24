@@ -686,11 +686,13 @@ else:
 # ======================================================================= round 4
 # --- 1. the admin API behind a proxy in the same pod: the real image, its real start command, a forwarder inside it
 MOCKDIR = os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc")
+cmd = (c.get("command") or []) if mt else []
+check("on the cluster mock-oidc starts uvicorn with --no-proxy-headers and trusts no forwarded header (the manifest's command)",
+      cmd[:2] == ["uvicorn", "app:app"] and "--no-proxy-headers" in cmd and not any("forwarded-allow-ips" in x or x == "--proxy-headers" for x in cmd), cmd)
 for sc in ("fastapi-nextjs", "nextjs-fullstack"):
-    cmd = re.search(r'(?m)^CMD (\[.*\])$', open(os.path.join(root, ".claude/make-it/scaffolds", sc, "mock-services/mock-oidc/Dockerfile")).read())
-    cmd = json.loads(cmd.group(1)) if cmd else []
-    check("%s: mock-oidc's image starts uvicorn with --no-proxy-headers and trusts no forwarded header" % sc,
-          "--no-proxy-headers" in cmd and not any("forwarded-allow-ips" in c or c == "--proxy-headers" for c in cmd), cmd)
+    dcmd = re.search(r'(?m)^CMD (\[.*\])$', open(os.path.join(root, ".claude/make-it/scaffolds", sc, "mock-services/mock-oidc/Dockerfile")).read())
+    check("%s: the image's own start (a sealed file) is what the manifest's command repeats, plus --no-proxy-headers" % sc,
+          dcmd and json.loads(dcmd.group(1)) + ["--no-proxy-headers"] == cmd, dcmd and dcmd.group(1))
 DOCKER = shutil.which("docker") and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
 check("docker is here, so the real image is checked behind a same-pod proxy (CI has it)", DOCKER or not os.environ.get("CI"))
 if DOCKER and len(hook) == 4 and PEOPLE:
@@ -720,7 +722,7 @@ if DOCKER and len(hook) == 4 and PEOPLE:
         r_ = dk("run", "-d", "--name", cname, "-p", "127.0.0.1::10090", "-p", "127.0.0.1::10091",
                 "-e", "MOCK_OIDC_REQUIRE_ACCESS_CODE=true", "-e", "MOCK_OIDC_ACCESS_CODE=" + CODE4,
                 "-e", "MOCK_OIDC_CLIENT_SECRET=" + SECRET4, "-e", "MOCK_OIDC_CLIENT_ID=mock-oidc-client", "-e", "MOCK_OIDC_PORT=10090",
-                "-e", "MOCK_OIDC_REDIRECT_URIS=" + REDIR, "-e", "MOCK_OIDC_EXTERNAL_BASE_URL=https://" + HOST, tag)
+                "-e", "MOCK_OIDC_REDIRECT_URIS=" + REDIR, "-e", "MOCK_OIDC_EXTERNAL_BASE_URL=https://" + HOST, tag, *cmd)
         dk("exec", "-d", cname, "python3", "-c", FWD)
         port = lambda p_: int(dk("port", cname, "%d/tcp" % p_).stdout.strip().rsplit(":", 1)[-1])
         direct, proxied = port(10090), port(10091)
