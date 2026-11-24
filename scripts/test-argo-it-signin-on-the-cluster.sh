@@ -481,7 +481,7 @@ if PEOPLE:
             ("a different number of emails", A('"a" "b"', emails='"a@x"'), 2, "PEOPLE STOP"),
             ("an array set twice", A('"a" "b"') + 'USER_SUBS=("c")\n', 2, "PEOPLE STOP"),
             ("no people", A(''), 2, "PEOPLE STOP"),
-            ("/make-it's placeholders still there", SEED_T, 2, "PEOPLE STOP: scripts/seed-mock-services.sh:39:"),
+            ("/make-it's placeholders still there", SEED_T, 2, "PEOPLE STOP: scripts/seed-mock-services.sh:53:"),
             ("a ; where a name should be", A('"a"; "b"'), 2, "PEOPLE STOP")):
         rc, out, data = people_run(text, out=True)
         check("the people block, %s: %s" % (label, "read" if want_rc == 0 else "a plain stop naming the line, nothing written"),
