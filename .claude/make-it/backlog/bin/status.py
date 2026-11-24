@@ -21,7 +21,7 @@ def day(s):
 
 def history(B):
     """({card path: {added, added_stage, added_done, done, live, checked, touched}}, first date, source)."""
-    git = lambda *a: subprocess.run(['git', '-C', B, *a], capture_output=True, text=True, errors='replace')
+    git = lambda *a: subprocess.run(['git', '-C', B, *a], capture_output=True, text=True, encoding='utf-8', errors='replace')
     pre = git('rev-parse', '--show-prefix')
     if pre.returncode: return {}, None, 'card dates (no git history)'
     log = git('-c', 'core.quotePath=false', 'log', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', '--reverse', '-p', '-M',
@@ -297,4 +297,4 @@ if __name__ == '__main__':
         parent = os.path.dirname(B)
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
         proj = open(f'{B}/.project', encoding='utf-8').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
-    print(render(facts(B), proj, needs_only=needs))
+    print(render(facts(B), R.arg(proj), needs_only=needs))

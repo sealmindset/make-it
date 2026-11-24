@@ -161,9 +161,9 @@ def self_test():
         assert s['pulled_in'] == [] and 'E07-S1' in s['scope'] and any('adds nothing' in n for n in s['notes']), s
         try: scope(b, 'E42'); raise AssertionError('an unknown id passed')
         except LookupError: pass
-        r = subprocess.run([sys.executable, __file__, b, 'E42', '--with-deps'], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, __file__, b, 'E42', '--with-deps'], capture_output=True, text=True, encoding='utf-8')
         assert r.returncode == 2 and 'E42 is not a card' in r.stderr, r
-        r = subprocess.run([sys.executable, __file__, b, 'E01', '--with-deps'], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, __file__, b, 'E01', '--with-deps'], capture_output=True, text=True, encoding='utf-8')
         assert r.returncode == 0 and json.loads(r.stdout)['scope'][-1] == 'E03-S1', r
     print('scope self-test: OK')
 
@@ -173,6 +173,6 @@ if __name__ == '__main__':
     if a == ['--self-test']: self_test(); sys.exit(0)
     wd = '--with-deps' in a; a = [x for x in a if x != '--with-deps']
     if not a or not os.path.isdir(os.path.join(os.path.expanduser(a[0]), 'items')): sys.exit(__doc__)
-    try: out = scope(os.path.expanduser(a[0]), ' '.join(a[1:]), wd)  # a category can have spaces
+    try: out = scope(os.path.expanduser(a[0]), R.arg(' '.join(a[1:])), wd)  # a category can have spaces
     except LookupError as e: print(f'scope: {e}', file=sys.stderr); sys.exit(2)
     print(json.dumps(out, indent=2))

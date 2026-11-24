@@ -22,7 +22,10 @@ v = R.v
 def write(p, fields=None, section=None, text=None, T=None):
     """Set (value) or remove (None) frontmatter fields, append `text` under `## section`, bump updated:."""
     T = T or datetime.date.today()
-    txt = open(p, encoding='utf-8').read()
+    try: raw = open(p, encoding='utf-8-sig', newline='').read()  # a leading BOM is dropped, and never written back
+    except UnicodeDecodeError: sys.exit(f'card: {p} is not UTF-8 text, nothing written -- re-save it as UTF-8')
+    nl = '\r\n' if '\r\n' in raw else '\n'  # the card keeps its own line endings
+    txt = raw.replace('\r\n', '\n')
     m = re.match(r'---\n(.*?)\n---', txt, re.S)
     if not m: sys.exit(f'card: no frontmatter in {p}')
     lines = m.group(1).split('\n')
@@ -41,9 +44,14 @@ def write(p, fields=None, section=None, text=None, T=None):
             body = body[:cut].rstrip('\n') + '\n' + text + ('\n\n' + body[cut:].lstrip('\n') if end else '')
         else: body += f'\n\n## {section}\n{text}'
     tmp = f'{p}.{os.getpid()}.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:  # whole file, then swap: a crash never leaves half a card
-        f.write('---\n' + '\n'.join(lines) + '\n---' + body + '\n')
-    os.replace(tmp, p)
+    try:
+        with open(tmp, 'w', encoding='utf-8', newline=nl) as f:  # whole file, then swap: a crash never leaves half a card
+            f.write('---\n' + '\n'.join(lines) + '\n---' + body + '\n')
+        os.replace(tmp, p)
+    except BaseException as e:
+        if os.path.exists(tmp): os.remove(tmp)  # no temp file left behind, whatever failed
+        if isinstance(e, UnicodeEncodeError): sys.exit(f'card: the text for {p} is not UTF-8, nothing written')
+        raise
 
 def regen(B, proj): subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
 
@@ -52,7 +60,7 @@ def lock(B):  # one card writer per board at a time, taken after stdin is read (
     import fcntl
     if B not in _locks: _locks[B] = os.open(f'{B}/items', os.O_RDONLY); fcntl.flock(_locks[B], fcntl.LOCK_EX)
 
-def git(B, *a): return subprocess.run(['git', '-C', B, *a], capture_output=True, text=True)
+def git(B, *a, input=None): return subprocess.run(['git', '-C', B, *a], capture_output=True, text=True, encoding='utf-8', errors='replace', input=input)
 
 def own_repo(B):  # a board that is its own git repo commits and pushes; one inside a project only stages
     top = git(B, 'rev-parse', '--show-toplevel')
@@ -71,7 +79,7 @@ def sync(B, paths, msg, proj):
     paths = [os.path.relpath(p, B) for p in paths] + ['BOARD.md']
     git(B, 'add', '--', *paths)
     if not own: return 'staged (board inside a project)'
-    c = git(B, 'commit', '-q', '-m', msg, '--', *paths)
+    c = git(B, 'commit', '-q', '-F', '-', '--', *paths, input=msg)  # on stdin, as UTF-8: an ASCII locale can't put it in argv
     if c.returncode: return 'nothing to commit' if not git(B, 'status', '--porcelain', '--', *paths).stdout.strip() else sys.exit(f'card: written, commit failed -- {c.stderr.strip()[:200]}')
     if git(B, 'rev-parse', '--abbrev-ref', '@{u}').returncode: return 'committed (no remote)'
     if git(B, 'push', '-q').returncode:  # someone pushed meanwhile: replay ours on top, once
@@ -122,9 +130,12 @@ def main(args):
     B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'card: no items/ folder in {B}')
     verb, rest = (args[0], args[1:]) if args else ('', [])
+    try: rest = [R.arg(a, 'strict') for a in rest]  # ids, a section, key=value: text, as UTF-8
+    except UnicodeDecodeError: sys.exit('card: an argument is not UTF-8 text, nothing written')
     def stdin():  # the text to write: never a terminal (it would wait forever), never empty (a lost heredoc)
         if sys.stdin.isatty(): sys.exit('card: pipe the text on stdin')
-        t = sys.stdin.read()
+        try: t = sys.stdin.read()
+        except UnicodeDecodeError: sys.exit('card: the text on stdin is not UTF-8, nothing written')
         return t if t.strip() else sys.exit('card: empty text on stdin, nothing written')
     if verb == 'append' and len(rest) == 2:
         t = stdin(); lock(B); pull(B); p = find(B, rest[0]); write(p, section=rest[1], text=t); what = f'{v(R.fm(p), "id")}: {rest[1]}'
@@ -145,9 +156,9 @@ def self_test():
     import tempfile
     T = str(datetime.date.today())
     run = lambda *a, stdin='', ok=True: (lambda r: (r, (r.returncode == 0) == ok or sys.exit(f'{a}: rc={r.returncode} {r.stdout}{r.stderr}')))(
-        subprocess.run([sys.executable, __file__, *a], input=stdin, capture_output=True, text=True))[0]
+        subprocess.run([sys.executable, __file__, *a], input=stdin, capture_output=True, text=True, encoding='utf-8'))[0]
     g = lambda d, *a: subprocess.run(['git', '-C', d, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false',
-                                      '-c', 'core.hooksPath=/dev/null', *a], capture_output=True, text=True, check=True).stdout
+                                      '-c', 'core.hooksPath=/dev/null', *a], capture_output=True, text=True, encoding='utf-8', check=True).stdout
     with tempfile.TemporaryDirectory() as t:
         os.environ.update(GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t', GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t')
         subprocess.run(['git', 'init', '-q', '--bare', f'{t}/remote.git'], check=True)
@@ -229,9 +240,9 @@ def self_test():
         assert len(os.listdir(f'{A}/items/EPIC-01-x/stories')) == n0, 'a refused new card left a file'
         PB = f'{P}/.claude/backlog'  # many writers at once (no upstream: the worst case for ids): nothing lost, no id twice
         ps = [subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'append', 'E01-S1', 'Burst'], stdin=subprocess.PIPE,
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(8)]
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8') for _ in range(8)]
         ps += [subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'new', 'E01'], stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(4)]
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8') for _ in range(4)]
         outs = [q.communicate(f'- line {i}\n' if i < 8 else card)[0] for i, q in enumerate(ps)]
         assert all(f'- line {i}' in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md') for i in range(8)), outs
         ids = [re.search(r'new (E01-S\d+)', o).group(1) for o in outs[8:]]
@@ -239,7 +250,7 @@ def self_test():
         import fcntl, time  # the lock is really taken: a writer waits while another holds it
         fd = os.open(f'{PB}/items', os.O_RDONLY); fcntl.flock(fd, fcntl.LOCK_EX)
         q = subprocess.Popen([sys.executable, __file__, '--board', PB, '--no-sync', 'append', 'E01-S1', 'Burst'], stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         q.stdin.write('- waited\n'); q.stdin.close(); time.sleep(1.5)
         assert q.poll() is None and '- waited' not in st(f'{PB}/items/EPIC-01-x/stories/S1-one.md'), 'wrote without the lock'
         fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd); q.wait(30)

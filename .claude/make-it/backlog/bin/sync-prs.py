@@ -40,7 +40,7 @@ def gh(repo):
     def look(n):
         if n not in cache:
             try:
-                r = subprocess.run(['gh', 'pr', 'view', str(n), '--json', 'state,mergedAt'], cwd=repo, capture_output=True, text=True, timeout=30)
+                r = subprocess.run(['gh', 'pr', 'view', str(n), '--json', 'state,mergedAt'], cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=30)
                 cache[n] = json.loads(r.stdout) if r.returncode == 0 else {'state': 'UNKNOWN', 'why': (r.stderr.strip().splitlines() or ['?'])[-1][:70]}
             except subprocess.TimeoutExpired: cache[n] = {'state': 'UNKNOWN', 'why': 'gh timed out'}
         return cache[n]
@@ -89,7 +89,7 @@ def run(B, look, dry, proj=None, T=None):
     if not dry: C.lock(B); out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]  # card.py's writer lock
     if out and not dry:
         subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
-    lines = [f"PR sync -- {proj or os.path.basename(B)} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]
+    lines = [f"PR sync -- {R.arg(proj or os.path.basename(B))} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]
     lines += [f'  {cid(p)} · {note}' for p, _, note in out] or ['  nothing to move']
     lines += ['Waiting:'] + [f'  {cid(p)} · {why}' for p, why in wait] if wait else []
     lines.append(f"{'Would move' if dry else 'Moved'} {len(out)} · waiting {len(wait)}")

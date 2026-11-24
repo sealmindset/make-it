@@ -26,7 +26,7 @@ exits 1 if there are any -- then nothing is written. Rules:
     a scope card to an open card outside the scope that it doesn't already wait on, would not make
     a loop, and says why with its evidence
 """
-import glob, importlib.util, json, os, re, sys, tempfile
+import glob, importlib.util, json, os, sys, tempfile
 
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
 R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
@@ -35,9 +35,9 @@ MODES = {'solo', 'spike', 'subagent-it', 'dispatch-it'}
 CANDIDATE = {'backlog', 'ready', 'designing'}
 
 
-def fm(p):
-    m = re.match(r'---\n(.*?)\n---', open(p, encoding='utf-8').read(), re.S)
-    return {k.strip(): v.strip() for k, v in (l.split(':', 1) for l in m.group(1).splitlines() if ':' in l)} if m else {}
+def fm(p):  # regen-board's reader (UTF-8, BOM dropped, a card that isn't UTF-8 named and skipped), keys and values trimmed
+    d = R.fm(p)
+    return None if d is None else {k.strip(): v.strip() for k, v in d.items()}
 
 
 def ids(s):  # "[E01-S1, E02]" or "E63-S148" -> ['E01-S1', 'E02']
@@ -55,7 +55,7 @@ def overlap(a, b):  # same path, or one is a folder holding the other
 
 
 def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
-    raw = {p: fm(p) for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md')}
+    raw = {p: d for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md') if (d := fm(p)) is not None}
     cards = {d['id'].upper(): d for d in raw.values() if d.get('id')}
     T = R.tree(raw)  # what each card waits on, by the board's one rule
     is_open = lambda i: i in cards and cards[i].get('status') != 'done'
