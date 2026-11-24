@@ -1143,7 +1143,10 @@ Reference: `~/.claude/make-it/references/build-standards.md`
 For Tier 1 (web-app), this includes checks across all categories:
 - **S01-S15**: Structure & configuration (project files, .env, stubs, secrets, README, learnings, the settle-filter-verify, keep-the-human-able-to-notice and which-skill-when sections)
 - **A01-A10**: Authentication & OIDC (callback, logout, proxy, state, JWT, ENFORCE_SECRETS)
-- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating)
+- **R01-R07**: RBAC & permissions (tables, roles, middleware, admin UI, frontend gating). R04,
+  concretely: list every route whose method is POST, PUT, PATCH or DELETE (each router file's
+  decorators); each carries `require_permission(...)` unless it is on R04's public list. One that
+  doesn't is a FAIL naming the route.
 - **U01-U07**: UI & frontend (standard components, header bar, theme, DataTable, types)
 - **D01-D06**: Database & seed data (migrations, seed users, Alembic syntax, one migration head)
 - **I01-I07**: Docker & infrastructure (compose, ports, health checks, entrypoint)
@@ -1214,6 +1217,126 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 **PART B: Live verification (start the app and test it)**
 
+**Rows checked on the running app.** Each step in Part B names, in its title, the rulebook rows
+it checks, and every row marked `[LIVE]` in `build-standards.md` is named by one of them. A row
+or step whose feature the app doesn't have ("Skip unless", "Only when") is N/A: reported as N/A,
+never as NOT RUN, and not written to TODO.md. A check that could not run goes in TODO.md as NOT
+RUN with its reason, never as passed. A check today's scaffold itself can't pass (step 28 b's
+page guard, step 31 f's known pages) is KNOWN, from the scaffold: counted and said plainly, not a
+FAIL, and the fix cycle doesn't touch it. "As User" means signed in as that role's test user, the
+way step 25 signs in. Never print a key or token value: not in a command, a log or the results.
+
+**Browser items** (marked "in a browser") need the rendered page: curl gets only the page's
+shell, because the pages render in the browser. They use the app's own Playwright in `e2e/`, on
+the host, installed once by step 22b. When step 22b couldn't install it or it can't launch, the
+item is NOT RUN with the reason "no browser here" and the install's reason, never FAIL, and the
+build goes on.
+
+**Write steps run only in a temporary copy.** A write step creates, changes or deletes a record
+or a setting, or restarts the backend: step 26 a's create, update and delete; 26 e's, 28 c's
+and 29 c's requests to write routes (sent to be refused: a broken guard would let them act);
+30 c; 33 a-c; the chat message or agent run that "No reachable AI provider" sends to find out;
+all of 33a except BNV03 (c), which only reads; and all of 33b, 33c, 33d, 33e, 33f, 33g and 33h. Every other step only reads, and runs against the running app as written. Nothing in
+Part B ever cleans up a database, and no write step is ever sent to the app's own: not in a
+brand-new build either, so a new app doesn't start life with the test's leftovers.
+Every build, new or existing, and /retrofit-it run the write steps in a temporary copy of the
+app's stack, with its own Compose project name, its own empty database volume and its own ports,
+named and offset the way `scripts/worktree.sh` does it for a worktree. The person's own
+containers, volumes and database are never written to, never stopped and never restarted.
+/resume-it's live pass starts no copy, so there the write steps are NOT RUN. In this order:
+    1. `count > before` (the person's database; it only reads): each table's rows, and the
+       database's own count of inserts, updates and deletes for it.
+    2. Put the write steps' commands in one script and run it with `wt_run bash <script>`. It
+       checks first, and starts and removes nothing when the check refuses. The copy is used
+       only on a set-up make-it's build produces
+       (`~/.claude/make-it/scripts/stack-check.py`, an allow-list): the scaffolds' services and
+       the mock services the build generates (`mock-<name>`, in the dev profile, built from
+       `./mock-services/mock-<name>`), using only the options those use; one network, the
+       project's own; every volume the project's own, and no folder of this computer mounted;
+       the address settings the scaffolds know, each read for certain and pointing at one of
+       the copy's own services or its own published port; any other setting that holds an
+       address only when it points at one of the copy's generated mocks; no cloud storage named
+       by its keys. Anything else, or anything it can't read, gets `NOT RUN: your app's set-up
+       isn't one make-it's build produces ([the first reason]), so I did not run the test that
+       creates, changes and deletes a record`. The copy is started with every AI-provider
+       address and key setting emptied, so it can never call a paid or outside AI service: the
+       write steps that need the AI provider (the rows "No reachable AI provider" lists) are
+       NOT RUN in the copy, with the reason "needs your AI provider; not tested in the
+       temporary copy", and the rest of the write steps run. Then it removes a copy left by
+       a session that died, starts the copy, runs the script inside it (`docker compose` and
+       the ports are the copy's, the app is at `http://localhost:$FRONTEND_PORT`; sign in there
+       as step 25 does) with a time limit of 30 minutes, and removes the copy on every way out:
+       finished, failed, interrupted or out of time. `NOT RUN: [reason]` (the set-up isn't one
+       the build produces, the copy didn't start, the time ran out): every write step not yet
+       done is NOT RUN with that reason, and the build goes on.
+    3. `count > after`, then compare the two: they must be identical, rows and counters. A
+       difference is a FAIL naming the table, "the write test wrote to your own database,
+       where it must never write", at the top of TODO.md.
+Say in the results what happened, never more:
+- `copy removed`, and no `NOT RUN`: "I tested creating, changing and deleting a record in a
+  temporary copy of your app, then removed the copy."
+- `NOT RUN: your app's set-up isn't one make-it's build produces ...`: say that sentence as it is.
+- any other `NOT RUN: [reason]`: "I didn't test creating, changing or deleting a record: [reason]."
+- `COPY LEFT: [name]`: "I could not remove the temporary copy of your app ([name]). Remove it
+  with: docker compose -p [name] --profile dev down -v", at the top of TODO.md.
+```bash
+# Run in the app's folder. <db> is the database service in docker-compose.yml (db in the scaffold).
+# Every `docker compose` here that reads or starts the stack uses the profile the build starts the app with (step 22).
+APP="$(env -u COMPOSE_PROJECT_NAME docker compose --profile dev config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
+q() { docker compose -p "$APP" exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
+# count: for each table of the person's database, name|rows, then the database's own counters,
+# name|inserts|updates|deletes (it only reads; the wait lets Postgres write its counters down)
+count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+  table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
+  information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+  \gexec" | q; printf '%s\n' "SELECT pg_sleep(11);" "SELECT relname, n_tup_ins, n_tup_upd, n_tup_del FROM pg_stat_user_tables WHERE schemaname = 'public' ORDER BY relname;" | q; }
+# the copy's project name and port offset, the way scripts/worktree.sh derives a worktree's
+# (but only variables whose name ends in PORT are offset: WORKERS:-4 is not a port)
+WT="$(printf '%s-%s' "$(basename "$PWD")" make-it-write-test | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')"
+WTENV="${TMPDIR:-/tmp}/$WT.env"
+wt_ok=   # set by wt_check alone, when every check has passed
+# wt_check: every check, before anything is started or removed. It starts nothing and removes nothing.
+wt_check() {
+  wt_ok=; local why off
+  docker info >/dev/null 2>&1 || { echo "NOT RUN: Docker isn't running"; return 1; }
+  [ -n "$APP" ] && [ "$WT" != "$APP" ] || { echo "NOT RUN: a temporary copy can't be told apart from your app"; return 1; }
+  off=$(( ($(printf '%s' "$WT" | cksum | awk '{print $1}') % 80 + 1) * 100 ))
+  { echo "export COMPOSE_PROJECT_NAME=$WT"
+    # every AI-provider address and key setting, emptied: the copy can never call a paid or outside AI service
+    python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" ai-settings | while read -r var; do echo "export $var="; done
+    grep -oE '\$\{[A-Z0-9_]*PORT:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
+      | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
+  # the copy is used only on a set-up make-it's build produces (an allow-list, in stack-check.py):
+  # the first thing that isn't is named in plain words, never a setting's value
+  why="$( . "$WTENV"; docker compose -p "$WT" --profile dev config --format json 2>/dev/null \
+    | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" copy "$WT" )" \
+    || { echo "NOT RUN: your app's set-up isn't one make-it's build produces (${why:-its settings could not be read}), so I did not run the test that creates, changes and deletes a record"; rm -f "$WTENV"; return 1; }
+  wt_ok=1
+}
+# wt_stop: remove the copy with its volume. Only after wt_check has passed here (down -v removes a
+# volume with a fixed name whatever project it is given), and only the project named exactly $WT.
+wt_stop() { [ -n "$wt_ok" ] && [ -n "$APP" ] && [ "$WT" != "$APP" ] || return 1
+  docker compose -p "$WT" --profile dev down -v --rmi local --remove-orphans; }
+# wt_run COMMAND...: check, make the copy, run COMMAND inside it with a time limit (WT_LIMIT
+# seconds), and remove the copy on every way out -- done, failed, interrupted, out of time
+wt_run() {
+  local r=1 pid=
+  wt_check || return 1
+  trap 'kill "$pid" 2>/dev/null; wt_stop >/dev/null 2>&1' EXIT; trap 'exit 130' INT TERM HUP
+  wt_stop >/dev/null 2>&1   # a copy left by a session that died
+  # start it: the app's own start runs its migrations and seed on the empty database
+  if ( . "$WTENV" && docker compose -p "$WT" --profile dev up -d --build --wait && bash scripts/seed-mock-services.sh >/dev/null ); then
+    ( . "$WTENV"; exec perl -e 'alarm shift; exec @ARGV' "${WT_LIMIT:-1800}" "$@" ) & pid=$!
+    wait "$pid"; r=$?
+    [ "$r" -ne 142 ] || echo "NOT RUN: the write test ran out of time"
+  else
+    echo "NOT RUN: the temporary copy didn't start (a port is taken, a migration failed, or its sign-in seed failed)"
+  fi
+  if wt_stop >/dev/null 2>&1; then echo "copy removed: $WT"; else echo "COPY LEFT: $WT"; fi
+  rm -f "$WTENV"; trap - EXIT INT TERM HUP; return "$r"
+}
+```
+
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
     the stop message):
@@ -1276,53 +1399,145 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 22. **Build and start containers:**
     ```bash
+    docker rm -f "<project>-live-check" 2>/dev/null   # a leftover changed-setting run (see below)
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
+    If the first command printed a name, it removed a leftover changed-setting run: note "Removed
+    a leftover <project>-live-check container" in the results, and after the start above also run
+    `docker compose --profile dev up -d --wait --force-recreate <backend>` so the backend gets its
+    network back. Every other service starts as usual.
     If build fails, diagnose silently, fix, and retry (up to 3 attempts). A TLS/certificate
     error is the one exception: that is step 21's security-tool ask, then retry.
     If port conflicts occur on `up`, remap conflicting ports and retry.
 
-23. **Wait for all services to be healthy** -- poll health endpoints for each service
+22b. **Install the browser for the browser items, once:** the same Chromium /try-it's smoke
+    test downloads. No `e2e/package.json` in the app (a Next.js full-stack app has none) → install
+    nothing: every browser item is NOT RUN with the reason "no browser here: this app has no
+    browser test setup (no `e2e/` folder)". Otherwise, in a sub-shell, so the next step still
+    runs in the app's folder:
+    ```bash
+    (
+      cd e2e || exit 1
+      if node -e "require('@playwright/test').chromium.launch().then(b => b.close())" >/dev/null 2>&1
+      then echo "browser ready"   # already installed: nothing is downloaded
+      elif [ -f package-lock.json ]; then npm ci && npx --no-install playwright install chromium
+      else npm install --no-save --no-package-lock && npx --no-install playwright install chromium
+      fi
+    )
+    ```
+    `npm ci` installs the exact Playwright version `e2e/package-lock.json` names and writes no
+    new file; an app built before the scaffold shipped that lock file installs without writing
+    one. Then run the launch line again, `(cd e2e && node -e "...")`. It works → the browser
+    items run. It fails (the install failed, Node.js or npm isn't on this computer, or Chromium
+    won't start) → every browser item is NOT RUN with the reason "no browser here: [the install's
+    reason]", never FAIL, and the build goes on. Only when it downloads, tell the user:
+    "Downloading a test browser (Chromium, about 300 MB, once) so I can check your app's pages
+    the way a person sees them." Nothing is asked.
+
+23. **Wait for all services to be healthy (V02)** -- poll health endpoints for each service
     (timeout 120s per service). If a service fails, read logs, fix, restart.
 
-24. **Run the mock service seed script:**
+24. **Run the mock service seed script (V03):** Only against this project's own services: the
+    script takes its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`), from the
+    environment or the project's `.env`, as `docker-compose.yml` does (check M02). If it still has
+    a literal port, fix it first (M02); never run it as it is, because in a worktree or copy it
+    would write to another app's sign-in service.
     ```bash
     bash scripts/seed-mock-services.sh
     ```
     If the script fails, diagnose and fix. The mock services must have the correct users
     and data before any testing begins.
 
-25. **Test the auth flow end-to-end for EACH role:**
+25. **Test the auth flow end-to-end for EACH role (V04):**
     For each role defined in app-context.json:
     a. Navigate to the app URL
     b. Follow the login flow through mock-oidc (use login_hint for the role's test user)
     c. Verify the callback completes and a JWT cookie is set
     d. Verify /auth/me returns the correct role from the DATABASE (not just "user")
-    e. Verify the dashboard loads with content
+    e. In a browser: verify the dashboard loads with content
     f. Test logout (POST to /auth/logout, verify JWT cookie is cleared, verify 401 after)
 
     If ANY role gets the wrong permissions (e.g., admin shows as "user"), this means the
     auth callback is not reading roles from the database. Fix the callback code and retest.
+    A role with no test user in the mock sign-in seed is an M02 gap (one user per role): add the
+    user to `scripts/seed-mock-services.sh` and, for the database, in a new migration -- never an
+    edited one, which a database that already exists would not apply -- then test that role; it
+    is not skipped.
 
-26. **Test every API endpoint:**
-    For each API route in the app (with a valid JWT):
-    a. Call the endpoint
+26. **Test every API endpoint (V05):**
+    For each API route in the app (with a valid JWT): the routes, their methods, required query
+    parameters and request bodies come from `GET /openapi.json`; ids and values come from the seed
+    data (a GET of the list first).
+    a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
+       update, then delete of this step's own test record per resource, its name or title starting
+       `live-check-test-`, never a seed record; a resource with no create route isn't written.
+       These writes are a write step: they run where "Write steps" above says, and nowhere else.
+       Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
+       a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
+       aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
+       name the rest in the results as not exercised.
     b. Verify 2xx response
     c. Verify response is valid JSON with expected structure
-    d. Verify list endpoints return NON-EMPTY arrays (seed data must exist)
+    d. Verify list endpoints return NON-EMPTY arrays where the seed data has rows for them. A
+       list the seed leaves empty on a fresh app (audit logs, statements, results of a job not
+       yet run) passes with an empty array; note it. A 422 for a request built from the schema is
+       a FAIL; a 422 from a missing required parameter means the request was wrong: fix it.
     e. Verify permission-protected endpoints return 403 for unauthorized roles
 
-27. **Test every page:**
+27. **Test every page (V06):**
     For each page defined in app-context.json (with a valid JWT):
     a. Request the page URL
     b. Verify it loads (200)
-    c. Verify it has meaningful content (not empty tables, not "no data found")
+    c. In a browser: verify it has meaningful content (not empty tables, not "no data found")
 
-28. **Test permission boundaries:**
-    For each role, verify:
+28. **Test permission boundaries (V07):**
+    For each role, signed in as in step 25, verify:
     a. Can access pages/endpoints they SHOULD access
-    b. Gets rejected (403 or redirect) from pages/endpoints they should NOT access
+    b. Gets rejected from pages/endpoints they should NOT access: a 403, a redirect, or (in a
+       browser) a page that shows a refusal and none of its data or working controls. A page
+       that renders its normal shell with an empty table isn't refused. On an app from today's
+       scaffold it is KNOWN, from the scaffold: "the page isn't guarded, only its data". Part C
+       doesn't add a page guard for it: the scaffold has no page-guard pattern
+       (its pages gate buttons with `hasPermission`, and `(auth)/layout.tsx` only sends a
+       signed-out person to the sign-in page).
+    c. Write refusals. The expected answer never comes from the route's own code, which is what
+       is being checked. A write route R04's file check (Part A) named as unguarded is a FAIL
+       from the file alone and gets no request: with no guard, a request would run. Never sent
+       either, and reported "not probed: an empty request could act": a DELETE; a route whose
+       path takes no id or slug and whose request body has no required field in `/openapi.json`
+       (an empty request could run it, like "mark all read"); and a route whose path has
+       `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `resend`, `email`, `notify`,
+       `mark`,
+       `run`, `replay`, `test`, `curation`, `statement`, `messages`, `chat`, `agents`, `revert`,
+       `restore`, `archive`, `publish` or `bulk`. A word counts only as a whole word of the path
+       (the path split at `/`, `-`, `_`, `.`, `{`, `}` and each capital letter; a plural `s` still
+       counts), never as letters inside a longer word: `/api/notes/{id}/mark-read` and
+       `/api/emails/{id}` are skipped, `/api/bookmarks/{id}` is not. R04's file check is their
+       check, and each counts as not run in the results sentence, with the reason "an empty
+       request could act". Every other
+       POST, PUT and PATCH route gets these requests, sent to the exact path it declares
+       (trailing slash included) with an empty JSON body `{}`, and an id or slug no record has
+       where the path takes one:
+       - Signed out: expect 401.
+       - As the seeded role with the fewest permissions, sent only when that role LACKS the
+         route's permission: map the route to a permission from its
+         path and method: the first path segment after `/api/` (after `/api/admin/`, with
+         `admin.` in front) is the resource, and POST is `create`, PUT or PATCH `update`, DELETE
+         `delete` -- `POST /api/notes/` is `notes.create`, `PUT /api/admin/settings/{key}` is
+         `admin.settings.update`. Look it up in the app's own permission list (its seed, or
+         `app-context.json`'s permission matrix); not there, try `admin.<resource>` (the scaffold
+         guards `/api/users` with `admin.users`). Expect 403. A route whose permission can't be found that way is NOT RUN for
+         that route, named in the results with the reason "no permission matches this route";
+         never skipped silently.
+       A 308 is the frontend's proxy moving a trailing-slash path: follow it with the same method
+       and body (`curl -L`); the answer after it is the result, and a 308 alone is neither.
+       FastAPI checks `require_permission` before the body, so a refused request writes nothing.
+       Fail: 422 (it got past a missing guard to the body check; nothing was written), 404 (past
+       it to the lookup), or 2xx (it wrote a record: name it from the response, delete it as
+       Super Admin through its own route, and if it can't be deleted, put it at the top of
+       TODO.md). In a stack whose permission check doesn't come first, this item is NOT RUN
+       with the reason "writes can't be probed safely here".
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
@@ -1340,16 +1555,23 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
 
 31. **Test DataTable features on every list page (V12):**
     For each page that displays tabular data:
-    a. Fetch the page HTML and verify it contains DataTable markup:
+    a. In a browser: open the page and verify it shows DataTable markup:
        - Pagination text (e.g., "Page 1 of") and page size selector
        - Column header buttons (not plain `<th>` text)
        - Toolbar area with search input and/or filter buttons
-    b. Verify data rows exist (seed data must populate -- no empty "No results" state)
+    b. In a browser: verify data rows exist (seed data must populate -- no empty "No results"
+       state)
     c. Verify the page source imports from `@/components/data-table` (read the page .tsx file)
     d. Verify column definitions use `DataTableColumnHeader` (provides Excel filtering + sorting)
     e. Verify `storageKey` prop is set (enables state persistence)
     f. Grep all page files for raw `<table` usage -- any match outside the DataTable
-       component files themselves is a U06 violation. Fix by replacing with DataTable.
+       component files themselves is a U06 violation. Fix by replacing with DataTable. Until the
+       scaffold is fixed, its own admin pages have raw tables: a match in
+       `frontend/app/(auth)/admin/settings/page.tsx`, `frontend/app/(auth)/admin/roles/page.tsx`
+       or `frontend/app/(auth)/admin/logs/page.tsx` (fastapi-nextjs), or
+       `src/app/(authenticated)/admin/roles/page.tsx` (nextjs-fullstack), is KNOWN, from the
+       scaffold (reported once, not a FAIL, not fixed). A raw table in any
+       page the build generated is still a FAIL.
 
 32. **Test theme toggle (V13):**
     a. Verify `<ModeToggle />` appears in the authenticated layout header (read the layout file)
@@ -1359,11 +1581,16 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
     e. Grep all `.tsx` page files (under `app/(auth)/`) for hardcoded colors:
        - Pattern: `#[0-9a-fA-F]{3,8}` or `rgb(` or `hsl(` or `oklch(`
        - Any match in a page file is a U09 violation (colors must use CSS variables or
-         Tailwind semantic classes so they respond to the theme toggle)
+         Tailwind semantic classes so they respond to the theme toggle), except inside an
+         `@media print` rule: print output is black on white whatever the theme
        - Fix by replacing with `var(--*)` CSS variables or Tailwind classes
     f. Verify the ModeToggle component uses the `mounted` state pattern (prevents hydration errors)
+    g. In a browser, as User: open the dashboard and use the mode toggle to pick light, then dark
+       (the scaffold's toggle steps through light, dark and system). Expect: the `<html>` class
+       switches between `light` and `dark`, localStorage `theme` holds the choice, and the choice
+       stays after a reload. Fail: the class doesn't change, or a page keeps one theme.
 
-33. **Test File Upload (if app has Documents page or upload feature):**
+33. **Test File Upload (V11) (if app has Documents page or upload feature):**
     a. Upload a valid PDF via the upload API endpoint -- verify 200 with extracted text
     b. Upload an image -- verify 200 with base64 content
     c. Upload an oversized file (> MAX_FILE_SIZE) -- verify 413 rejection
@@ -1372,6 +1599,177 @@ Tell user: "Your app is built! Now I'm making sure everything works perfectly...
        this is F03 violation. Must use `require('pdf-parse/lib/pdf-parse')` instead.
        The default import crashes in production Docker with ENOENT on test data file.
     f. Verify DOCUMENTS_PATH and UPLOAD_CACHE_PATH in docker-compose.yml environment block
+
+**The changed-setting run** (steps 33c, 33d, 33f and 33g use it). `<backend>` is the app's
+backend service as its `docker-compose.yml` names it (`backend` in the scaffold). `<run>` is
+`<project>-live-check`, where `<project>` is the `name` in `docker compose config --format json`,
+so two worktrees never share one. In this order:
+    1. `docker rm -f <run>` (a leftover from an earlier run), then `docker compose stop <backend>`.
+    2. `docker compose run -d --service-ports --use-aliases --name <run> -e <SETTING>=<value>
+       <backend>`. Without `--use-aliases` the frontend can't find the backend by its service
+       name, and every request through the app fails.
+    3. Wait at most 60 seconds, reading `docker inspect -f '{{.State.Status}} {{.State.ExitCode}}'
+       <run>` and the backend's health URL once a second, then run the check.
+    4. **Put it back, always** -- whether the check passed, failed, was cut off or errored:
+       `docker rm -f <run>`, then `docker compose --profile dev up -d --wait --force-recreate
+       <backend>` (a plain start can leave the backend with no network after a hard kill), then
+       one request through the app's frontend that reaches the backend. Write in the results that the
+       normal backend is back, healthy and reached through the frontend; if it isn't, fix that
+       before any other check.
+    Never edit `.env` for it, and never leave `<run>` behind. If this session dies mid-run, the
+    next start (step 22, or /resume-it's live pass) removes the leftover `<run>`. "The AI address unreachable" means
+    `http://127.0.0.1:9` in the setting the provider reads: `AZURE_AI_FOUNDRY_ENDPOINT`
+    (anthropic_foundry), `ANTHROPIC_BASE_URL` (anthropic, read by the Anthropic SDK),
+    `OPENAI_BASE_URL` (openai, read by the OpenAI SDK), `OLLAMA_BASE_URL` (ollama). claude_agent
+    has none: use `CLAUDE_CODE_OAUTH_TOKEN=` (empty) instead.
+
+**No reachable AI provider** (steps 33a-33h). A default build may have none: `claude_agent` ships
+with an empty token, and the scaffold has no mock AI provider. Before these steps, read the
+provider's key in the backend without printing it (`docker compose exec <backend> sh -c '[ -n
+"$<KEY>" ] && echo set || echo empty'`, with `<KEY>` one of `AZURE_AI_FOUNDRY_API_KEY`,
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`; ollama has no key) and, as User,
+send one chat message or trigger one agent. An empty key, or an
+answer that says the AI is unavailable, means there is no reachable provider. Then these rows are
+NOT RUN with the reason "no AI key yet" -- never FAIL, and never fixed: V14, V16, F10, F11, AI11,
+AI12, AI13, BN03, BNV01, BNV02, AC02, AC04, ACV01. With no key, or with a provider whose prices
+are $0 (claude_agent's are), these are NOT RUN with the reason "needs a configured, priced AI
+provider" -- never FAIL, and never fixed: AC12, ACV02. So is AC11's agent-off check; its 403 and
+audit checks run either way. These need no provider and run either way: AI01d, BN04, BN05,
+BNV03. A default build has no key, so it can't catch a broken budget cap: that needs a mock AI
+provider, which the scaffold doesn't have yet.
+
+33a. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
+    a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
+       and seed memories in place, send a chat message to an AI agent. Verify the response
+       reflects memory context (e.g., if seed memory says "prefers bullet points", response
+       should use bullet format). Disable brain features, send same message, verify response
+       format differs.
+    b. **BNV02: Curation produces memories** -- Trigger MemoryCuratorAgent via admin API
+       (POST /api/admin/brain/curation/run). Verify job record created in DI03 table.
+       Verify job completes. If unprocessed conversations with memory signals exist,
+       verify at least one new memory created in brain_memories.
+    c. **BNV03: Memory isolation** -- Login as user A, GET /api/brain/memories, note
+       user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
+       user-type memories are NOT returned. Confirm org-type memories with scope 'all'
+       ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
+
+33b. **Test AI accounting (ACV01-ACV03)** -- Skip if ai_features.needed != true
+    a. **ACV01: One call, one priced row** -- trigger one agent; exactly one new ledger row
+       with agent, feature, tier, model, tokens and a cost that matches the price row.
+    b. **ACV02: A cap refuses before spending** -- set the agent's day cap to $0.000001 on the
+       Control Plane, trigger it: no provider call, one refused_budget row, the fallback shown
+       in plain words. Put the cap back.
+    c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
+       today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
+
+33c. **Test upload failures, AI analysis and file layouts (F09, F10, F14)** -- Skip a row whose
+    feature the app doesn't have (F10 needs file upload and AI features).
+    - **F09** -- As the lowest role allowed to upload: POST an empty file, then a corrupt PDF
+      (`head -c 2048 /dev/urandom > bad.pdf`), to the upload endpoint. Expect: 400 or 422 for the
+      empty file (its rulebook row allows either) and 422 for the corrupt one, each with a plain
+      message. Fail: any 500, or a body
+      naming a library, a stack trace or a file path.
+    - **F10** -- As the lowest role allowed to upload: upload a small PDF that has text. Expect:
+      the stored document has its extracted text and, kept apart from it, an AI analysis. Then,
+      in the changed-setting run with the AI address unreachable, upload it again. Expect: the
+      upload succeeds and the document is saved with its text and no analysis. Fail: no analysis
+      while the AI is up, the text overwritten by the analysis, or the upload refused while the
+      AI is down.
+    - **F14** -- As the lowest role allowed to import: import the same CSV three times, with 0, 3
+      and 7 lines above its header row. Expect: all three succeed with the same row count. Fail:
+      any of them fails or counts a different number of rows.
+
+33d. **Test the AI with a changed setting (F11, AI01d)** -- Skip unless ai_features.needed = true.
+    - **F11** -- No sign-in: the changed-setting run with the AI address unreachable and
+      pre-flight on (the app's config names the switch: `AI_PREFLIGHT_CHECK` in the scaffold).
+      Expect: within 10 seconds `docker inspect` shows `exited` with a non-zero code, `docker logs
+      <run>` names the pre-flight check that failed, and the health URL never answered. Fail:
+      still `running` at 60 seconds, the health URL answers, or exit code 0. The put-back runs
+      either way.
+    - **AI01d** -- Only when `ai_providers.primary` is `claude_agent`. No sign-in: run `docker
+      compose exec <backend> claude --version` and `docker compose exec <backend> python -c
+      "import claude_agent_sdk"`. Then as User, in the changed-setting run with
+      `CLAUDE_CODE_OAUTH_TOKEN=` (empty): send one chat message. Expect: a version line, a clean
+      import, and the friendly "run `claude setup-token`" message (available: false), with any
+      status (a 503 with that message is a pass). Fail: either command fails, or a 500 or a crash
+      without the token.
+
+33e. **Test chat: streaming, history, privacy and the chat screen (V14, AI11, AI12, AI13)** --
+    Skip unless the app has conversational AI.
+    - **AI11** -- As User: POST a message to `/api/ai/conversations/{id}/messages` with `Accept:
+      text/event-stream` (`curl -N`). Expect: 200, `Content-Type: text/event-stream`, `data:`
+      token events arriving over time, and a last event with `"done": true`. Fail: another
+      content type, the whole reply in one burst, or no done event.
+    - **AI12** -- As User: create a conversation, send two messages, then GET
+      `/api/ai/conversations/{id}`. Expect: both messages and both replies. Then as Manager (a
+      different person): GET the same id. Expect: 404, and the conversation isn't in that
+      person's list. Fail: missing history, or the second person gets it.
+    - **AI13** -- In a browser, as User: open the chat page and send a message. Expect: the reply
+      appears as it is written, the conversation shows in the sidebar at once, and it is still
+      there after a reload. Fail: the reply appears only when finished, or the sidebar misses it.
+    - **V14** -- As User: ask for a long answer and watch the stream (`curl -N`). Expect:
+      `{"heartbeat": true}` events while it runs. Then POST the same message with `Accept:
+      application/json`. Expect: 200 and the whole reply as one JSON object. V14's streaming,
+      history and privacy items are AI11-AI13 above. Fail: no heartbeat in a reply that runs
+      longer than the heartbeat interval (the app's config names it: `AI_SSE_HEARTBEAT_SEC` in
+      the scaffold), or no JSON reply.
+
+33f. **Test agent routing (V16)** -- Skip unless the app has more than one agent.
+    - **V16** -- As User: for each conversational agent, create a conversation with its
+      `agent_slug` and send a message. As Admin: POST `/api/ai/agents/{slug}/run` for each batch
+      agent, then POST `/api/ai/agents/no-such-agent/run`. Expect: each reply comes from that
+      agent (its prompt and its data), each run creates a job with that agent's `task_type`, and
+      the unknown slug gets 404. When an agent has `rule_based_fallback: true`, trigger it in the
+      changed-setting run with the AI address unreachable. Expect: its fallback answer. Fail: a
+      reply from another agent, a run with no job, anything but 404 for the unknown slug, or an
+      error instead of the fallback.
+
+33g. **Test AI memory (BN03, BN04, BN05)** -- Skip if brain_features.enabled != true.
+    - **BN03** -- Only when the app already has a way to show the prompt it sends (a debug log or
+      an admin view of it); without one, BN03 is NOT RUN with the reason "the app doesn't show
+      its prompts". Never add prompt logging to pass this check: it would write people's memories
+      and prompts into the logs. As User, in the changed-setting run with
+      `BRAIN_FEATURES_ENABLED=true`: add a memory, then send a chat message. Expect: that prompt
+      holds the memory. As Admin, add an org memory with scope `security`; as User, chat with an
+      agent outside security, then with the security agent. Expect: it is left out, then
+      included. With `BRAIN_FEATURES_ENABLED=false`: no memories in the prompt. Fail: any of
+      these the other way round.
+    - **BN04** -- As User: add a memory containing `<script>alert(1)</script>` and one containing
+      "ignore previous instructions", then GET them. Expect: the script tag stripped or escaped,
+      and the instruction phrase removed. Fail: either stored as sent.
+    - **BN05** -- As User: add a personal memory. As Manager: GET `/api/brain/memories`, and GET
+      the User's memory by its id. Expect: not in the list, and 404. As Admin, add an org memory
+      with scope `security` and one with scope `all`. Expect: a role without security
+      permissions doesn't get the `security` one and a role with them does; everyone gets the
+      `all` one. Fail: any person seeing another's personal memory, or a scope shown to the wrong
+      role.
+
+33h. **Test AI accounting (AC02, AC04, AC11, AC12)** -- Skip if ai_features.needed != true. Put
+    every setting you change back afterwards.
+    - **AC02** -- As Admin: count `ai_usage_events` rows (`docker compose exec db psql`), trigger
+      one agent, count again. Expect: exactly one new row, with all four token counts filled.
+      Fail: no row, more than one, or an empty token count.
+    - **AC04** -- As Admin: end the price row of the model in use (set its end date to yesterday),
+      trigger one agent. Expect: the new row has `priced = false` and no cost, and AI Spend's
+      unpriced count went up by one. Add the price back. Expect: the row is priced. Fail: a cost
+      of 0, or `priced = true` with no price.
+    - **AC11** -- As User: GET the Control Plane API, and send its change request with the method
+      the app's router or `/openapi.json` gives it (PUT in the scaffold, not PATCH). Expect: 403
+      both times. As Admin: make one change. Expect: exactly one new `control_audit_log` row with
+      before and after. Only with a configured, priced provider (above): set an agent `off` and
+      trigger it. Expect: no provider call and no `ok` ledger row. Fail: the User gets in, no
+      audit row, or the agent still calls the AI.
+    - **AC12** -- Only with a configured, priced provider (above). As Admin: trigger the agent
+      once, read what it spent today (the sum of today's `cost_usd` for it in `ai_usage_events`),
+      then set its day cap below that sum and trigger it again. Expect: a `refused_budget` row
+      with cost 0, no provider call, and the admins' 100% notice; for an agent with
+      `rule_based_fallback: true`, its fallback answer too. Fail: an `ok` row, a provider call,
+      or, for an agent that declares a fallback, no fallback answer.
+
+33i. **Run the variant's live checks (P03)** -- Only when ACTIVE_VARIANT is set: run every item
+    under `### Live checks (Part B)` in the variant's definition file.
+    - **P03** -- No sign-in: `curl -sI http://localhost:[FRONTEND_PORT]/sw.js`. Expect: 200 with a
+      JavaScript content type. Fail: any other status, or an HTML page.
 
 **PART C: Fix cycle (silent, automatic)**
 
@@ -1420,30 +1818,6 @@ Common issues and fixes:
 
 Tell user (during fix cycle): "Almost there -- just polishing a few things..."
 
-33. **Test brain layer (BNV01-BNV03)** -- Skip if brain_features.enabled != true
-    a. **BNV01: Brain context influences AI responses** -- With BRAIN_FEATURES_ENABLED=true
-       and seed memories in place, send a chat message to an AI agent. Verify the response
-       reflects memory context (e.g., if seed memory says "prefers bullet points", response
-       should use bullet format). Disable brain features, send same message, verify response
-       format differs.
-    b. **BNV02: Curation produces memories** -- Trigger MemoryCuratorAgent via admin API
-       (POST /api/admin/brain/curation/run). Verify job record created in DI03 table.
-       Verify job completes. If unprocessed conversations with memory signals exist,
-       verify at least one new memory created in brain_memories.
-    c. **BNV03: Memory isolation** -- Login as user A, GET /api/brain/memories, note
-       user-type memories. Login as user B, GET /api/brain/memories, confirm user A's
-       user-type memories are NOT returned. Confirm org-type memories with scope 'all'
-       ARE visible to both users. Try to access user A's memory by ID as user B -- verify 404.
-
-33b. **Test AI accounting (ACV01-ACV03)** -- Skip if ai_features.needed != true
-    a. **ACV01: One call, one priced row** -- trigger one agent; exactly one new ledger row
-       with agent, feature, tier, model, tokens and a cost that matches the price row.
-    b. **ACV02: A cap refuses before spending** -- set the agent's day cap to $0.000001 on the
-       Control Plane, trigger it: no provider call, one refused_budget row, the fallback shown
-       in plain words. Put the cap back.
-    c. **ACV03: Pages agree with the ledger** -- AI Spend's total for today equals the sum of
-       today's ledger rows; a 30-day statement's AI total equals the same sum for its period.
-
 If issues remain after 3 cycles, note them in TODO.md but DO NOT block the handoff.
 The app should be in the best possible state.
 
@@ -1457,9 +1831,9 @@ nobody has to scan this app again later to find and fix these.
 
 **PART D: Declare success and hand off**
 
-40. Tell the user:
+40. Tell the user, filled from Part B's results:
 
-"Your app is built and verified! Here's what I created:
+"Your app is built! Here's what I created:
 
 - [X] pages/screens
 - [X] API endpoints
@@ -1468,8 +1842,18 @@ nobody has to scan this app again later to find and fix these.
 - Security features built in
 - [Development environment / Cloud infrastructure] ready
 
-Everything is working -- login, permissions, data, and all your pages. Now let's
-see your app in action!"
+[The results sentence.] Now let's see your app in action!"
+
+**The results sentence** (here, and in /resume-it's live pass) is built from these parts, in this
+order, leaving out a part whose count is 0. It never claims more than the results show.
+
+| Part | When | Say |
+|------|------|-----|
+| passed | any check passed | "[N] checks passed on your running app" |
+| failed | a FAIL still open after the fixes | "[N] failed and are at the top of your to-do list: [each, in plain words]" |
+| known | a KNOWN, from the scaffold | "[N] are known gaps in the app's starting template, which I don't change here: [each, in plain words]" |
+| not run | a NOT RUN | "[N] weren't run: [each reason with its count, in plain words, e.g. '3 need an AI key', '2 need a browser']" |
+| all clear | only when failed, known and not run are all 0 | "everything I checked works" |
 
 40b. **Seal the project (silent -- checks WM01-WM07).** Follow
 `~/.claude/make-it/references/watermark.md`: put the security step's outcome in a small JSON file

@@ -30,9 +30,23 @@ NC='\033[0m' # No Color
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-MOCK_OIDC_URL="http://localhost:[MOCK_OIDC_PORT]"
+# Host ports: the same variables docker-compose.yml uses -- the environment first, then the
+# project's .env -- with the build's port only as the default. Never a literal port in a URL, so
+# in a worktree or a copy with its own ports this seeds that project's own services (check M02).
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+env_port() {  # env_port NAME DEFAULT
+    local v="${!1:-}"
+    if [ -z "$v" ] && [ -f "$ROOT_DIR/.env" ]; then
+        v="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$ROOT_DIR/.env" | tail -1 | cut -d= -f2- \
+            | sed -e 's/[[:space:]]*#.*$//' | tr -d "\"' \r")"
+    fi
+    echo "${v:-$2}"
+}
+MOCK_OIDC_PORT="$(env_port MOCK_OIDC_PORT "[MOCK_OIDC_PORT]")"
+APP_PORT="$(env_port APP_PORT "[APP_PORT]")"
+MOCK_OIDC_URL="http://localhost:${MOCK_OIDC_PORT}"
 CLIENT_ID="mock-oidc-client"
-APP_URL="http://localhost:[APP_PORT]"
+APP_URL="http://localhost:${APP_PORT}"
 MAX_RETRIES=30
 
 # App users (must match database seed oidc_subjects)
