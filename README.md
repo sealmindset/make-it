@@ -1005,6 +1005,36 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.26 -- /argo-it: people can sign in on the test copy on a cluster, and /argo-it says what sign-in will do
+
+Before, an app deployed by /argo-it ran on the cluster but nobody could sign in, and /argo-it
+never said so.
+
+- **One new question at set-up:** who signs people in on the test copy. The practice sign-in
+  (a list of pretend people, no passwords, behind an access code), or your organisation's
+  sign-in. The live version always uses your organisation's.
+- **The practice sign-in asks for an access code** before it lists anyone. Your DevOps team
+  sets the code as a cluster secret. Without a proper code it shows a plain "isn't set up yet"
+  page and signs nobody in. Anyone who has the code can sign in as any pretend person, an
+  administrator included, so keep the test address off the internet.
+- **Its admin side answers only its own start-up step,** and needs a secret as well. Other
+  workloads on the cluster are refused.
+- **It can never reach the live version.** A check before sending, and a step at the start of
+  every build, fail if the live version's files mention it. A refused build publishes
+  nothing.
+- **Addresses follow one written rule,** so two people setting up the same app get the same
+  files.
+- **The live version always enforces strong keys.** A live copy with a weak key refuses to
+  start.
+- **The first deploy shows up straight away,** and /argo-it says what you will see while the
+  first build runs.
+- **Secrets in the onboarding notes are created without the value reaching a command line.**
+- **Apps already built** get the updated practice sign-in at their next /resume-it. Until
+  then /argo-it offers them only the organisation's sign-in.
+- **Proven on a local test bed** by an independent run: running and signed in with no hand
+  fix. **Not proven:** a real organisation sign-in, a cluster other than the test one, and
+  GitHub itself. One-service apps are not offered the practice sign-in yet.
+
 ### v1.71.25 -- `.env` stays out of every image, and a worktree gets its own database port
 
 - **Every image an app builds leaves `.env` files out.** Before, the backend image and both
