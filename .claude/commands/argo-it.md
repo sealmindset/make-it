@@ -1505,7 +1505,8 @@ When it starts, its start-up hook -- inside its own pod -- loads the pretend peo
 `mock-oidc-people.json` (below: written at set-up from `scripts/seed-mock-services.sh`, their single
 source) and registers the app's own return address (`https://{hostname}/api/auth/callback`). So after any
 restart, of it or of the app, in any order, it has its people and its return address, with no hand step;
-the app's backend skips its own seeding of the practice sign-in there at once.
+the app's backend's own seeding of it is refused there (403): it gives up after its five tries, about 10
+seconds, and starts.
 
 ```yaml
 apiVersion: apps/v1
