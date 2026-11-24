@@ -1,0 +1,12 @@
+# Keep machine-local caches out of the image: the Dockerfile installs its own dependencies.
+.venv
+venv
+__pycache__
+*.pyc
+.git
+
+# Never copy local secrets into the image: the Dockerfile does `COPY . .`, so a .env left in this
+# folder would ship inside it. Configuration comes from the container's environment.
+.env
+.env.*
+!.env.example

@@ -218,6 +218,7 @@ efa65c65e17d51d58570edce9d702b0604fdf6a9b8db65afaed8f075af8867c7  make-it/scaffo
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  make-it/scaffolds/fastapi-nextjs/frontend/public/.gitkeep
 0de53cd732d131cdce54369495853e1d92f94e7a444944167b216260efb441f6  make-it/scaffolds/fastapi-nextjs/frontend/tailwind.config.ts
 86c57aa7eec3e819fc7f5f7075219d9383d4ce824b751816636e581170b7cc97  make-it/scaffolds/fastapi-nextjs/frontend/tsconfig.json
+aea4c4717fb4be5a05331bbe3620ecd92baa42563eafb465208aaa6910947e2d  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/.dockerignore
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/Dockerfile
 7719b9908602199e66a7d229259ba3b853aece4f2a87dd432de4ae3c700468a5  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
@@ -239,6 +240,7 @@ fe4778c90cb9673fafb7d5875a7c7996306ba3f9617d6f99de6db1012f3a8056  make-it/scaffo
 ef761de84c5fc12a4b6fb64acb9d62ba7feb42934e8d91d923f4456c8a6c28e7  make-it/scaffolds/nextjs-fullstack/docker-compose.yml
 df6ada73b40d268e916188e82e207114182dfc9d7d21d3f56558502cbf764d92  make-it/scaffolds/nextjs-fullstack/entrypoint.sh
 86e3de7c7dfdef1ba4b6985aff52f3371f4169cfba995d9a2dee5f1610879b83  make-it/scaffolds/nextjs-fullstack/eslint.config.mjs
+aea4c4717fb4be5a05331bbe3620ecd92baa42563eafb465208aaa6910947e2d  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/.dockerignore
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/Dockerfile
 28a97b0cb14aaa20bd4ed4a072eb4a6d3dc8fa244304b1df8655de7877e6abae  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/requirements.txt
