@@ -247,7 +247,8 @@ build goes on.
 
 29. **Test Activity Logs (web-app and api-service only):**
     a. Verify GET /api/admin/logs/stats returns valid stats (buffer_size, total_received, etc.)
-    b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests)
+    b. Verify GET /api/admin/logs/events returns non-empty results (after app has handled requests),
+       and that a signed-in request's event names that user in `user_email` (L09)
     c. Verify DELETE /api/admin/logs/events returns 403 for non-admin roles
     d. Verify the Admin UI Activity Logs tab loads with stats cards and event table
 
