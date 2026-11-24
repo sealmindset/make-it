@@ -177,6 +177,10 @@ check("the live version always turns ENFORCE_SECRETS on, whatever compose says",
       TABLE.get("ENFORCE_SECRETS", {}).get("prod", "").startswith('`"true"`'), TABLE.get("ENFORCE_SECRETS"))
 
 # ======================================================================= Service names, the built-in backend address
+dep_t = fence_after(r"### \{service\}\.yaml \(Deployment\)") or ""
+check("each app Deployment is ready only once the Compose service's own healthcheck passes (no 502 while it starts)",
+      "readinessProbe:\n          exec:\n            command: {healthcheck_exec}" in dep_t
+      and "its Deployment gets that check as a `readinessProbe`" in F and "No `healthcheck:`: leave the probe out." in F)
 svc_t = fence_after(r"### \{service\}-service\.yaml \(Service\)")
 check("each app service's Service is named as its compose service ({compose_service})", svc_t is not None and "name: {compose_service}" in svc_t)
 fe_dock = open(os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/frontend/Dockerfile")).read()
