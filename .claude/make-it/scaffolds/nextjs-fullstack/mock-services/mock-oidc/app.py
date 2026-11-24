@@ -19,8 +19,13 @@ Config via environment variables:
 - MOCK_OIDC_CLIENT_SECRET (default mock-oidc-secret)
 - MOCK_OIDC_ACCESS_CODE (optional) -- when set, the sign-in page asks for this code before it shows
   anyone or signs anyone in (a shared code, for a practice sign-in someone else can reach)
-- MOCK_OIDC_REQUIRE_ACCESS_CODE (optional, "true" on a cluster) -- refuse to start without an access code
-  of at least 16 characters
+- MOCK_OIDC_REQUIRE_ACCESS_CODE (optional, "true" on a cluster) -- cluster mode: "true", "1" or "yes" turn it
+  on, unset/"false"/"0"/"no" leave it off, and anything else turns it on too (fail closed). In cluster mode:
+  - nobody signs in without an access code of at least 16 characters that isn't only spaces or one repeated
+    character: without one, the sign-in page says the practice sign-in isn't set up yet (a plain page, not an
+    error), and a plain line at start says why, without the code;
+  - the admin API (/api/...) and the API docs answer only requests from this machine itself (127.0.0.1 or ::1:
+    the start-up hook that loads the people runs in the same pod); from anywhere else they answer 403.
 Unset, both leave local development exactly as it was.
 """
 
@@ -54,21 +59,29 @@ INTERNAL_BASE = os.getenv("MOCK_OIDC_INTERNAL_BASE_URL", f"http://mock-oidc:{POR
 CLIENT_ID = os.getenv("MOCK_OIDC_CLIENT_ID", "mock-oidc-client")
 CLIENT_SECRET = os.getenv("MOCK_OIDC_CLIENT_SECRET", "mock-oidc-secret")
 ACCESS_CODE = os.getenv("MOCK_OIDC_ACCESS_CODE", "")
-if os.getenv("MOCK_OIDC_REQUIRE_ACCESS_CODE", "").lower() == "true" and len(ACCESS_CODE) < 16:
-    # Fail closed: a practice sign-in someone else can reach never runs without its access code.
-    print("mock-oidc: not starting: MOCK_OIDC_REQUIRE_ACCESS_CODE is true and MOCK_OIDC_ACCESS_CODE is "
-          "missing or shorter than 16 characters", file=sys.stderr, flush=True)
-    sys.exit(1)
+_mode = os.getenv("MOCK_OIDC_REQUIRE_ACCESS_CODE", "").strip().lower()
+CLUSTER = _mode not in ("", "false", "0", "no")      # fail closed: any other value is cluster mode
+NOT_SET_UP = ""                                       # why nobody can sign in yet (cluster mode only)
+if CLUSTER:
+    if _mode not in ("true", "1", "yes"):
+        print("mock-oidc: MOCK_OIDC_REQUIRE_ACCESS_CODE has a value other than true/false: running in cluster mode",
+              file=sys.stderr, flush=True)
+    if not ACCESS_CODE:
+        NOT_SET_UP = "MOCK_OIDC_ACCESS_CODE is missing"
+    elif len(ACCESS_CODE) < 16:
+        NOT_SET_UP = "MOCK_OIDC_ACCESS_CODE is shorter than 16 characters"
+    elif not ACCESS_CODE.strip() or len(set(ACCESS_CODE)) == 1:
+        NOT_SET_UP = "MOCK_OIDC_ACCESS_CODE is only spaces or one repeated character"
+    if NOT_SET_UP:
+        # Never the code itself. Nobody signs in until DevOps sets a proper code and restarts it.
+        print("mock-oidc: the practice sign-in isn't set up: %s; nobody can sign in until it is set "
+              "(16+ characters) and mock-oidc restarts" % NOT_SET_UP, file=sys.stderr, flush=True)
 
 # Access code: a correct code is remembered for that browser in a signed cookie for ACCESS_TTL seconds.
-# Wrong codes are counted per client address, in memory (a restart clears them): after ACCESS_MAX_FAILS
-# within ACCESS_WINDOW seconds, every try is refused until the window passes; each wrong try waits 1 second.
+# A wrong code waits 1 second (without holding up anyone else) and is never counted: nobody can lock others out.
 ACCESS_COOKIE = "mock_oidc_access"
 ACCESS_TTL = 15 * 60
-ACCESS_MAX_FAILS = 5
-ACCESS_WINDOW = 5 * 60
-_access_key = secrets.token_bytes(32)
-_access_fails: dict[str, list[float]] = {}
+_access_key = secrets.token_bytes(32)   # per process: a restart asks everyone for the code again
 
 # ---------------------------------------------------------------------------
 # RSA key pair (generated once on startup)
@@ -118,6 +131,39 @@ AUTH_CODE_TTL = 300  # 5 minutes
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Mock OIDC Provider", version="1.0.0")
+
+# In cluster mode only these answer requests from outside this machine; everything else (the admin API, the
+# API docs) answers only 127.0.0.1 / ::1 -- the start-up hook in the same pod.
+PUBLIC_ROUTES = {"/.well-known/openid-configuration", "/jwks", "/authorize", "/token", "/userinfo", "/health"}
+LOOPBACK = {"127.0.0.1", "::1"}
+
+
+@app.middleware("http")
+async def _cluster_admin_from_loopback_only(request: Request, call_next):
+    if CLUSTER and request.url.path not in PUBLIC_ROUTES and _client(request) not in LOOPBACK:
+        return JSONResponse({"detail": "Not available here."}, status_code=403)
+    return await call_next(request)
+
+
+def _page(content: str, status_code: int = 200, form_to: str = "") -> HTMLResponse:
+    """An HTML page with headers that keep it out of frames, caches and referrers."""
+    csp = ("default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; "
+           "form-action 'self'" + (" " + form_to if form_to else ""))
+    return HTMLResponse(content=content, status_code=status_code, headers={
+        "Content-Security-Policy": csp, "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+def _not_set_up_page() -> HTMLResponse:
+    return _page("""<!DOCTYPE html>
+<html><head><title>Practice sign-in - not set up yet</title></head>
+<body style="font-family:sans-serif;display:flex;justify-content:center;margin-top:80px;">
+  <div style="max-width:420px;">
+    <h2>Practice sign-in</h2>
+    <p>The practice sign-in isn't set up yet. Ask your DevOps team to finish setting it up
+       (ONBOARDING-K8S.md, the access code).</p>
+  </div>
+</body></html>""", status_code=503)
 
 
 def _validate_redirect_uri(client_id: str, redirect_uri: str) -> None:
@@ -209,12 +255,12 @@ def _render_code_page(query: str, message: str = "") -> HTMLResponse:
     """The sign-in page when an access code is set: a code field only, no names."""
     esc = html_mod.escape
     note = f'<p style="color:#b00;">{esc(message)}</p>' if message else ""
-    return HTMLResponse(content=f"""<!DOCTYPE html>
+    return _page(f"""<!DOCTYPE html>
 <html><head><title>Practice sign-in - Access code</title></head>
 <body style="font-family:sans-serif;display:flex;justify-content:center;margin-top:80px;">
   <form method="POST" action="/authorize" style="max-width:360px;">
     <h2>Practice sign-in</h2>
-    <p>Enter the access code your team gave you.</p>{note}
+    <p>Enter the access code your team gave you. This browser is remembered for 15 minutes.</p>{note}
     <input type="hidden" name="return_query" value="{esc(query, quote=True)}">
     <input type="password" name="access_code" autocomplete="off" required style="width:100%;padding:8px;">
     <button type="submit" style="margin-top:12px;padding:8px 16px;">Continue</button>
@@ -224,17 +270,10 @@ def _render_code_page(query: str, message: str = "") -> HTMLResponse:
 
 async def _check_code(request: Request, code: str, return_query: str):
     """A code submitted from the code page: right -> set the cookie and go back to the sign-in page."""
-    who, now = _client(request), time.time()
-    recent = [t for t in _access_fails.get(who, []) if now - t < ACCESS_WINDOW]
-    _access_fails[who] = recent
-    if len(recent) >= ACCESS_MAX_FAILS:
-        return _render_code_page(return_query, "Too many wrong codes. Wait a few minutes and try again.")
     if not hmac.compare_digest(code.encode(), ACCESS_CODE.encode()):
-        recent.append(now)
-        await asyncio.sleep(1)
+        await asyncio.sleep(1)   # slows guessing; other people's requests go on meanwhile
         return _render_code_page(return_query, "That code isn't right.")
-    _access_fails.pop(who, None)
-    expires = int(now) + ACCESS_TTL
+    expires = int(time.time()) + ACCESS_TTL
     secure = EXTERNAL_BASE.startswith("https://") or request.headers.get("x-forwarded-proto") == "https"
     resp = RedirectResponse(url="/authorize?" + return_query.lstrip("?"), status_code=303)
     resp.set_cookie(ACCESS_COOKIE, _access_token(expires), max_age=ACCESS_TTL, httponly=True,
@@ -294,6 +333,10 @@ def _render_login_page(
     if not user_buttons:
         user_buttons = "<p style='color:#999;'>No users registered. Run the seed script first.</p>"
 
+    # The picked person's form goes here, then on to the app's (already checked) return address
+    target = urlparse(redirect_uri)
+    form_to = f"{target.scheme}://{target.netloc}" if target.scheme in ("http", "https") and target.netloc else ""
+
     page_html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -322,7 +365,7 @@ def _render_login_page(
     </div>
 </body>
 </html>"""
-    return HTMLResponse(content=page_html)
+    return _page(page_html, form_to=form_to)
 
 
 @app.get("/authorize")
@@ -342,6 +385,8 @@ async def authorize_get(
     If login_hint is provided and matches a registered user sub,
     auto-approve and redirect with code. Otherwise show login form.
     """
+    if NOT_SET_UP:
+        return _not_set_up_page()
     if response_type != "code":
         raise HTTPException(400, "Only response_type=code is supported")
 
@@ -375,6 +420,8 @@ async def authorize_post(
     return_query: str = Form(""),
 ):
     """Authorization endpoint (POST) -- the access code form, or a user picked on the login page."""
+    if NOT_SET_UP:
+        return _not_set_up_page()
     if access_code is not None and ACCESS_CODE:
         return await _check_code(request, access_code, return_query)
     if not _has_access(request):
@@ -420,6 +467,8 @@ async def token(
     Validates client_id, client_secret, redirect_uri, and code.
     Returns JWT access_token and id_token signed with RSA key.
     """
+    if NOT_SET_UP:
+        raise HTTPException(503, "The practice sign-in isn't set up yet.")
     # Validate client credentials
     if client_id != CLIENT_ID:
         raise HTTPException(401, "Invalid client_id")

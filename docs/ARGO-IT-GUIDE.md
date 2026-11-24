@@ -118,7 +118,7 @@ my-app/
 | `backend` (FastAPI) | Yes -- Deployment + Service | App service |
 | `frontend` (Next.js) | Yes -- Deployment + Service + Ingress | Web-facing app service |
 | `db` (PostgreSQL) | No | Use managed DB or existing cluster DB |
-| `mock-oidc` | Test copy only, when picked | The practice sign-in: in `env/dev/` only if the person picks it (pretend people, no passwords -- anyone who can reach the dev address can sign in as anyone); never in `env/prod/`, which always uses the organisation's sign-in |
+| `mock-oidc` | Test copy only, when picked | The practice sign-in: in `env/dev/` only if the person picks it (pretend people, no passwords, behind an access code DevOps sets -- anyone with the code can sign in as anyone; its admin API answers only its own pod); never in `env/prod/`, which always uses the organisation's sign-in |
 | `mock-jira` | No | Local dev only -- real API in K8s |
 | `worker` (Celery) | Yes -- Deployment only (no Service) | Background worker |
 

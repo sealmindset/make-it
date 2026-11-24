@@ -22,21 +22,26 @@ alembic upgrade head
 # Seed mock-oidc test users (local dev only)
 # In production OIDC_ISSUER_URL points to a real IdP and this is a harmless no-op.
 # ---------------------------------------------------------------------------
+# On a cluster the practice sign-in's admin API answers only itself (403 here): its own start-up hook loads
+# the people from scripts/seed-mock-services.sh, so this stops at once and the app starts.
 OIDC_URL="${OIDC_ISSUER_URL:-http://mock-oidc:10090}"
 echo "Seeding mock-oidc test users..."
+SEED=yes
 for i in 1 2 3 4 5; do
-    curl -sf "${OIDC_URL}/api/users" >/dev/null 2>&1 && break
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "${OIDC_URL}/api/users" 2>/dev/null || true)
+    if [ "$STATUS" = "200" ]; then break; fi
+    if [ "$STATUS" = "403" ]; then SEED=no; echo "mock-oidc loads its own users here; skipping."; break; fi
     echo "mock-oidc not ready, retrying in 2s..."
     sleep 2
 done
 
-curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+[ "$SEED" = yes ] && curl -sf --max-time 3 -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
     -d '{"sub":"mock-superadmin","email":"superadmin@example.com","name":"Sarah SuperAdmin"}' >/dev/null 2>&1 || true
-curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+[ "$SEED" = yes ] && curl -sf --max-time 3 -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
     -d '{"sub":"mock-admin","email":"admin@example.com","name":"Alex Admin"}' >/dev/null 2>&1 || true
-curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+[ "$SEED" = yes ] && curl -sf --max-time 3 -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
     -d '{"sub":"mock-analyst","email":"analyst@example.com","name":"Ana Analyst"}' >/dev/null 2>&1 || true
-curl -sf -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
+[ "$SEED" = yes ] && curl -sf --max-time 3 -X POST "${OIDC_URL}/api/users" -H "Content-Type: application/json" \
     -d '{"sub":"mock-viewer","email":"viewer@example.com","name":"Victor Viewer"}' >/dev/null 2>&1 || true
 echo "Mock-oidc users seeded."
 
