@@ -66,12 +66,18 @@ for w in load(od, "arg_workspaces")["result"]:
         ws["results"]["big_post"] = {"status": code, "rows": rows if code == 200 else None}
     con = [t for t in CONSOLE if t in tables]
     if con:
+        crash = a.crash_regex.replace("'", "''")  # inside KQL's verbatim @'...' a quote is doubled
         q = ("union isfuzzy=true " + ", ".join(f"({CONSOLE[t]} | extend Src='{t}')" for t in con) +
-             f" | where TimeGenerated >= datetime({since}) | where Text matches regex @'{a.crash_regex}'"
+             f" | where TimeGenerated >= datetime({since}) | where Text matches regex @'{crash}'"
              " | summarize Count=count(), First=min(TimeGenerated), Last=max(TimeGenerated), Sample=take_any(substring(Text, 0, 240)) by Src, App")
         code, rows = la(w["customerId"], q)
         save(od, f"web_crash_{tag}", "log_analytics", {"workspace": tag, "query": q}, code, rows)
         ws["results"]["crash_signals"] = {"status": code, "rows": rows if code == 200 else None}
 json.dump(summary, open(os.path.join(od, "web-hunt-summary.json"), "w"), indent=1)
 hits = {k: v["results"]["web_ioc"]["rows"] for k, v in summary["workspaces"].items() if v.get("results", {}).get("web_ioc", {}).get("rows")}
-print("workspaces with web tables:", sum(1 for v in summary["workspaces"].values() if v.get("web_tables_mb_30d")), "| IOC hits:", hits or "none")
+# A query that failed is not a clean result: report it apart from the hits.
+failed = {k: v["results"]["web_ioc"]["status"] for k, v in summary["workspaces"].items()
+          if "web_ioc" in v.get("results", {}) and v["results"]["web_ioc"]["status"] != 200}
+print("workspaces with web tables:", sum(1 for v in summary["workspaces"].values() if v.get("web_tables_mb_30d")),
+      "| IOC hits:", hits or ("none in the workspaces that answered" if failed else "none"),
+      "| IOC query FAILED in:", failed or "none")

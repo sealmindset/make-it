@@ -26,7 +26,16 @@ fi
 mkdir -p dist
 for doc in briefing technical appendix test-plan; do
   [ -f "$doc.md" ] || continue
-  pandoc "$doc.md" --from markdown+pipe_tables+yaml_metadata_block --standalone \
-    --css scripts/pdf.css --metadata pagetitle="$doc" --pdf-engine=weasyprint -o "dist/$doc.pdf" 2>&1 | grep -v '^WARNING' || true
+  rm -f "dist/$doc.pdf"   # a failed build must not leave the previous PDF looking current
+  log=$(mktemp)
+  if ! pandoc "$doc.md" --from markdown+pipe_tables+yaml_metadata_block --standalone \
+    --css scripts/pdf.css --metadata pagetitle="$doc" --pdf-engine=weasyprint -o "dist/$doc.pdf" 2>"$log"; then
+    grep -v '^WARNING' "$log" >&2 || true
+    rm -f "$log" "dist/$doc.pdf"
+    echo "FAILED: dist/$doc.pdf was not built" >&2
+    exit 1
+  fi
+  grep -v '^WARNING' "$log" || true
+  rm -f "$log"
   echo "built dist/$doc.pdf"
 done

@@ -1005,6 +1005,26 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.21 -- /threats-it's fetch, build and hunt scripts report a failure as a failure
+
+Four places in /threats-it's scripts could turn a failure into something that looked like a
+result.
+
+- **Fetching a source:** a failed download was logged with a meaningless code, a missing file
+  stopped the script before it logged anything, and the page from the last run stayed in
+  place. Now the old page is removed first, the real result is logged, and a failed or
+  timed-out fetch is refused.
+- **Building the reports:** a failure in the document converter was hidden. Now the build
+  stops with an error.
+- **Hunting:** a quote character in a search prefix or pattern broke the query. Both are now
+  passed safely.
+- **The indicator search no longer reads "none" when its query failed.** It names the
+  workspaces where the query failed.
+- **Known limit, on the board as a card:** other failed queries in the web hunt (a workspace
+  that cannot be read, the crash and large-upload searches) and three scripts this release
+  does not touch (exposure, tenant access, technique lookup) can still read as "nothing
+  found" when a query fails.
+
 ### v1.71.20 -- the workflow /argo-it generates can build and deploy an app made from make-it's scaffold
 
 Run as released, /argo-it's generated workflow failed on every app built from make-it's own
