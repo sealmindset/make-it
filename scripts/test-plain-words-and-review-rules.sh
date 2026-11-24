@@ -80,6 +80,27 @@ ok('parallel-dispatch.md: the lane prompt example carries both blocks', PLAIN in
 ok('parallel-dispatch.md: every agent prompt carries them, said as a rule', 'Every agent prompt also carries the two blocks from `approval-block.md`' in prompt)
 ok('(control) a brief whose block lost a sentence fails', SORT not in flat(build(TEMPLATES[0])).replace('and the rest are dropped, not filed', 'and the rest are filed'))
 
+# --- the smaller briefs carry a pointer line, and no brief can be added without the rules ---
+P_MSG = 'Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id.'
+P_REV = 'Sort what you find (`approval-block.md`, A review sorts its findings): important, at most five minor, already there; file no follow-up cards.'
+POINTERS = {'.claude/make-it/threats-it/references/fact-check.md': (P_MSG, P_REV), '.claude/commands/deadcode-it.md': (P_MSG,),
+            '.claude/make-it/references/backlog-board.md': (P_MSG,), '.claude/make-it/resolve-it/writer-prompt.md': (P_MSG,)}
+for p, want in POINTERS.items():
+    ok(f'{os.path.basename(p)}: its brief points at the message rule' + (' and the review rule' if len(want) > 1 else ''), all(w in flat(raw(p)) for w in want))
+ok('the fact-check pointer sits inside the prompt it hands over', P_MSG in flat(re.search(r'^## Prompt template\n(.*?)^## ', raw('.claude/make-it/threats-it/references/fact-check.md'), re.M | re.S).group(1)))
+ok('groom\'s grounders get the plain-report line, in the groom section', P_MSG in flat(re.search(r'^### `groom \[filter\].*?(?=^### )', raw(BB), re.M | re.S).group(0)))
+known = set(TEMPLATES) | set(POINTERS) | {PD}
+found = []
+for dp, _, fs in os.walk(f'{root}/.claude'):
+    for f in fs:
+        rel = os.path.relpath(os.path.join(dp, f), root)
+        if f.endswith('.md') and '/scaffolds/' not in rel and (f.endswith('-prompt.md') or re.search(r'^## Prompt template|Never plant a deliberate flaw', raw(rel), re.M)): found.append(rel)
+ok('every brief in the shipped files is one this test checks (a new brief must carry the rules and be listed here)', found and set(found) <= known, sorted(set(found) - known))
+ok('(control) the search for briefs finds the ones known today', {TEMPLATES[0], TEMPLATES[4], '.claude/make-it/resolve-it/writer-prompt.md', '.claude/make-it/threats-it/references/fact-check.md'} <= set(found), found)
+ok('a lane\'s brief tells it to read its area\'s running list, fix what is in its files, and mark it fixed',
+   all('Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).' in flat(raw(p)) for p in (TEMPLATES[2], PD)))
+ok('the review brief says where a clean review is recorded', 'card.py set <id> reviewed="<date> ready"' in flat(raw(TEMPLATES[0])))
+
 # --- the lead's own summary step says: rewrite, never forward ---
 for p in (PD, SDD, '.claude/commands/dispatch-it.md', '.claude/commands/subagent-it.md', '.claude/commands/resolve-it.md', '.claude/commands/backlog-it.md'):
     f = flat(raw(p))
@@ -99,19 +120,19 @@ ok('subagent-driven-development.md: minors are capped and fixed in the work, not
    and 'record **Minor** findings in the ledger and point the final review at that list' not in sdd)
 ok('subagent-driven-development.md: three rounds on one root cause is still the owner\'s design choice', 'Same root cause three rounds running' in sdd)
 bb, cmd = flat(raw(BB)), flat(raw('.claude/commands/backlog-it.md'))
-ok('backlog-board.md: the running list has one home and a way to clear it', '### The running list' in raw(BB) and 'the `## Running list` section of the epic card the work\'s card sits under' in bb
-   and 'card.py append <epic id> "Running list"' in bb and 'A line is open until a `fixed` line quotes it' in bb)
+ok('backlog-board.md: the running list has one home and a way to clear it', '### The running list' in raw(BB) and 'one `## Running list: <skill or area>` section per skill or area, on the epic card the work\'s card sits under' in bb
+   and 'card.py append <epic id> "Running list: <skill or area>"' in bb and 'A line is open until a `fixed` line quotes it' in bb)
 ok('capture is unchanged: card first, and the owner\'s own reports always become cards', 'the card before any question' in cmd and "the owner's own reports always become cards" in cmd)
 
 # --- run: the running list, written twice with the real card writer, is one section ---
 B = f'{tmp}/s/board'
 subprocess.run([sys.executable, f'{root}/scripts/backlog-stand-in/make-board.py', f'{tmp}/s'], check=True)
-card = lambda text: subprocess.run([sys.executable, f'{root}/.claude/make-it/backlog/bin/card.py', '--board', B, '--no-sync', 'append', 'E01', 'Running list'],
+card = lambda text: subprocess.run([sys.executable, f'{root}/.claude/make-it/backlog/bin/card.py', '--board', B, '--no-sync', 'append', 'E01', 'Running list: export'],
                                    input=text, capture_output=True, text=True, encoding='utf-8')
-r1 = card('- export: the header row is counted as data (export.py) · found 2026-11-24 in "Export drops the last row (E01-S10)"\n')
-r2 = card('- fixed 2026-11-25: "export: the header row is counted" · pull request 15\n')
+r1 = card('- the header row is counted as data (export.py) · found 2026-11-24 in "Export drops the last row (E01-S10)"\n')
+r2 = card('- fixed 2026-11-25: "the header row is counted" · pull request 15\n')
 epic = open(f'{B}/items/EPIC-01-bugs/epic.md', encoding='utf-8').read()
-ok('the running list is one section on the epic card, and a fixed line lands under it', r1.returncode == 0 and r2.returncode == 0 and epic.count('## Running list') == 1
-   and re.search(r'## Running list\n- export: the header row.*\n- fixed 2026-11-25: "export: the header row is counted"', epic) is not None, epic + r1.stderr + r2.stderr)
+ok('the running list is one section per area on the epic card, and a fixed line lands under it', r1.returncode == 0 and r2.returncode == 0 and epic.count('## Running list: export') == 1
+   and re.search(r'## Running list: export\n- the header row.*\n- fixed 2026-11-25: "the header row is counted"', epic) is not None, epic + r1.stderr + r2.stderr)
 sys.exit(fail)
 PY
