@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stand-in for `gh` in the board's tests: it answers from a file and never touches the network.
+#   GH_STUB_PRS  the JSON file `gh pr list` prints (make-board.py writes one beside the board)
+case "${1:-} ${2:-}" in
+  "auth status") exit 0 ;;
+  "pr view") echo '{"state":"OPEN","mergedAt":null}' ;;
+  "pr list") cat "${GH_STUB_PRS:?gh stand-in: set GH_STUB_PRS}" ;;
+  *) echo "gh stand-in: unexpected call: $*" >&2; exit 1 ;;
+esac
