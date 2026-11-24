@@ -50,8 +50,18 @@ exact formats, and stated relationships ("same layout as X", "matches Y"). These
   cannot confirm from the diff, mark it **⚠️ Cannot verify from diff** (don't pass or fail it) —
   the controller resolves those.
 - Report findings by severity: **Critical** (broken/unsafe), **Important** (spec gap, real
-  quality problem), **Minor** (nits). Raise anything questionable — the controller adjudicates;
-  do not self-censor.
+  quality problem), **Minor** (nits). Raise anything that could be Critical or Important — the
+  controller adjudicates. Critical and Important are both IMPORTANT in the rule below.
+- Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+  not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+  something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+  five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+  filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+  send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+  list. File no follow-up cards: leftovers are fixed inside the work.
+- Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+  they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+  title with its id, never a bare id.
 - Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to
   check attention: practice items are made only by the coordinator's practice script, in chat
   (human-in-the-loop rule 4).
@@ -64,7 +74,9 @@ SAFEGUARDS: ✅|⚠️|❌  — <each weakening, and the SAFEGUARDS line or brie
 Findings:
   - [Critical] ...
   - [Important] ...
-  - [Minor] ...
+  - [Minor] ... (at most five, the quickest to fix)
+  - [Already there] ... (older than this diff; say if it can lose data, leak a secret, send
+    something wrong, or tell the person something untrue)
 ⚠️ Cannot verify from diff:
   - ...
 ```

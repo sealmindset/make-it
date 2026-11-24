@@ -56,5 +56,16 @@ read-only switch, log groups, queues, mailboxes, audit trails, the job records]
    Then the **forward walk:** each remaining step, will it work, and why.
 4. **What would get the person their outcome today** (described, not done), with its risk.
 5. **Anything else wrong you saw** (a helper that can write in read-only mode, a silent failure, a
-   loop), as one line each, for follow-up cards.
+   loop), as one line each, sorted as ALREADY THERE: say for each whether it can lose data, leak a
+   secret, send something wrong, or tell the person something untrue.
+Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+list. File no follow-up cards: leftovers are fixed inside the work.
+Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+title with its id, never a bare id.
 End with a SAFEGUARDS line if anything you ran could have changed state (it should be "none").

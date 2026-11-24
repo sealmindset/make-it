@@ -116,6 +116,12 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 - All three verdicts (spec, quality, safeguards) are required; never skip a re-review. An
   undisclosed weakened safeguard is undone, never kept (`approval-block.md`).
 - Trust the ledger + `git log` over recollection after a compaction/resume.
+- What you tell the owner is plain (`approval-block.md`, A message to the owner): when you pass on a
+  subagent's or a reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
+- Findings are sorted (`approval-block.md`, A review sorts its findings): Critical and Important are
+  fixed before the task is complete; at most five quick Minors are fixed with them and the rest are
+  dropped; a fault that was already there is a card only if it can hurt someone, else one line on
+  the running list. No task files a follow-up card by default.
 
 See `subagent-driven-development.md` for model selection, status handling, reviewer ⚠️ items,
 reviewer-prompt construction, file handoffs, durable progress, and red flags.

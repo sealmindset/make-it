@@ -43,6 +43,9 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
   stop reasons: a BLOCKED status you can't resolve, ambiguity that genuinely prevents progress,
   or all tasks complete. "Should I continue?" prompts waste the user's time — they asked you to
   execute the plan.
+- **What you tell the owner is plain** (`approval-block.md`, A message to the owner): a few short
+  lines, at most one update a day unless they are needed. When you pass on a subagent's or a
+  reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
 
 ---
 
@@ -197,8 +200,10 @@ A confirmed gap = failed spec review → back to the implementer → re-review.
 - A dispatch prompt describes ONE task — never paste accumulated prior-task summaries (a real
   session hit 42k chars, 99% pasted history). A fresh subagent needs its task, the interfaces it
   touches, and the global constraints. Nothing else.
-- Dispatch fixes for Critical/Important; record **Minor** findings in the ledger and point the
-  final review at that list (a roll-up nobody reads is a silent discard).
+- Dispatch fixes for Critical/Important, and with them at most five **Minor** findings, the quickest to fix,
+  when they are quick; the other Minors are dropped, not filed and not rolled up. A fault older
+  than the task is a card only if it can hurt someone, else one line on the running list
+  (`approval-block.md`, A review sorts its findings). No task files a follow-up card by default.
 - A **plan-mandated** finding (or any finding conflicting with the plan text) is the human's
   decision: present the finding + the plan text, ask which governs. Don't dismiss it because the
   plan mandates it; don't fix against the plan without asking.

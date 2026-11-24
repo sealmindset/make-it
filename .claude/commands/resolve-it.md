@@ -79,7 +79,7 @@ No argument: ask once what isn't working and for whom.
 8. **Ship and verify the outcome** (§7) -- the outcome sentence observed true on the live system,
    counts reconciled. Not true: back to step 2 with the new evidence (a stacked cause).
 9. **Prevent** -- first, check the alerts that exist reach a person; then detection for every silent failure, refusals for every easy human mistake, a card
-   for every manual unblock (§3.6) and every deferred item.
+   for every manual unblock (§3.6). Leftovers are fixed inside this work, not filed: `approval-block.md`, A review sorts its findings.
 10. **Record** -- card, `docs/incidents/<date>-<slug>.md` (§12), memory and doctrine, patterns (§9-10).
     Then the owner report (§11).
 
@@ -87,6 +87,8 @@ No argument: ask once what isn't working and for whom.
 Only what changes the run, decision-ready and batched (`approval-block.md`). Questions the evidence
 can answer are not asked. A high-stakes step the project gates (a release, a data change outside the
 autonomy level) is asked on its own, with what changes, the evidence, the blast radius and the undo.
+What you tell the owner follows `approval-block.md`, A message to the owner: when you pass on the
+investigator's or the reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
 
 ## Never (any level -- `resolve-it.md` §3)
 - Write anything while investigating; re-run, re-send or restart as a way of looking.
