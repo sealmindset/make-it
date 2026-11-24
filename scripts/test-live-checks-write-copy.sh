@@ -9,12 +9,17 @@
 #   - every call that starts, stops or removes anything names the copy's project, exactly, never the person's;
 #   - a copy left by a session that died is removed first: only the project with exactly the copy's name;
 #   - the copy goes on every way out: done, a failed start, a failed test, out of time, the run killed mid-test;
-#   - every check runs BEFORE anything is started or removed: a refused copy (shared storage, a folder mounted into
-#     any service, a setting whose host is outside the copy, no Docker) starts nothing and issues no `down` at all,
-#     because `down -v` removes a volume with a fixed name whatever project it is given;
-#   - where the app CONNECTS is checked by .claude/make-it/scripts/stack-check.py (shared with /resume-it's "settings
-#     point at this machine" rule): the copy's own services pass; an outside host, localhost, 127.0.0.1 and
-#     host.docker.internal are refused; unknown is refused; only the host is printed, never a value;
+#   - every check runs BEFORE anything is started or removed: a refused copy starts nothing and issues no `down`
+#     at all (`down -v` removes a volume with a fixed name whatever project it is given); the only Docker calls a
+#     refusal makes are the two that read: `info` and `compose config`;
+#   - the copy is used only on make-it's STANDARD set-up (the owner's call, 2026-11-24): an allow-list in
+#     .claude/make-it/scripts/stack-check.py, not a list of unsafe shapes. Only the scaffolds' services, one
+#     project-scoped network, project-scoped volumes, no folder of this computer mounted, only the address settings
+#     the scaffolds know, each one read for certain and pointing at the copy's own services or its own published
+#     port, and no cloud storage named by credentials. Anything else is "not standard": one plain sentence with
+#     the first reason, a host or a setting's NAME at most, never a value;
+#   - both stock scaffolds, as generated, are standard, and so is a copy made by the scaffold's scripts/worktree.sh;
+#     the allow-list's services and address settings are exactly what the scaffolds' own files define;
 #   - only variables whose name ends in PORT are offset (WORKERS:-4 stays 4);
 #   - the count guard reads the PERSON'S database, rows and the database's own insert/update/delete counters: a write
 #     step wired to it by mistake makes them differ, even a create-then-delete that nets zero rows;
@@ -29,7 +34,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; SELF="$root/scripts/$(basename "$0")"
 MK="${1:-$root/.claude/commands/make-it.md}"
 WTSH="$root/.claude/make-it/scaffolds/fastapi-nextjs/scripts/worktree.sh"
-SC="$root/.claude/make-it/scripts/stack-check.py"
+SC="${STACK_CHECK:-$root/.claude/make-it/scripts/stack-check.py}"   # STACK_CHECK: a changed copy, for the controls
 fail=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fail=1; }
@@ -41,7 +46,7 @@ PW="fixture"; PW="${PW}pw"; export PW
 
 fence='on && /^ *```bash/{f=1; next} on && f && /^ *```/{f=0} on && f'
 awk '/^\*\*Write steps run only/{on=1} /^21\. /{on=0} '"$fence" "$MK" | sed 's/<db>/db/g' \
-  | sed "s#\$HOME/.claude/make-it/scripts#$root/.claude/make-it/scripts#g" > "$TMPD/block.sh" || true
+  | sed "s#\$HOME/.claude/make-it/scripts/stack-check.py#$SC#g" > "$TMPD/block.sh" || true
 check "the Write steps block defines count, wt_check, wt_stop and wt_run" \
   '( for f in count wt_check wt_stop wt_run; do grep -E "^ *$f\(\) [{(]" "$TMPD/block.sh" >/dev/null || exit 1; done )'
 check "a brand-new build has no other path: no fresh-database test is left, and every build uses the copy" \
@@ -73,20 +78,36 @@ case " $* " in
   *" info "*) ;;
   *" volume ls "*) cat "$STUB/volumes" 2>/dev/null || true ;;
   *" config --format json "*) python3 -I - "$proj" <<'PY'
+# make-it's standard set-up (the fastapi-nextjs scaffold's shape), then one change when STUB_CASE names it
 import json, os, sys
 p, e = sys.argv[1], os.environ.get
-fp, bp, dp = e("FRONTEND_PORT", "3100"), e("BACKEND_PORT", "8100"), e("DB_PORT", "5532")
-pw = e("PW", "")   # a made-up password, set by the test: it must never show in what the block prints
-benv = {"DATABASE_URL": e("STUB_DBURL", "postgresql+asyncpg://app:" + pw + "@db:5432/app"), "FRONTEND_URL": "http://localhost:" + fp,
-        "OIDC_ISSUER_URL": "http://mock-oidc:10090", "WORKERS": e("WORKERS", "4"), "JWT_SECRET": pw}
-if e("STUB_DBHOST"): benv.update(DB_HOST=e("STUB_DBHOST"), DB_PORT="5432")
-print(json.dumps({"name": p,
-    "volumes": {"postgres_data": {"name": "fixed_data" if e("STUB_FIXED") else p + "_postgres_data"}},
-    "services": {"frontend": {"ports": [{"published": fp, "target": 3000}]},
-                 "backend": {"environment": benv, "ports": [{"published": bp, "target": 8000}],
-                             "volumes": [{"type": "bind", "source": "/Users/someone/uploads", "target": "/app/uploads"}] if e("STUB_BIND") else []},
-                 "mock-oidc": {},
-                 "db": {"ports": [{"published": dp, "target": 5432}], "volumes": [{"type": "volume", "source": "postgres_data"}]}}}))
+fp, bp, dp, case, pw = e("FRONTEND_PORT", "3100"), e("BACKEND_PORT", "8100"), e("DB_PORT", "5532"), e("STUB_CASE", ""), e("PW", "")
+net = {"app-network": None}
+benv = {"DATABASE_URL": "postgresql+asyncpg://app:" + pw + "@db:5432/app", "FRONTEND_URL": "http://localhost:" + fp,
+        "BACKEND_URL": "http://localhost:" + bp, "OIDC_ISSUER_URL": "http://mock-oidc:10090", "TRUSTED_PROXIES": "frontend",
+        "CRIBL_STREAM_URL": "", "WORKERS": e("WORKERS", "4"), "JWT_SECRET": pw}
+c = {"name": p, "networks": {"app-network": {"name": p + "_app-network"}}, "volumes": {"postgres_data": {"name": p + "_postgres_data"}},
+     "services": {"frontend": {"networks": dict(net), "ports": [{"published": fp, "target": 3000}], "environment": {"BACKEND_INTERNAL_URL": "http://backend:8000"}},
+                  "backend": {"networks": dict(net), "ports": [{"published": bp, "target": 8000}], "environment": benv},
+                  "mock-oidc": {"networks": dict(net)},
+                  "db": {"networks": dict(net), "ports": [{"published": dp, "target": 5432}], "volumes": [{"type": "volume", "source": "postgres_data", "target": "/var/lib/postgresql/data"}]}}}
+b = c["services"]["backend"]
+if case == "addsvc": c["services"]["worker"] = {"networks": dict(net)}
+if case == "extnet": c["networks"]["app-network"] = {"name": "corp-net", "external": True}
+if case == "fixednet": c["networks"]["app-network"] = {"name": "shared-net"}
+if case == "extranet": c["networks"]["other"] = {"name": p + "_other"}; b["networks"]["other"] = None
+if case == "hostmode": b["network_mode"] = "host"
+if case == "extrahosts": b["extra_hosts"] = ["db.internal=10.0.0.5"]
+if case == "extvol": c["volumes"]["postgres_data"] = {"name": "pgdata", "external": True}
+if case == "fixedvol": c["volumes"]["postgres_data"] = {"name": "fixed_data"}
+if case == "bind": b["volumes"] = [{"type": "bind", "source": "/Users/someone/uploads", "target": "/app/uploads"}]
+if case == "knownout": benv["DATABASE_URL"] = "postgresql://app:" + pw + "@prod-db.example.com:5432/app"
+if case == "hostdb": benv["DATABASE_URL"] = "postgresql://app:" + pw + "@host.docker.internal:5432/app"
+if case == "unknown": benv["REDIS_URL"] = "redis://db:6379/0"
+if case == "unparse1": benv["DATABASE_URL"] = "redis://:" + pw[:4] + "," + pw[4:] + "@cache.example.com"
+if case == "unparse2": benv["DATABASE_URL"] = "postgresql://app:" + pw[:4] + "/" + pw[4:] + "@db:5432/app"
+if case == "cloud": benv.update(S3_BUCKET="team-files", AWS_ACCESS_KEY_ID=pw.upper(), AWS_SECRET_ACCESS_KEY=pw)
+print(json.dumps(c))
 PY
     ;;
   *" config "*) echo "name: $proj"; echo "services:" ;;
@@ -162,52 +183,85 @@ scenario timeout "WT_LIMIT=1" 'wt_run sleep 20; echo "run=$?"'
 check "a write test that runs out of time is stopped, says NOT RUN, and the copy is removed" \
   'has "NOT RUN: the write test ran out of time" "$TMPD/timeout.out" && has "run=142" "$TMPD/timeout.out" && gone timeout'
 
-# refused: every check runs first, so nothing is started and NO `down` is issued at all (down -v would remove a
-# volume with a fixed name, whatever project it is given)
-refused() { has "NOT RUN: $2" "$TMPD/$1.out" && has "run=1" "$TMPD/$1.out" && [ ! -e "$STUB/ran" ] && [ -z "$(acts "$TMPD/$1.log")" ] && ! has "$PW" "$TMPD/$1.out"; }
-TRY='wt_run touch "$STUB/ran"; echo "run=$?"; wt_stop; echo "stop=$?"'
-scenario fixed "STUB_FIXED=1" "$TRY"
-check "refused, nothing started, no down: the database's volume has a fixed name (the copy would share it)" 'refused fixed "the copy would share your app'"'"'s storage"'
-scenario bind "STUB_BIND=1" "$TRY"
-check "refused, nothing started, no down: a folder on this computer is mounted into a service that isn't the database" 'refused bind "the copy would share your app'"'"'s storage"'
-scenario outside "STUB_DBURL=postgresql://app:${PW}@prod-db.example.com:5432/app" "$TRY"
-check "refused, nothing started, no down: DATABASE_URL points outside the copy; only the host is shown" \
-  'refused outside "your settings point at prod-db.example.com, which is not part of this app'"'"'s own copy"'
-scenario hostdb "STUB_DBURL=postgresql://app:${PW}@host.docker.internal:5432/app" "$TRY"
-check "refused, nothing started, no down: DATABASE_URL points at the person's own machine" 'refused hostdb "your settings point at host.docker.internal, which"'
-scenario split "STUB_DBHOST=10.0.0.7" "$TRY"
-check "refused, nothing started, no down: a split DB_HOST points outside the copy" 'refused split "your settings point at 10.0.0.7, which"'
-scenario nodocker "STUB_NO_DOCKER=1" "$TRY"
-check "refused, nothing started, no down: Docker isn't running" 'refused nodocker "Docker isn"'
+# not standard: every check runs first, so nothing is started and nothing removed. The only Docker calls are the two
+# that read (`info`, `compose config`): no `up`, and no `down` at all, even from a wt_stop afterwards.
+SAID="your app's set-up has been changed from make-it's standard one"
+SO="so I did not run the test that creates, changes and deletes a record"
+reads_only() { ! grep -v -E ' :: (info|compose( -p [^ ]+)?( --profile dev)? config( --format json)?)$' "$1" >/dev/null; }
+notstd() {  # notstd CASE REASON: the one sentence with this reason; nothing started or removed; nothing of a value shown
+  scenario "$1" "STUB_CASE=$1" 'wt_run touch "$STUB/ran"; echo "run=$?"; wt_stop; echo "stop=$?"'
+  has "NOT RUN: $SAID ($2), $SO" "$TMPD/$1.out" && [ "$(grep -c "NOT RUN" "$TMPD/$1.out")" = 1 ] && has "run=1" "$TMPD/$1.out" && has "stop=1" "$TMPD/$1.out" \
+    && [ ! -e "$STUB/ran" ] && reads_only "$TMPD/$1.log" && ! has "$PW" "$TMPD/$1.out" && ! has "${PW%?????}" "$TMPD/$1.out" && ! has "${PW#????}" "$TMPD/$1.out"
+}
+check "not standard: a service make-it's set-up doesn't have" 'notstd addsvc "it has a service make-it'"'"'s set-up doesn'"'"'t have: worker"'
+check "not standard: an external network" 'notstd extnet "it uses an outside network"'
+check "not standard: a network with a fixed name" 'notstd fixednet "it uses an outside network"'
+check "not standard: an extra network on one service" 'notstd extranet "it uses more than one network"'
+check "not standard: network_mode: host" 'notstd hostmode "its backend service sets network_mode"'
+check "not standard: extra_hosts" 'notstd extrahosts "its backend service sets extra_hosts"'
+check "not standard: an external volume" 'notstd extvol "it keeps data in a volume that is not the app'"'"'s own"'
+check "not standard: a volume with a fixed name (down -v would remove it by that name)" 'notstd fixedvol "it keeps data in a volume that is not the app'"'"'s own"'
+check "not standard: a folder of this computer mounted into a service" 'notstd bind "a folder of this computer is mounted into its backend service"'
+check "not standard: a known address setting pointing outside; only the host is shown" 'notstd knownout "DATABASE_URL points at prod-db.example.com, outside the app"'
+check "not standard: a known address setting pointing at the person's own machine" 'notstd hostdb "DATABASE_URL points at host.docker.internal, outside the app"'
+check "not standard: an address setting make-it's set-up doesn't know, even one that names the copy's own service" 'notstd unknown "it has an address setting make-it'"'"'s set-up doesn'"'"'t have: REDIS_URL"'
+check "not standard: an address that can't be read for certain (a comma in the password part); nothing of it is shown" \
+  'notstd unparse1 "the address in DATABASE_URL can'"'"'t be read for certain" && ! has "example.com" "$TMPD/unparse1.out"'
+check "not standard: an address that can't be read for certain (a slash in the password part); nothing of it is shown" 'notstd unparse2 "the address in DATABASE_URL can'"'"'t be read for certain"'
+check "not standard: cloud storage named by a bucket and keys" 'notstd cloud "it names cloud storage or an outside service by its keys: S3_BUCKET"'
+scenario nodocker "STUB_NO_DOCKER=1" 'wt_run touch "$STUB/ran"; echo "run=$?"; wt_stop; echo "stop=$?"'
+check "Docker isn't running: NOT RUN, nothing started or removed" 'has "NOT RUN: Docker isn" "$TMPD/nodocker.out" && has "run=1" "$TMPD/nodocker.out" && [ -z "$(acts "$TMPD/nodocker.log")" ]'
 
-# stack-check.py itself: sc MODE '{"NAME": "value", ...}' -> the backend's settings in a copy that publishes port 5900
-sc() { python3 -I -c 'import json, sys; print(json.dumps({"name": "copy", "volumes": {"d": {"name": "copy_d"}}, "services": {"db": {}, "cache": {}, "backend": {"environment": json.loads(sys.argv[1]), "ports": [{"published": "5900", "target": 3000}]}}}))' "$2" | python3 -I "$SC" $1; }
-yes_() { [ -z "$(sc "$1" "$2")" ]; }                                   # allowed: exit 0, nothing printed
-no_() { local o; o="$(sc "$1" "$2")" && return 1; printf '%s' "$o" | grep -F -- "$3" >/dev/null && ! printf '%s' "$o" | grep -F "$PW" >/dev/null; }
-check "stack-check copy: the copy's own services, its own published port, a file database, a bind address and a path are allowed" \
-  'yes_ "copy copy" "{\"DATABASE_URL\": \"postgresql://u:${PW}@db:5432/x\", \"REDIS_URL\": \"redis://cache:6379/0\", \"FRONTEND_URL\": \"http://localhost:5900\", \"SQLITE_URL\": \"sqlite:///./a.db\", \"HOST\": \"0.0.0.0\", \"API_URL\": \"/api\", \"DB_HOST\": \"db\", \"EMPTY_URL\": \"\"}"'
-check "stack-check copy: an outside database host is refused, and only the host is printed" \
-  'no_ "copy copy" "{\"DATABASE_URL\": \"postgresql://u:${PW}@prod-db.example.com:5432/x\"}" "your settings point at prod-db.example.com, which is not part of this app'"'"'s own copy"'
-check "stack-check copy: localhost, 127.0.0.1 and host.docker.internal are the person's own machine: refused" \
-  'no_ "copy copy" "{\"DATABASE_URL\": \"postgresql://u:${PW}@localhost:5432/x\"}" "point at localhost" && no_ "copy copy" "{\"REDIS_URL\": \"redis://127.0.0.1:6379\"}" "point at 127.0.0.1" && no_ "copy copy" "{\"DATABASE_URL\": \"mysql://u:${PW}@host.docker.internal/x\"}" "point at host.docker.internal"'
-check "stack-check copy: split forms (a HOST variable, a host=... string), a queue, a storage address and any other outside service are refused" \
-  'no_ "copy copy" "{\"DB_HOST\": \"prod-db.internal\", \"DB_PORT\": \"5432\"}" "point at prod-db.internal" && no_ "copy copy" "{\"DATABASE_DSN\": \"host=pg.corp dbname=x password=${PW}\"}" "point at pg.corp" && no_ "copy copy" "{\"AMQP_URL\": \"amqp://u:${PW}@mq.corp\"}" "point at mq.corp" && no_ "copy copy" "{\"S3_ENDPOINT\": \"https://s3.amazonaws.com\"}" "point at s3.amazonaws.com"'
-check "stack-check copy: an address that can't be read, or settings that can't be read, are refused" \
-  'no_ "copy copy" "{\"DATABASE_URL\": \"${PW} not an address\"}" "DATABASE_URL" && ! printf "not json" | python3 -I "$SC" copy copy >/dev/null && ! python3 -I "$SC" copy copy </dev/null >/dev/null'
-check "stack-check local (the rule /resume-it's live pass uses): this machine and compose services pass, an outside database is refused, an outside web API is not its business" \
-  'yes_ local "{\"DATABASE_URL\": \"postgresql://u:${PW}@localhost:5432/x\", \"REDIS_URL\": \"redis://cache\", \"AI_URL\": \"https://api.example.com\"}" && no_ local "{\"DATABASE_URL\": \"postgresql://u:${PW}@prod-db.example.com/x\"}" "your settings point at prod-db.example.com"'
-# a URL in .env and a URL in the Compose file itself: what `docker compose config` gives stack-check (needs the docker CLI only)
-if docker compose version >/dev/null 2>&1; then
-  for where in env file; do
-    d="$TMPD/real-$where"; mkdir -p "$d"
-    if [ "$where" = env ]; then v='${DATABASE_URL}'; echo "DATABASE_URL=postgresql://u:${PW}@prod-db.example.com:5432/x" > "$d/.env"; else v="postgresql://u:${PW}@prod-db.example.com:5432/x"; fi
-    printf '%s\n' 'services:' '  db: {image: postgres}' '  backend:' '    image: busybox' '    environment:' "      DATABASE_URL: \"$v\"" > "$d/docker-compose.yml"
-    ( cd "$d" && docker compose -p copy config --format json 2>/dev/null | python3 -I "$SC" copy copy ) > "$TMPD/real-$where.out" 2>&1 || true
-  done
-  check "stack-check copy on real \`docker compose config\`: an outside DATABASE_URL set in .env, or in the Compose file, is refused" \
-    'has "your settings point at prod-db.example.com" "$TMPD/real-env.out" && has "your settings point at prod-db.example.com" "$TMPD/real-file.out" && ! has "$PW" "$TMPD/real-env.out"'
+# stack-check.py's other caller: /resume-it's live pass, `local` mode, unchanged
+sc() { python3 -I -c 'import json, sys; print(json.dumps({"name": "x", "services": {"db": {}, "cache": {}, "backend": {"environment": json.loads(sys.argv[1])}}}))' "$2" | python3 -I "$SC" $1; }
+LOCAL_OK="{\"DATABASE_URL\": \"postgresql://u:${PW}@localhost:5432/x\", \"REDIS_URL\": \"redis://cache\", \"AI_URL\": \"https://api.example.com\"}"
+LOCAL_OUT="{\"DATABASE_URL\": \"postgresql://u:${PW}@prod-db.example.com/x\"}"
+check "stack-check local (/resume-it's rule, unchanged): this machine and compose services pass, an outside database is refused with its host only, an outside web API is not its business" \
+  'o="$(sc local "$LOCAL_OK")" && [ -z "$o" ] && o="$(sc local "$LOCAL_OUT" || true)" && [ "$o" = "your settings point at prod-db.example.com" ]'
+check "stack-check copy: settings that can't be read at all are not standard" \
+  '! printf "not json" | python3 -I "$SC" copy x >/dev/null && ! python3 -I "$SC" copy x </dev/null >/dev/null'
+
+# the allow-list is what the scaffolds' own files define: services, folders they bind, address settings
+python3 -I - "$SC" "$root/.claude/make-it/scaffolds" <<'PY' || fail=1
+import importlib.util, re, sys
+spec = importlib.util.spec_from_file_location("stack_check", sys.argv[1]); sc = importlib.util.module_from_spec(spec); spec.loader.exec_module(sc)
+services, binds, names = set(), set(), set()
+for s in ("fastapi-nextjs", "nextjs-fullstack"):
+    comp = [l for l in open(f"{sys.argv[2]}/{s}/docker-compose.yml", encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#")]
+    a = comp.index("services:"); b = next(n for n in range(a + 1, len(comp)) if re.match(r"[a-z]", comp[n]))
+    services |= {m.group(1) for l in comp[a:b] if (m := re.fullmatch(r"  ([a-z][a-z0-9-]*):", l))}
+    binds |= {m.group(1) for l in comp if (m := re.fullmatch(r"\s+- [\"']?(?:\.|/|~)[^:]*:([^:\"']+).*", l)) and "=" not in l}
+    pairs = [m.groups() for l in comp if (m := re.fullmatch(r"\s+- ([A-Z0-9_]+)=(.*)", l))]
+    pairs += [m.groups() for l in open(f"{sys.argv[2]}/{s}/.env.example", encoding="utf-8").read().splitlines() if (m := re.fullmatch(r"([A-Z0-9_]+)=(.*)", l))]
+    names |= {n for n, v in pairs if sc.ADDRESS_NAME.search(n) or "://" in v}
+ok = True
+for what, got, want in (("services", sc.SCAFFOLD_SERVICES, services), ("folders the scaffolds bind", sc.SCAFFOLD_BINDS, binds), ("address settings", sc.KNOWN_ADDRESSES, names)):
+    same = set(got) == want
+    print(("ok   " if same else "FAIL ") + f"the allow-list's {what} are exactly what both scaffolds' files define")
+    if not same: ok = False; print("  allow-list only: " + " ".join(sorted(set(got) - want)) + " | scaffolds only: " + " ".join(sorted(want - set(got))))
+sys.exit(0 if ok else 1)
+PY
+
+# both stock scaffolds, as generated, and a copy made by scripts/worktree.sh: all standard (real `docker compose config`;
+# it needs the docker CLI, not a running Docker)
+if [ -n "${1:-}" ]; then :   # a control's child run: the not-standard cases are what it is for
+elif docker compose version >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+  inst() {  # inst SCAFFOLD DIR: the scaffold with its placeholders filled, and its .env from .env.example
+    mkdir -p "$2"; cp -R "$root/.claude/make-it/scaffolds/$1/." "$2"
+    ( cd "$2" && sed -i.bak -e 's/\[APP_SLUG\]/stock-app/g' -e 's/\[APP_NAME\]/Stock App/g' -e 's/\[FRONTEND_PORT\]/3100/g' -e 's/\[APP_PORT\]/3100/g' \
+        -e 's/\[BACKEND_PORT\]/8100/g' -e 's/\[DB_PORT\]/5500/g' -e 's/\[MOCK_OIDC_PORT\]/10190/g' docker-compose.yml .env.example scripts/*.sh && rm -f ./*.bak scripts/*.bak && cp .env.example .env )
+  }
+  std() { ( cd "$1" && docker compose -p "$2" --profile dev config --format json 2>"$TMPD/std.err" | python3 -I "$SC" copy "$2" ) > "$TMPD/std.out" 2>&1 && [ ! -s "$TMPD/std.out" ]; }
+  inst fastapi-nextjs "$TMPD/stock-app"; inst nextjs-fullstack "$TMPD/stock-full"
+  check "the fastapi-nextjs scaffold, as generated, is standard" 'std "$TMPD/stock-app" stock-app-make-it-write-test || { cat "$TMPD/std.out" "$TMPD/std.err"; false; }'
+  check "the nextjs-fullstack scaffold, as generated, is standard" 'std "$TMPD/stock-full" stock-full-make-it-write-test || { cat "$TMPD/std.out" "$TMPD/std.err"; false; }'
+  ( cd "$TMPD/stock-app" && git init -q -b main . && git add -A >/dev/null 2>&1 && git -c user.name=t -c user.email=t@example.invalid commit -q --no-gpg-sign -m stock >/dev/null 2>&1 \
+      && bash scripts/worktree.sh new feat/try >/dev/null 2>&1 ) || true
+  WTC="$TMPD/stock-app-worktrees/feat_try"
+  check "a copy made by the scaffold's scripts/worktree.sh (its own project name and offset ports) is standard" \
+    '[ -f "$WTC/.env" ] && grep "^COMPOSE_PROJECT_NAME=stock-app-feat_try" "$WTC/.env" >/dev/null && std "$WTC" stock-app-feat_try || { cat "$TMPD/std.out" "$TMPD/std.err" 2>/dev/null; false; }'
 else
-  echo "skip the .env / Compose-file case: no docker CLI here"
+  echo "skip the stock scaffolds and the worktree copy: no docker CLI or git here"
 fi
 
 # the run is killed: once while the copy is starting, once in the middle of the write steps
@@ -240,10 +294,21 @@ if [ -z "${1:-}" ]; then
     'opp "s/\n *trap \x27kill[^\n]*INT TERM HUP\n/\n/" "killed in the middle of the write steps"'
   check "(control) the time limit removed: a stuck write test never ends" \
     'opp "s/alarm shift; exec \@ARGV/shift; exec \@ARGV/" "a write test that runs out of time"'
-  check "(control) the storage and address check no longer refuses: a copy that connects outside is started" \
-    'opp "s/\n    \|\| \{ echo \"NOT RUN: \\\$\{why:-[^\n]*return 1; \}\n/\n    || true\n/" "refused, nothing started, no down: DATABASE_URL points outside the copy"'
+  check "(control) the standard-set-up check no longer refuses: a copy that connects outside is started" \
+    'opp "s/\n    \|\| \{ echo \"NOT RUN: [^\n]*return 1; \}\n/\n    || true\n/" "not standard: a known address setting pointing outside"'
+  # opp2 PERL REASON: stack-check.py with one edit must fail this script on the check named REASON
+  opp2() {
+    cp "$SC" "$TMPD/sc.py"; perl -0pi -e "$1" "$TMPD/sc.py"; ! cmp -s "$SC" "$TMPD/sc.py" || return 1
+    local out; out="$(STACK_CHECK="$TMPD/sc.py" bash "$SELF" "$MK" 2>&1)" && return 1
+    printf '%s\n' "$out" | grep -F "FAIL $2" >/dev/null
+  }
+  check "(control) the network check removed: an outside network passes" 'opp2 "s/\n *check_networks\(cfg, services, project\)\n/\n/" "not standard: an external network"'
+  check "(control) an unknown address setting treated as fine" \
+    'opp2 "s/\n            if name not in KNOWN_ADDRESSES:\n[^\n]*\n/\n/" "not standard: an address setting make-it'"'"'s set-up doesn'"'"'t know"'
+  check "(control) an unparseable address treated as fine" \
+    'opp2 "s/\n            if hosts is None:\n[^\n]*\n/\n            if hosts is None:\n                continue\n/" "not standard: an address that can'"'"'t be read for certain (a comma"'
   check "(control) wt_stop no longer waits for the checks: a refused copy still gets down -v" \
-    'opp "s/wt_stop\(\) \{ \[ -n \"\\\$wt_ok\" \] && /wt_stop() { /" "refused, nothing started, no down: the database'"'"'s volume has a fixed name"'
+    'opp "s/wt_stop\(\) \{ \[ -n \"\\\$wt_ok\" \] && /wt_stop() { /" "not standard: a volume with a fixed name"'
   check "(control) every numeric default offset again: WORKERS becomes a port number" \
     'opp "s/\[A-Z0-9_\]\*PORT:-/[A-Z0-9_]+:-/" "only variables whose name ends in PORT are offset"'
   check "(control) the counters dropped from count: a create-then-delete passes the guard" \
