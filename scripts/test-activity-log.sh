@@ -202,9 +202,9 @@ fail=0
 # with one fix taken out the test for that fix must fail.
 if (cd "$SB" && python3 -c "import pytest, pytest_asyncio, sqlalchemy, aiosqlite, fastapi, httpx, pydantic_settings, jwt, uvicorn" </dev/null 2>/dev/null); then
   TESTS="tests/integration/test_activity_log_user.py tests/integration/test_console_access_log.py tests/integration/test_visitor_address.py"
-  check "the scaffold's three activity-log test files pass, every case run (8 + 2 + 10)" \
+  check "the scaffold's three activity-log test files pass, every case run (16 + 2 + 10)" \
     '(cd "$SB" && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider $TESTS </dev/null >"$TMPD/pytest.out" 2>&1) || { tail -n 25 "$TMPD/pytest.out"; false; }'
-  check "  ... 20 passed, none skipped" 'gq -E "^20 passed" "$TMPD/pytest.out" && [ "$(grep -c "skipped" "$TMPD/pytest.out")" = 0 ]'
+  check "  ... 28 passed, none skipped" 'gq -E "^28 passed" "$TMPD/pytest.out" && [ "$(grep -c "skipped" "$TMPD/pytest.out")" = 0 ]'
   red() {  # red NAME FILE-IN-BACKEND PYTHON-REPLACE-EXPR TESTFILE WANTED-SUMMARY
     local TF="$4" WANT="$5"
     rm -rf "$TMPD/b"; mkdir -p "$TMPD/b"; cp -R "$SB/." "$TMPD/b/"
@@ -216,7 +216,9 @@ PY
     check "(control) $1: its test fails ($WANT)" \
       '! (cd "$TMPD/b" && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider "$TF" </dev/null >"$TMPD/red.out" 2>&1) && gq -E "^$WANT in " "$TMPD/red.out" || { tail -n 5 "$TMPD/red.out"; false; }'
   }
-  red "the user fix taken out" app/middleware/auth.py 's.replace("    request.state.user = user\n", "", 1)' tests/integration/test_activity_log_user.py "3 failed, 5 passed"
+  red "the user fix taken out" app/middleware/auth.py 's.replace("    request.state.user = user\n", "", 1)' tests/integration/test_activity_log_user.py "3 failed, 13 passed"
+  red "the log takes the user from an X-User header" app/middleware/logging.py 's.replace("        user_sub = None\n        user_email = None\n", "        user_sub = request.headers.get(\"x-user\")\n        user_email = request.headers.get(\"x-user\")\n", 1)' tests/integration/test_activity_log_user.py "2 failed, 14 passed"
+  red "auth signs in from an X-User header" app/middleware/auth.py 's.replace("    token = request.cookies.get(\"token\")\n", "    token = request.cookies.get(\"token\")\n    if request.headers.get(\"x-user\"):\n        request.state.user = UserInfo(sub=request.headers[\"x-user\"], email=request.headers[\"x-user\"], name=\"\", role_id=\"\", role_name=\"\", permissions=[])\n", 1)' tests/integration/test_activity_log_user.py "2 failed, 14 passed"
   red "the console filter not installed" app/main.py 's.replace("\ndrop_query_strings_from_server_log()\n", "\n", 1)' tests/integration/test_console_access_log.py "2 failed"
   red "the trusted-proxy wrap dropped" app/main.py 's.replace("app = TrustedProxyHeaders(app, settings.TRUSTED_PROXIES)  # type: ignore[assignment]\n", "", 1)' tests/integration/test_visitor_address.py "1 failed, 9 passed"
   red "uvicorn left to read the header itself" entrypoint.sh 's.replace(" --no-proxy-headers\n", "\n", 1)' tests/integration/test_visitor_address.py "1 failed, 9 passed"

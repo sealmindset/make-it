@@ -102,6 +102,20 @@ async def test_request_without_a_token_logs_no_user(jwt_secret):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("header", ["X-User", "X-Remote-User", "X-Forwarded-User", "Remote-User"])
+@pytest.mark.parametrize("path", ["/api/auth/me", "/api/admin/logs/stats"])
+async def test_a_user_header_without_a_token_is_not_believed(jwt_secret, header, path):
+    # Only the verified token names the user: a header a caller writes neither signs them in nor
+    # puts a name in the log.
+    async with _client() as client:
+        resp = await client.get(path, headers={header: ADMIN_USER.email})
+    assert resp.status_code == 401
+    event = _event(path)
+    assert event["user_sub"] is None
+    assert event["user_email"] is None
+
+
+@pytest.mark.asyncio
 async def test_token_with_a_wrong_signature_logs_no_user(jwt_secret):
     forged = _token(ADMIN_USER, secrets.token_hex(32))
     async with _client(forged) as client:
