@@ -11,3 +11,9 @@ __pycache__
 coverage.json
 htmlcov
 .git
+
+# Never copy local secrets into the image: config.py reads env_file=".env", and `COPY . .` puts the
+# file in the final image. Configuration comes from the container's environment.
+.env
+.env.*
+!.env.example

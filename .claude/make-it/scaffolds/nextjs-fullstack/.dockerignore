@@ -7,3 +7,9 @@ coverage
 *.tsbuildinfo
 npm-debug.log*
 .git
+
+# Never copy local secrets into the image: `COPY . .` brings .env into the build stage, and Next's
+# standalone output copies .env and .env.production into .next/standalone, which the runner ships.
+.env
+.env.*
+!.env.example
