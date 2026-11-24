@@ -831,6 +831,47 @@ class StaleCopies(Case):
         self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])  # nothing was treated as an old copy
         self.assertEqual([f for f in out["notes"] if "old copy" in f.get("reason", "")], [])
 
+    def git_that_answers(self, blob, answer):
+        """A git on PATH that is the real one except when asked for this blob's bytes: then it
+        prints `answer`, or fails when `answer` is None. Stands in for two files with one SHA-1."""
+        import shutil
+        real = shutil.which("git")
+        fake = os.path.join(self.tmp.name, "idgit")
+        os.mkdir(fake)
+        odd = "exit 1" if answer is None else f"printf '%s' '{answer}'; exit 0"
+        with open(os.path.join(fake, "git"), "w") as f:
+            f.write(f'#!/bin/sh\ncase "$*" in *"cat-file blob {blob}"*) {odd} ;; esac\nexec "{real}" "$@"\n')
+        os.chmod(os.path.join(fake, "git"), 0o755)
+        self.env = dict(os.environ, PATH=fake + os.pathsep + os.environ["PATH"])
+
+    def test_an_old_copy_whose_bytes_git_confirms_is_still_a_note(self):
+        self.the_case()
+        self.git_that_answers(self.g("rev-parse", "main~1:scripts/scan_gitleaks.py"), '"""never closed\n')
+        self.tool("--mine", folder=self.wt)
+        out = self.scan_wt(0)
+        self.assertIn("scripts/scan_gitleaks.py", [f["file"] for f in out["notes"] if "old copy" in f.get("reason", "")])
+
+    def test_same_git_id_with_different_bytes_is_not_an_old_copy(self):
+        # SHA-1 only locates the old copy; the bytes decide. A collision keeps the file's stop.
+        self.the_case()
+        # same length as the file, one byte different: a length-only comparison must not pass
+        self.git_that_answers(self.g("rev-parse", "main~1:scripts/scan_gitleaks.py"), '"""never closeX\n')
+        self.tool("--mine", folder=self.wt)
+        out = self.scan_wt(2)
+        self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])
+        self.assertNotIn("scripts/scan_gitleaks.py",
+                         [f["file"] for f in out["notes"] if "old copy" in f.get("reason", "")])
+        self.assertIn(("scripts/scan_gitleaks.py", "git-id-clash"), {(f["file"], f["signal"]) for f in out["notes"]})
+
+    def test_git_failing_to_give_the_bytes_is_not_an_old_copy(self):
+        self.the_case()
+        self.git_that_answers(self.g("rev-parse", "main~1:scripts/scan_gitleaks.py"), None)
+        self.tool("--mine", folder=self.wt)
+        out = self.scan_wt(2)
+        self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])
+        self.assertEqual([f for f in out["notes"] if "old copy" in f.get("reason", "")
+                          and f["file"] == "scripts/scan_gitleaks.py"], [])
+
     def test_a_missing_object_never_makes_git_fetch(self):
         # a repository set up to fetch missing objects on demand runs its own "upload" command to
         # do it; the check must never trigger that
@@ -1368,6 +1409,23 @@ class Wiring(unittest.TestCase):
                 p = subprocess.run([sys.executable, "-I", tool, d, "--cleared-file", os.path.join(d, "c.json"),
                                     "--projects-file", os.path.join(d, "p.json")], capture_output=True, text=True)
                 self.assertEqual(p.returncode, 2, p.stdout)
+
+
+class WeakHashes(unittest.TestCase):
+    """A SHA-1 or MD5 call in the check only locates and never decides, and says so (bandit B324)."""
+
+    def test_weak_hashes_are_marked_not_for_security(self):
+        import ast
+        with open(SCRIPT, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr in ("sha1", "md5") and isinstance(n.func.value, ast.Name)
+                 and n.func.value.id == "hashlib"]
+        self.assertTrue(calls, "the check no longer computes git's blob id: update this test")
+        for c in calls:
+            flag = [k for k in c.keywords if k.arg == "usedforsecurity"]
+            self.assertTrue(flag and isinstance(flag[0].value, ast.Constant) and flag[0].value.value is False,
+                            f"line {c.lineno}: hashlib.{c.func.attr} without usedforsecurity=False")
 
 
 if __name__ == "__main__":
