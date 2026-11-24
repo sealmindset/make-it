@@ -453,15 +453,17 @@ a. **Determine active tiers** from app-context.json (`project_type` and `active_
 
 b. **Run a quick static scan** for each check ID in the active tiers. This is NOT a full
    build-verify -- it's a lightweight file-existence and pattern check:
+   A row marked `[LIVE]` is read here from its files only; its live part runs in the live pass
+   (step `live-pass`) after a change that touches its area.
 
    For each check category, do a targeted scan:
    - **Structure (S01-S15):** Check for CHANGELOG.md, TODO.md, .env, .env.example, .gitignore, README.md, a root CLAUDE.md whose first section is the canary (S13; create the file if missing, canary from `make-it.md` Build step h with `builder_name` or the `🐤 canary ok` fallback) + LEARNINGS.md + its `@LEARNINGS.md` import in CLAUDE.md + the `## Settle, filter, verify` section in CLAUDE.md (S11; copy it from `muddy-water.md`) + the `## Keep the human able to notice` section (S12; copy it from `human-in-the-loop.md`, and replace an old rule 4 in place) + the `## Which make-it skill, when` section after the Learnings import (S14; copy it from `skill-triggers.md`, and replace an older copy with it). S13, S10, S11, S12 and S14 all write the same file, `CLAUDE.md`: apply them together, S13 first and S14 last, as one change -- never as separate `/dispatch-it` lanes. S15: an `expert_persona` still in an older form (a plain text value, an empty one, or no field), brought up to date once.
    - **Auth (A01-A10):** Grep for oidc_subject in callback, POST logout route, ENFORCE_SECRETS
-   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage
+   - **RBAC (R01-R07):** Check for roles/permissions tables in migrations, require_permission usage, and R04's write-route rule: every POST, PUT, PATCH and DELETE route carries `require_permission`, except R04's public list
    - **UI (U01-U07):** Check for breadcrumbs.tsx, data-table.tsx, quick-search.tsx, mode-toggle.tsx
    - **Database (D01-D06):** Check for migrations directory, seed data file, and one Alembic head with no duplicate or dangling revision (D06)
    - **Docker (I01-I07):** Check for docker-compose.yml, entrypoint.sh, 127.0.0.1 in health checks
-   - **Mock Services (M01-M05):** Check for mock-oidc/, seed-mock-services.sh, and that mock-oidc's app.py can ask for an access code (M05, a WARN: an older copy is compared with the scaffold version it came from first -- the same apart from its return addresses, it is updated with them kept; changed anywhere else, the person sees the differences and picks **Update it** or **Keep mine**, and a copy is kept either way -- so /argo-it can run the practice sign-in on a cluster)
+   - **Mock Services (M01-M05):** Check for mock-oidc/, seed-mock-services.sh, that the seed script reads its ports from `MOCK_OIDC_PORT` and `FRONTEND_PORT` (or `APP_PORT`) instead of a literal port (M02; an app built before that is fixed with the lines M02 quotes), and that mock-oidc's app.py can ask for an access code (M05, a WARN: an older copy is compared with the scaffold version it came from first -- the same apart from its return addresses, it is updated with them kept; changed anywhere else, the person sees the differences and picks **Update it** or **Keep mine**, and a copy is kept either way -- so /argo-it can run the practice sign-in on a cluster)
    - **Activity Logs (L01-L11):** Grep for LogStore/log_store, log middleware, /logs/events endpoint, and the sign-in code putting the user on the request for the log (L09: `request.state.user =` in `get_current_user`), the query-string filter on uvicorn's loggers (L10: `drop_query_strings_from_server_log` in `main.py`), and the trusted-proxy wrap with `--no-proxy-headers` and the frontend's `forwarded-for.mjs` (L11)
    - **Notifications (N01-N08):** Check for notifications table in migrations/schema, /api/notifications route, notification-bell component, notification seed data
    - **File Upload (F01-F08):** Check for upload component, extract-text utility, Docker volume in docker-compose.yml. If pdf-parse is in package.json, verify import uses `pdf-parse/lib/pdf-parse` NOT default import (F03 -- crashes in production Docker)
@@ -739,6 +741,7 @@ minus the items left out above:
 2. Apply important gaps next (FIX items)
 3. Note nice-to-have gaps in TODO.md (WARN items)
 4. After each batch, run existing tests to verify nothing broke
+4b. Then run the live pass (step `live-pass`) for the areas the applied gaps touch.
 5. Update CHANGELOG.md with what was added
 6. Report results: what was applied (by group, naming each change) and what is left (the group
    the user didn't name, if any; each item left out this time, as one line,
@@ -864,6 +867,7 @@ needs; it works as both, instead of inferring a specialist of its own.
 
 **After ANY work is completed:**
 1. Run all existing tests silently
+1b. Then the live pass (step `live-pass`), when the work changed a file in one of its areas.
 2. Report results in plain language
 2b. Screens added or changed? UI gate Part 2 (`ui-gate.md`): built screens next to the approved
    preview -- wait for the yes before step 3 (its learnings go through step 3)
@@ -872,6 +876,111 @@ needs; it works as both, instead of inferring a specialist of its own.
    it would change; the user answers per item. Skip if nothing is queued; otherwise wait for the
    answer before the next question.
 4. Ask: "Want to keep going, test more thoroughly, or are you done for now?"
+
+</step>
+
+<step name="live-pass">
+
+**The live pass: rows checked on the running app, after a relevant change.** A catch-up group or
+a piece of work is a relevant change when it touches an area in this table; with no area touched
+there is no live pass. The area comes from the table, never a judgement: an applied catch-up gap
+whose ID prefix (the letters before its number: `A` for A03, `AI` for AI12) is in "Catch-up
+checks", or a changed file whose path contains a word in "Files". A path under `.make-it/`
+(make-it's own records, not the app's code) never matches. A project with no compose file
+at its root (`docker-compose.yml`, `docker-compose.yaml`, `compose.yml` or `compose.yaml`) has no
+live pass: nothing is triggered, started or recorded.
+
+The live pass runs only checks that call no paid AI provider and leave nothing in the app's data:
+it sends the running app no request that could write to it.
+Which rows those are is fixed by this table, not decided each time; the rows in the two "Not run
+here" columns are run by /make-it's build-verify Part B, not here.
+
+| Area | Catch-up checks | Files (path contains) | Run here | Not run here: needs the AI provider | Not run here: needs a temporary copy |
+|------|-----------------|-----------------------|----------|-------------------------------------|----------------------------------------|
+| Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 | -- | -- |
+| Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06, V07 | -- | -- |
+| Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 | -- | -- |
+| File upload | F | `upload`, `document`, `import` | -- | F10 | V11, F09, F14 |
+| AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | -- | F11, V14, V16, AI11, AI12, AI13 | AI01d |
+| AI memory | BN | `brain`, `memor` | BNV03 | BN03, BNV01, BNV02 | BN04, BN05 |
+| AI accounting | AC | `metering`, `ai_accounting`, `ai_control`, `ai-control`, `usage`, `ledger`, `spend`, `budget`, `price`, `statement` | -- | AC02, AC04, AC12, ACV01, ACV02 | AC11 |
+| The mobile variant | P | `sw.ts`, `manifest.json` | P03 | -- | -- |
+| Every live pass (starting the app) | -- | -- | V02, V03 | -- | -- |
+
+V05 here sends GET requests only, and V07 here runs step 28 a and b only. V05's write requests,
+step 28 c's refusal requests and step 29 c's DELETE are not sent: a broken guard would let them
+write to the app's own data. Each is NOT RUN and counted as not run in the results sentence, with
+the reason "needs a temporary copy; run a full build check to include it". /make-it's
+build-verify runs them, in its temporary copy; the live pass starts no copy.
+
+1. **Where.** In the folder the change was made in (its worktree, with its own `.env` and ports).
+2. **Only when it can start here.** `docker info` fails → start nothing: every row of the pass is
+   NOT RUN, with the reason "Docker isn't running". Then read the database, queue and cache URLs
+   in `docker compose config`'s environment values, as `deadcode.md` §5's "Settings first" bullet
+   does, with the profile step 3 starts the app with (the rule make-it's write test shares; it
+   prints the host only, never a setting's value):
+   ```bash
+   docker compose --profile dev config --format json | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" local
+   ```
+   One whose host isn't a compose service
+   name, `localhost` or `127.0.0.1` → start nothing: every row of the pass is NOT RUN, with the
+   reason it printed, "your settings point at <host>". Settings it can't read → the same, with
+   its reason.
+3. **Start it.** The app counts as already running only when every one of its services in
+   `docker compose --profile dev ps` is up and healthy; anything less (some services up, the
+   backend down) counts as not running. Then `docker rm -f <project>-live-check 2>/dev/null`: if
+   it printed a name, a leftover changed-setting run was serving the app with a changed setting;
+   tell the user: "I found a test copy of your app's server left over from an earlier check, and
+   put the normal one back." Then `docker compose --profile dev up -d --build --wait`, which
+   starts every service (it rebuilds what changed; a TLS or certificate error gets /try-it step
+   1's security-tool ask, as there); only when a leftover was found, also `docker compose
+   --profile dev up -d --wait --force-recreate <backend>`. Then `bash
+   scripts/seed-mock-services.sh`, only
+   against this project's own services (make-it step 24: a seed script with a literal port is
+   fixed first, check M02). No other ask: starting the app is routine here. If it doesn't
+   come up healthy, that is V02 failing, fixed as step 5 says; if it still won't start, the rest
+   of the pass is NOT RUN, with the reason "the app didn't start", and the start problem goes at
+   the top of TODO.md.
+4. **Run each row in "Run here"** for every touched area, plus V02 and V03, with the step that
+   names it in /make-it's build-verify Part B (`~/.claude/commands/make-it.md`), as that step is
+   written: the same requests, roles, expected results and fail rules, the changed-setting run
+   and its put-back included, and N/A for a feature the app doesn't have. Browser items use the
+   app's `e2e/` Playwright only when it is already there (a build's step 22b installs it); the
+   live pass never installs it, and without it they are NOT RUN with the reason "no browser
+   here". Each row in a "Not run
+   here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
+   "needs a temporary copy; run a full build check to include it", except AC12 and ACV02, which get the build's reason, "needs a
+   configured, priced AI provider" (their check expects no call).
+5. **Each row's result is PASS, FAIL, NOT RUN with its reason, KNOWN (from the scaffold), N/A,
+   or LEFT OUT (your choice).** KNOWN is what make-it's Part B calls a check today's scaffold
+   can't pass: counted and said, never a FAIL, never fixed here. N/A is a row whose feature the
+   app doesn't have: reported, not written to TODO.md. A row
+   that belongs to an item in `## Left out by your choice` (read as
+   `~/.claude/make-it/references/left-out-record.md`'s read steps say) is LEFT OUT: reported,
+   never run and never fixed. A check that could not run -- the app didn't start, the step needs
+   something this app lacks, a request couldn't be made -- is NOT RUN, never passed. A FAIL is
+   fixed like any test failure in this session (diagnose, fix, re-run that row, up to 3 rounds);
+   one still failing after that goes at the top of TODO.md, where the results sentence says it is.
+6. **Record it** under `## Test Status` in `.make-it-state.md`: "Live pass [date] ([areas]):
+   [n] passed, [n] failed, [n] known, [n] not run ([row]: [reason], ...), [n] left out". Each NOT RUN row
+   has one TODO.md line with its reason: when its line is already there, update its date and
+   reason; never add a second line for it.
+7. **Tell the user one plain line**, the one that fits what happened:
+   Said after the fix rounds. [The results sentence] is make-it step 40's: its parts and their
+   rules, so it says how many weren't run and why, for every reason, and "everything I checked
+   works" only when nothing failed, nothing is known and nothing was left unrun.
+   - It ran, and the pass started the app: "I started your app and checked [the areas, in plain
+     words] on it: [the results sentence]. I've left it running; /wrap-it stops it."
+   - It ran, and the app was already running: "Your app was already running, so I checked [the
+     areas, in plain words] on it: [the results sentence]."
+   - Docker isn't running: "I couldn't check [the areas] on your app because Docker isn't
+     running, so those checks are marked not run."
+   - The settings point elsewhere: "I didn't start your app to check [the areas]: its settings
+     point at [host], so those checks are marked not run."
+   - It won't start: "I couldn't get your app to start, so [the areas] weren't checked: [the
+     reason, in plain words]. It's at the top of your to-do list."
+
+Leave the app running afterwards, as /try-it does; /wrap-it shuts it down.
 
 </step>
 
@@ -1552,7 +1661,8 @@ After each major component (tables, service, API, UI), run a quick check:
 **Phase 4: Verify & Report**
 
 Run BN01-BN13 static checks against the implemented code.
-If app is running (docker-compose up), also run BNV01-BNV03 live checks.
+Then run the live pass (step `live-pass`) for AI memory: it starts the app if needed and runs that
+area's rows, BNV01-BNV03 included.
 
 Report to user:
 "Brain layer added to [PROJECT_NAME]! Here's what's new:
@@ -1619,7 +1729,8 @@ and the put-off line (discover-context), and return to the menu.
 **Phase 3: Build.** Prompt #10g steps 2-7, in its order. Route the call sites one agent at a
 time, running that agent's existing tests after each. Set `ai_accounting` in app-context.json.
 
-**Phase 4: Verify and report.** AC01-AC16, and ACV01-ACV03 with the app running. Report each
+**Phase 4: Verify and report.** AC01-AC16 from the files, then the live pass (step `live-pass`)
+for AI accounting, which runs ACV01-ACV03 and the AC rows marked `[LIVE]` on the running app. Report each
 passed or failed from what ran, then in plain words: what each AI step cost in the seed data, the
 pages and where they are, and the ladder's suggested switches, each waiting on its check.
 

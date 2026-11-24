@@ -502,6 +502,8 @@ claude
 
 `/fix-it` reads the most recent `/nemo-it` attestation, classifies each finding as auto-fixable or manual-only, applies all safe fixes, verifies nothing broke, and re-scans to produce an updated attestation showing the improvement.
 
+Its closing report says what really happened. Every in-scope finding ends with exactly one outcome -- fixed, changed but not re-checked, failed, needs a person, or not attempted -- and the counts add up; none of them is worked out by subtracting one report from the other. "Fixed" means the change was kept and the scanner that found the problem ran again in the new scan and no longer reports it: if that scanner did not run the second time, its findings are "not re-checked". "Ready to ship" is said only when the whole new report lists no critical or high finding, not only the ones the run set out to fix. The tests and the build run where they live (`backend/`, `frontend/`, ...), and each is passed, failed or not run from the command's own exit status: "no tests ran" and "the build was not checked" are never worded as a pass. The record is `.claude/make-it/scripts/fix-it-results.py`; `scripts/test-fix-it-true-results.sh` runs it against a small stand-in project and report (`scripts/fix-it-fixtures/`).
+
 ### Severity Modes
 
 | Command | What It Fixes |
@@ -1004,6 +1006,44 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.71.28 -- checks that say they test the running app now do; /fix-it reports what really happened
+
+Two changes in one release.
+
+**Live checks**
+- **The rulebook said the AI "checks the running app" for many checks, with no step that did.**
+  Now 32 must-pass checks are marked as live, and each has a named step in the build's check
+  that really exercises the running app. A test fails if a live check has no step.
+- **Results are said truly.** The closing line counts what passed, what failed, what is a known
+  gap in the starter code, and what was not run, with the reason for each. "Everything I
+  checked works" is said only when nothing failed, nothing is a known gap and nothing was left
+  unrun.
+- **The test that creates, changes and deletes a record never touches your data.** It runs in
+  a temporary copy of the app with its own empty database, which is removed afterwards. Your
+  own database is counted before and after, and any change is a failure.
+- **The copy is used only on a set-up make-it's build produces.** Anything else, such as an
+  outside database or an added network, means that test is not run, and it says why. Nothing
+  is started or removed in that case.
+- **/resume-it runs a live pass** limited to checks that are free and change nothing.
+- **A write route's permission check is tested two ways:** in the code, and by trying it as a
+  person without the permission and as someone signed out.
+- **The browser checks install the app's own browser tool once,** and are marked "not run",
+  never "failed", when that is not possible.
+- **Not proven:** the AI checks are not run against a running app anywhere yet. That needs a
+  stand-in AI provider. An app whose set-up has been customised does not get its create,
+  change and delete tested live. 25 other checks are still to be made live.
+
+**/fix-it**
+- **Its counts are true.** Each finding gets exactly one result: fixed, changed but not
+  re-checked, failed, needs a person, or not attempted. They add up. "Fixed" needs a kept
+  change and a new scan in which the same scanner ran and no longer reports it.
+- **"Tests pass" and "the app still builds" are said only when they did.** A failed run is
+  never read as "no tests found", and a build is checked in the folder where it lives.
+- **"Ready to ship" is said only when the new report lists no critical or high finding at
+  all,** not just none of the ones it set out to fix.
+- **Known limit:** on an unusual project layout /fix-it may run the tests from the wrong
+  folder and report passing tests as failing. It never reports failing tests as passing.
 
 ### v1.71.27 -- /threats-it names a failed search as failed; Java is allowed; the force-push guard stops refusing harmless commands
 

@@ -2564,6 +2564,10 @@ Mock service seeding (MANDATORY):
        http://localhost:3100/api/auth/callback)
     5. Verify all mock services return data on their main endpoints
 - The seed script must be idempotent (safe to run multiple times)
+- The seed script takes every host port from the same variables docker-compose.yml uses (from
+  the environment or the project's .env, with the build's port only as the default), never a
+  literal, so in a worktree or copy with its own ports it seeds that project's own services
+  (check M02)
 - The seed script runs as part of the build-verify step, NOT left for the user
 
 Environment variable name consistency (CRITICAL):

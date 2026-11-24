@@ -1,0 +1,8 @@
+{
+  "name": "fix-it-fixture-frontend",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test"
+  }
+}
