@@ -4,4 +4,4 @@
 # whenever the scaffold's copy changes (scripts/test-argo-it-signin-on-the-cluster.sh fails until you do).
 7ed5dcc152ffe80268c8b94e617bc7a0e236048681dcdcaf2b59f8d3e2350b64  before v1.59.0
 28a97b0cb14aaa20bd4ed4a072eb4a6d3dc8fa244304b1df8655de7877e6abae  v1.59.0 to v1.71.20
-9d1de9789f58060a01bba061b00a9a2b74dd19e5f2ddfe8ddb84fb9ce69c6ef8  E12-S15 (the access code)
+9d1de9789f58060a01bba061b00a9a2b74dd19e5f2ddfe8ddb84fb9ce69c6ef8  with the access code
