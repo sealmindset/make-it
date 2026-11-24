@@ -19,11 +19,11 @@ e55c4167a36ca1b0766360d0967f4946eacac6be6c9d68aa18d89251d3f14779  commands/wrap-
 8556df61a395f3637e75d122e2b7754813871478415bf84a154ab42980554b01  make-it/README.md
 76be671e8855c08d75a64bf8e9ce22b9effbf08f7aa32258c285042e78b86885  make-it/backlog/bin/card.py
 2f6ec22b7858ae553bd4228eea914daf14afb7b7cfe9f480f6ed785573bd6e62  make-it/backlog/bin/check-plan.py
-c799a9f852b28e77141ce74e19cfebfa382fbb73503ef7f3cc8a697dcdb1ab9f  make-it/backlog/bin/regen-board.py
+01f26636878e18778e5b265e4ce7ca84bf586c03df69823560018ba038294b98  make-it/backlog/bin/regen-board.py
 13f9dc6e3e73285593a69d14b7ca86fc1178a507a01cd980854fe96ffa7c909e  make-it/backlog/bin/scope.py
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
-8a622f747bebbbdbc47d4947b5ab95227db66f5b8cd8cabb0b4b6047af24f003  make-it/backlog/bin/status.py
-802489fbf31f9e6dc99d6948a766fc4be520c064c62e1fa5da1c00b545eca7c4  make-it/backlog/bin/sync-prs.py
+a7530a085486703a65405ce02fc31b3d3220f95687894df094fc7a5eed82dcc4  make-it/backlog/bin/status.py
+3605915c1289af2fd82f7936257cc6ec82929b2436607abdaa6ad19f441281c6  make-it/backlog/bin/sync-prs.py
 5ec4d01f0a7aca1ece2cf46f5636a301362bfa45c92139b15da72a84088720ac  make-it/confluence-docs/00-make-it-framework-overview.md
 6b2080dd7d1f428c767e9b77dbf53b5ba6d679ca9f9936b3ef28ded6efe75a15  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md

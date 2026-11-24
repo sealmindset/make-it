@@ -32,6 +32,11 @@ def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
 def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '') + (f" →{v(d,'mode')}" if v(d, 'mode') else '')
 def warn(d): return '⚠️' if v(d, 'stakes') == 'critical' else ''
+def cut(s, n):  # shorten at a word boundary, so a long title never ends mid-word
+    return s if len(s) <= n else (s[:n].rsplit(' ', 1)[0].rstrip(' ,;:·-') or s[:n - 1]) + '…'
+def name(d, n=60):  # how every helper names a card to a person: its title with its id, never a bare id
+    t = v(d, 'title').strip('"')
+    return f"{cut(t, n) if t else 'Untitled card'} ({v(d, 'id')})"
 def load(B):  # card path -> frontmatter, epics first
     return {p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None}
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
@@ -245,6 +250,8 @@ def main(args):
         F = tree({'b/items/EPIC-05-x/epic.md': C('E05', dependsOn='E02-S1'), 'b/items/EPIC-05-x/stories/S1.md': C('E05-S1'),
                   'b/items/EPIC-02-y/stories/S1.md': C('E02-S1')})  # a story with no `parent:` belongs to its folder's epic
         assert needs('E05-S1', F) == [('E02-S1', 'E05', 'E02-S1')] and leaves('E05', F) == ['E05-S1'], needs('E05-S1', F)
+        assert cut('The sign-in fix for the cluster', 16) == 'The sign-in fix…' and cut('short', 16) == 'short' and cut('Unbreakablelongword', 8) == 'Unbreaka…'
+        assert name(C('E12-S15', title='"The sign-in fix"')) == 'The sign-in fix (E12-S15)' and name(C('E01-S2')) == 'Untitled card (E01-S2)'
         print('regen-board self-test: OK'); return
     proj = None
     if '--project' in args:

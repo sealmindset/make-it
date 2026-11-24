@@ -3,17 +3,30 @@
 epics, and cycle time. Read-only, no AI call -- the same board gives the same answer.
 
 Usage: status.py [board_dir] [--project NAME] [--needs-you]
+       status.py [board_dir] [--project NAME] --first [--repo PATH] [--lane-cap N] [--seen]
        status.py --self-test
+  --first  the first screen: the one thing to do next (a written rule, with its choices), only what
+           needs you, what changed since you last looked, and one trend line. --repo is the code repo
+           whose open pull requests `gh` lists (without it, or without gh, those steps are skipped and
+           said so). --seen records this look in <board>/.last-seen.json (kept out of the board's git).
   Dates come from the board's git history (when a card went done, Live or Checked, and when it
   last changed). With no git history, from each card's created: and updated:.
 """
-import datetime, importlib.util, os, re, statistics, subprocess, sys
+import datetime, importlib.util, json, os, re, statistics, subprocess, sys
 
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
 sys.dont_write_bytecode = True  # no __pycache__ beside the installed scripts
 R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
 v, D = R.v, datetime.timedelta
 WEEKS, STALL, LANE, TOP = 4, 14, 2, 5  # ponytail: fixed window, stall thresholds (work / a lane) and list cap; flags if anyone needs them
+# The first screen's rule, as named numbers (owner interview 2026-11-24):
+PR_STALL = 2      # days an open pull request may sit unchanged before it counts as stalled: lanes work in hours, so two quiet days means nobody is on it (same as LANE)
+PLAN_STALE = 0.5  # the plan is stale once more than this share of the cards that can start are not in it: past half, it no longer describes the board
+GROW_WEEKS = 2    # weeks running with more cards opened than closed before a groom is the next thing: one bad week is noise, two is a trend
+GROOM_AGE = 14    # days after which the last groom is too old to trust, whatever the trend: its order was made for a board two weeks gone
+GROOM_REST = 7    # days a groom is left alone even while the pile grows, so the board never answers "groom" twice in the same week
+SIT = (3, 5)      # held cards brought to a weekly sitting: three when questions also wait, five at most, so the screen stays short enough to read
+MARK = '.last-seen.json'  # when the owner last opened the first screen, and what the board held then
 
 def day(s):
     try: return datetime.date.fromisoformat(s.strip())
@@ -106,17 +119,29 @@ def facts(B, T=None):
     if os.path.exists(pf):
         txt = open(pf, encoding='utf-8').read(); pd = day((re.search(r'\d{4}-\d{2}-\d{2}', txt.split('\n', 1)[0]) or [''])[0])
         cand = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready', 'designing') and v(d, 'id').upper() not in parents]
-        listed = {i.upper() for i in re.findall(r'(?:· |^\s*- [^\w]*?)(E\d+(?:-S\d+)?)', txt, re.M)}  # wave items and bullets, not reason text
+        def wave_ids(w):
+            """The cards a wave or bullet line is about, not the ones its reason mentions. The older form leads
+            with bare ids (`· E01-S8 · title -- why`, `- E01-S8 -- why`); the plain form names each card
+            `Title (E01-S8)` up to the first ` -- ` that follows an id."""
+            head = w.split(' -- ')[0]
+            old = re.findall(r'(?:· |^\s*- [^\w(]*?)(E\d+(?:-S\d+)?)\b', head)
+            if old: return [i.upper() for i in old]
+            m = re.match(r'(.*?\(E\d+(?:-S\d+)?\))(?: \(proposed\))?(?: -- | → |\s*$)', w)  # ponytail: a title that itself holds "(E1-S2) -- " would end the line early
+            return [i.upper() for i in re.findall(r'\((E\d+(?:-S\d+)?)\)', m.group(1))] if m else []
+        listed = {i for l in txt.splitlines() if re.match(r'\d+\. |\s*- ', l) for i in wave_ids(l)}  # wave items and bullets, not reason text
         new = sum(v(op[p], 'id').upper() not in listed for p in cand)  # a plan leads the cards it lists; the rest go after it
         waves = re.findall(r'^\d+\. .*$', txt.split('## Waves', 1)[-1].split('\n## ', 1)[0], re.M)
         merged = lambda i: status.get(i, 'done') == 'done' or any(v(d, 'id').upper() == i and v(d, 'stage') in ('Live', 'Checked') for d in cards.values())
-        wave_ids = lambda w: [i.upper() for i in re.findall(r'· (E\d+(?:-S\d+)?)', w.split(' -- ')[0])]
         nxt = next((w for w in waves if not all(merged(i) for i in wave_ids(w))), None)
         byid = {v(d, 'id').upper(): d for d in cards.values()}
         # a next wave that can't start (held, waiting on you, blocked) would otherwise stall the plan forever, silently
         stuck = [i for i in wave_ids(nxt or '') if i in byid and not merged(i) and (R.warn(byid[i]) or R.waiting(byid[i]) or v(byid[i], 'status') == 'blocked')]
-        plan = (pd, len(cand) - new, new, nxt, stuck)
+        todo = [i for i in wave_ids(nxt or '') if not merged(i)]
+        plan = (pd, len(cand) - new, new, nxt, stuck, todo, listed)
     rank = lambda p, d: (v(d, 'priority') or 'P9', -idle(p, d))
+    startable = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready') and v(d, 'id').upper() not in parents and not R.blocked(d, TREE)]
+    try: gd = day((re.search(r'\d{4}-\d{2}-\d{2}', open(os.path.join(B, 'GROOM-PLAN.md'), encoding='utf-8').readline()) or [''])[0])
+    except OSError: gd = None
     opn = {p: d for p, d in cards.items() if v(d, 'status') != 'done'}
     cyc = lambda a, b: {pr: sorted((day(h(p)[b]) - (day(h(p)[a]) if a != 'created' else opened(p, d))).days
                                    for p, d in leaf.items() if bug(d) and h(p).get(b) and (a == 'created' or h(p).get(a))
@@ -135,14 +160,23 @@ def facts(B, T=None):
                 epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in kids(e)), len(kids(e))) for e in epics if kids(e)),
                              key=lambda x: (-(x[2] - x[1]), x[0])),
                 r2l=cyc('created', 'live'), l2c=cyc('live', 'checked'),
-                cards=cards, idle=lambda p: idle(p, cards[p]), title=lambda p: title(cards[p]), epic_cards=epics)
+                cards=cards, idle=lambda p: idle(p, cards[p]), title=lambda p: title(cards[p]), epic_cards=epics,
+                B=B, leaf=leaf, tree=TREE, startable=startable, groom_age=max(0, (T - gd).days) if gd else None, opened=lambda p: opened(p, cards[p]), done_on=dn, seen=set(seen))
+
+def named(f, i):  # a card named from its id; an id this board doesn't hold is said so
+    d = f['tree'][0].get(i.upper())
+    return R.name(d) if d else f'a card not on this board ({i})'
+
+def wave(f):  # the plan's next wave in plain words: its number, its mode, the cards still to do
+    nxt, todo = f['plan'][3], f['plan'][5]
+    mode = (re.search(r'\*\*(.+?)\*\*', nxt) or [0, 'wave'])[1]
+    return f"wave {nxt.split('.')[0]} ({mode}): " + ', '.join(named(f, i) for i in todo)
 
 def render(f, proj, needs_only=False):
     c, idle, title, T = f['cards'], f['idle'], f['title'], f['T']
-    cut = lambda s, n: s if len(s) <= n else s[:n - 1] + '…'
-    cid = lambda p: v(c[p], 'id')
-    name = lambda p, n: cid(p) + (f' · {cut(title(p), n)}' if title(p) else '')
-    ids = lambda ps: ', '.join(map(cid, ps[:TOP])) + (f' +{len(ps) - TOP} more' if len(ps) > TOP else '')
+    cut = R.cut
+    name = lambda p, n=60: R.name(c[p], n)  # every card by its title with its id, never a bare id
+    names = lambda ps, extra=lambda p: '': [f'    {name(p)}{extra(p)}' for p in ps[:TOP]] + [f'    +{len(ps) - TOP} more'] * (len(ps) > TOP)
     since = f" since {f['first']}" if f['first'] else ''
     out = [f"BOARD STATUS — {proj} · {T}",
            f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done · dates from {f['src']}{since}", '', 'IN FLIGHT']
@@ -150,15 +184,14 @@ def render(f, proj, needs_only=False):
         if k == 'Live, waits':  # grouped by what they wait on, soonest first
             if ps: out.append(f"  {k:<15}{len(ps):>4}  " + ', '.join(f'{w} ×{n}' for w, n in sorted(__import__('collections').Counter(v(c[p], 'checkAfter') for p in ps).items(), key=lambda x: R.soon(x[0]))))
             continue
-        out.append(f"  {k:<15}{len(ps):>4}  " + (f"{ids(ps)} · oldest idle {idle(ps[0])}d" if ps else '—'))
-        if k == 'Live, to check':  # what proves each fix, oldest first
-            out += [f"    {cid(p)} · {cut(v(c[p], 'signal'), 70)}" for p in ps[:TOP] if v(c[p], 'signal')]
+        out.append(f"  {k:<15}{len(ps):>4}  " + (f"oldest idle {idle(ps[0])}d" if ps else '—'))
+        out += names(ps, lambda p: f" · {cut(v(c[p], 'signal'), 70)}" if k == 'Live, to check' and v(c[p], 'signal') else '')  # what proves each fix, oldest first
     out += ['', 'UP NEXT']
     out.append('  Next bug       ' + ('; '.join(name(p, 60) for p in f['next_bugs']) or '—'))
     if f['plan']:
-        pd, covered, new, nxt, _ = f['plan']
+        pd, covered, new, nxt = f['plan'][:4]
         out.append(f"  PLAN.md        {pd or 'undated'} · covers {covered} of {covered + new} candidates" + (f'; {new} new since (new bugs first, the rest after its waves)' if new else ''))
-        out.append(f"                 next wave: {cut(nxt, 80)}" if nxt else '                 every wave is merged -- re-plan')
+        out.append(f"                 next wave: {wave(f)}" if nxt else '                 every wave is merged -- re-plan')
     else: out.append('  PLAN.md        none (run /backlog-it plan)')
     for i, p in enumerate(f['can'][:TOP]):
         d = c[p]
@@ -179,24 +212,186 @@ def render(f, proj, needs_only=False):
     needs += [f"    P2/P3 held: {len(f['held']) - len(p1)} (⚠️ on BOARD.md)"] * (len(f['held']) > len(p1))
     if needs_only: return '\n'.join(needs)
     out += [''] + needs
-    drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], ' · lane stopped? it should hand the card back'),
+    drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], '  lane stopped? it should hand the card back'),
              (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], ''),
-             ('Live, no signal', f['no_signal'], ' · write how the fix is checked: card.py set <id> signal="…"'),
-             ('Live, never due', f['never_due'], ' · checkAfter is no date or dated tag: card.py set <id> checkAfter=YYYY-MM-DD')]
-    out += ['', 'DRIFT'] + [f"  {k:<22}{len(ps):>3}  {ids(ps)}{hint}" for k, ps, hint in drift if ps]
+             ('Live, no signal', f['no_signal'], '  write how the fix is checked: card.py set <id> signal="…"'),
+             ('Live, never due', f['never_due'], '  checkAfter is no date or dated tag: card.py set <id> checkAfter=YYYY-MM-DD')]
+    out += ['', 'DRIFT'] + [l for k, ps, hint in drift if ps for l in [f"  {k:<22}{len(ps):>3}{hint}"] + names(ps)]
     if f['plan'] and not f['plan'][3]: out.append('  PLAN.md ran out        every wave is merged -- run /backlog-it plan')
-    if f['plan'] and f['plan'][4]: out.append(f"  PLAN.md stuck          {f['plan'][3].split(' ', 1)[0].rstrip('.')} waits on {', '.join(f['plan'][4])} -- answer it or re-plan")
+    if f['plan'] and f['plan'][4]: out.append(f"  PLAN.md stuck          wave {f['plan'][3].split('.')[0]} waits on {', '.join(named(f, i) for i in f['plan'][4])} -- answer it or re-plan")
     if out[-1] == 'DRIFT': out.append('  none')
     out += ['', f"EPICS  (most open first)"]
     for e, dn, tot in f['epics'][:TOP]:
         ep = f['epic_cards'][e]; n = round(20 * dn / tot)
-        out.append(f"  {v(ep, 'id'):<5}{cut(v(ep, 'title').strip(chr(34)), 30):<31}{'█' * n}{'░' * (20 - n)} {dn}/{tot}")
+        out.append(f"  {R.name(ep, 30):<38}{'█' * n}{'░' * (20 - n)} {dn}/{tot}")
     out += [f"  +{len(f['epics']) - TOP} more epics"] * (len(f['epics']) > TOP)
     out += ['', 'CYCLE TIME  (median days, bugs, transitions seen in git)']
     for k, m in (('Reported → Live', f['r2l']), ('Live → Checked', f['l2c'])):
         med = lambda xs: f'{statistics.median(xs):g} (n={len(xs)})' if xs else '—'
         out.append(f"  {k:<17}{med(m[''])} · " + ' · '.join(f'{pr} {med(m[pr])}' for pr in ('P1', 'P2', 'P3')))
     return '\n'.join(out)
+
+def open_prs(repo, f):
+    """The repo's open pull requests from `gh`, sorted by what each needs: ([ready], [(stuck, why)]) as
+    {n, title, name}; or (None, why) when gh can't say. Ready = reviewed (no longer a draft, no changes
+    asked for), every check finished and passed, and up to date with main. Stuck = behind or in conflict
+    with main, or a draft, a failing check or a running check with no change for PR_STALL days. Any other
+    open pull request is moving, and is left out."""
+    if not repo: return None, 'no --repo'
+    try:
+        r = subprocess.run(['gh', 'pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,title,isDraft,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt'],
+                           cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=60)
+        rows = json.loads(r.stdout) if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError): rows = None
+    if rows is None: return None, 'gh could not list them'
+    card = {int(n): d for d in f['cards'].values() if v(d, 'status') != 'done' for n in re.findall(r'\d+', re.sub(r'https?://\S+', ' ', v(d, 'pr')))}
+    ready, stuck = [], []
+    for x in sorted(rows, key=lambda x: x['number']):
+        n = x['number']; d = card.get(n)
+        pr = dict(n=n, name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(x.get('title') or 'no title', 50)}\" (#{n})")
+        state = [c.get('conclusion') or c.get('state') or c.get('status') or 'PENDING' for c in x.get('statusCheckRollup') or []]
+        failing = any(c in ('FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE') for c in state)
+        passed = all(c in ('SUCCESS', 'SKIPPED', 'NEUTRAL') for c in state)  # ponytail: a repo with no checks at all counts as passed
+        quiet = max(0, (f['T'] - (day((x.get('updatedAt') or '')[:10]) or f['T'])).days)
+        merge = x.get('mergeStateStatus')
+        if merge == 'DIRTY': stuck.append((pr, 'it conflicts with main'))
+        elif merge == 'BEHIND': stuck.append((pr, 'it is behind main'))
+        elif not x.get('isDraft') and passed and merge in ('CLEAN', 'HAS_HOOKS') and x.get('reviewDecision') not in ('CHANGES_REQUESTED', 'REVIEW_REQUIRED'): ready.append(pr)
+        elif quiet >= PR_STALL: stuck.append((pr, ('a check fails, and ' if failing else '') + f'no change for {quiet} days'))
+    return ready, stuck
+
+def next_thing(f, prs, lane_cap):
+    """The one thing to do next: every branch of the rule that holds right now, in the rule's order, each
+    as (label, sentence, what picking it does, the strongest argument against it, the stuck things it
+    names). The first is the recommendation; the next ones are the other choices."""
+    c, T, plan = f['cards'], f['T'], f['plan']
+    name = lambda p: R.name(c[p], 50)
+    more = lambda xs: f' and {len(xs) - 1} more' if len(xs) > 1 else ''
+    n_of = lambda xs, one, many: one if len(xs) == 1 else many.format(len(xs))
+    out = []
+    if w := f['waiting']:
+        out.append(('Answer now', f"Answer {n_of(w, 'the question that waits', 'the {} questions that wait')} on you, first \"{name(w[0])}\": {n_of(w, 'that card', 'those cards')} cannot move until you do.",
+                    'I ask each question as a one-click choice, the most urgent first', 'it takes your time now, and other work could start first'))
+    ready, stuck = prs if prs[0] is not None else ([], [])
+    if ready:
+        out.append(('Release it', f"Release {ready[0]['name']}{more(ready)}: {n_of(ready, 'it is', 'they are')} reviewed, up to date, and the checks pass.",
+                    f"merges {ready[0]['name']} and puts it out through the usual release steps", 'once it is out, taking it back means another release'))
+    if stuck:
+        out.append(('Sort them', f"Sort {n_of(stuck, 'the pull request that is', 'the {} pull requests that are')} stuck or out of date: " + '; '.join(f"{pr['name']} ({why})" for pr, why in stuck[:2])
+                    + (f'; and {len(stuck) - 2} more' if len(stuck) > 2 else '') + '.',
+                    'I check each one and say what it needs: an update, a fix, or closing', 'sorting old pull requests starts no new work'))
+    running = len(f['flight']['Now fixing']); free = max(0, lane_cap - running)
+    status = lambda i: v(f['tree'][0].get(i, {}), 'status')
+    in_force, busy = False, []
+    if plan:
+        _, _, _, nxt, held_up, todo, listed = plan
+        busy = [i for i in todo if status(i) == 'in-progress']
+        can = f['startable']; fresh = [p for p in can if v(c[p], 'id').upper() not in listed]
+        if nxt and not held_up and free and not busy:
+            out.append(('Start the wave', f"Start wave {nxt.split('.')[0]} of the plan: {', '.join(named(f, i) for i in todo)}. {free} of {lane_cap} lanes are free.",
+                        'starts those cards, each in its own lane, with every gate in place', 'a wave fills lanes that a new bug may need'))
+        why = ('every wave in the plan is done' if not nxt else f"the next wave waits on {', '.join(named(f, i) for i in held_up)}" if held_up
+               else f"{len(fresh)} of the {len(can)} cards that can start are not in the plan" if can and len(fresh) / len(can) > PLAN_STALE else '')
+        in_force = not why  # a plan in force keeps the order of the cards it lists
+        if why:
+            out.append(('Plan', f'Make a new plan: {why}.', 'works out the order the open cards run in and writes the plan; nothing starts',
+                        'a plan takes an AI pass and a few minutes, while cards that could start wait'))
+    rows = f['rows'][:GROW_WEEKS]
+    grew = len(rows) == GROW_WEEKS and all(o > cl for _, o, cl, _ in rows)
+    age = f['groom_age']
+    if (grew and (age is None or age >= GROOM_REST)) or (age is not None and age > GROOM_AGE):
+        why = ('more cards were opened than closed two weeks running (' + ', then '.join(f'{o} opened, {cl} closed' for _, o, cl, _ in rows) + ')') if grew else f'the last groom was {age} days ago'
+        out.append(('Groom', f'Groom the board: {why}.', 're-orders the open cards and proposes which to drop; nothing closes without your pick',
+                    'a groom is a long run and fixes nothing by itself'))
+    # with a plan in force, only a card it doesn't list may jump in (new bugs first); its own cards keep their wave
+    nxt_card = [p for p in f['next_bugs'] + f['can'] if not in_force or v(c[p], 'id').upper() not in listed][:1]
+    if nxt_card and free:
+        d = c[nxt_card[0]]
+        out.append(('Start it', f"Start \"{name(nxt_card[0])}\": it is the next safe card ({v(d, 'priority') or 'no priority'}{', a bug' if v(d, 'type') == 'breakfix' else ''}), and nothing it waits on is open.",
+                    'brings the card back as a prompt you can change, and runs it on your go', 'a groom or a plan first might pick a better card'))
+    if not out:
+        why = (f"wave {plan[3].split('.')[0]} of the plan is running ({', '.join(named(f, i) for i in busy)})" if busy else
+               f'{running} of {lane_cap} lanes are busy' if running else 'no card can start safely')
+        out.append(('Wait', f'Nothing to start right now: {why}, so wait'
+                    + (f"; {len(f['held'])} held cards wait for you at the weekly sitting." if f['held'] else '.'),
+                    'nothing starts; look again when a lane reports or a pull request moves', 'held cards only move when you take them up'))
+    return out
+
+def first(f, proj, prs, lane_cap, seen=False):
+    """The first screen, at most about 25 short lines: DO NEXT, NEEDS YOU, what changed, the trend."""
+    c, T, B = f['cards'], f['T'], f['B']
+    name = lambda p, n=50: R.name(c[p], n)
+    some = lambda ps, k=2: ', '.join(name(p, 44) for p in ps[:k]) + (f' +{len(ps) - k} more' if len(ps) > k else '')
+    todo = next_thing(f, prs, lane_cap)
+    out = [f'BOARD — {proj} · {T}', '', 'DO NEXT', f'  {todo[0][1]}']
+    opts = [f'{lab} -- {does}' + (f' (Recommended; against: {against})' if not i else '') for i, (lab, _, does, against) in enumerate(todo[:3])]
+    opts.append('Full status -- prints the whole report; nothing starts')
+    out += [f'  {i}. {o}' for i, o in enumerate(opts, 1)]
+    if prs[0] is None: out.append(f'  (pull requests not checked: {prs[1]})')
+    out += ['', 'NEEDS YOU']
+    w = f['waiting']
+    out += [f"  {name(p)}: {R.cut(R.ask(c[p])[0], 150)}" for p in w[:3]] or ['  Questions: nothing waits on you']
+    out += [f'  +{len(w) - 3} more questions (`/backlog-it status` lists them)'] * (len(w) > 3)
+    if held := f['held']:
+        frees = {}  # held card -> the open cards that wait on it (directly, or through a card or epic it sits under)
+        for i, d in f['tree'][0].items():
+            if v(d, 'status') != 'done':
+                for leaf, _, via in R.needs(i, f['tree']): frees.setdefault(leaf, set()).add(i); frees.setdefault(via, set()).add(i)
+        n = lambda p: len(frees.get(v(c[p], 'id').upper(), ()))
+        sit = sorted(held, key=lambda p: (-n(p), v(c[p], 'priority') or 'P9', -f['idle'](p)))[:SIT[0] if w else SIT[1]]
+        out.append(f"  Held, high-stakes: {len(held)} card{'s' * (len(held) != 1)}. For the weekly sitting, the {len(sit)} that free the most other work:")
+        out += [f"    {name(p)} -- " + (f"frees {n(p)} other card{'s' * (n(p) != 1)}" if n(p) else 'nothing else waits on it') for p in sit]
+    # what changed: against the mark the last --seen look left, else the last 24 hours (dates are whole days)
+    stuck_now = f['lane_idle'] + f['stalled'] + [p for p in f['leaf'] if f['plan'] and v(c[p], 'id').upper() in f['plan'][4]]
+    snap = dict(seen=datetime.datetime.now().isoformat(sep=' ', timespec='minutes'), ids=sorted(v(d, 'id') for d in f['leaf'].values()),
+                done=sorted(v(c[p], 'id') for p in f['done_on']), stuck=sorted({v(c[p], 'id') for p in stuck_now} | {f"#{pr['n']}" for pr, _ in (prs[1] if prs[0] is not None else [])}))
+    try: old = json.load(open(os.path.join(B, MARK), encoding='utf-8'))
+    except (OSError, ValueError): old = None
+    if old:
+        out += ['', f"SINCE YOU LAST LOOKED ({old.get('seen', '?')})"]
+        was = lambda k: set(old.get(k, []))
+        closed = [p for p in f['done_on'] if v(c[p], 'id') not in was('done')]
+        found = [p for p in f['leaf'] if v(c[p], 'id') not in was('ids')]
+        stuck = [p for p in dict.fromkeys(stuck_now) if v(c[p], 'id') not in was('stuck')]
+        stuck_prs = [pr['name'] for pr, _ in (prs[1] if prs[0] is not None else []) if f"#{pr['n']}" not in was('stuck')]
+    else:
+        out += ['', 'IN THE LAST 24 HOURS  (the first look: nothing marks an earlier one)']
+        since = T - D(days=1)
+        closed = [p for p, on in f['done_on'].items() if on >= since and p in f['seen']]
+        found = [p for p in f['leaf'] if f['opened'](p) >= since and p in f['seen']]
+        stuck, stuck_prs = list(dict.fromkeys(stuck_now)), [pr['name'] for pr, _ in (prs[1] if prs[0] is not None else [])]
+    dropped = lambda ps: [p for p in ps if v(c[p], 'closed_as')]  # closed as not needed: closed, but nothing shipped
+    shipped = [p for p in closed if p not in dropped(closed)]
+    line = lambda k, ps, extra=(): f'  {k:<8} ' + (f"{len(ps) + len(extra)} -- " + ', '.join(filter(None, [some(ps) if ps else '', *extra[:max(0, 2 - len(ps))]])) if ps or extra else 'nothing')
+    out += [line('Shipped:', shipped) + (f' · {len(dropped(closed))} more closed as not needed' if dropped(closed) else ''), line('Found:', found), line('Stuck:', stuck, stuck_prs)]
+    if f['rows']:
+        _, o, cl, _ = f['rows'][0]
+        wk = lambda ps: [p for p in ps if p in f['seen']]
+        new = wk([p for p in f['leaf'] if T - D(days=7) < f['opened'](p) <= T]); shut = wk([p for p, on in f['done_on'].items() if T - D(days=7) < on <= T])
+        bugs = lambda ps: sum(v(c[p], 'type') == 'breakfix' for p in ps)
+        if o > cl:
+            cat, k = max(__import__('collections').Counter(v(c[p], 'category') or 'no category' for p in new).items(), key=lambda x: x[1], default=('', 0))
+            why = f'mostly new bugs ({bugs(new)} of {o})' if 2 * bugs(new) >= o else f'mostly new cards about {cat} ({k} of {o})'
+            trend = f'the pile grew by {o - cl}, {why}'
+        elif cl > o:
+            gone, fixed = len(dropped(shut)), bugs([p for p in shut if p not in dropped(shut)])
+            trend = f'the pile shrank by {cl - o}, with ' + (f'{gone} cards closed as not needed' if 2 * gone > cl else f'{fixed} fixes shipped' if 2 * fixed >= cl else f'{cl} cards finished')
+        else: trend = 'the pile stayed level'
+        out += ['', f'TREND  This week: {o} opened, {cl} closed: {trend}.']
+    else: out += ['', 'TREND  No full week of history yet.']
+    if seen: mark_seen(B, snap)
+    return '\n'.join(out)
+
+def mark_seen(B, snap):
+    """Record this look in <board>/.last-seen.json. It never reaches the board's git: when no ignore
+    rule covers it yet, one line is added to the repo's own .git/info/exclude (local, never committed)."""
+    git = lambda *a: subprocess.run(['git', '-C', B, *a], capture_output=True, text=True, encoding='utf-8', errors='replace')
+    if git('rev-parse', '--git-dir').returncode == 0 and git('check-ignore', '-q', MARK).returncode == 1:
+        ex = git('rev-parse', '--git-path', 'info/exclude').stdout.strip()
+        ex = ex if os.path.isabs(ex) else os.path.join(B, ex)
+        os.makedirs(os.path.dirname(ex), exist_ok=True)
+        with open(ex, 'a', encoding='utf-8') as fh: fh.write(f'{MARK}\n')
+    with open(os.path.join(B, MARK), 'w', encoding='utf-8') as fh: json.dump(snap, fh)
 
 def self_test():
     import tempfile
@@ -254,7 +449,7 @@ def self_test():
         assert set(ids(f['flight']['Live, to check'])) == {'E01-S2', 'E01-S16'} and ids(f['flight']['Other work']) == ['E01-S6'], f['flight']
         assert all(f['idle'](p) >= 0 for p in f['cards']), 'negative idle'
         r = render(f, 't')  # Live splits: due now (with its signal) vs waits on a release; a Live card with no signal drifts
-        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and 'v1.41.0 ×1' in r and 'E01-S2 · worker log: retry ok' in r, r
+        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and 'v1.41.0 ×1' in r and 'Untitled card (E01-S2) · worker log: retry ok' in r, r
         assert ids(f['never_due']) == ['E01-S24'] and 'Live, never due' in r, f['never_due']
         assert set(ids(f['no_signal'])) == {'E01-S16', 'E01-S24'} and 'Live, no signal' in r, f['no_signal']
         b = R.render(t, 't')  # the report and BOARD.md agree on every status line
@@ -268,15 +463,15 @@ def self_test():
         assert f['plan'][1:3] == (2, 6) and f['plan'][3].startswith('2.') and 'ran out' not in render(f, 't'), f['plan']
         assert f['r2l'][''] == [3, 4] and f['r2l']['P1'] == [3] and f['l2c'][''] == [6], (f['r2l'], f['l2c'])  # S7 entered at Checked
         n = render(f, 't', needs_only=True)  # dispatch's closing list: every held P1 shown, the rest counted, nothing twice
-        assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '⚠️ E01-S4' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
-        assert f'    E01-S3 · Filings give up · idle 2d\n      {Q}\n        Retry -- runs them again tonight\n        Refile -- you re-enter the 3 by hand\n' in n, n
+        assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '(E01-S4) · P1' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
+        assert f'    Filings give up (E01-S3) · idle 2d\n      {Q}\n        Retry -- runs them again tonight\n        Refile -- you re-enter the 3 by hand\n' in n, n
         assert '        (no context' in n.split('E01-S21')[1].split('E01-S3')[0] and 'answers not on card' in n, n  # BOARD.md's shape, gaps flagged
         assert 'growing +3.5/wk' in render(f, 't') and 'lane stopped?' in render(f, 't') and '█' in render(f, 't')
         open(f'{t}/PLAN.md', 'w', encoding='utf-8').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n')  # every wave merged
         g = facts(t, T); assert g['plan'][3] is None and 'PLAN.md ran out' in render(g, 't'), g['plan']
         open(f'{t}/PLAN.md', 'w', encoding='utf-8').write(f'# Run Plan -- {d(9)}\n\n## Waves\n1. **solo** · E01-S1 · done\n2. **solo** · E01-S4 · held\n')
         g = facts(t, T)  # the next wave can't start (S4 is high-stakes): stuck, not silently waiting forever
-        assert g['plan'][4] == ['E01-S4'] and 'PLAN.md stuck' in render(g, 't') and 'waits on E01-S4' in render(g, 't'), g['plan']
+        assert g['plan'][4] == ['E01-S4'] and 'PLAN.md stuck' in render(g, 't') and 'wave 2 waits on Untitled card (E01-S4)' in render(g, 't'), g['plan']
         assert len(facts(t, T - D(days=15))['rows']) == 3  # no week that ends before the history starts
         assert forecast([(1, 3), (1, 3)], 8, T).startswith('shrinking -2.0/wk: clear in ~4 wks'), forecast([(1, 3), (1, 3)], 8, T)
         assert forecast([], 0, T) == 'nothing open' and forecast([], 3, T) == 'no full week of history yet'
@@ -290,11 +485,22 @@ if __name__ == '__main__':
         i = args.index('--project')
         if i + 1 >= len(args): sys.exit('status: --project needs a name')
         proj = args[i + 1]; del args[i:i + 2]
-    needs = '--needs-you' in args; args = [a for a in args if a != '--needs-you']  # dispatch's closing list
+    opt = {}
+    for k in ('--repo', '--lane-cap'):
+        if k in args:
+            i = args.index(k)
+            if i + 1 >= len(args) or args[i + 1].startswith('--'): sys.exit(f'status: {k} needs a value')
+            opt[k] = args[i + 1]; del args[i:i + 2]
+    if not opt.get('--lane-cap', '3').isdigit(): sys.exit('status: --lane-cap needs a number')
+    flag = lambda k: k in args and not args.remove(k)
+    needs, first_screen, seen = flag('--needs-you'), flag('--first'), flag('--seen')  # --needs-you: dispatch's closing list
     B = os.path.abspath(os.path.expanduser(args[0] if args else os.environ.get('BACKLOG_DIR', '.claude/backlog')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'status: no items/ folder in {B}')
     if not proj:
         parent = os.path.dirname(B)
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
         proj = open(f'{B}/.project', encoding='utf-8').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
-    print(render(facts(B), R.arg(proj), needs_only=needs))
+    if first_screen:
+        f = facts(B)
+        print(first(f, R.arg(proj), open_prs(os.path.expanduser(opt['--repo']) if '--repo' in opt else None, f), int(opt.get('--lane-cap', 3)), seen))
+    else: print(render(facts(B), R.arg(proj), needs_only=needs))
