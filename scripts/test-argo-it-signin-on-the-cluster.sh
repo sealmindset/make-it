@@ -89,7 +89,7 @@ class Mock:
                 urllib.request.urlopen("http://127.0.0.1:%d/health" % self.port, timeout=1); self.up = True; break
             except Exception:
                 time.sleep(0.2)
-    def req(self, method, path, form=None, cookie=None, js=None):
+    def req(self, method, path, form=None, cookie=None, js=None, auth=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         h = {}
         body = None
@@ -99,6 +99,8 @@ class Mock:
             body = json.dumps(js); h["Content-Type"] = "application/json"
         if cookie:
             h["Cookie"] = cookie
+        if auth:
+            h["Authorization"] = auth
         c.request(method, path, body=body, headers=h)
         r = c.getresponse()
         return r.status, r.getheaders(), r.read().decode("utf-8", "replace")
@@ -179,8 +181,8 @@ check("the live version always turns ENFORCE_SECRETS on, whatever compose says",
 # ======================================================================= Service names, the built-in backend address
 dep_t = fence_after(r"### \{service\}\.yaml \(Deployment\)") or ""
 check("each app Deployment is ready only once the Compose service's own healthcheck passes (no 502 while it starts)",
-      "readinessProbe:\n          exec:\n            command: {healthcheck_exec}" in dep_t
-      and "its Deployment gets that check as a `readinessProbe`" in F and "No `healthcheck:`: leave the probe out." in F)
+      "readinessProbe:\n          exec:\n            command: {healthcheck_exec}\n" in dep_t
+      and "its Deployment gets that check as a `readinessProbe`" in F and "No probe -- and the report names the service and says why" in F)
 svc_t = fence_after(r"### \{service\}-service\.yaml \(Service\)")
 check("each app service's Service is named as its compose service ({compose_service})", svc_t is not None and "name: {compose_service}" in svc_t)
 fe_dock = open(os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/frontend/Dockerfile")).read()
@@ -515,7 +517,7 @@ if mt and len(hook) == 4 and PEOPLE:
             st0, _, _ = m.req("GET", "/authorize?" + QS)
             h = subprocess.run([PYEXE, "-I", "-c", script], env=m.env, capture_output=True, text=True, timeout=120)
             check("the hook runs (from 127.0.0.1, inside the pod): it loads the people and registers the return address", h.returncode == 0, h.stderr[-300:])
-            users = json.loads(m.req("GET", "/api/users")[2])
+            users = json.loads(m.req("GET", "/api/users", auth="Bearer " + m.env["MOCK_OIDC_CLIENT_SECRET"])[2])
             check("after the hook the practice sign-in holds the seed script's people (one source)",
                   [u["sub"] for u in users] == [p_[0] for p_ in FOUR], users)
             st, hs, _ = m.req("POST", "/authorize", form=dict(access_code=CODE2, return_query=QS))
@@ -584,7 +586,6 @@ check("the send ask and the report both say the sign-in sentence", p5.count('sig
 check("the settings copied as is are listed at the send ask", "These settings were copied as they are" in p5.split("**What would you like to do?**", 1)[0])
 check("the report says app-context.json was left changed, and names its keys", "left it changed, not saved" in flat(p5) and "deployment.signin_dev" in p5)
 for label, phrase in (("ONBOARDING: the admin warning", "The practice sign-in lets anyone who has the access code sign in as any pretend person, an administrator included: keep `{hostname}` reachable only from your organisation's network too."),
-                      ("ONBOARDING: the admin routes", "answer only its own pod -- every other address, inside the cluster or out, gets 403"),
                       ("ONBOARDING: 15 minutes", "a browser that typed it is remembered for 15 minutes"),
                       ("ONBOARDING: no lock-out", "A wrong code waits a second and is never counted: nobody can lock testers out"),
                       ("ONBOARDING: what testers see before the code", "**Sign in** opens a page that says \"The practice sign-in isn't set up yet. Ask your DevOps team to finish setting it up\""),
@@ -593,7 +594,7 @@ for label, phrase in (("ONBOARDING: the admin warning", "The practice sign-in le
                       ("ONBOARDING: cluster mode stays on", "Any value other than `false`, `0`, `no` or empty keeps these rules on"),
                       ("ONBOARDING: which shells", "Every command below works in any shell (sh, bash, zsh) and keeps each value off the command line"),
                       ("ONBOARDING: no trailing newline", "A value read from a prompt never keeps a trailing newline"),
-                      ("ONBOARDING: the code out of band", "when you hand it to your testers -- out of band"),
+                      ("ONBOARDING: the code out of band", "Hand the access code to your testers out of band"),
                       ("ONBOARDING: never in a ticket", "never in a ticket, chat or email"),
                       ("ONBOARDING: the access code generated into a private file", "openssl rand -hex 12 | tr -d '\\n' > \"$d/PRACTICE_ACCESS_CODE\""),
                       ("ONBOARDING: the organisation's Secret", "kubectl create secret generic {app}-oidc-{env} -n {namespace}"),
@@ -682,6 +683,186 @@ if b3:
           and "literal `value:` otherwise" not in rule3b, rule3b[:300])
 else:
     check("5b step 3b is there", False)
+# ======================================================================= round 4
+# --- 1. the admin API behind a proxy in the same pod: the real image, its real start command, a forwarder inside it
+MOCKDIR = os.path.join(root, ".claude/make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc")
+for sc in ("fastapi-nextjs", "nextjs-fullstack"):
+    cmd = re.search(r'(?m)^CMD (\[.*\])$', open(os.path.join(root, ".claude/make-it/scaffolds", sc, "mock-services/mock-oidc/Dockerfile")).read())
+    cmd = json.loads(cmd.group(1)) if cmd else []
+    check("%s: mock-oidc's image starts uvicorn with --no-proxy-headers and trusts no forwarded header" % sc,
+          "--no-proxy-headers" in cmd and not any("forwarded-allow-ips" in c or c == "--proxy-headers" for c in cmd), cmd)
+DOCKER = shutil.which("docker") and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+check("docker is here, so the real image is checked behind a same-pod proxy (CI has it)", DOCKER or not os.environ.get("CI"))
+if DOCKER and len(hook) == 4 and PEOPLE:
+    tag = "argoit-mock-test:%d" % os.getpid(); cname = "argoit-mock-test-%d" % os.getpid()
+    SECRET4, CODE4 = "round4-client-secret-0123456789", "round4-access-code-0123"
+    FWD = ("import socket, threading\n"
+           "def pipe(a, b):\n"
+           "    try:\n"
+           "        while True:\n"
+           "            d = a.recv(65536)\n"
+           "            if not d: break\n"
+           "            b.sendall(d)\n"
+           "    except OSError: pass\n"
+           "    finally:\n"
+           "        for s_ in (a, b):\n"
+           "            try: s_.shutdown(socket.SHUT_RDWR)\n"
+           "            except OSError: pass\n"
+           "srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(('0.0.0.0', 10091)); srv.listen(16)\n"
+           "while True:\n"
+           "    c, _ = srv.accept(); u = socket.create_connection(('127.0.0.1', 10090))\n"
+           "    threading.Thread(target=pipe, args=(c, u), daemon=True).start(); threading.Thread(target=pipe, args=(u, c), daemon=True).start()\n")
+    def dk(*a, **k):
+        return subprocess.run(["docker"] + list(a), capture_output=True, text=True, **k)
+    try:
+        b_ = dk("build", "-q", "-t", tag, MOCKDIR, timeout=600)
+        check("the scaffold's mock-oidc image builds", b_.returncode == 0, b_.stderr[-300:])
+        r_ = dk("run", "-d", "--name", cname, "-p", "127.0.0.1::10090", "-p", "127.0.0.1::10091",
+                "-e", "MOCK_OIDC_REQUIRE_ACCESS_CODE=true", "-e", "MOCK_OIDC_ACCESS_CODE=" + CODE4,
+                "-e", "MOCK_OIDC_CLIENT_SECRET=" + SECRET4, "-e", "MOCK_OIDC_CLIENT_ID=mock-oidc-client", "-e", "MOCK_OIDC_PORT=10090",
+                "-e", "MOCK_OIDC_REDIRECT_URIS=" + REDIR, "-e", "MOCK_OIDC_EXTERNAL_BASE_URL=https://" + HOST, tag)
+        dk("exec", "-d", cname, "python3", "-c", FWD)
+        port = lambda p_: int(dk("port", cname, "%d/tcp" % p_).stdout.strip().rsplit(":", 1)[-1])
+        direct, proxied = port(10090), port(10091)
+        def hreq(p_, method, path, headers=None, js=None):
+            for _ in range(60):
+                try:
+                    c_ = http.client.HTTPConnection("127.0.0.1", p_, timeout=10)
+                    c_.request(method, path, body=json.dumps(js) if js is not None else None,
+                               headers=dict(headers or {}, **({"Content-Type": "application/json"} if js is not None else {})))
+                    r2 = c_.getresponse(); return r2.status, r2.read().decode("utf-8", "replace")
+                except (OSError, http.client.HTTPException):
+                    time.sleep(0.5)
+            return None, ""
+        hreq(direct, "GET", "/health"); hreq(proxied, "GET", "/health")
+        BAD = {"X-Forwarded-For": "127.0.0.1"}
+        rows = []
+        for label, p_, hd in (("through a same-pod proxy, no token", proxied, {}),
+                              ("through a same-pod proxy, no token, X-Forwarded-For: 127.0.0.1", proxied, BAD),
+                              ("through a same-pod proxy, no token, Forwarded: for=127.0.0.1", proxied, {"Forwarded": "for=127.0.0.1"}),
+                              ("through a same-pod proxy, a wrong token", proxied, {"Authorization": "Bearer wrong"}),
+                              ("from another address, with the secret", direct, {"Authorization": "Bearer " + SECRET4}),
+                              ("from another address, with the secret and X-Forwarded-For: 127.0.0.1", direct, dict(BAD, Authorization="Bearer " + SECRET4)),
+                              ("from another address, with the secret and Forwarded: for=127.0.0.1", direct, {"Forwarded": "for=127.0.0.1", "Authorization": "Bearer " + SECRET4})):
+            st_g, _ = hreq(p_, "GET", "/api/users", hd)
+            st_p, _ = hreq(p_, "POST", "/api/users", hd, js=dict(sub="intruder", email="i@example.test", name="Intruder"))
+            st_d, _ = hreq(p_, "GET", "/docs", hd)
+            rows.append((label, st_g, st_p, st_d))
+            check("the real image, %s: GET and POST /api/users and /docs answer 403" % label, (st_g, st_p, st_d) == (403, 403, 403), (st_g, st_p, st_d))
+        ins = dk("exec", cname, "python3", "-c", "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:10090/api/users').status)")
+        check("the real image, inside its own pod without the secret: 403", "403" in ins.stderr, (ins.stdout + ins.stderr)[-200:])
+        rc_, out_, data_ = people_run(SEED, out=True)
+        dk("exec", "-i", cname, "sh", "-c", "cat > /tmp/mock-oidc-people.json", input=data_ or "")
+        h_ = dk("exec", cname, "python3", "-I", "-c", hook[3].replace("/people/", "/tmp/"))
+        check("the real image: the start-up hook (inside the pod, with the secret) loads the people and the return address", h_.returncode == 0, h_.stderr[-300:])
+        st_l, body_l = hreq(proxied, "GET", "/api/users", {"Authorization": "Bearer " + SECRET4})
+        check("the real image, inside its own pod with the secret (as a port-forward reaches it): the admin API answers, and holds only the seed script's people",
+              st_l == 200 and [u["sub"] for u in json.loads(body_l)] == [p_[0] for p_ in FOUR], (st_l, body_l[:200]))
+        logs = dk("logs", cname).stdout + dk("logs", cname).stderr
+        check("the real image's log: the hook's calls came from 127.0.0.1 and were accepted",
+              re.search(r'127\.0\.0\.1:\d+ - "POST /api/users HTTP/1\.1" 200', logs) and re.search(r'127\.0\.0\.1:\d+ - "PUT /api/clients/mock-oidc-client/redirect_uris HTTP/1\.1" 200', logs),
+              logs[-400:])
+    finally:
+        dk("rm", "-f", cname); dk("rmi", "-f", tag)
+check("the hook sends the client secret as its bearer token", len(hook) == 4 and '"Bearer " + os.environ["MOCK_OIDC_CLIENT_SECRET"]' in hook[3])
+says("ONBOARDING: the admin routes need the secret", "answer only its own pod, and only with the client secret as a bearer token -- every other address, inside the cluster or out, gets 403")
+says("ONBOARDING: a port-forward still needs the secret", "A `kubectl port-forward` to the practice sign-in reaches it as its own pod, and still gets 403 without that secret.")
+
+# --- 2. ONBOARDING's secret blocks: a trap cleans up on Ctrl-C, and no value is ever printed
+check("ONBOARDING no longer prints the access code after creating it",
+      "base64 -d; echo" not in devops and not re.search(r"(?m)^kubectl get secret .*PRACTICE_ACCESS_CODE.*base64 -d\s*$", devops))
+says("ONBOARDING: the code goes to the clipboard, not the screen", "copy it straight to the clipboard")
+blocks = [b_ for b_ in re.findall(r"```sh\n(.*?)```", devops, re.S) if "create secret" in b_]
+check("every ONBOARDING secret block sets the trap and ends by listing key names only",
+      blocks and all("trap 'stty echo 2>/dev/null; rm -rf \"$d\"' EXIT; trap 'exit 130' INT TERM" in b_ and "go-template='{{range $k, $v := .data}}{{$k}}" in b_ for b_ in blocks), len(blocks))
+STUBK = tempfile.mkdtemp()
+open(os.path.join(STUBK, "kubectl"), "w").write(
+    "#!/bin/sh\n# a stub: 'create secret' records each --from-file's size and first bytes' kind; 'get' prints key names\n"
+    "echo \"kubectl $1 $2\" >> \"$STUB_LOG\"\n"
+    "for a in \"$@\"; do case \"$a\" in --from-file=*) f=\"${a#--from-file=}\"; f=\"${f#*=}\"; [ -f \"$f\" ] && { D=$(dirname \"$f\"); echo \"file $D $(basename \"$f\") $(wc -c < \"$f\" | tr -d ' ') $(tail -c1 \"$f\" | od -An -c | tr -d ' ')\" >> \"$STUB_LOG\"; };; esac; done\n"
+    "[ -n \"$STUB_HANG\" ] && { echo \"$D\" > \"$STUB_HANG\"; sleep 30; }\n"
+    "[ \"$1\" = get ] && echo KEY_NAME_ONLY\nexit 0\n")
+os.chmod(os.path.join(STUBK, "kubectl"), 0o755)
+filled = [b_.replace("{app}", "bedapp").replace("{namespace}", "bedapp").replace("{env}", "dev").replace("{app_db_name}", "bedapp")
+          .replace("{registry_host}", "registry.example.test") for b_ in blocks]
+for sh_ in ("sh", "bash", "zsh"):
+    if not shutil.which(sh_):
+        check("%s is here to run ONBOARDING's blocks" % sh_, not os.environ.get("CI") or sh_ == "zsh"); continue
+    bad = []
+    for i, b_ in enumerate(filled):
+        log_ = tempfile.mktemp(); tmpd = tempfile.mkdtemp()
+        env_ = dict(os.environ, PATH=STUBK + ":" + os.environ["PATH"], STUB_LOG=log_, TMPDIR=tmpd + "/")
+        r_ = subprocess.run([sh_, "-c", b_], input="typed-value\nsecond-value\n", env=env_, capture_output=True, text=True, errors="replace", timeout=60)
+        rec = open(log_).read() if os.path.exists(log_) else ""
+        leftover = [l_.split()[1] for l_ in rec.splitlines() if l_.startswith("file ") and os.path.exists(l_.split()[1])]
+        if r_.returncode or "KEY_NAME_ONLY" not in r_.stdout or leftover or "file " not in rec or re.search(r" \\n$", rec, re.M) \
+                or "typed-value" in r_.stdout + r_.stderr or re.search(r"[0-9a-f]{24}", r_.stdout):
+            bad.append((i, r_.returncode, leftover, r_.stdout[-120:], rec[-200:]))
+        shutil.rmtree(tmpd, ignore_errors=True)
+    check("in %s every ONBOARDING secret block runs (stub kubectl): values from files without a trailing newline, the folder gone, only key names printed" % sh_, not bad, bad)
+    # an interrupt while kubectl runs, in a terminal: the folder is removed and the terminal's echo is back on
+    import pty, signal, termios
+    b_ = filled[0]
+    hang = tempfile.mktemp(); tmpd = tempfile.mkdtemp()
+    pid_, fd_ = pty.fork()
+    if pid_ == 0:
+        os.environ.update(PATH=STUBK + ":" + os.environ["PATH"], STUB_LOG=os.devnull, STUB_HANG=hang, TMPDIR=tmpd + "/")
+        os.execvp(sh_, [sh_, "-c", "stty -echo; " + b_])
+    t0_ = time.time()
+    while not (os.path.exists(hang) and open(hang).read().strip()) and time.time() - t0_ < 20:
+        import select
+        if select.select([fd_], [], [], 0.1)[0]:
+            try:
+                os.read(fd_, 1024)
+            except OSError:
+                pass
+    sub_ = os.path.exists(hang)
+    pdir = open(hang).read().strip() if sub_ else ""
+    try:
+        os.killpg(pid_, signal.SIGINT)   # Ctrl-C: INT to the terminal's whole group (pty.fork made pid_ its leader)
+    except OSError:
+        sub_ = False
+    seen_ = bool(pdir) and os.path.isdir(pdir)   # its private folder, there while kubectl runs
+    time.sleep(1.5)
+    echo_on = bool(termios.tcgetattr(fd_)[3] & termios.ECHO)
+    try:
+        os.kill(pid_, signal.SIGKILL)
+    except OSError:
+        pass
+    os.waitpid(pid_, 0)
+    left = bool(pdir) and os.path.exists(pdir); shutil.rmtree(tmpd, ignore_errors=True)
+    check("in %s an interrupt (INT) in the middle of a block removes its private folder and turns echo back on" % sh_,
+          sub_ and seen_ and not left and echo_on, (sub_, seen_, left, echo_on))
+shutil.rmtree(STUBK, ignore_errors=True)
+
+# --- 3. the first build, told plainly; no promised number of minutes
+p5r = doc.split("**5. Report success:**", 1)[-1].split("</step>", 1)[0]
+says("the report: what the first build looks like", "**The first build:** it takes a few minutes -- the first build is the slowest.")
+says("the report: the bare 503 until it finishes", "answers with a bare \"no available server\" page (error 503): that is expected, nothing is broken")
+says("the report: how to tell it has finished", "It has finished when **{hostname}** shows your app's own page")
+check("the first-build lines are in the report after the send", "**The first build:**" in p5r)
+check("the text promises no number of minutes for a deploy (no ~3 or 2-3 minutes)",
+      not re.search(r"~\s*\d+(-\d+)? minutes|about \d+-\d+ minutes", doc), re.findall(r".{0,40}(?:~\s*\d+(?:-\d+)?|about \d+-\d+) minutes", doc))
+
+# --- 4. the database template, filled as a run fills it, keeps no placeholder
+dbt = fence_after(r"\*\*\{app\}-db\.yaml \(Database Deployment\):\*\*")
+if dbt and PH:
+    dbf = (dbt.replace("{app}", "bedapp").replace("{secret_pattern_resolved}", "bedapp-secrets-dev").replace("{app_db_name}", "bedapp"))
+    rc, out = ph_run({"env/dev/bedapp-db.yaml": dbf, ".github/workflows/build-and-deploy.yml": "a: 1\n", "ONBOARDING-K8S.md": "a\n"})
+    check("the database manifest, filled as a run fills it, passes the no-placeholder check (its comments too)", rc == 0, out[-300:])
+else:
+    check("the database template is there", False)
+
+# --- 5. readiness probes: Compose's timing; when there is no probe
+check("the Deployment template's readiness probe carries Compose's interval, timeout and retries",
+      all(x in dep_t for x in ("periodSeconds: {healthcheck_interval}", "timeoutSeconds: {healthcheck_timeout}", "failureThreshold: {healthcheck_retries}")))
+for phrase in ("`{healthcheck_timeout}` from `timeout:` (Kubernetes would otherwise give the check only 1 second)",
+               "in whole seconds rounded up (`5s` is 5, `1m30s` is 90, `500ms` is 1)",
+               "one that isn't set takes Compose's own default (30, 30 and 3)",
+               "when it has `disable: true`, when `test:` is `[\"NONE\"]`, or when `test:` is a plain string instead of a list",
+               "the report names the service and says why"):
+    says("the readiness rule", phrase)
+
 sys.exit(1 if failed else 0)
 PY
 [ -s "$ERRF" ] && { echo "FAIL stderr was written (shown below)"; fail=1; }

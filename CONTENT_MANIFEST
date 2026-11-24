@@ -222,7 +222,7 @@ aea4c4717fb4be5a05331bbe3620ecd92baa42563eafb465208aaa6910947e2d  make-it/scaffo
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/Dockerfile
 43727c08037721f34d11def3b2639d76fcf6da8a0e83c2110aef5175df039dac  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/requirements.txt
-4da621bad15fec480ada6f1dd660ae4b640455e592ab894a31803d13e05ebfb7  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/test_app.py
+8ab5a5d2dfcf48143ceda657a069fc72ea223ae9be386844f912382f7a4e2f0f  make-it/scaffolds/fastapi-nextjs/mock-services/mock-oidc/test_app.py
 5cb2590a2f1787be27646b7c3705f251d83c33acb5b5fb9c1ca6d2fe211915dc  make-it/scaffolds/fastapi-nextjs/pyproject.toml
 07210d274609bc832f3c42c9de6800ab85843beeecf41780b1d0433ff2c0d7c0  make-it/scaffolds/fastapi-nextjs/scripts/precommit-in-container.sh
 9c66da23d70ab4242ffd543293778f7f99acd73870bf57d54534a2b607fa0bc4  make-it/scaffolds/fastapi-nextjs/scripts/seed-mock-services.sh
@@ -246,7 +246,7 @@ aea4c4717fb4be5a05331bbe3620ecd92baa42563eafb465208aaa6910947e2d  make-it/scaffo
 72da6e95c04c409ee24e5cb37f36b001d70173ef482f4441861537f22901ad33  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/Dockerfile
 9d1de9789f58060a01bba061b00a9a2b74dd19e5f2ddfe8ddb84fb9ce69c6ef8  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/app.py
 37c2b393eb5969dc0817f3c5635f74625f1ea7aae98f7445ce0f0045807130e7  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/requirements.txt
-4da621bad15fec480ada6f1dd660ae4b640455e592ab894a31803d13e05ebfb7  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/test_app.py
+8ab5a5d2dfcf48143ceda657a069fc72ea223ae9be386844f912382f7a4e2f0f  make-it/scaffolds/nextjs-fullstack/mock-services/mock-oidc/test_app.py
 64429a3b3ec4001151c5af63647eae573e8cd483de0801e03fe754846d1b0697  make-it/scaffolds/nextjs-fullstack/next.config.ts
 6c716fec39f0bc92f73f7b3bfcdba94dd675152afba03eb3cee41d8563fcc870  make-it/scaffolds/nextjs-fullstack/package.json
 ac31e2a95ef64fe27ceb4124e101675273107aae2e33bc490b01d919e7f03646  make-it/scaffolds/nextjs-fullstack/postcss.config.mjs

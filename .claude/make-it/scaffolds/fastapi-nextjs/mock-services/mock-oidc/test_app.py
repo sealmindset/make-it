@@ -22,6 +22,8 @@ REDIR = "https://app.example.test/api/auth/callback"
 QS = urlencode(dict(client_id="mock-oidc-client", redirect_uri=REDIR, response_type="code", state="s"))
 CODE = "right-code-0123456789"
 OUTSIDE, LOCAL = "10.42.0.17", "127.0.0.1"
+SECRET = "test-only-client-secret"   # the pod's client secret: the admin API's bearer token in cluster mode
+BEARER = "Bearer " + SECRET
 failed = []
 _loads = 0
 
@@ -41,7 +43,7 @@ def load(**env):
     keep = dict(os.environ)
     for k in [k for k in os.environ if k.startswith("MOCK_OIDC_")]:
         del os.environ[k]
-    os.environ.update(MOCK_OIDC_EXTERNAL_BASE_URL="https://app.example.test", MOCK_OIDC_CLIENT_SECRET="test-only")
+    os.environ.update(MOCK_OIDC_EXTERNAL_BASE_URL="https://app.example.test", MOCK_OIDC_CLIENT_SECRET=SECRET)
     os.environ.update(env)
     err = io.StringIO()
     try:
@@ -56,7 +58,7 @@ def load(**env):
     return mod
 
 
-async def _call(mod, method, path, client, form, js, cookie):
+async def _call(mod, method, path, client, form, js, cookie, auth=None):
     path, _, qs = path.partition("?")
     headers, body = [], b""
     if form is not None:
@@ -67,6 +69,8 @@ async def _call(mod, method, path, client, form, js, cookie):
         headers.append((b"content-type", b"application/json"))
     if cookie:
         headers.append((b"cookie", cookie.encode()))
+    if auth:
+        headers.append((b"authorization", auth.encode()))
     headers.append((b"content-length", str(len(body)).encode()))
     scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method, "scheme": "http",
              "path": path, "raw_path": path.encode(), "query_string": qs.encode(), "root_path": "",
@@ -91,8 +95,8 @@ async def _call(mod, method, path, client, form, js, cookie):
     return out["status"], out["headers"], out["body"].decode("utf-8", "replace")
 
 
-def call(mod, method, path, client=OUTSIDE, form=None, js=None, cookie=None):
-    return asyncio.run(_call(mod, method, path, client, form, js, cookie))
+def call(mod, method, path, client=OUTSIDE, form=None, js=None, cookie=None, auth=None):
+    return asyncio.run(_call(mod, method, path, client, form, js, cookie, auth))
 
 
 def many(mod, reqs):
@@ -102,8 +106,8 @@ def many(mod, reqs):
 
 
 def seed(mod, client):
-    call(mod, "POST", "/api/users", client, js=dict(sub="mock-admin", email="admin@example.test", name="Alex Admin"))
-    call(mod, "PUT", "/api/clients/mock-oidc-client/redirect_uris", client, js=dict(redirect_uris=[REDIR]))
+    call(mod, "POST", "/api/users", client, js=dict(sub="mock-admin", email="admin@example.test", name="Alex Admin"), auth=BEARER)
+    call(mod, "PUT", "/api/clients/mock-oidc-client/redirect_uris", client, js=dict(redirect_uris=[REDIR]), auth=BEARER)
 
 
 def cookie_from(hs):
@@ -126,17 +130,28 @@ ADMIN = [("GET", "/api/users", None), ("POST", "/api/users", dict(sub="x", email
          ("DELETE", "/api/users/mock-admin", None), ("PUT", "/api/clients/mock-oidc-client/redirect_uris", dict(redirect_uris=["https://evil.example/cb"])),
          ("GET", "/docs", None), ("GET", "/openapi.json", None), ("GET", "/redoc", None),
          ("GET", "/api/users/", None), ("GET", "//api/users", None), ("GET", "/authorize/../api/users", None)]
-refused = [(meth, p, call(m, meth, p, OUTSIDE, js=js)[0]) for meth, p, js in ADMIN]
-check("cluster mode: the admin API, the API docs and look-alike paths answer 403 to another address",
+refused = [(meth, p, call(m, meth, p, OUTSIDE, js=js, auth=BEARER)[0]) for meth, p, js in ADMIN]
+check("cluster mode: the admin API, the API docs and look-alike paths answer 403 to another address, even with the secret",
       all(s == 403 for _, _, s in refused), refused)
+for label, auth in (("no token", None), ("a wrong token", "Bearer wrong-" + SECRET), ("the secret without Bearer", SECRET),
+                    ("lower-case bearer and the secret plus a space", "bearer " + SECRET + " ")):
+    refused = [(meth, p, call(m, meth, p, LOCAL, js=js, auth=auth)[0]) for meth, p, js in ADMIN]
+    check("cluster mode: from this machine with %s, the admin API and docs answer 403 (a same-pod proxy is no way in)" % label,
+          all(s == 403 for _, _, s in refused), refused)
 for who in (LOCAL, "::1"):
-    st, _, _ = call(m, "POST", "/api/users", who, js=dict(sub="mock-admin", email="admin@example.test", name="Alex Admin"))
-    st2, _, body = call(m, "GET", "/api/users", who)
-    check("cluster mode: the admin API works from this machine (%s), where the start-up hook runs" % who,
+    st, _, _ = call(m, "POST", "/api/users", who, js=dict(sub="mock-admin", email="admin@example.test", name="Alex Admin"), auth=BEARER)
+    st2, _, body = call(m, "GET", "/api/users", who, auth=BEARER)
+    check("cluster mode: the admin API works from this machine (%s) with the client secret as its bearer token, as the start-up hook calls it" % who,
           st == 200 and st2 == 200 and "mock-admin" in body, (st, st2))
-call(m, "PUT", "/api/clients/mock-oidc-client/redirect_uris", LOCAL, js=dict(redirect_uris=[REDIR]))
-st, _, body = call(m, "GET", "/api/users", LOCAL)
+call(m, "PUT", "/api/clients/mock-oidc-client/redirect_uris", LOCAL, js=dict(redirect_uris=[REDIR]), auth=BEARER)
+st, _, body = call(m, "GET", "/api/users", LOCAL, auth=BEARER)
 check("cluster mode: the refused calls from outside changed nothing", [u["sub"] for u in json.loads(body)] == ["mock-admin"], body)
+md = load(MOCK_OIDC_REQUIRE_ACCESS_CODE="true", MOCK_OIDC_ACCESS_CODE=CODE, MOCK_OIDC_CLIENT_SECRET="mock-oidc-secret")
+check("cluster mode with the scaffold's default client secret: the admin API stays shut, even from this machine with it",
+      call(md, "GET", "/api/users", LOCAL, auth="Bearer mock-oidc-secret")[0] == 403)
+tree0 = ast.parse(open(SRC).read())
+mw = next((ast.unparse(n) for n in ast.walk(tree0) if isinstance(n, ast.AsyncFunctionDef) and n.name == "_cluster_admin_only"), "")
+check("the admin token is compared in constant time (hmac.compare_digest)", "compare_digest" in mw, mw[:200])
 public = [(p, call(m, "GET", p, OUTSIDE)[0]) for p in ("/health", "/.well-known/openid-configuration", "/jwks")]
 check("cluster mode: the public routes answer another address", all(s == 200 for _, s in public), public)
 
