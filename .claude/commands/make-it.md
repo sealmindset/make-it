@@ -1232,76 +1232,78 @@ the host, installed once by step 22b. When step 22b couldn't install it or it ca
 item is NOT RUN with the reason "no browser here" and the install's reason, never FAIL, and the
 build goes on.
 
-**Write steps run only where there is no real data.** A write step creates, changes or deletes
-a record or a setting, or restarts the backend: step 26 a's create, update and delete; 28 c's
-write requests and 29 c's DELETE (sent to be refused: a broken guard would let them act); 30 c;
-33 a-c; and all of 33a, 33b, 33c, 33d, 33e, 33f, 33g and 33h. Every other step only reads, and
-runs against the running app as written. Nothing in Part B ever cleans up a database: a test
-record goes only through the app's own delete route, inside a write step.
-- **A brand-new build**: /make-it's own build, where step 22 printed `fresh-db: yes` in this
-  run. The database is the one this build just made and seeded, so the write steps run on the
-  running app. Anything else -- `fresh-db: no`, no such line from this run, /retrofit-it,
-  /resume-it -- is an existing app.
-- **An existing app**: the write steps run in a temporary copy of the app's stack, with its own
-  Compose project name, its own empty database volume and its own ports, named and offset the
-  way `scripts/worktree.sh` does it for a worktree. The person's own containers, volumes and
-  database are never written to, never stopped and never restarted. In this order:
+**Write steps run only in a temporary copy.** A write step creates, changes or deletes a record
+or a setting, or restarts the backend: step 26 a's create, update and delete; 28 c's write
+requests and 29 c's DELETE (sent to be refused: a broken guard would let them act); 30 c;
+33 a-c; all of 33a except BNV03 (c), which only reads; and all of 33b, 33c, 33d, 33e, 33f, 33g
+and 33h. Every other step only reads, and runs against the running app as written. Nothing in
+Part B ever cleans up a database, and no write step is ever sent to the app's own: not in a
+brand-new build either, so a new app doesn't start life with the test's leftovers.
+Every build, new or existing, and /retrofit-it run the write steps in a temporary copy of the
+app's stack, with its own Compose project name, its own empty database volume and its own ports,
+named and offset the way `scripts/worktree.sh` does it for a worktree. The person's own
+containers, volumes and database are never written to, never stopped and never restarted.
+/resume-it's live pass starts no copy, so there the write steps are NOT RUN. In this order:
     1. `count > before` (the person's database; it only reads).
-    2. `wt_start`. When the copy can't be made (Docker isn't running, a port is taken, a
-       migration fails, the copy would share the database's storage) it prints `NOT RUN:
-       [reason]` and removes what it started: every write step is then NOT RUN with that reason,
-       and the build goes on.
-    3. Run the write steps in the copy: start every command with `. "$WTENV"`, so `docker
-       compose` and the ports are the copy's (the app is at `http://localhost:$FRONTEND_PORT`),
-       and sign in there as step 25 does.
-    4. **Remove it, always** -- whether the steps passed, failed, were cut off or errored:
-       `wt_stop`. A copy left by a session that died is removed by the next `wt_start`.
-    5. `count > after`, then compare the two: they must be identical. A difference is a FAIL
+    2. Put the write steps' commands in one script and run it with `wt_run bash <script>`. It
+       removes a copy left by a session that died, starts the copy, runs the script inside it
+       (`docker compose` and the ports are the copy's, the app is at
+       `http://localhost:$FRONTEND_PORT`; sign in there as step 25 does) with a time limit of 30
+       minutes, and removes the copy on every way out: finished, failed, interrupted or out of
+       time. When the copy can't be made (Docker isn't running, a port is taken, a migration
+       fails, the copy would share the database's storage) or the time runs out, it prints `NOT
+       RUN: [reason]`: every write step not yet done is NOT RUN with that reason, and the build
+       goes on.
+    3. `count > after`, then compare the two: they must be identical. A difference is a FAIL
        naming the table, "the write test wrote to your own database, where it must never
        write", at the top of TODO.md.
-  Then say in the results, in these words: "I tested creating, changing and deleting a record in
-  a temporary copy of your app, then removed the copy."
-  ```bash
-  # Run in the app's folder. <db> is the database service in docker-compose.yml (db in the scaffold).
-  APP="$(env -u COMPOSE_PROJECT_NAME docker compose config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
-  q() { docker compose -p "$APP" exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
-  # count: one line per table of the person's database, name|rows (it only reads)
-  count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
-    table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
-    information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-    \gexec" | q; }
-  # the copy's project name and port offset, the way scripts/worktree.sh derives a worktree's
-  WT="$(printf '%s-%s' "$(basename "$PWD")" make-it-write-test | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')"
-  WTENV="${TMPDIR:-/tmp}/$WT.env"
-  # wt_stop: remove the copy with its volume. It names the copy, and refuses when that could be the person's project.
-  wt_stop() { [ -n "$APP" ] && [ "$WT" != "$APP" ] || return 1
-    docker compose -p "$WT" --profile dev down -v --rmi local --remove-orphans; rm -f "$WTENV"; }
-  wt_try() (
-    no() { echo "NOT RUN: $1"; exit 1; }
-    docker info >/dev/null 2>&1 || no "Docker isn't running"
-    [ -n "$APP" ] && [ "$WT" != "$APP" ] || no "a temporary copy can't be told apart from your app"
-    wt_stop >/dev/null 2>&1   # a copy left by a session that died
-    off=$(( ($(printf '%s' "$WT" | cksum | awk '{print $1}') % 80 + 1) * 100 ))
-    { echo "export COMPOSE_PROJECT_NAME=$WT"
-      grep -oE '\$\{[A-Z0-9_]+:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
-        | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
-    . "$WTENV"
-    # its volumes must be its own, and the database must not keep its data in a folder on this computer
-    docker compose -p "$WT" --profile dev config --format json | python3 -I -c 'import json, sys; c = json.load(sys.stdin); p, db = sys.argv[1:3]; sys.exit(1 if [k for k, v in (c.get("volumes") or {}).items() if v.get("external") or not str(v.get("name", "")).startswith(p + "_")] + [m for m in (c["services"][db].get("volumes") or []) if m.get("type") != "volume" and not m.get("read_only")] else 0)' \
-      "$WT" "<db>" || no "the copy would share your database's storage"
-    # start it: the app's own start runs its migrations and seed on the empty database
-    docker compose -p "$WT" --profile dev up -d --build --wait || no "the temporary copy didn't start (a port is taken, or a migration failed)"
-    bash scripts/seed-mock-services.sh >/dev/null || no "the temporary copy's sign-in seed failed"
-    echo "copy ready: $WT"
-  )
-  # wt_start: make the copy; a failure or an interruption removes it again
-  wt_start() {
-    trap 'wt_stop >/dev/null 2>&1; exit 130' INT TERM HUP
-    wt_try; local r=$?
-    [ "$r" -eq 0 ] || wt_stop >/dev/null 2>&1
-    trap - INT TERM HUP; return "$r"
-  }
-  ```
+Then say in the results, in these words: "I tested creating, changing and deleting a record in a
+temporary copy of your app, then removed the copy."
+```bash
+# Run in the app's folder. <db> is the database service in docker-compose.yml (db in the scaffold).
+APP="$(env -u COMPOSE_PROJECT_NAME docker compose config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
+q() { docker compose -p "$APP" exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
+# count: one line per table of the person's database, name|rows (it only reads)
+count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+  table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
+  information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+  \gexec" | q; }
+# the copy's project name and port offset, the way scripts/worktree.sh derives a worktree's
+WT="$(printf '%s-%s' "$(basename "$PWD")" make-it-write-test | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')"
+WTENV="${TMPDIR:-/tmp}/$WT.env"
+# wt_stop: remove the copy with its volume. Only the project named exactly $WT, and never the person's.
+wt_stop() { [ -n "$APP" ] && [ "$WT" != "$APP" ] || return 1
+  docker compose -p "$WT" --profile dev down -v --rmi local --remove-orphans; rm -f "$WTENV"; }
+wt_try() (
+  no() { echo "NOT RUN: $1"; exit 1; }
+  docker info >/dev/null 2>&1 || no "Docker isn't running"
+  [ -n "$APP" ] && [ "$WT" != "$APP" ] || no "a temporary copy can't be told apart from your app"
+  wt_stop >/dev/null 2>&1   # a copy left by a session that died
+  off=$(( ($(printf '%s' "$WT" | cksum | awk '{print $1}') % 80 + 1) * 100 ))
+  { echo "export COMPOSE_PROJECT_NAME=$WT"
+    grep -oE '\$\{[A-Z0-9_]+:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
+      | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
+  . "$WTENV"
+  # its volumes must be its own, and the database must not keep its data in a folder on this computer
+  docker compose -p "$WT" --profile dev config --format json | python3 -I -c 'import json, sys; c = json.load(sys.stdin); p, db = sys.argv[1:3]; sys.exit(1 if [k for k, v in (c.get("volumes") or {}).items() if v.get("external") or not str(v.get("name", "")).startswith(p + "_")] + [m for m in (c["services"][db].get("volumes") or []) if m.get("type") != "volume" and not m.get("read_only")] else 0)' \
+    "$WT" "<db>" || no "the copy would share your database's storage"
+  # start it: the app's own start runs its migrations and seed on the empty database
+  docker compose -p "$WT" --profile dev up -d --build --wait || no "the temporary copy didn't start (a port is taken, or a migration failed)"
+  bash scripts/seed-mock-services.sh >/dev/null || no "the temporary copy's sign-in seed failed"
+)
+# wt_run COMMAND...: make the copy, run COMMAND inside it with a time limit (WT_LIMIT seconds),
+# and remove the copy on every way out -- done, failed, interrupted, out of time
+wt_run() {
+  local r=1 pid=
+  trap 'kill "$pid" 2>/dev/null; wt_stop >/dev/null 2>&1' EXIT; trap 'exit 130' INT TERM HUP
+  if wt_try; then
+    ( . "$WTENV"; exec perl -e 'alarm shift; exec @ARGV' "${WT_LIMIT:-1800}" "$@" ) & pid=$!
+    wait "$pid"; r=$?
+    [ "$r" -ne 142 ] || echo "NOT RUN: the write test ran out of time"
+  fi
+  wt_stop >/dev/null 2>&1; trap - EXIT INT TERM HUP; return "$r"
+}
+```
 
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
@@ -1365,17 +1367,11 @@ record goes only through the app's own delete route, inside a write step.
 
 22. **Build and start containers:**
     ```bash
-    # fresh database? Once, before the first build attempt, never on a retry. <project> is the
-    # `name` in `docker compose config`. Yes only when no volume of this project exists yet.
-    [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=<project>" 2>/dev/null || echo unknown)" ] \
-      && echo "fresh-db: yes" || echo "fresh-db: no"
     docker rm -f "<project>-live-check" 2>/dev/null   # a leftover changed-setting run (see below)
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
-    The first line says whether this build is about to make the database ("Write steps" above
-    uses it): a volume that is already there, or no answer from Docker, is `fresh-db: no`.
-    If the `docker rm` printed a name, it removed a leftover changed-setting run: note "Removed
+    If the first command printed a name, it removed a leftover changed-setting run: note "Removed
     a leftover <project>-live-check container" in the results, and after the start above also run
     `docker compose --profile dev up -d --wait --force-recreate <backend>` so the backend gets its
     network back. Every other service starts as usual.

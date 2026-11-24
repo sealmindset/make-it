@@ -890,25 +890,28 @@ checks", or a changed file whose path contains a word in "Files". A path under `
 at its root (`docker-compose.yml`, `docker-compose.yaml`, `compose.yml` or `compose.yaml`) has no
 live pass: nothing is triggered, started or recorded.
 
-The live pass runs only checks that call no paid AI provider and leave nothing in the app's data.
+The live pass runs only checks that call no paid AI provider and leave nothing in the app's data:
+it sends the running app no request that could write to it.
 Which rows those are is fixed by this table, not decided each time; the rows in the two "Not run
 here" columns are run by /make-it's build-verify Part B, not here.
 
-| Area | Catch-up checks | Files (path contains) | Run here | Not run here: needs the AI provider | Not run here: would leave test records |
+| Area | Catch-up checks | Files (path contains) | Run here | Not run here: needs the AI provider | Not run here: needs a temporary copy |
 |------|-----------------|-----------------------|----------|-------------------------------------|----------------------------------------|
 | Sign-in and permissions | A, R | `auth`, `rbac`, `role`, `permission` | V04, V07 | -- | -- |
 | Server routes and pages | D, G | `routers/`, `routes/`, `/api/`, `app/(auth)/` | V05, V06, V07 | -- | -- |
 | Lists and the theme | U | `data-table`, `mode-toggle`, `globals.css` | V12, V13 | -- | -- |
-| File upload | F | `upload`, `document`, `import` | F09 | F10 | V11, F14 |
+| File upload | F | `upload`, `document`, `import` | -- | F10 | V11, F09, F14 |
 | AI | AI | `lib/ai`, `agent`, `chat`, `conversation` | -- | F11, V14, V16, AI11, AI12, AI13 | AI01d |
 | AI memory | BN | `brain`, `memor` | BNV03 | BN03, BNV01, BNV02 | BN04, BN05 |
 | AI accounting | AC | `metering`, `ai_accounting`, `ai_control`, `ai-control`, `usage`, `ledger`, `spend`, `budget`, `price`, `statement` | -- | AC02, AC04, AC12, ACV01, ACV02 | AC11 |
 | The mobile variant | P | `sw.ts`, `manifest.json` | P03 | -- | -- |
 | Every live pass (starting the app) | -- | -- | V02, V03 | -- | -- |
 
-V05 here sends GET requests only; its other requests are NOT RUN, with the reason "it would leave
-test records". V07 here runs all of step 28, its write refusals included: a refused request writes
-nothing, and one that isn't refused is a FAIL whose record step 28 c removes or names.
+V05 here sends GET requests only, and V07 here runs step 28 a and b only. V05's write requests,
+step 28 c's refusal requests and step 29 c's DELETE are not sent: a broken guard would let them
+write to the app's own data. Each is NOT RUN and counted as not run in the results sentence, with
+the reason "needs a temporary copy; run a full build check to include it". /make-it's
+build-verify runs them, in its temporary copy; the live pass starts no copy.
 
 1. **Where.** In the folder the change was made in (its worktree, with its own `.env` and ports).
 2. **Only when it can start here.** `docker info` fails → start nothing: every row of the pass is
@@ -939,7 +942,7 @@ nothing, and one that isn't refused is a FAIL whose record step 28 c removes or 
    live pass never installs it, and without it they are NOT RUN with the reason "no browser
    here". Each row in a "Not run
    here" column of a touched area is NOT RUN, with the reason "it would call the AI provider" or
-   "it would leave test records", except AC12 and ACV02, which get the build's reason, "needs a
+   "needs a temporary copy; run a full build check to include it", except AC12 and ACV02, which get the build's reason, "needs a
    configured, priced AI provider" (their check expects no call).
 5. **Each row's result is PASS, FAIL, NOT RUN with its reason, KNOWN (from the scaffold), N/A,
    or LEFT OUT (your choice).** KNOWN is what make-it's Part B calls a check today's scaffold
