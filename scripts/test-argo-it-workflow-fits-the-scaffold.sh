@@ -61,6 +61,10 @@ def envmap(svc):
     return e
 SERVICES = [n for n, s in compose.items() if s.get("build") and not n.startswith("mock-") and "dev" not in (s.get("profiles") or [])]
 DB_SERVICES = [n for n in SERVICES if "DATABASE_URL" in envmap(compose[n])]
+# The practice sign-in (E12-S15 task 3): when the text builds mock-oidc's image too, the model builds it, as its
+# compose service, last (it gets no smoke test: no DATABASE_URL)
+if "plus `mock-oidc` when the practice sign-in was picked" in re.sub(r"\s+", " ", phase) and "mock-oidc" in compose:
+    SERVICES.append("mock-oidc")
 CTX = {}
 for n in SERVICES:
     b = compose[n]["build"]
@@ -135,13 +139,14 @@ def step_name(t):
     mm = re.search(r"^      - name: (.*)$", t, re.M)
     return mm.group(1).strip() if mm else ""
 
-# expand {service}
+# expand the per-service steps ({compose_service} since E12-S15 task 3; {service} before it)
+PER = "{compose_service}" if "{compose_service}" in phase else "{service}"
 expanded = []
 for t in steps:
-    if "{service}" in t:
+    if PER in t:
         who = DB_SERVICES if "smoke" in step_name(t).lower() else SERVICES
         for n in who:
-            expanded.append((n, t.replace("{service}", n)))
+            expanded.append((n, t.replace(PER, n)))
     else:
         expanded.append((None, t))
 
@@ -155,7 +160,7 @@ def order_key(item):
     name = step_name(t)
     for k, entry in order:
         e = entry.split(" -- ")[0].strip()
-        e = e.replace("{service}", svc or "")
+        e = e.replace(PER, svc or "")
         if name == e or (e and name.startswith(e)):
             return (int(k), SERVICES.index(svc) if svc in SERVICES else 0)
     UNPLACED.append(step_name(t))
@@ -249,6 +254,8 @@ case "$1" in
 esac
 exit 0''')
 stub("yq", "exit 0")
+# kubectl: `kubectl kustomize DIR` prints DIR's YAML files, as an assembled version (the live-version step needs one)
+stub("kubectl", '[ "$1" = kustomize ] || exit 1; [ -f "$2/kustomization.yaml" ] || { echo "no kustomization in $2" >&2; exit 1; }; cat "$2"/*.yaml')
 stub("rsync", "exit 0")
 stub("sudo", "exit 0")
 stub("git", 'exit 0')
@@ -323,6 +330,9 @@ def simulate(ref_name, steps=None, mode="ok", event="push"):
     work = tempfile.mkdtemp(dir=TMP)
     shutil.copytree(scaffold, os.path.join(work, "src"))
     src = os.path.join(work, "src")
+    os.makedirs(os.path.join(src, "env/prod"))     # the live version's folder, as set-up writes it (clean)
+    open(os.path.join(src, "env/prod/kustomization.yaml"), "w").write("resources:\n- backend.yaml\n")
+    open(os.path.join(src, "env/prod/backend.yaml"), "w").write("image: x/backend:prod-latest\n")
     log = os.path.join(work, "docker.log")
     open(log, "w").close()
     R = {"outputs": {}, "problems": [], "pushed": {}, "ran": [], "failed": None, "out": {}, "meta": {}, "ctx": ctx}
@@ -533,6 +543,28 @@ if shutil.which("rsync") and mr:
           all(res.values()), "; ".join(k for k, v in res.items() if not v) + " " + (r.stderr or "")[-200:])
 else:
     check("the mirror can be checked (rsync on this machine, and a mirror step)", False)
+
+# the live version never runs the practice sign-in: a step on every run, before the deploy branch is written
+live = [i for i, s in enumerate(ST) if "run" in s and "PRACTICE_ACCESS_CODE" in s["run"] and "/prod" in s["run"]]
+check("a step refuses the practice sign-in in the live version, on every run (no if:), before the deploy branch is touched",
+      live and "if" not in ST[live[0]] and all(live[0] < i for i in pos(lambda s: str(s.get("uses", "")).startswith("actions/checkout")
+      and (s.get("with") or {}).get("path")) + mirror_at), [ST[i].get("name") for i in live])
+if live:
+    def run_live(files):
+        d = tempfile.mkdtemp(dir=TMP)
+        for rel, txt in files.items():
+            os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True); open(os.path.join(d, rel), "w").write(txt)
+        r = run_bash(["-euo", "pipefail", "-c", ST[live[0]]["run"]], d, dict(os.environ, PATH=STUBS + ":" + os.environ["PATH"]))
+        shutil.rmtree(d, ignore_errors=True)
+        return r.returncode
+    check("that step passes a clean live folder, stops on the practice sign-in in it (a hand edit too), and fails when there is no live folder",
+          run_live({"env/prod/kustomization.yaml": "resources:\n- a.yaml\n", "env/prod/a.yaml": "image: x/backend:prod-latest\n", "env/dev/mock-oidc.yaml": "x\n"}) == 0
+          and run_live({"env/prod/kustomization.yaml": "resources:\n- a.yaml\n", "env/prod/a.yaml": "image: x/mock-oidc:sha-1\n"}) == 1
+          and run_live({"env/dev/mock-oidc.yaml": "x\n"}) == 2)
+mr_txt = ST[mirror_at[0]]["run"] if mirror_at else ""
+check("the workflow patches and fills the practice sign-in only in the test copy's folder, never the live version's",
+      ("mock-oidc" not in mr_txt) or ("deploy/env/dev/mock-oidc.yaml" in mr_txt and "env/prod" not in mr_txt
+      and not re.search(r"(?m)^(?!\s*#).*(seed-mock-services|mock-oidc-people)", mr_txt)), mr_txt[-600:])
 
 # the migration check on fixtures
 vstep = next((s for s in ST if "run" in s and "MIGRATIONS_DIR" in s["run"]), None)

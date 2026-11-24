@@ -222,6 +222,8 @@ Verification: Grep for `ModeToggle` in the authenticated layout file. Grep for `
 
 **M04** [Tier 1, 5] [BLOCK] **All service URLs from env vars** -- Never hardcoded base URLs in client code.
 
+**M05** [Tier 1, 5] [WARN] **The practice sign-in can ask for an access code** -- `mock-services/mock-oidc/app.py` contains `MOCK_OIDC_ACCESS_CODE` (read the file, never a version guess). An older copy can't run on a cluster, so /argo-it offers only the organisation's sign-in until it is updated. Update, never a silent replace: first compare the app's copy with the scaffold versions it can have come from: with its built-in return addresses emptied (the `CLIENT_ID: {"redirect_uris": [...]},` list written as `[]`), its sha256 is in `~/.claude/make-it/scaffolds/mock-oidc-releases.sha256` (every released scaffold copy) -- or it isn't, and the app changed it. Listed there (the same apart from the `redirect_uris` list): replace it with the scaffold's, keeping only that list (the app's own return addresses, with its ports). Not listed -- the app changed its practice sign-in -- show the person the differences in plain words and ask one select: **Update it** (the app's own changes are dropped; a copy is kept as `mock-oidc/app.py.before-update`) or **Keep mine** (the TODO line says /argo-it offers only the organisation's sign-in until it is updated). Either way a copy of the app's file is kept before anything is written. Local development is unchanged (no code set means no code asked). **SaaS auth pattern only -- skip if EasyAuth is selected.**
+
 ---
 
 ## Activity Logs

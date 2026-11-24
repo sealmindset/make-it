@@ -511,7 +511,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | UI & Frontend | U01-U09 | 9 | 1 (Web App) |
 | Database & Seed Data | D01-D06 | 6 | 1 (Web App) |
 | Docker & Infrastructure | I01-I10 | 10 | 0-1 |
-| Mock Services | M01-M04 | 4 | 1 (Web App) |
+| Mock Services | M01-M05 | 5 | 1 (Web App) |
 | Activity Logs | L01-L11 | 11 | 1 (Web App) |
 | Notifications | N01-N08 | 8 | 1 (Web App) |
 | File Upload | F01-F17 | 17 | 1 (Web App) |
@@ -523,7 +523,7 @@ The complete list of enumerated checks is maintained in `build-standards.md`. Be
 | AI Features | AI01-AI30 (incl. AI01a-AI01d) | 34 | AI (any type); AI30: 0 (Universal) |
 | AI Accounting | AC01-AC16, ACV01-ACV03 | 19 | AI (any type) |
 | PWA/Mobile | P01-P08 | 8 | 1+mobile |
-| **Total** | | **~201** | |
+| **Total** | | **~202** | |
 
 Each check has:
 - **Unique ID** for traceability (e.g., AI02 = AI input sanitization)
