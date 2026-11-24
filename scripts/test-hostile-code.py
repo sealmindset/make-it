@@ -854,7 +854,8 @@ class StaleCopies(Case):
     def test_same_git_id_with_different_bytes_is_not_an_old_copy(self):
         # SHA-1 only locates the old copy; the bytes decide. A collision keeps the file's stop.
         self.the_case()
-        self.git_that_answers(self.g("rev-parse", "main~1:scripts/scan_gitleaks.py"), "x = 1\n")
+        # same length as the file, one byte different: a length-only comparison must not pass
+        self.git_that_answers(self.g("rev-parse", "main~1:scripts/scan_gitleaks.py"), '"""never closeX\n')
         self.tool("--mine", folder=self.wt)
         out = self.scan_wt(2)
         self.assertEqual(out["not_checked"], ["scripts/scan_gitleaks.py"])

@@ -620,7 +620,9 @@ def stale_copies(root, gitsha):
             if os.path.getsize(disk) > MAX_BYTES:
                 continue
             with open(disk, "rb") as f:
-                here = f.read()
+                here = f.read(MAX_BYTES + 1)  # bounded even if the file grew after the size check
+            if len(here) > MAX_BYTES:
+                continue
         except OSError:
             continue
         size = one("cat-file", "-s", ours)  # read the blob only when it is as long as the file
