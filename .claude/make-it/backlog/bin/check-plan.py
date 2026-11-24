@@ -26,7 +26,7 @@ exits 1 if there are any -- then nothing is written. Rules:
     a scope card to an open card outside the scope that it doesn't already wait on, would not make
     a loop, and says why with its evidence
 """
-import glob, importlib.util, json, os, re, sys, tempfile
+import glob, importlib.util, json, os, sys, tempfile
 
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
 R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
@@ -35,9 +35,9 @@ MODES = {'solo', 'spike', 'subagent-it', 'dispatch-it'}
 CANDIDATE = {'backlog', 'ready', 'designing'}
 
 
-def fm(p):
-    m = re.match(r'---\n(.*?)\n---', open(p).read(), re.S)
-    return {k.strip(): v.strip() for k, v in (l.split(':', 1) for l in m.group(1).splitlines() if ':' in l)} if m else {}
+def fm(p):  # regen-board's reader (UTF-8, BOM dropped, a card that isn't UTF-8 named and skipped), keys and values trimmed
+    d = R.fm(p)
+    return None if d is None else {k.strip(): v.strip() for k, v in d.items()}
 
 
 def ids(s):  # "[E01-S1, E02]" or "E63-S148" -> ['E01-S1', 'E02']
@@ -55,7 +55,7 @@ def overlap(a, b):  # same path, or one is a folder holding the other
 
 
 def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
-    raw = {p: fm(p) for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md')}
+    raw = {p: d for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md') if (d := fm(p)) is not None}
     cards = {d['id'].upper(): d for d in raw.values() if d.get('id')}
     T = R.tree(raw)  # what each card waits on, by the board's one rule
     is_open = lambda i: i in cards and cards[i].get('status') != 'done'
@@ -146,7 +146,7 @@ def self_test():
     with tempfile.TemporaryDirectory() as b:
         os.makedirs(f'{b}/items/EPIC-01-x/stories')
         def card(path, **kv):
-            open(f'{b}/items/EPIC-01-x/{path}', 'w').write('---\n' + ''.join(f'{k}: {v}\n' for k, v in kv.items()) + '---\n')
+            open(f'{b}/items/EPIC-01-x/{path}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {v}\n' for k, v in kv.items()) + '---\n')
         card('epic.md', id='E01', status='in-progress')
         for n in (1, 2, 3): card(f'stories/S{n}.md', id=f'E01-S{n}', status='backlog', parent='E01', category='ui')
         card('stories/S4.md', id='E01-S4', status='backlog', parent='E01', stakes='critical')
@@ -192,9 +192,9 @@ def self_test():
         assert any('E01-S6: already in-progress' in e for e in check(b, bad))
         # an epic whose children are all done is a container, not a candidate; a childless epic is one
         os.makedirs(f'{b}/items/EPIC-02-y/stories'); os.makedirs(f'{b}/items/EPIC-03-z/stories')
-        open(f'{b}/items/EPIC-02-y/epic.md', 'w').write('---\nid: E02\nstatus: backlog\n---\n')
-        open(f'{b}/items/EPIC-02-y/stories/S1.md', 'w').write('---\nid: E02-S1\nstatus: done\nparent: E02\n---\n')
-        open(f'{b}/items/EPIC-03-z/epic.md', 'w').write('---\nid: E03\nstatus: backlog\n---\n')
+        open(f'{b}/items/EPIC-02-y/epic.md', 'w', encoding='utf-8').write('---\nid: E02\nstatus: backlog\n---\n')
+        open(f'{b}/items/EPIC-02-y/stories/S1.md', 'w', encoding='utf-8').write('---\nid: E02-S1\nstatus: done\nparent: E02\n---\n')
+        open(f'{b}/items/EPIC-03-z/epic.md', 'w', encoding='utf-8').write('---\nid: E03\nstatus: backlog\n---\n')
         errs = check(b, good)
         assert any('E03: candidate card not planned' in e for e in errs), errs
         assert not any(e.startswith('E02:') for e in errs), errs
@@ -208,7 +208,7 @@ def self_test():
     with tempfile.TemporaryDirectory() as b:
         def card(epic, name, **kv):
             os.makedirs(f'{b}/items/{epic}/stories', exist_ok=True)
-            open(f'{b}/items/{epic}/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            open(f'{b}/items/{epic}/{name}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
         card('EPIC-01-a', 'epic.md', id='E01', status='in-progress')
         card('EPIC-01-a', 'stories/S1.md', id='E01-S1', status='backlog', parent='E01')
         card('EPIC-01-a', 'stories/S2.md', id='E01-S2', status='backlog', parent='E01')
@@ -246,9 +246,9 @@ if __name__ == '__main__':
             i = a.index(name); val = a[i + 1]; del a[i:i + 2]; return val
         return default
     lane_cap = int(opt('--lane-cap', 3)); serial = tuple(x for x in opt('--serial', '').split(',') if x)
-    sc = opt('--scope', None); sc = json.load(open(sc)) if sc else None
+    sc = opt('--scope', None); sc = json.load(open(sc, encoding='utf-8')) if sc else None
     partial = '--partial' in a; a = [x for x in a if x != '--partial']
     if len(a) != 2: sys.exit(__doc__)
-    errs = check(os.path.expanduser(a[0]), json.load(open(a[1])), lane_cap, serial, partial, sc)
+    errs = check(os.path.expanduser(a[0]), json.load(open(a[1], encoding='utf-8')), lane_cap, serial, partial, sc)
     print('\n'.join(errs) if errs else 'plan OK')
     sys.exit(1 if errs else 0)

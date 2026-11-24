@@ -8,17 +8,32 @@ Usage: regen-board.py [board_dir] [--project NAME]
 """
 import datetime, glob, os, re, sys
 
+# UTF-8 whatever the locale. Every backlog helper loads this module first, so this runs once for all of them.
+# Output never crashes on an odd character (one UTF-8 can't encode shows as a \u.. escape); input never silently changes: stdin that
+# isn't UTF-8 raises, and card.py refuses it in plain words. A leading BOM on stdin is dropped.
+for _s, _enc, _err in ((sys.stdin, 'utf-8-sig', 'strict'), (sys.stdout, 'utf-8', 'backslashreplace'), (sys.stderr, 'utf-8', 'backslashreplace')):
+    if hasattr(_s, 'reconfigure'): _s.reconfigure(encoding=_enc, errors=_err)
+
+def arg(s, errors='replace'):  # text from the command line as UTF-8 (an ASCII locale hands Python its bytes escaped)
+    return os.fsencode(s).decode('utf-8', errors)
+
 ORDER = ['in-progress', 'ready', 'blocked', 'designing', 'backlog', 'done']
 BIG = 30  # ponytail: an epic past this many cards counts its done cards and groups the rest by category
+_skipped = set()
 def fm(p):
-    m = re.match(r'---\n(.*?)\n---', open(p).read(), re.S)
+    """A card's frontmatter. None for a card that isn't UTF-8: named once on stderr, and skipped."""
+    try: txt = open(p, encoding='utf-8-sig').read()  # a leading BOM is not part of the card
+    except UnicodeDecodeError as e:
+        if p not in _skipped: _skipped.add(p); print(f'backlog: skipped {p}: not UTF-8 text (byte {e.start}) -- re-save it as UTF-8', file=sys.stderr)
+        return None
+    m = re.match(r'---\n(.*?)\n---', txt, re.S)
     return dict(l.split(':', 1) for l in m.group(1).splitlines() if ':' in l) if m else {}
 def v(d, k): return d.get(k, '').strip()
 def num(s): return int(re.sub(r'\D', '', v(s, 'id').split('-S')[-1]) or 0)
 def chips(d): return (f" [{v(d,'size')}]" if v(d, 'size') else '') + (f" 📌{v(d,'pin')}" if v(d, 'pin') else '') + (f" →{v(d,'mode')}" if v(d, 'mode') else '')
 def warn(d): return '⚠️' if v(d, 'stakes') == 'critical' else ''
 def load(B):  # card path -> frontmatter, epics first
-    return {p: fm(p) for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md')}
+    return {p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None}
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
     return v(d, 'status') != 'done' and bool(v(d, 'decision') or v(d, 'stage') == 'Needs decision')
 def ask(d):
@@ -107,8 +122,8 @@ def render(B, proj):
             out += [f"- {warn(d)}{v(d,'id')}{' · ' * bool(t)}{t}{age(d)}", f'  - {q}'] + [f'    - {x}' for x in under]
         out.append('')
     for ep in sorted(glob.glob(f'{B}/items/*/epic.md')):
-        e = fm(ep)
-        stories = [fm(s) for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md'))]
+        e = L.get(ep, {})
+        stories = [L[s] for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md')) if s in L]
         stories.sort(key=lambda s: (ORDER.index(v(s, 'status')) if v(s, 'status') in ORDER else 9, num(s)))
         counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories)))
         out += [f"## {warn(e)}{v(e,'id')} · {v(e,'title')}  _[{v(e,'status')}]_{chips(e)}", f'_{counts}_', '']
@@ -143,8 +158,8 @@ def main(args):
         import subprocess, tempfile
         with tempfile.TemporaryDirectory() as t:
             os.makedirs(f'{t}/items/EPIC-01-bugs/stories')
-            def card(name, **kv): open(f'{t}/items/EPIC-01-bugs/{name}', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
-            def board(): subprocess.run([sys.executable, __file__, t, '--project', 't'], check=True); return open(f'{t}/BOARD.md').read()
+            def card(name, **kv): open(f'{t}/items/EPIC-01-bugs/{name}', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+            def board(): subprocess.run([sys.executable, __file__, t, '--project', 't'], check=True); return open(f'{t}/BOARD.md', encoding='utf-8').read()
             card('epic.md', id='E01', title='Bugs', status='in-progress')
             card('stories/S1.md', id='E01-S1', status='backlog', type='breakfix', priority='P1', stakes='critical')
             card('stories/S2.md', id='E01-S2', status='backlog', type='breakfix', priority='P1', dependsOn='E01-S4')
@@ -184,10 +199,10 @@ def main(args):
             assert '**Next up:** S3' in board()
             # A big epic (over 30 cards): done cards as a count, open cards grouped by category; small epics unchanged
             os.makedirs(f'{t}/items/EPIC-02-big/stories')
-            open(f'{t}/items/EPIC-02-big/epic.md', 'w').write('---\nid: E02\ntitle: Big\nstatus: in-progress\n---\n')
+            open(f'{t}/items/EPIC-02-big/epic.md', 'w', encoding='utf-8').write('---\nid: E02\ntitle: Big\nstatus: in-progress\n---\n')
             for n in range(1, 34):
                 kv = dict(id=f'E02-S{n}', title=f'T{n}', status='done' if n < 3 else 'backlog', category='zeta' if n % 2 else 'alpha')
-                open(f'{t}/items/EPIC-02-big/stories/S{n}.md', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
+                open(f'{t}/items/EPIC-02-big/stories/S{n}.md', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n')
             b = board(); big = b.split('## E02')[1]
             assert '### done (2)\n_listed by `/backlog-it show E02`_' in big and 'E02-S1 ·' not in big and 'E02-S2 ·' not in big, big
             assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
@@ -208,8 +223,8 @@ def main(args):
             assert '**Live, waits:** 2026-02-30 → S25 · v2098.12.31 → S26 · 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b  # in date order
             # what a card waits on: an id with children means its open cards; an epic's dependsOn holds for every card under it
             os.makedirs(f'{t}/items/EPIC-03-later/stories')
-            open(f'{t}/items/EPIC-03-later/epic.md', 'w').write('---\nid: E03\nstatus: backlog\n---\n')
-            later = lambda n, st: open(f'{t}/items/EPIC-03-later/stories/S{n}.md', 'w').write(f'---\nid: E03-S{n}\nstatus: {st}\nparent: E03\n---\n')
+            open(f'{t}/items/EPIC-03-later/epic.md', 'w', encoding='utf-8').write('---\nid: E03\nstatus: backlog\n---\n')
+            later = lambda n, st: open(f'{t}/items/EPIC-03-later/stories/S{n}.md', 'w', encoding='utf-8').write(f'---\nid: E03-S{n}\nstatus: {st}\nparent: E03\n---\n')
             later(1, 'done')
             card('stories/S3.md', id='E01-S3', title='Import skips rows', status='backlog', type='breakfix', priority='P2', dependsOn='[E03]')
             assert '**Next up:** S3' in board()  # an open epic whose cards are all done is finished
@@ -242,9 +257,9 @@ def main(args):
     if not proj:
         parent = os.path.dirname(B)  # <repo>/.claude/backlog -> name the repo, not ".claude"
         if os.path.basename(parent) == '.claude': parent = os.path.dirname(parent)
-        proj = open(f'{B}/.project').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
+        proj = open(f'{B}/.project', encoding='utf-8').read().strip() if os.path.exists(f'{B}/.project') else os.path.basename(parent)
 
-    open(f'{B}/BOARD.md', 'w').write(render(B, proj))
+    open(f'{B}/BOARD.md', 'w', encoding='utf-8').write(render(B, arg(proj)))
 
 if __name__ == '__main__':
     main(sys.argv[1:])

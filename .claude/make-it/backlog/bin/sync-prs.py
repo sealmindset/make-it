@@ -40,7 +40,7 @@ def gh(repo):
     def look(n):
         if n not in cache:
             try:
-                r = subprocess.run(['gh', 'pr', 'view', str(n), '--json', 'state,mergedAt'], cwd=repo, capture_output=True, text=True, timeout=30)
+                r = subprocess.run(['gh', 'pr', 'view', str(n), '--json', 'state,mergedAt'], cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=30)
                 cache[n] = json.loads(r.stdout) if r.returncode == 0 else {'state': 'UNKNOWN', 'why': (r.stderr.strip().splitlines() or ['?'])[-1][:70]}
             except subprocess.TimeoutExpired: cache[n] = {'state': 'UNKNOWN', 'why': 'gh timed out'}
         return cache[n]
@@ -89,7 +89,7 @@ def run(B, look, dry, proj=None, T=None):
     if not dry: C.lock(B); out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]  # card.py's writer lock
     if out and not dry:
         subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
-    lines = [f"PR sync -- {proj or os.path.basename(B)} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]
+    lines = [f"PR sync -- {R.arg(proj or os.path.basename(B))} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]
     lines += [f'  {cid(p)} · {note}' for p, _, note in out] or ['  nothing to move']
     lines += ['Waiting:'] + [f'  {cid(p)} · {why}' for p, why in wait] if wait else []
     lines.append(f"{'Would move' if dry else 'Moved'} {len(out)} · waiting {len(wait)}")
@@ -101,8 +101,8 @@ def self_test():
     with tempfile.TemporaryDirectory() as t:
         S = f'{t}/items/EPIC-01-bugs/stories'; os.makedirs(S)
         def card(n, body='', **kv):
-            open(f'{S}/S{n}.md', 'w').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in {'id': f'E01-S{n}', 'type': 'breakfix', 'status': 'in-progress', **kv}.items()) + f'---\n{body}')
-        open(f'{t}/items/EPIC-01-bugs/epic.md', 'w').write('---\nid: E01\ntitle: Bugs\nstatus: in-progress\n---\n')
+            open(f'{S}/S{n}.md', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in {'id': f'E01-S{n}', 'type': 'breakfix', 'status': 'in-progress', **kv}.items()) + f'---\n{body}')
+        open(f'{t}/items/EPIC-01-bugs/epic.md', 'w', encoding='utf-8').write('---\nid: E01\ntitle: Bugs\nstatus: in-progress\n---\n')
         url = 'https://github.com/org2/repo1/pull/109'
         card(1, stage='Fix ready', pr='[101]', priority='P1', signal='log: ok')     # merged -> Live
         card(17, stage='Fix ready', pr='[101]')                                     # merged, no signal -> waits (the Live gate)
@@ -116,12 +116,12 @@ def self_test():
         card(10, stage='Fix ready', pr='[110]', decision='Ratify #110?', signal='x') # moves, flags the decision
         card(12, stage='Fix ready', pr='splashdown#71')                             # short form: ambiguous -> waits
         card(13, stage='Needs decision', pr='[101]')                                # older waiting form: left alone
-        open(f'{S}/S11.md', 'w').write('---\nid: E01-S11\ntype: story\nstatus: in-progress\npr: [101]\n---\n')  # no stage: untouched
+        open(f'{S}/S11.md', 'w', encoding='utf-8').write('---\nid: E01-S11\ntype: story\nstatus: in-progress\npr: [101]\n---\n')  # no stage: untouched
         st = {101: 'MERGED', 102: 'MERGED', 103: 'OPEN', 104: 'CLOSED', 105: 'MERGED', 106: 'MERGED', 109: 'OPEN', url: 'MERGED', 110: 'MERGED', 71: 'MERGED'}
         look = lambda n: {'state': st.get(n, 'UNKNOWN'), 'mergedAt': '2026-10-15T10:00:00Z'}
-        before = {p: open(p).read() for p in R.load(t)}
+        before = {p: open(p, encoding='utf-8').read() for p in R.load(t)}
         out = run(t, look, dry=True, proj='t', T=T)
-        assert {p: open(p).read() for p in R.load(t)} == before and not os.path.exists(f'{t}/BOARD.md') and 'Would move 4' in out, out
+        assert {p: open(p, encoding='utf-8').read() for p in R.load(t)} == before and not os.path.exists(f'{t}/BOARD.md') and 'Would move 4' in out, out
         out = run(t, look, dry=False, proj='t', T=T)
         c = {v(d, 'id'): d for d in R.load(t).values()}
         assert [v(c[f'E01-S{n}'], 'stage') for n in (1, 2, 3, 5, 6, 9, 10, 12, 13)] == ['Live', 'Fix ready', 'Cause found', 'Live', 'Fix ready', 'Live', 'Live', 'Fix ready', 'Needs decision'], out
@@ -131,8 +131,8 @@ def self_test():
         assert 'E01-S17 · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
         assert 'E01-S9 · Fix ready → Live · repo1#109 merged' in out and 'E01-S12 · pr: names another repo by short form' in out, out
         assert not any(f'E01-S{n} ' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
-        assert 'clear decision: and answers:' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md').read(), out
-        assert '**Live, to check:** S1, S5, S9, S10' in open(f'{t}/BOARD.md').read(), open(f'{t}/BOARD.md').read()
+        assert 'clear decision: and answers:' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md', encoding='utf-8').read(), out
+        assert '**Live, to check:** S1, S5, S9, S10' in open(f'{t}/BOARD.md', encoding='utf-8').read(), open(f'{t}/BOARD.md', encoding='utf-8').read()
         assert not [f for f in os.listdir(S) if f.endswith('.tmp')], os.listdir(S)
         out = run(t, look, dry=False, proj='t', T=T)  # nothing left to move: idempotent
         assert 'nothing to move' in out and 'Moved 0' in out, out
