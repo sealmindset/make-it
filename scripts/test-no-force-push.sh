@@ -204,7 +204,7 @@ for f in "$T"/cases/*.json; do
     refuse_harmless-*) t2h=$((t2h + 1)); [ "$rc" = 2 ] && n2h=$((n2h + 1)) || bad "allowed (listed as refused on purpose): $cmd" ;;
   esac
 done
-[ "$t2r" -ge 170 ] && [ "$t2a" -ge 30 ] && [ "$t2h" -ge 10 ] || bad "the case file is short: $t2r refuse, $t2a allow, $t2h refused on purpose"
+[ "$t2r" -ge 250 ] && [ "$t2a" -ge 60 ] && [ "$t2h" -ge 15 ] || bad "the case file is short: $t2r refuse, $t2a allow, $t2h refused on purpose"
 ok "the case file: refuses $n2r of $t2r force pushes, allows $n2a of $t2a harmless commands, and refuses $n2h of $t2h harmless ones on purpose"
 # the message names the safe way
 run_hook "$(payload 'git push --force')"
@@ -239,6 +239,11 @@ python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":"git push
 s=$(python3 -c 'import time;print(time.time())'); bash "$HOOK" < "$T/big-force.json" >/dev/null 2>&1; rc1=$?; bash "$HOOK" < "$T/big-plain.json" >/dev/null 2>&1; rc2=$?
 e=$(python3 -c "import time;print(round(time.time()-$s,2))")
 [ "$rc1" = 2 ] && [ "$rc2" = 0 ] && python3 -c "import sys; sys.exit(0 if $e < 2 else 1)" && ok "two 2 MB commands judged by the raw-text rule in ${e}s: force refused, plain push allowed" || bad "2 MB commands: exits $rc1/$rc2 in ${e}s"
+# when the unreadable text holds no git push at all, the message says that and not "a git push"
+run_hook "$(payload "cp a b && cat > n.md <<'EOF'
+it's a note: we push twice (a + b)
+EOF")"
+grep -qF 'I found no git push in it' "$T/err" && ok "a refusal with no git push in the command says so" || bad "a refusal with no git push in the command still calls it a git push ($(cat "$T/err"))"
 # just past 64 KB too, a force flag in any spelling ends in a refusal (the raw-text rule takes quotes
 # and backslashes out), and a plain push or --force-with-lease still goes through
 python3 - "$T" <<'PYEOF'
@@ -266,7 +271,7 @@ for c in 'git push -f' 'git push -4f' 'git push -"f"' 'git push --mi' 'git push 
 done
 noawk 'git push origin main' && noawk 'git push --force-with-lease' && ok "without awk: $nna force pushes refused, a plain push and --force-with-lease allowed" || bad "without awk, a plain push was refused"
 # the hook header names what it does not catch
-for w in 'EARLIER command' 'echo / printf' 'python -c' 'env -S' 'aliases' 'remote.*.push' 'PATH' '$VARIABLE' '$(echo git)' "pu''sh"; do
+for w in 'EARLIER command' 'echo / printf' 'python -c' 'env -S' 'aliases' 'remote.*.push' 'PATH' '$VARIABLE' '$(echo git)' '{git,} push' "pu''sh"; do
   grep -qF -- "$w" "$HOOK" && ok "the hook's header names a bypass it doesn't catch: $w" || bad "the hook's header doesn't name: $w"
 done
 

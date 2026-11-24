@@ -24,10 +24,17 @@
 # echo, printf, cd, mkdir, ls, rm, touch, true, false, pwd, date, wc, head, tail, grep, test, [,
 # gh pr / issue / run / api / release, or git add / commit / push / status / diff / log / show /
 # fetch / pull / checkout / switch / branch / rev-parse / stash / tag / restore / worktree, with no
-# VAR=value in front and no --exec / --receive-pack / --upload-pack. In any other command (a shell,
-# a script, ./file, source, eval, python, a function, a variable as a command ...) the here-doc
-# text is read as commands, as this guard always did. So writing a card or a note that mentions a
-# force push and then pushing normally goes through; writing a script and running it does not.
+# VAR=value in front, no git -c / --config-env, and no option that begins --e, --rec, --u or --o
+# (--exec, --receive-pack, --upload-pack, --ext-diff, --output and every shortening git takes for
+# them: they run a program or write a file). In any other command (a shell, a script, ./file,
+# source, eval, python, a function, a variable as a command ...) the here-doc text is read as
+# commands, as this guard always did. So writing a card or a note that mentions a force push and
+# then pushing normally goes through; writing a script and running it does not.
+# One more kind of text: a here-doc that is only an argument, "$(cat <<'EOF' ... )" in double
+# quotes, handed to a command that is not a shell, eval, ssh, sudo, env, xargs or an option such as
+# -c / -e (git commit -m "$(cat ...)", gh pr create --body "$(cat ...)", a script with a note). It
+# is data when the command has no git push in it and nothing that could run it (no shell, eval,
+# pipe, ./file or $variable as a command); otherwise it is read like any other here-doc.
 #
 # A guard against mistakes, not against hiding a push. It does NOT see: a script file written by an
 # EARLIER command, or by this one with echo / printf, and then run; text an interpreter runs
@@ -35,10 +42,11 @@
 # (3) below); a whole git push given as ONE quoted string to a command that is not a shell (ssh or
 # docker with '...', env -S, su -c); git aliases and a force refspec already set in git config
 # (remote.*.push, remote.*.mirror), also when this command sets them with git config; a hook folder
-# with another name than hooks or .husky, or a program on the PATH, that this command overwrites;
-# flags or a whole command that come out of a $VARIABLE, "$@" or $(...) (as in $(echo git) push -f,
-# or F=-f; git push $F); and the word push split by quotes, a backslash, braces or $(...)
-# (pu''sh, pu\sh, pu{sh,}).
+# with another name than hooks or .husky, a link that leads into one, or a program on the PATH,
+# that this command overwrites; flags or a whole command that come out of a $VARIABLE, "$@" or
+# $(...) (as in $(echo git) push -f, or F=-f; git push $F); the words git or push made by braces
+# ({git,} push -f, git {push,} -f); and the word push split by quotes, a backslash, braces or
+# $(...) (pu''sh, pu\sh, pu{sh,}).
 #
 # Known over-blocking. (1) On purpose: a git push with a force flag written out as bare words
 # after another command (echo git push -f); xargs git push; a {a,b} group with a - or + in a
@@ -47,8 +55,10 @@
 # over 64 KB; a quote, $(...) or here-doc that never closes; $'...' with a backslash in it; a
 # here-doc whose end word is not a plain word (or sits against other text, as in cat<<EOF), that
 # has a line beginning with its end word or (when the end word is not quoted, or inside $(...))
-# ending in a backslash, or that comes with a file name holding .git, hooks, husky or config; <<
-# inside ${...} or x[...]; case inside $(...). (3) A here-doc in a command that is not on the list
+# ending in a backslash, or that comes with a word holding .git, hooks, husky or config (in any
+# case), or with a redirect target, tee or cd argument that is not a plain name (it holds ? * [ {
+# $ ~ or ..; ~/plain is fine); << inside ${...} or x[...]; case inside $(...). When no git push
+# was found in such a command, the message says so. (3) A here-doc in a command that is not on the list
 # above (python3 - <<EOF, bash x.sh <<EOF, a cp or VAR=1 anywhere) is read as commands: it is
 # refused when a line of it reads as a force push, and (2) applies when it can't be read (an
 # apostrophe) or has the word push in it. The way out, always: run the push as its own command.
@@ -68,6 +78,10 @@
 
 export LC_ALL=C
 
+nopush() {
+  printf '%s\n' "Blocked by make-it: this command has the word push and a force-like sign (--force, a +, or a flag such as -rf) inside text I couldn't fully read, so I refuse it to be safe. I found no git push in it. Run its parts as separate commands (the commit on its own, for example)." >&2
+  exit 2
+}
 refuse() {
   printf '%s\n' "Blocked by make-it: $1 can overwrite work on GitHub that nobody here has seen. Use git push --force-with-lease instead: it refuses if the online copy changed. A plain force push is for a person to run by hand.${2:-}" >&2
   exit 2
@@ -79,7 +93,7 @@ case $input in *push*) ;; *) exit 0 ;; esac
 out=""
 [ "${#input}" -le 65536 ] && out=$(printf '%s' "$input" | awk '
 function ws(c) { return c == " " || c == "\t" || c == "\n" || c == "\r" }
-function word(L) { if (HV[L]) T[L, ++NT[L]] = TK[L]; TK[L] = ""; HV[L] = 0 }
+function word(L) { if (HV[L]) { T[L, ++NT[L]] = TK[L]; TS[L, NT[L]] = SU[L] } TK[L] = ""; HV[L] = 0; SU[L] = 0 }
 function op(L, c) { word(L); T[L, ++NT[L]] = "\003" c }
 function base(t) { sub(/.*\//, "", t); sub(/\.(exe|EXE)$/, "", t); return t }
 function isshell(b) { return b ~ /^(sh|bash|zsh|dash|ksh)$/ }
@@ -110,8 +124,8 @@ function lex(i, term, L,   c, d, q, ansi, par, dl, qd, st, j) {
         else if (d == "\n") i++
         else TK[L] = TK[L] c
       }
-      else if (c == "$" && cm[i + 1] == "(") i = lex(i + 2, ")", ++NL)
-      else if (c == "`") i = lex(i + 1, "`", ++NL)
+      else if (c == "$" && cm[i + 1] == "(") { j = ++NL; DQP[j] = L; DQK[j] = NT[L] + 1; i = lex(i + 2, ")", j); SU[L] = 1 }
+      else if (c == "`") { i = lex(i + 1, "`", ++NL); SU[L] = 1 }
       else { if (c == "{" && cm[i - 1] == "$") br++; else if (c == "}" && br > 0) br--; TK[L] = TK[L] c }
       continue
     }
@@ -122,8 +136,8 @@ function lex(i, term, L,   c, d, q, ansi, par, dl, qd, st, j) {
     }
     if (c == "\047" || c == "\"") { q = c; ansi = 0; HV[L] = 1 }
     else if (c == "$" && (cm[i + 1] == "\047" || cm[i + 1] == "\"")) { q = cm[++i]; ansi = (q == "\047"); HV[L] = 1 }
-    else if (c == "$" && cm[i + 1] == "(") { i = lex(i + 2, ")", ++NL); HV[L] = 1 }
-    else if (c == "`") { i = lex(i + 1, "`", ++NL); HV[L] = 1 }
+    else if (c == "$" && cm[i + 1] == "(") { i = lex(i + 2, ")", ++NL); HV[L] = 1; SU[L] = 1 }
+    else if (c == "`") { i = lex(i + 1, "`", ++NL); HV[L] = 1; SU[L] = 1 }
     else if (c == "\\") { i++; if (cm[i] != "\n") { TK[L] = TK[L] cm[i]; HV[L] = 1 } }
     else if (c == " " || c == "\t" || c == "\r") word(L)
     else if (c == "<" && cm[i + 1] == "<") {
@@ -148,7 +162,7 @@ function lex(i, term, L,   c, d, q, ansi, par, dl, qd, st, j) {
     else if (c == "\n") { if (HN[L]) i = heredocs(i, L, term != ""); op(L, c) }
     else if (c == ";" || c == "|") op(L, c)
     else if (c == "(") {
-      if (TK[L] ~ /[<>]$/) { i = lex(i + 1, ")", ++NL); HV[L] = 1 }
+      if (TK[L] ~ /[<>]$/) { i = lex(i + 1, ")", ++NL); HV[L] = 1; SU[L] = 1 }
       else { par++; op(L, c) }
     }
     else if (c == ")") { if (par > 0) par--; op(L, c) }
@@ -184,7 +198,7 @@ function heredocs(i, L, nested,   h, j, e, x, y, n, bs, sm) {
       if ((nested || !HQ[L, h]) && e > j && cm[e - 1] == "\\") bad = 1   # the shell joins this line to the next
       j = e + 1
     }
-    PB[++NP] = bs; PE[NP] = j - 1
+    PB[++NP] = bs; PE[NP] = j - 1; PL[NP] = L; PQ[NP] = HQ[L, h]
     if (!HQ[L, h]) {
       sm = m; m = j - 1
       for (x = bs; x <= m; x++) {
@@ -204,39 +218,58 @@ function haspush(a, b,   x) {
   return 0
 }
 function no(why) { print "REFUSE:" why; exit }
+# A here-doc that is only the text of an argument: "$(cat <<\047EOF\047 ... )" in double quotes, handed
+# to a command as one of its arguments (not to a shell, eval or an option that runs text). Main
+# reads such text as a quoted word. It stays data unless the command has a git push in it or
+# something that could run it (RUNNER: a shell, eval, a pipe, a ./file or $variable as a command).
+function argtext(p,   L, k, n) {
+  L = PL[p]
+  if (!PQ[p] || !DQP[L] || !LENT[DQP[L], DQK[L]]) return 0
+  n = 0
+  for (k = 1; k <= NT[L]; k++) if (substr(T[L, k], 1, 1) != "\003") { if (T[L, k] != "cat") return 0; n++ }
+  return n == 1
+}
+function strict(p) { if (haspush(PB[p], PE[p])) bad = 1; SB[++NS] = PB[p]; SE[NS] = PE[p] }
 # Finds git ... push in list L and reads its arguments; hands on what a shell or eval is given.
 # Every command may be handing a git push to something else, so git is looked for in its arguments
 # too. Also notes whether the command is calm (CALM) and names a hook or config file (HOOKY).
-function judge(L,   k, t, b, state, skip, ev, j, f, p0, piped, first, xa) {
-  state = "start"; skip = 0; ev = ""; p0 = 1; piped = 0; xa = 0
+function judge(L,   k, t, b, state, skip, ev, j, f, p0, piped, first, xa, cw, pv, prev, lt) {
+  state = "start"; skip = 0; ev = ""; p0 = 1; piped = 0; xa = 0; cw = ""; prev = ""
   for (k = 1; k <= NT[L] + 1; k++) {
     t = (k > NT[L]) ? "\003" : T[L, k]
     if (substr(t, 1, 1) == "\003") {
       if (ev != "") script(ev)
       if (xa && state == "git") no("a git command that takes its arguments from xargs")
-      ev = ""; state = "start"; skip = 0; xa = 0
-      if (t == "\003|") piped = 1; else { piped = 0; p0 = k + 1 }
+      ev = ""; state = "start"; skip = 0; xa = 0; cw = ""; prev = ""
+      if (t == "\003|") { piped = 1; RUNNER = 1 } else { piped = 0; p0 = k + 1 }
       continue
     }
-    if (t !~ /[ \t\n]/ && t ~ /\.git(\/|$)|hooks|husky|config/) HOOKY = 1
-    if (t ~ /^--(exec|receive-pack|upload-pack)/) CALM = 0
+    pv = prev; prev = t; lt = tolower(t)
+    # a file name that may be a git hook or config (any case), and a place this command writes to or
+    # moves into (a redirect, tee, cd) whose name is not plain: with a here-doc, too close to call
+    if (lt ~ /\.git(\/|$)|hooks|husky|config/) HOOKY = 1
+    if ((pv ~ /^[0-9&]*>>?$/ || t ~ /^[0-9&]*>>?[^&>]/ || cw == "cd" || cw == "tee") && (t == "" || TS[L, k] || t ~ /[?*\[{$~]|\.\./ && t !~ /^~\/[^?*\[{$~]*$/ || (cw == "cd" && t == "-"))) HOOKY = 1
+    # an option that can run a program, in any shortening: --exec --receive-pack --upload-pack --ext-diff --output
+    if (t ~ /^--(e|rec|u|o)/) CALM = 0
+    if ((state == "other" || state == "git" || state == "push" || state == "gh") && pv !~ /^(-c|-e|-S|-x|--eval|--command|--exec|--run)$/ && cw !~ /^(ssh|su|sudo|doas|docker|kubectl|env|xargs|watch|nohup|timeout|command|exec|time)$/) LENT[L, k] = 1
     if (skip) { skip = 0; continue }
-    if (t == "") { if (state == "start") CALM = 0; continue }                               # what a $(...) left: maybe nothing
+    if (t == "") { if (state == "start") { CALM = 0; RUNNER = 1 } continue }                               # what a $(...) left: maybe nothing
     if (state == "start" || state == "other") {
       first = (state == "start")
       if (first) {
         if (t ~ /^[A-Za-z_][A-Za-z0-9_]*\+?=/ || t ~ /^-/) { CALM = 0; continue }
         if (t ~ /^(then|do|else|if|elif|while|until|!|\{)$/) continue
         if (!calm(t) && t != "git" && t != "gh") CALM = 0
+        cw = base(t); if (t ~ /^\$/ || t ~ /\//) RUNNER = 1
       }
-      b = base(t); if (first) sub(/^[={]/, "", b)
+      b = t; sub(/[<>].*$/, "", b); b = base(b); if (first) sub(/^[={]/, "", b)
       if (b == "xargs") xa = 1
       if (b == "git") { state = "git"; if (!first || t != "git") CALM = 0 }
       else if (isshell(b) || (first && (b == "." || b == "source" || b == "trap"))) {
-        state = "shell"; CALM = 0
+        state = "shell"; CALM = 0; RUNNER = 1
         if (piped) for (j = p0; j < k; j++) if (substr(T[L, j], 1, 1) != "\003") script(T[L, j])
       }
-      else if (b == "eval") { state = "eval"; CALM = 0 }
+      else if (b == "eval") { state = "eval"; CALM = 0; RUNNER = 1 }
       else if (first && t == "gh") state = "gh"
       else state = "other"
     }
@@ -247,7 +280,7 @@ function judge(L,   k, t, b, state, skip, ev, j, f, p0, piped, first, xa) {
       if (t == "-c" && (T[L, k + 1] ~ /^alias\..*push/ || T[L, k + 1] ~ /^remote\..*\.(push|mirror)=/)) no("a git push set up with git -c (" T[L, k + 1] ")")
       if (t ~ /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--super-prefix|--attr-source)$/) { skip = 1; if (t != "-C") CALM = 0 }
       else if (t ~ /^-/) { if (t != "--no-pager") CALM = 0 }
-      else if (t == "push") { state = "push"; if (xa) no("a git push that takes its arguments from xargs") }
+      else if (t == "push") { state = "push"; SAWPUSH = 1; if (xa) no("a git push that takes its arguments from xargs") }
       else {
         if (t !~ /^(add|commit|status|diff|log|show|fetch|pull|checkout|switch|branch|rev-parse|stash|tag|restore|worktree)$/) CALM = 0
         state = "other"
@@ -299,8 +332,8 @@ END {
   if (!closed) { print "UNREADABLE"; exit }
   # The command first, then every script found in it (a judge that refuses prints and exits). Last,
   # the here-doc texts: data if every command was calm; if not, read as commands, and too close to
-  # call when the text has the word push in it (an interpreter may be the one reading it); with a
-  # hook or config file named, too close to call as well.
+  # call when the text has the word push in it (an interpreter may be the one reading it), except
+  # the text of an argument (see argtext); with a hook or config file named, too close to call.
   NL = 0; NS = 0; NP = 0; l = 0; k = 0; pp = 0; CALM = 1; HOOKY = 0; m = M
   lex(1, "", ++NL)
   for (;;) {
@@ -308,12 +341,13 @@ END {
     if (k < NS) { k++; m = SE[k]; lex(SB[k], "", ++NL); continue }
     if (pp < NP && HOOKY) bad = 1
     if (pp < NP && !CALM) {
-      while (pp < NP) { pp++; if (haspush(PB[pp], PE[pp])) bad = 1; SB[++NS] = PB[pp]; SE[NS] = PE[pp] }
+      while (pp < NP) { pp++; if (argtext(pp)) LX[++nlx] = pp; else strict(pp) }
       continue
     }
+    if ((SAWPUSH || RUNNER) && lx < nlx) { while (lx < nlx) strict(LX[++lx]); continue }
     break
   }
-  print (bad ? "UNREADABLE" : "OK")
+  print (bad ? (SAWPUSH ? "UNREADABLE" : "UNREADABLE:nopush") : "OK")
 }' 2>/dev/null)
 
 case $out in
@@ -342,7 +376,7 @@ v=$(printf '%s' "$input" | awk 'BEGIN { RS = "\001" } { s = s $0 } END {
   else print "OK" }' 2>/dev/null)
 case $v in
   OK) exit 0 ;;
-  FORCE) refuse "a git push I couldn't fully read, with a force sign in it," "$unread" ;;
+  FORCE) [ "$out" = "UNREADABLE:nopush" ] && nopush; refuse "a git push I couldn't fully read, with a force sign in it," "$unread" ;;
 esac
 case $input in *"\$'"*) refuse "a git push I couldn't fully read, with a force sign in it," "$unread" ;; esac
 t=${input//\\\\\\n/}; t=${t//\\[ntr]/ }; t=${t//[\\\"\']/}
