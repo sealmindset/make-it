@@ -622,14 +622,16 @@ python3 -I "$HOME/.claude/make-it/scripts/fix-it-results.py" check syntax --in [
 python3 -I "$HOME/.claude/make-it/scripts/fix-it-results.py" check tests
 ```
 
-It finds the test suites where they live (the project folder, `backend/`, `frontend/`, any folder
-up to two levels down), runs `pytest` and `npm test` in each of those folders, and stops one that
-does not finish in 15 minutes. A folder below another gets its own `pytest` run and its own line
+It finds the test suites where they live and runs each one there: `pytest` tests anywhere in the
+project, up to six folders down; `npm test` in the project folder and up to two folders down
+(`backend/`, `frontend/`, `src/web-ui/`). It stops a run that does not finish in 15 minutes. A folder below another gets its own `pytest` run and its own line
 only when it has its own test configuration (`pytest.ini`, or a pytest section in
 `pyproject.toml`, `setup.cfg` or `tox.ini`); otherwise its tests stay in the run of the folder
 above. With no configuration anywhere above them, tests run from the folder just above their
 `tests` folder and the package it sits in (`tests/unit/` runs from the project folder,
 `backend/app/tests/` from `backend/`), which is where plain `pytest` makes their imports work.
+A configuration kept inside the `tests` folder itself (`tests/pytest.ini`) is run from the folder
+above it, as `pytest tests`.
 `npm test` runs in each folder whose own `package.json` has a test script. Installed and
 vendored folders are never run. One red folder makes the tests red. PASSED needs exit status 0,
 no failed count in the runner's summary line, and at least one test that ran. Any failed count

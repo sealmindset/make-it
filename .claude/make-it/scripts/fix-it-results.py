@@ -205,7 +205,7 @@ def count(out, word):
     stem = {'pass': r'pass(?:ed|ing)', 'fail': r'fail(?:ed|ing|ures?)'}[word]
     nums = []
     for line in out.splitlines():
-        if SUMMARY.match(line):
+        if SUMMARY.match(line) or line.startswith('test result:'):   # the second is cargo's own line, which says more than counts
             nums += re.findall(r'(\d+) ' + stem + r'\b', line)
         nums += re.findall(r'^(?:\S\s+)?' + word + r'\s+(\d+)\s*$', line)   # TAP and node --test: "# pass 3"
         nums += re.findall(r'^Ran (\d+) tests? in ', line) if word == 'pass' else re.findall(r'^FAILED \(.*\b(?:failures|errors)=(\d+)', line)   # unittest
@@ -292,12 +292,14 @@ def pytest_runs(root):
       2. with no configuration anywhere above it, the run folder is the one just above its `tests` folder and above
          the package it sits in (a folder with `__init__.py`): the place `python -m pytest` makes imports work from.
          `tests/unit/` -> the project folder; `backend/app/tests/` -> `backend/`.
+    A configuration kept inside a `tests` folder itself (`tests/pytest.ini`) is run from the folder above with
+    `tests` as the argument (check_auto does that), so imports resolve as they do by hand.
     Installed and vendored folders (node_modules, a venv, vendor, hidden folders) are never looked in, and are
     handed to pytest as folders to leave out. Returns (the run folders, the left-out folders)."""
     runs, left_out = set(), []
     for base, dirs, files in os.walk(root):
         deep = base != root and os.path.relpath(base, root).count(os.sep) >= 5
-        left_out += [os.path.join(base, x) for x in dirs if x in SKIP_DIRS]
+        left_out += [os.path.join(base, x) for x in dirs if x in SKIP_DIRS and x != '__pycache__']
         dirs[:] = [] if deep else sorted(x for x in dirs if not x.startswith('.') and x not in SKIP_DIRS
                                          and not os.path.islink(os.path.join(base, x)))
         if not any(re.match(r'(test_.*|.*_test)\.py$', f) for f in files):
@@ -328,11 +330,15 @@ def check_auto(ledger, root, name):
     suites, left_out = pytest_runs(root) if name == 'tests' else ([], [])
     for d in sorted(set(dirs) | set(suites)):
         if d in suites:
-            py = pytest_python(d, root)
+            # a configured folder that is itself a tests folder is run from the folder above it, named as the argument
+            inside = d != root and os.path.basename(d) in ('tests', 'test')
+            cwd = os.path.dirname(d) if inside else d
+            py = pytest_python(cwd, root)
             # a run folder further down has its own run and its own line, so this run leaves it out
             cmd = [py or 'python3', '-m', 'pytest', '-q', '-p', 'no:cacheprovider'] + [
-                '--ignore=' + os.path.relpath(x, d) for x in suites + left_out if x.startswith(d + os.sep)]
-            results.append(record_check(ledger, root, name, d, cmd, *(run(cmd, d, True) if py else (127, 'pytest is not installed')), auto=True))
+                '--ignore=' + os.path.relpath(x, cwd) for x in suites + left_out if x.startswith(d + os.sep)] + (
+                [os.path.basename(d)] if inside else [])
+            results.append(record_check(ledger, root, name, cwd, cmd, *(run(cmd, cwd, True) if py else (127, 'pytest is not installed')), auto=True))
         if npm_script(d, 'test' if name == 'tests' else 'build'):
             cmd = ['npm', 'test'] if name == 'tests' else ['npm', 'run', 'build']
             results.append(record_check(ledger, root, name, d, cmd,
