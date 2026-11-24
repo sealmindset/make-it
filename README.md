@@ -797,7 +797,7 @@ Both scaffolds provide the same core foundations:
 - DataTable with Excel-like column filtering
 - Sidebar, breadcrumbs, command palette, dark mode toggle
 - Docker Compose with health checks and migration auto-run
-- Mock OIDC provider (Python, no Java dependencies)
+- Mock OIDC provider (Python)
 
 ---
 

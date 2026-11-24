@@ -379,8 +379,6 @@ Document the decision in the project's `app-context.json` under `data_integratio
 
 **X03** [Tier 0] [FIX] **Latest stable dependencies** -- No outdated majors. Check for known CVEs.
 
-**X04** [Tier 0] [BLOCK] **No Java runtime dependencies** -- No Java-based tools, libraries, or Docker images.
-
 **X05** [Tier 1] [FIX] **Security headers** -- Appropriate headers for production (HSTS, CSP, X-Frame-Options, etc.).
 
 **X06** [Tier 0] [BLOCK] **No module-level throws (Next.js)** -- Secret/config assertions deferred to runtime functions, not import-time throws.

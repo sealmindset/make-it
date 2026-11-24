@@ -128,7 +128,6 @@ Security guardrails are organized into tiers. **Tier 0 is mandatory for every pr
 - Input validation at system boundaries
 - Sensitive data masked in output
 - Latest stable dependencies with no known CVEs
-- No Java runtime dependencies (policy)
 
 **Tier 1 -- Web App (in addition to Tier 0):**
 - OIDC authentication (never custom password management)

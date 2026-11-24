@@ -1434,7 +1434,6 @@ SECURITY ✓
 - No hardcoded config values
 - Input validation at system boundaries
 - Latest stable dependencies
-- No Java runtime dependencies
 
 ARCHITECTURE ✓
 - Separation of concerns

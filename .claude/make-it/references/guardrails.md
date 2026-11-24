@@ -40,7 +40,7 @@ These apply to every project /make-it builds, no exceptions.
 9. **Input validation at system boundaries** -- Validate all external input (user input, API responses, file parsing, CLI arguments). Trust internal code; validate at the edges.
 10. **Mask/redact sensitive data in output** -- Logs, error messages, and UI never display full secrets, tokens, or credentials.
 11. **Latest stable dependencies** -- Always use the latest stable version of every dependency. No pinning to outdated majors. Check for known CVEs before proceeding.
-12. **No Java runtime dependencies** -- Do not use Java-based tools, libraries, or Docker images (including navikt/mock-oauth2-server). Java runtime dependencies are prohibited by project policy. Use Python, Node.js, Go, or Rust alternatives instead.
+12. (removed 2026-11-24: Java is allowed)
 13. **ENFORCE_SECRETS pattern for secret validation** -- Never use `NODE_ENV === 'production'`
     or equivalent to gate secret assertions, because Docker/container builds always set
     NODE_ENV=production. Instead, add a dedicated `ENFORCE_SECRETS=true` env var that is ONLY
@@ -219,7 +219,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
   from redirect responses. This is the standard pattern for /auth/login in Next.js 16+.
 - ENFORCE_SECRETS pattern: use dedicated env var, not NODE_ENV (see Tier 0 rule #13)
 - No module-level throws for secret/config assertions (see Tier 0 rule #14)
-- Mock-oidc for local development with pre-seeded test users (Python/FastAPI, no Java)
+- Mock-oidc for local development with pre-seeded test users (Python/FastAPI)
 - Seed users' oidc_subjects must match mock-oidc subject IDs exactly
 - Admin UI: User Management + Role Management pages with permission matrix
 

@@ -2502,10 +2502,6 @@ mock-oidc Dockerfile (mock-services/mock-oidc/Dockerfile):
   EXPOSE 10090
   CMD ["uvicorn", "mock_oidc.main:app", "--host", "0.0.0.0", "--port", "10090"]
 
-IMPORTANT: Do NOT use Java-based OIDC servers (navikt/mock-oauth2-server or similar).
-Java dependencies are prohibited by project policy. The Python mock-oidc
-service provides the same OIDC functionality without any Java dependency.
-
 Environment variable wiring:
 - .env must point all service URLs to the local mock services
 - .env.example must document the production URLs (commented out) alongside
