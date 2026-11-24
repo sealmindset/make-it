@@ -82,6 +82,66 @@ still() { at "$1" "$(fill "$L_STILL" "$2")"; }
 # rescan NAME REPORT: a fresh copy of that fixture report (a re-scan is written after the fixes), then fix-it.md's rescan line
 rescan() { cp "$FX/$2" "$TMPD/$1.rescan.md" && at "$1" "$(fill "$L_RESCAN" "$TMPD/$1.rescan.md")"; }
 
+# ---- the controls are started now, run beside the checks below, and are read at the end ----------------------
+if [ -z "${1:-}" ]; then
+  # Each control is a copy of fix-it.md, the results script and the fixtures with ONE edit, and the whole script must
+  # fail on it. They run side by side (each stops at its first failure); the untouched copy must pass in full.
+  NP="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"; [ "$NP" -ge 2 ] || NP=2; [ "$NP" -le 8 ] || NP=8
+  NJ=0; LABELS=(); IDS=(); JOBF=(""); JOBP=(""); mkdir -p "$TMPD/ctl"
+  launch() {   # launch N [FILE PERL]
+    while [ "$(jobs -rp | grep -c .)" -ge "$NP" ]; do sleep 0.3; done
+    ( d="$TMPD/ctl/$1"; mkdir -p "$d"; tar -cf - "$F" "$PY" "$FX" | tar -xf - -C "$d"
+      if [ -z "${2:-}" ]; then if bash "$SELF" "$d" > "$d.log" 2>&1; then echo passed; else echo failed; fi
+      else perl -0pi -e "$3" "$d/$2"
+        if cmp -s "$2" "$d/$2"; then echo "the edit changed nothing"; elif FIRST_FAIL_STOPS=1 bash "$SELF" "$d" > "$d.log" 2>&1; then echo "the checks still passed"; else echo failed; fi
+      fi > "$TMPD/ctl/$1.res" ) &
+  }
+  # ctl LABEL FILE PERL [FILE PERL ...]: one check, one or more edits
+  ctl() { local ids=""; LABELS+=("$1"); shift; while [ $# -gt 0 ]; do NJ=$((NJ + 1)); ids="$ids $NJ"; JOBF+=("$1"); JOBP+=("$2"); shift 2; done; IDS+=("$ids"); }
+  ctl "(control, fault a) fails when a finding the re-scan did not check counts as fixed (the old subtraction)" \
+    "$PY" "s/                if ran:\n/                if True:\n/"
+  ctl "(control, fault a) fails when a finding nobody touched starts out as fixed" \
+    "$PY" "s/r\[3\], .not attempted., /r[3], \x27changed\x27, /"
+  ctl "(control, fault b) fails with the old test line back in fix-it.md" \
+    "$F" "s/^[^\n]*fix-it-results[.]py\" check tests\n/pytest 2>\/dev\/null || npm test 2>\/dev\/null || echo \"No test suite found\"\n/m"
+  ctl "(control, fault b) fails when 'no tests ran' is recorded as passed, and when a timeout is" \
+    "$PY" "s/return .not run., .the test command ran but found no tests./return \x27passed\x27, \x27ok\x27/" \
+    "$PY" "s/return .failed., .it did not finish/return \x27passed\x27, \x27it did not finish/"
+  ctl "(control, fault c) fails with the old build lines back in fix-it.md" \
+    "$F" "s/^[^\n]*fix-it-results[.]py\" check build\n/cd src\/web-ui && npm run build 2>\/dev\/null\n/m"
+  ctl "(control, fault c) fails when a build that exits non-zero is passed, and when 'no build step' is worded as still builds" \
+    "$PY" "s/if rc == 0 else \(.failed., .exit status %d. % rc\)/if True else 0/" \
+    "$PY" "s/.no tests ran. if name == .tests. else .not checked./\x27no tests ran\x27 if name == \x27tests\x27 else \x27the app still builds\x27/"
+  ctl "(control, 1) fails when a FAIL or NO FINDINGS row alone counts as 'the scanner ran'" \
+    "$PY" "s/    if st == .PASS.:/    if st in (\x27PASS\x27, \x27FAIL\x27, \x27NO FINDINGS\x27):/"
+  ctl "(control, 1) fails when a missing row counts as ran, and when the 'Not run:' list is not read" \
+    "$PY" "s/\.get\(cat\)\n/.get(cat, \x27PASS\x27)\n/" \
+    "$PY" "s/    if named\(scanner, facts\.get\(.notrun., ..\)\):/    if False:/"
+  ctl "(control, 2) fails when the ship line looks only at the findings in scope" \
+    "$PY" "s/        if left == 0:/        if not open_urgent:/"
+  ctl "(control, 3) fails when a failed count with exit 0 passes, and when the no-tests rule ignores the counts" \
+    "$PY" "s/    if failed or rc != 0:/    if rc != 0:/" \
+    "$PY" "s/    if not passed and not failed and \(rc == 5 or/    if (rc == 5 or/"
+  ctl "(control, 3) fails when the no-tests wording rule is removed" \
+    "$PY" "s/\(rc == 5 or re\.search\(r.no tests ran[^\n]*\n/(rc == 5):\n/"
+  ctl "(control, 4) fails when only the top folder's test suite is run" \
+    "$PY" "s/    suites, left_out = pytest_runs\(root\) if name == .tests. else \(\[\], \[\]\)\n/    suites, left_out = pytest_runs(root) if name == \x27tests\x27 else ([], [])\n    suites = suites[:1]\n/"
+  ctl "(control, a, b) fails when the first report is accepted as the re-scan, and when a later pass replaces a fail" \
+    "$PY" "s/        if os\.path\.abspath\(args\[0\]\) == first\[1\] or /        if False and /" \
+    "$PY" "s/\[\(r\[2\], r\[3\]\)\] = \(r\[4\], r\[5\]\)/[(r[2], \x27\x27)] = (r[4], r[5])/"
+  ctl "(control, e) fails when start adds to an old record, and when only the parent process is stopped on a time-out" \
+    "$PY" "s/with open\(ledger, .w./with open(ledger, \x27a\x27/" \
+    "$PY" "s/            os\.killpg\(p\.pid, signal\.SIGKILL\)[^\n]*\n/            p.kill()\n/"
+  ctl "(control, folders) fails when every folder of tests is run on its own, and when a folder with its own configuration is not" \
+    "$PY" "s/        if not has_pytest_config\(d\):   # rule 2\n/        if True:\n/; s/            while d != root and \(set/            while False and (set/" \
+    "$PY" "s/        runs\.add\(d\)\n/        runs.add(root)\n/"
+  ctl "(control, minor b, c) fails when any line with the word 'failed' counts, and when any severity table is read" \
+    "$PY" "s/        if SUMMARY\.match\(line\):/        if True:/" \
+    "$PY" "s/heading\.startswith\(.severity distribution.\) and sev_tables == 1 and //"
+  # one background shell starts them all, a few at a time, so the checks below do not wait for them
+  ( launch 0; n=1; while [ "$n" -le "$NJ" ]; do launch "$n" "${JOBF[$n]}" "${JOBP[$n]}"; n=$((n + 1)); done; wait ) &
+fi
+
 # ---- (a) the counts ----------------------------------------------------------------------------------------
 # Eight findings. Two fixed and confirmed; one changed, but Trivy did not run the second time; one changed and still
 # reported; one tried and reverted; one for a person; two never touched (one of them a Trivy finding that the re-scan
@@ -244,13 +304,39 @@ check "(d) a project built by 'make build' is built that way, and a red one is '
 check "(e) start begins a fresh record: nothing of an earlier run is left in it" \
   'at a "$(fill "$L_START" "$R/$FX/report-before.md")" && at a "$B_SUM" && out "| **Total** | 0 | 0 | 0 | 0 | 0 | 0 |" && out "No findings were in scope, so nothing was fixed." && [ "$(grep -c . "$TMPD/a/.git/fix-it-run/ledger.jsonl")" = 1 ]'
 check "(e) a test run that hangs is stopped with everything it started, at once" \
-  'proj re && rm -rf "$TMPD/re/backend" && pj re/frontend "\"test\":\"sleep 41 & sleep 42 & wait\"" && T0="$(date +%s)" && ! TO=3 tests re && [ "$(( $(date +%s) - T0 ))" -lt 25 ] && [ "$(pgrep -f "^sleep 4[12]$" | grep -c . || true)" = 0 ] && out "Tests: did NOT pass in frontend/ (\`npm test\`: it did not finish within 3 seconds, so I stopped it)."'
+  'proj re && rm -rf "$TMPD/re/backend" && pj re/frontend "\"test\":\"sleep 41.$$ & sleep 42.$$ & wait\"" && T0="$(date +%s)" && ! TO=3 tests re && [ "$(( $(date +%s) - T0 ))" -lt 38 ] && [ "$(pgrep -f "^sleep 4[12][.]$$\$" | grep -c . || true)" = 0 ] && out "Tests: did NOT pass in frontend/ (\`npm test\`: it did not finish within 3 seconds, so I stopped it)."'
 
 # not a git project; and CI is not forced onto a build
 check "outside a git project nothing is recorded, the command stops, and fix-it.md has the sentence for the person" \
   'mkdir -p "$TMPD/nogit" && ! (cd "$TMPD/nogit" && GIT_CEILING_DIRECTORIES="$TMPD" HOME="$TMPD/home" bash -c "$(fill "$L_START" x)") > "$TMPD/out" 2>&1 && out "fix-it-results: this folder is not inside a git project, so there is nowhere to keep the record" && has "\"This folder is not a git project, so I have nowhere to keep a record of what gets fixed and no way to undo a fix. I changed nothing, and nothing is fixed. Run \`git init\` here (or /resume-it), then run /fix-it again.\" Report nothing as fixed."'
 check "a build is not run with CI=true forced on (some builds turn warnings into errors under CI); a test run is" \
   'proj ci && rm -rf "$TMPD/ci/backend" && pj ci/frontend "\"build\":\"node -e \\\"process.exit(process.env.CI ? 1 : 0)\\\"\",\"test\":\"node -e \\\"console.log(process.env.CI ? 1 : 0, String.fromCharCode(112,97,115,115,101,100))\\\"\"" && build ci && out "Build: the app still builds (\`npm run build\` in frontend/ finished without an error)." && tests ci && out "Tests: passed in frontend/ (\`npm test\`: 1 passed)."'
+
+# ---- last review round: which folder a test run starts in ----------------------------------------------------
+# A folder below another gets its own pytest run only when it has its own test configuration. Otherwise its tests
+# stay in the run above; with no configuration above, they run from the folder just above their tests folder and package.
+# lay NAME: an empty git project with the record started. pyt DIR NAME ASSERT: a one-test file there.
+lay() { rm -rf "${TMPD:?}/$1"; mkdir -p "$TMPD/$1" && (cd "$TMPD/$1" && git init -q . 2>/dev/null) && at "$1" "$(fill "$L_START" x)"; }
+pyt() { mkdir -p "$TMPD/$1" && printf 'def test_%s():\n    assert %s\n' "$2" "$3" > "$TMPD/$1/test_$2.py"; }
+app() { mkdir -p "$TMPD/$1/app" && : > "$TMPD/$1/app/__init__.py" && echo "def f(): return 1" > "$TMPD/$1/app/core.py"; }
+uses_app() { mkdir -p "$TMPD/$1" && printf 'from app.core import f\ndef test_%s():\n    assert f() == 1\n' "$2" > "$TMPD/$1/test_$2.py"; }
+ntests() { [ "$(grep -c "^Tests: " "$TMPD/out")" = "$1" ] || { echo "  expected $1 'Tests:' line(s)"; grep "^Tests: " "$TMPD/out" | sed 's/^/    | /'; false; }; }
+check "(folders) a package at the root with tests/unit and tests/integration, no configuration: one run from the project folder, and it passes" \
+  'lay f1 && app f1 && uses_app f1/tests/unit core && uses_app f1/tests/integration flow && tests f1 && out "Tests: passed in the project folder (\`python3 -m pytest -q -p no:cacheprovider\`: 2 passed)." && ntests 1'
+check "(folders) the same with a pytest.ini at the root: still one run from the project folder" \
+  'lay f2 && app f2 && uses_app f2/tests/unit core && uses_app f2/tests/integration flow && printf "[pytest]\ntestpaths = tests\n" > "$TMPD/f2/pytest.ini" && tests f2 && out "Tests: passed in the project folder (\`python3 -m pytest -q -p no:cacheprovider\`: 2 passed)." && ntests 1'
+check "(folders) backend/app/tests with no configuration runs from backend/, where its imports work" \
+  'lay f3 && app f3/backend && uses_app f3/backend/app/tests core && tests f3 && out "Tests: passed in backend/ (\`python3 -m pytest -q -p no:cacheprovider\`: 1 passed)." && ntests 1'
+check "(folders) a root configuration keeps a folder below it that has none in its own run: a red test there makes that one run red" \
+  'lay f4 && printf "[pytest]\n" > "$TMPD/f4/pytest.ini" && pyt f4/tests root True && pyt f4/backend/tests unit False && ! tests f4 && out "Tests: did NOT pass in the project folder (\`python3 -m pytest -q -p no:cacheprovider\`: 1 failed, 1 passed)." && ntests 1'
+check "(folders) the scaffold's layout (its own root pyproject.toml and backend/pytest.ini): the backend tests run from backend/" \
+  'lay f5 && SC=.claude/make-it/scaffolds/fastapi-nextjs && { [ ! -d "$SC" ] || { cp "$SC/pyproject.toml" "$TMPD/f5/" && mkdir -p "$TMPD/f5/backend" && cp "$SC/backend/pytest.ini" "$TMPD/f5/backend/"; }; } && { [ -f "$TMPD/f5/backend/pytest.ini" ] || { mkdir -p "$TMPD/f5/backend" && printf "[pytest]\ntestpaths = tests\n" > "$TMPD/f5/backend/pytest.ini"; }; } && app f5/backend && uses_app f5/backend/tests health && : > "$TMPD/f5/backend/tests/conftest.py" && pj f5/frontend "\"build\":\"true\"" && tests f5 && gq -E "^Tests: passed in backend/ \(\`python3 -m pytest -q -p no:cacheprovider\`: 1 passed\)\.$" "$TMPD/out" && ntests 1'
+check "(folders) installed and vendored folders are never run: red tests in node_modules, a venv and vendor change nothing" \
+  'lay f6 && pyt f6/tests root True && pyt f6/node_modules/pkg/tests v1 False && pyt f6/backend/.venv/lib/tests v2 False && pyt f6/venv/x v3 False && pyt f6/vendor/lib/tests v4 False && tests f6 && out "Tests: passed in the project folder (\`python3 -m pytest -q -p no:cacheprovider --ignore=backend/.venv --ignore=node_modules --ignore=vendor --ignore=venv\`: 1 passed)." && ntests 1'
+check "(minor b) a green run whose output has a log line with the word 'failed' is still passed: counts come from the summary line" \
+  'proj mb && rm -rf "$TMPD/mb/backend" && pj mb/frontend "\"test\":\"echo retry: 1 failed attempt; echo 5 passed\"" && tests mb && out "Tests: passed in frontend/ (\`npm test\`: 5 passed)."'
+check "(minor c) only the table under 'Severity Distribution' is read: a later severity table, or a second one, does not replace it" \
+  'proj mc && at mc "$(fill "$L_SCOPE" DEP-NPM-001 CRITICAL "npm audit" "x")" && rec mc DEP-NPM-001 changed "y" && { cat "$FX/report-after.md"; printf "\n## Historical Comparison\n\n| Severity | Count |\n|---|---|\n| Critical | 0 |\n| High | 0 |\n\n### Severity Distribution\n\n| Severity | Count |\n|---|---|\n| Critical | 0 |\n| High | 0 |\n"; } > "$TMPD/mc.two.md" && at mc "$(fill "$L_RESCAN" "$TMPD/mc.two.md")" && gone mc DEP-NPM-001 && at mc "$B_SUM" && out "The new report still lists 0 critical and 4 high findings, counting any I did not set out to fix: this is not ready to ship." && noout "lists no critical or high"'
 
 # ---- the words in fix-it.md --------------------------------------------------------------------------------
 # the bash blocks of the verify step
@@ -262,49 +348,17 @@ check "fix-it.md: no check in the verify step hides its errors or falls through 
 check "fix-it.md: the three results, and 'not run' is never a pass" \
   'has "**Every check has one of three results: PASSED, FAILED or NOT RUN.** The result is the one the check command prints, taken from the real command'"'"'s exit status and output." && has "NOT RUN (no test suite, no build step, a tool that is not installed, a folder that is not there) is never a pass and is never worded as one." && has "For NOT RUN, say \"the build was not checked\", never \"the app still builds\"."'
 check "fix-it.md: counts come from the record, one outcome per finding, never from subtraction" \
-  'has "Every count and every result /fix-it reports later comes from this record, never from memory and never from subtracting one report'"'"'s totals from another'"'"'s." && has "**Never work a \"fixed\" count out by subtracting the new report'"'"'s totals from the old one'"'"'s.**" && has "\`changed\` is not \"fixed\". Nothing is called fixed before the re-scan (Phase 4). A finding with no line stays \"not attempted\", and is reported that way." && has "A finding is **fixed** only when the scanner that found it ran in the re-scan and no longer reports it:" && has "A FAIL row alone is not enough: it only says something was found, perhaps by another scanner in the same row." && has "**Every in-scope finding has exactly one outcome:** fixed / changed, not re-checked / failed / needs a person / not attempted. The five counts add up to the findings in scope."'
+  'has "Every count and every result /fix-it reports later comes from this record, never from memory and never from subtracting one report'"'"'s totals from another'"'"'s." && has "**Never work a \"fixed\" count out by subtracting the new report'"'"'s totals from the old one'"'"'s.**" && has "\`changed\` is not \"fixed\". Nothing is called fixed before the re-scan (Phase 4). A finding with no line stays \"not attempted\", and is reported that way." && has "A finding is **fixed** only when the scanner that found it ran in the re-scan and no longer reports it:" && has "A FAIL row alone is not enough: it only says something was found, perhaps by another scanner in the same row." && has "A folder below another gets its own \`pytest\` run and its own line only when it has its own test configuration (\`pytest.ini\`, or a pytest section in \`pyproject.toml\`, \`setup.cfg\` or \`tox.ini\`); otherwise its tests stay in the run of the folder above." && has "**Every in-scope finding has exactly one outcome:** fixed / changed, not re-checked / failed / needs a person / not attempted. The five counts add up to the findings in scope."'
 check "fix-it.md: the report says the summary's sentences and never a better result" \
   'has "**Say the sentences under \"SAY THIS TO THE PERSON\" as they are printed.**" && has "You may not turn a result into a better one: \"not re-checked\" is never \"fixed\", \"no tests ran\" and \"not checked\" are never \"pass\" or \"still builds\", and a failed check is never left out." && has "11. **Report what happened, not what was hoped.**"'
 
 # ---- controls (this repo only): a copy with the old behaviour back must fail the checks above ---------------
 if [ -z "${1:-}" ]; then
-  # opp FILE PERL: a copy of fix-it.md, the results script and the fixtures with one edit must fail this script
-  opp() {
-    local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"
-    tar -cf - "$F" "$PY" "$FX" | tar -xf - -C "$d"
-    perl -0pi -e "$2" "$d/$1"; ! cmp -s "$1" "$d/$1" && ! FIRST_FAIL_STOPS=1 bash "$SELF" "$d" >/dev/null 2>&1
-  }
-  check "(control) passes on an untouched copy" \
-    'd="$TMPD/c"; mkdir -p "$d" && tar -cf - "$F" "$PY" "$FX" | tar -xf - -C "$d" && bash "$SELF" "$d" >/dev/null 2>&1'
-  check "(control, fault a) fails when a finding the re-scan did not check counts as fixed (the old subtraction)" \
-    'opp "$PY" "s/                if ran:\n/                if True:\n/"'
-  check "(control, fault a) fails when a finding nobody touched starts out as fixed" \
-    'opp "$PY" "s/r\[3\], .not attempted., /r[3], \x27changed\x27, /"'
-  check "(control, fault b) fails with the old test line back in fix-it.md" \
-    'opp "$F" "s/^[^\n]*fix-it-results[.]py\" check tests\n/pytest 2>\/dev\/null || npm test 2>\/dev\/null || echo \"No test suite found\"\n/m"'
-  check "(control, fault b) fails when 'no tests ran' is recorded as passed, and when a timeout is" \
-    'opp "$PY" "s/return .not run., .the test command ran but found no tests./return \x27passed\x27, \x27ok\x27/" && opp "$PY" "s/return .failed., .it did not finish/return \x27passed\x27, \x27it did not finish/"'
-  check "(control, fault c) fails with the old build lines back in fix-it.md" \
-    'opp "$F" "s/^[^\n]*fix-it-results[.]py\" check build\n/cd src\/web-ui && npm run build 2>\/dev\/null\n/m"'
-  check "(control, fault c) fails when a build that exits non-zero is passed, and when 'no build step' is worded as still builds" \
-    'opp "$PY" "s/if rc == 0 else \(.failed., .exit status %d. % rc\)/if True else 0/" && opp "$PY" "s/.no tests ran. if name == .tests. else .not checked./\x27no tests ran\x27 if name == \x27tests\x27 else \x27the app still builds\x27/"'
-  # the review round's mutants: each puts one reviewed fault back
-  check "(control, 1) fails when a FAIL or NO FINDINGS row alone counts as 'the scanner ran'" \
-    'opp "$PY" "s/    if st == .PASS.:/    if st in (\x27PASS\x27, \x27FAIL\x27, \x27NO FINDINGS\x27):/"'
-  check "(control, 1) fails when a missing row counts as ran, and when the 'Not run:' list is not read" \
-    'opp "$PY" "s/\.get\(cat\)\n/.get(cat, \x27PASS\x27)\n/" && opp "$PY" "s/    if named\(scanner, facts\.get\(.notrun., ..\)\):/    if False:/"'
-  check "(control, 2) fails when the ship line looks only at the findings in scope" \
-    'opp "$PY" "s/        if left == 0:/        if not open_urgent:/"'
-  check "(control, 3) fails when a failed count with exit 0 passes, and when the no-tests rule ignores the counts" \
-    'opp "$PY" "s/    if failed or rc != 0:/    if rc != 0:/" && opp "$PY" "s/    if not passed and not failed and \(rc == 5 or/    if (rc == 5 or/"'
-  check "(control, 3) fails when the no-tests wording rule is removed" \
-    'opp "$PY" "s/\(rc == 5 or re\.search\(r.no tests ran[^\n]*\n/(rc == 5):\n/"'
-  check "(control, 4) fails when only the top folder's test suite is run" \
-    'opp "$PY" "s/suites = \[d for d in dirs if has_pytest_suite/suites = [d for d in dirs[:1] if has_pytest_suite/"'
-  check "(control, a, b) fails when the first report is accepted as the re-scan, and when a later pass replaces a fail" \
-    'opp "$PY" "s/        if os\.path\.abspath\(args\[0\]\) == first\[1\] or /        if False and /" && opp "$PY" "s/\[\(r\[2\], r\[3\]\)\] = \(r\[4\], r\[5\]\)/[(r[2], \x27\x27)] = (r[4], r[5])/"'
-  check "(control, e) fails when start adds to an old record, and when only the parent process is stopped on a time-out" \
-    'opp "$PY" "s/with open\(ledger, .w./with open(ledger, \x27a\x27/" && opp "$PY" "s/            os\.killpg\(p\.pid, signal\.SIGKILL\)[^\n]*\n/            p.kill()\n/"'
+  wait
+  check "(control) passes on an untouched copy" '[ "$(cat "$TMPD/ctl/0.res")" = passed ] || { tail -n 20 "$TMPD/ctl/0.log"; false; }'
+  for i in "${!LABELS[@]}"; do
+    check "${LABELS[$i]}" 'for n in ${IDS[$i]}; do [ "$(cat "$TMPD/ctl/$n.res")" = failed ] || { echo "  edit $n: $(cat "$TMPD/ctl/$n.res")"; false; }; done'
+  done
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
