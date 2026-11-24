@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     ENFORCE_SECRETS: bool = False
     # Activity Log
     LOG_BUFFER_SIZE: int = 10000
+    # Proxies whose X-Forwarded-For is believed (addresses, networks or host names; empty = none).
+    # See app/middleware/trusted_proxies.py.
+    TRUSTED_PROXIES: str = ""
 
     # AI Provider
     AI_PROVIDER: str = "anthropic_foundry"

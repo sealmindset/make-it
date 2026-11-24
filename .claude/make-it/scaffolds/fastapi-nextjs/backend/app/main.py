@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.access_log import drop_query_strings_from_server_log
 from app.config import enforce_secrets, settings
 from app.middleware.logging import RequestLoggingMiddleware
 from app.routers import about, auth, logs, permissions, prompts, roles, users
@@ -10,6 +11,9 @@ app = FastAPI(title="[APP_SLUG]", version="0.1.0")
 
 # Fail fast if ENFORCE_SECRETS=True and secrets are weak
 enforce_secrets()
+
+# The console log prints method, path and status, never a query string (sign-in codes ride in one)
+drop_query_strings_from_server_log()
 
 # Middleware
 app.add_middleware(RequestLoggingMiddleware)
@@ -80,3 +84,11 @@ class TrailingSlashASGI:
 
 
 app = TrailingSlashASGI(_fastapi_app)  # type: ignore[assignment]
+
+# --------------------------------------------------------------------------
+# The visitor's address, believed from X-Forwarded-For only when a proxy named in TRUSTED_PROXIES
+# sent it (compose: the frontend). Outermost, so the activity log sees the visitor, not the proxy.
+# --------------------------------------------------------------------------
+from app.middleware.trusted_proxies import TrustedProxyHeaders  # noqa: E402
+
+app = TrustedProxyHeaders(app, settings.TRUSTED_PROXIES)  # type: ignore[assignment]

@@ -42,6 +42,8 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Adds the visitor's address to X-Forwarded-For on the way to the backend (see the file)
+COPY --from=builder --chown=nextjs:nodejs /app/forwarded-for.mjs ./forwarded-for.mjs
 
 USER nextjs
 
@@ -50,4 +52,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["node", "--import", "./forwarded-for.mjs", "server.js"]

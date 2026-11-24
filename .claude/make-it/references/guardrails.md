@@ -258,6 +258,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - [ ] Clear Buffer button only visible to users with admin.logs.delete permission
 - [ ] LOG_BUFFER_SIZE present in .env.example and docker-compose.yml
 - [ ] After app handles some requests, GET /api/admin/logs/events returns non-empty results
+- [ ] A signed-in request's event names that user (user_email set); a request with no token names none (L09)
+- [ ] The backend's console log shows `GET /api/auth/callback`, never its `?code=` (L10)
+- [ ] A request through the frontend records the browser's address, not the frontend container's (L11)
 
 ### UI & Frontend
 - System fonts only (no external font CDNs -- Zscaler-safe)

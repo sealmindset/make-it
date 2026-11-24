@@ -227,8 +227,9 @@ if [ -z "${1:-}" ]; then
     'opp "$GV" "s/; its CI half is not built[.]/; the CI pipeline enforces it on every pull request./" && opp "$BS" "s/The CI half \(the same scan in the organization.s pipeline, with its own exceptions list\) is not built; only this build check exists./make-it-verify runs AI30 in CI too./"'
   check "(control) fails with a claim that AI30 protects against poisoning" \
     'opp "$GV" "s/a boundary check, not protection against poisoning/a boundary check that protects against poisoning/"'
-  check "(control) fails with the checks table count left at 33, and with the total left one short (197)" \
-    'opp "$GV" "s/[|] AI01-AI30 \(incl. AI01a-AI01d\) [|] 34 [|]/| AI01-AI30 (incl. AI01a-AI01d) | 33 |/" && opp "$GV" "s/[*][*]~198[*][*]/**~197**/"'
+  # L09-L11 (activity log: the user, the console log, the visitor's address) moved the total from 198 to 201.
+  check "(control) fails with the checks table count left at 33, and with the total left one short (200)" \
+    'opp "$GV" "s/[|] AI01-AI30 \(incl. AI01a-AI01d\) [|] 34 [|]/| AI01-AI30 (incl. AI01a-AI01d) | 33 |/" && opp "$GV" "s/[*][*]~201[*][*]/**~200**/"'
 fi
 
 check "the whole run wrote nothing to stderr (a bad regex or an undefined helper fails here, not silently)" \
