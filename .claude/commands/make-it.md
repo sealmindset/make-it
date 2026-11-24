@@ -1247,26 +1247,30 @@ containers, volumes and database are never written to, never stopped and never r
     1. `count > before` (the person's database; it only reads): each table's rows, and the
        database's own count of inserts, updates and deletes for it.
     2. Put the write steps' commands in one script and run it with `wt_run bash <script>`. It
-       checks first, and starts and removes nothing when a check refuses: the copy's storage
-       must be its own (no volume with a fixed or outside name, no folder of this computer
-       mounted into any service), and every address its settings name -- database, queue,
-       cache, storage or any other service -- must be one of the copy's own services
-       (`~/.claude/make-it/scripts/stack-check.py`, the rule /resume-it's live pass shares). A
-       setting that points at `localhost`, `127.0.0.1`, `host.docker.internal` or any outside
-       host is refused: "your settings point at <host>, which is not part of this app's own
-       copy". Then it removes a copy left by a session that died, starts the copy, runs the
-       script inside it (`docker compose` and the ports are the copy's, the app is at
-       `http://localhost:$FRONTEND_PORT`; sign in there as step 25 does) with a time limit of 30
-       minutes, and removes the copy on every way out: finished, failed, interrupted or out of
-       time. `NOT RUN: [reason]` (a check refused, the copy didn't start, the time ran out):
-       every write step not yet done is NOT RUN with that reason, and the build goes on.
+       checks first, and starts and removes nothing when the check refuses. The copy is used
+       only on make-it's standard set-up
+       (`~/.claude/make-it/scripts/stack-check.py`, an allow-list): only the services the
+       scaffolds define, with no `network_mode`, `extra_hosts` or links; one network, the
+       project's own; every volume the project's own, and no folder of this computer mounted;
+       only the address settings the scaffolds know, each read for certain and pointing at one
+       of the copy's own services or its own published port; no cloud storage named by its
+       keys. Anything else, or anything it can't read, is not standard: `NOT RUN: your app's
+       set-up has been changed from make-it's standard one ([the first reason]), so I did not
+       run the test that creates, changes and deletes a record`. Then it removes a copy left by
+       a session that died, starts the copy, runs the script inside it (`docker compose` and
+       the ports are the copy's, the app is at `http://localhost:$FRONTEND_PORT`; sign in there
+       as step 25 does) with a time limit of 30 minutes, and removes the copy on every way out:
+       finished, failed, interrupted or out of time. `NOT RUN: [reason]` (not standard, the
+       copy didn't start, the time ran out): every write step not yet done is NOT RUN with that
+       reason, and the build goes on.
     3. `count > after`, then compare the two: they must be identical, rows and counters. A
        difference is a FAIL naming the table, "the write test wrote to your own database,
        where it must never write", at the top of TODO.md.
 Say in the results what happened, never more:
 - `copy removed`, and no `NOT RUN`: "I tested creating, changing and deleting a record in a
   temporary copy of your app, then removed the copy."
-- `NOT RUN: [reason]`: "I didn't test creating, changing or deleting a record: [reason]."
+- `NOT RUN: your app's set-up has been changed ...`: say that sentence as it is.
+- any other `NOT RUN: [reason]`: "I didn't test creating, changing or deleting a record: [reason]."
 - `COPY LEFT: [name]`: "I could not remove the temporary copy of your app ([name]). Remove it
   with: docker compose -p [name] --profile dev down -v", at the top of TODO.md.
 ```bash
@@ -1293,11 +1297,11 @@ wt_check() {
   { echo "export COMPOSE_PROJECT_NAME=$WT"
     grep -oE '\$\{[A-Z0-9_]*PORT:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
       | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
-  # its storage must be its own, and every address it would use must be one of its own services:
-  # the host only is printed, never a setting's value
+  # the copy is used only on make-it's standard set-up (an allow-list, in stack-check.py): the first
+  # thing that isn't standard is named in plain words, never a setting's value
   why="$( . "$WTENV"; docker compose -p "$WT" --profile dev config --format json 2>/dev/null \
     | python3 -I "$HOME/.claude/make-it/scripts/stack-check.py" copy "$WT" )" \
-    || { echo "NOT RUN: ${why:-the copy's settings can't be read}"; rm -f "$WTENV"; return 1; }
+    || { echo "NOT RUN: your app's set-up has been changed from make-it's standard one (${why:-its settings could not be read}), so I did not run the test that creates, changes and deletes a record"; rm -f "$WTENV"; return 1; }
   wt_ok=1
 }
 # wt_stop: remove the copy with its volume. Only after wt_check has passed here (down -v removes a

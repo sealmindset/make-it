@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Where would this app's stack reach and keep its data? One rule, two callers.
+"""Where would this app's stack reach and keep its data? Two callers.
 
 Reads `docker compose config --format json` on stdin (settings already resolved: the Compose file, `.env`, env files).
 
@@ -7,54 +7,47 @@ Reads `docker compose config --format json` on stdin (settings already resolved:
       /resume-it's live pass ("settings point at this machine", deadcode.md section 5's "Settings first" bullet):
       a database, queue or cache address must be a Compose service, localhost or 127.0.0.1.
   stack-check.py copy PROJECT
-      /make-it's write test, before it starts the temporary copy named PROJECT: every address the copy would use --
-      database, queue, cache, storage or any other service -- must be one of the copy's own Compose services, or the
-      copy's own published port on this machine. localhost, 127.0.0.1 and host.docker.internal are the person's own
-      machine, so they are refused like any outside host. The copy's volumes must be its own (not external, not
-      fixed-name), and no service may mount a writable folder of this computer.
+      /make-it's write test, before it starts the temporary copy named PROJECT. The copy is used only on make-it's
+      STANDARD set-up: an allow-list of what the scaffolds define, never a list of unsafe shapes. Every one of
+      these must hold, or the set-up is "not standard" and the write test is not run:
+        - every service is one the scaffolds define, with no network_mode, extra_hosts, links or external_links;
+        - one network, the project's own (not external, no fixed name), and no service on any other;
+        - every volume is the project's own named volume; no folder of this computer is mounted;
+        - every address-valued setting is one the scaffolds know, is read for certain, and points at one of the
+          copy's own services or at the copy's own published port on this machine;
+        - no cloud storage or outside service is named by its keys.
 
-Exit 0 and print nothing: it may start. Exit 1 and print one plain reason: it must not. Anything unknown or
-unreadable is a refusal. It never prints a setting's value: a host name and a setting's NAME only (a URL can hold
-a password).
+Exit 0 and print nothing: it may start. Exit 1 and print the first reason in plain words: it must not. Anything
+unknown or unreadable is a refusal. It never prints a setting's value: a host name or a setting's NAME at most (a
+URL can hold a password), and for an address it can't read for certain, the NAME only.
+
+The three sets below are what the two scaffolds' own files define; scripts/test-live-checks-write-copy.sh derives
+them from those files and fails when they differ.
 """
 import json
 import re
 import sys
 
+# --- make-it's standard set-up (fastapi-nextjs and nextjs-fullstack) ---
+SCAFFOLD_SERVICES = {"frontend", "backend", "app", "db", "mock-oidc"}
+SCAFFOLD_BINDS = set()                      # container paths the scaffolds mount a folder of this computer on: none
+KNOWN_ADDRESSES = {"DATABASE_URL", "OIDC_ISSUER_URL", "OIDC_EXTERNAL_URL", "FRONTEND_URL", "BACKEND_URL",
+                   "BACKEND_INTERNAL_URL", "NEXTAUTH_URL", "MOCK_OIDC_EXTERNAL_BASE_URL",
+                   "MOCK_OIDC_INTERNAL_BASE_URL", "CRIBL_STREAM_URL", "TRUSTED_PROXIES"}
+ADDRESS_NAME = re.compile(r"(URL|URI|DSN|ENDPOINT|HOST|HOSTNAME|SERVER|SERVERS|BROKER|BROKERS|ADDR|ADDRESS|PROXIES"
+                          r"|CONNECTION|CONNECTION_STRING)$")
+CLOUD_NAME = re.compile(r"^(AWS_|S3_|GCS_|GCP_|GOOGLE_CLOUD_|GOOGLE_APPLICATION_CREDENTIALS|AZURE_STORAGE|R2_|MINIO_"
+                        r"|SUPABASE_|FIREBASE_|CLOUDINARY_)|BUCKET|BLOB|SAS_TOKEN")
+SERVICE_OPTIONS = ("network_mode", "extra_hosts", "links", "external_links")
+# an address read for certain: scheme://[user[:password]@]host[:port][/path], plain characters only; or host[,host...]
+STRICT_URL = re.compile(r"[a-z][a-z0-9+.\-]*://(?:[A-Za-z0-9._~%\-]+(?::[A-Za-z0-9._~%\-]*)?@)?([A-Za-z0-9.\-]+)"
+                        r"(?::(\d+))?(?:[/?#][^\s@\\]*)?")
+STRICT_HOSTS = re.compile(r"[A-Za-z0-9.\-]+(?::\d+)?(?:,[A-Za-z0-9.\-]+(?::\d+)?)*")
+
+# --- the `local` rule ---
 URL = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*)://(?:[^/?#\s,]*@)?(\[[^\]]+\]|[^:/?#\s,@]*)(?::(\d+))?")
-KEYED = re.compile(r"(?i)\b(?:host|hostaddr|server|data source)\s*=\s*(?:tcp:)?([A-Za-z0-9._\-]+)")
-PLAIN = re.compile(r"\s*(\[[^\]]+\]|[A-Za-z0-9._\-]+)(?::(\d+))?\s*")
-ADDR_NAME = re.compile(r"(HOST|HOSTNAME|SERVER|SERVERS|BROKER|BROKERS|ADDR|ADDRESS)$")
-URL_NAME = re.compile(r"(URL|URI|DSN|ENDPOINT|CONNECTION|CONNECTION_STRING|CONN_STR)$")
 STORE_NAME = re.compile(r"DB|DATABASE|POSTGRES|PG|MYSQL|MARIA|MONGO|REDIS|CACHE|QUEUE|RABBIT|AMQP|KAFKA|BROKER|SQL")
 WEB = {"http", "https", "ws", "wss"}
-THIS_MACHINE = {"localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal", "gateway.docker.internal",
-                "host.containers.internal"}
-BIND_ALL = {"0.0.0.0", "::", "[::]"}
-
-
-def addresses(name, value):
-    """(scheme, host, port) for each address in one setting. host None: it should hold an address and can't be read."""
-    value = "" if value is None else str(value).strip()
-    if not value:
-        return []
-    urls = [(m.group(1).lower(), m.group(2).lower(), m.group(3)) for m in URL.finditer(value)]
-    if urls:
-        return [u for u in urls if u[1]]          # sqlite:///./file.db has no host: a file in the container
-    keyed = [("", h.lower(), None) for h in KEYED.findall(value)]
-    if keyed:
-        return keyed
-    if ADDR_NAME.search(name):
-        out = []
-        for part in value.split(","):
-            m = PLAIN.fullmatch(part)
-            if not m:
-                return [("", None, None)]
-            out.append(("", m.group(1).lower(), m.group(2)))
-        return out
-    if URL_NAME.search(name) and not value.startswith(("/", ".")):
-        return [("", None, None)]
-    return []
 
 
 def refuse(reason):
@@ -62,57 +55,123 @@ def refuse(reason):
     sys.exit(1)
 
 
+def settings_of(services):
+    out = []
+    for svc in services.values():
+        env = svc.get("environment") or {}
+        if isinstance(env, list):
+            env = dict(e.split("=", 1) if "=" in e else (e, "") for e in env)
+        out += [(str(k), "" if v is None else str(v).strip()) for k, v in env.items()]
+    return out
+
+
+def check_local(services):
+    names = {k.lower() for k in services}
+    for name, value in settings_of(services):
+        for m in URL.finditer(value):
+            scheme, host = m.group(1).lower(), m.group(2).lower()
+            if host and scheme not in WEB and host not in names and host not in ("localhost", "127.0.0.1"):
+                refuse(f"your settings point at {host}")
+        if "://" not in value and re.search(r"(HOST|HOSTNAME|SERVER)$", name) and STORE_NAME.search(name):
+            host = value.split(":")[0].lower()
+            if re.fullmatch(r"[a-z0-9.\-]+", host) and host not in names and host not in ("localhost", "127.0.0.1"):
+                refuse(f"your settings point at {host}")
+
+
+def check_services(services):
+    for key, svc in services.items():
+        if key not in SCAFFOLD_SERVICES:
+            refuse(f"it has a service make-it's set-up doesn't have: {key}")
+    for key, svc in services.items():
+        for opt in SERVICE_OPTIONS:
+            if svc.get(opt):
+                refuse(f"its {key} service sets {opt}")
+
+
+def check_networks(cfg, services, project):
+    nets = cfg.get("networks") or {}
+    for key, net in nets.items():
+        if (net or {}).get("external") or (net or {}).get("name") != f"{project}_{key}":
+            refuse("it uses an outside network")
+    if len(nets) != 1 or any(set(svc.get("networks") or {}) - set(nets) or len(svc.get("networks") or {}) > 1
+                             for svc in services.values()):
+        refuse("it uses more than one network")
+
+
+def check_storage(cfg, services, project):
+    vols = cfg.get("volumes") or {}
+    for key, vol in vols.items():
+        if (vol or {}).get("external") or (vol or {}).get("name") != f"{project}_{key}":
+            refuse("it keeps data in a volume that is not the app's own")
+    for key, svc in services.items():
+        for m in svc.get("volumes") or []:
+            kind = m.get("type")
+            if kind == "tmpfs" or (kind == "volume" and m.get("source") in vols):
+                continue
+            if kind == "bind" and m.get("target") in SCAFFOLD_BINDS:
+                continue
+            refuse(f"a folder of this computer is mounted into its {key} service" if kind == "bind"
+                   else "it keeps data in a volume that is not the app's own")
+
+
+def hosts_of(value):
+    """[(host, port)] when the whole value is read for certain, else None."""
+    m = STRICT_URL.fullmatch(value)
+    if m:
+        return [(m.group(1).lower(), m.group(2))]
+    if STRICT_HOSTS.fullmatch(value):
+        return [(h.split(":")[0].lower(), (h.split(":") + [None])[1]) for h in value.split(",")]
+    return None
+
+
+def check_addresses(services):
+    own = {k.lower() for k in services}
+    published = {str(p.get("published")) for svc in services.values() for p in (svc.get("ports") or []) if p.get("published")}
+    for name, value in settings_of(services):
+        if not value:
+            continue
+        if ADDRESS_NAME.search(name) or "://" in value:
+            if name not in KNOWN_ADDRESSES:
+                refuse(f"it has an address setting make-it's set-up doesn't have: {name}")
+            hosts = hosts_of(value)
+            if hosts is None:
+                refuse(f"the address in {name} can't be read for certain")
+            for host, port in hosts:
+                if host in own or (host in ("localhost", "127.0.0.1") and port and port in published):
+                    continue
+                refuse(f"{name} points at {host}, outside the app")
+    for name, value in settings_of(services):
+        if value and CLOUD_NAME.search(name):
+            refuse(f"it names cloud storage or an outside service by its keys: {name}")
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode not in ("local", "copy") or (mode == "copy" and len(sys.argv) != 3):
-        refuse("the app's settings can't be checked")
+        refuse("its settings can't be checked")
     try:
         cfg = json.load(sys.stdin)
         services = cfg["services"]
-        names = set()
-        for key, svc in services.items():
-            names.add(key.lower())
-            names.update(str(svc[k]).lower() for k in ("container_name", "hostname") if svc.get(k))
-        published = {str(p.get("published")) for svc in services.values() for p in (svc.get("ports") or []) if p.get("published")}
-        settings = []
-        for svc in services.values():
-            env = svc.get("environment") or {}
-            if isinstance(env, list):
-                env = dict(e.split("=", 1) if "=" in e else (e, "") for e in env)
-            settings += list(env.items())
-        volumes = cfg.get("volumes") or {}
+        settings_of(services)
+        if not isinstance(services, dict) or not services:
+            raise ValueError
     except Exception:
-        refuse("the app's settings can't be read")
-
-    if mode == "copy":
+        refuse("your app's settings can't be read" if mode == "local" else "its settings can't be read")
+    if mode == "local":
+        check_local(services)
+    else:
         project = sys.argv[2]
-        for key, vol in volumes.items():
-            if (vol or {}).get("external") or not str((vol or {}).get("name", "")).startswith(project + "_"):
-                refuse(f"the copy would share your app's storage (the volume {key} is not the copy's own)")
-        for key, svc in services.items():
-            for m in svc.get("volumes") or []:
-                if m.get("type") not in ("volume", "tmpfs") and not m.get("read_only"):
-                    refuse(f"the copy would share your app's storage (a folder of this computer is mounted into {key})")
-
-    for name, value in settings:
-        for scheme, host, port in addresses(name, value):
-            if host is None:
-                if mode == "copy":
-                    refuse(f"the address in {name} can't be read, so it may be outside this app's own copy")
-                continue
-            if host in names:
-                continue
-            if mode == "local":
-                store = (scheme and scheme not in WEB) or (not scheme and STORE_NAME.search(name))
-                if store and host not in ("localhost", "127.0.0.1"):
-                    refuse(f"your settings point at {host}")
-                continue
-            if not scheme and host in BIND_ALL:
-                continue                          # an address to listen on, not one to reach
-            if host in THIS_MACHINE and port and port in published:
-                continue                          # the copy's own published port
-            refuse(f"your settings point at {host}, which is not part of this app's own copy")
+        try:
+            check_services(services)
+            check_networks(cfg, services, project)
+            check_storage(cfg, services, project)
+            check_addresses(services)
+        except SystemExit:
+            raise
+        except Exception:
+            refuse("its settings can't be read")
     sys.exit(0)
 
 
-main()
+if __name__ == "__main__":
+    main()
