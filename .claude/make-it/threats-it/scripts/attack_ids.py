@@ -41,6 +41,9 @@ for tid in ids:
     if not name:
         failed(tid, "attack.mitre.org", "no technique name on the page")
         continue
+    if tid not in title.group(1):  # a block or error page answered 200: its title is not the technique's name
+        failed(tid, "attack.mitre.org", "not a technique page")
+        continue
     ver = re.search(r"ATT&(?:amp;)?CK content v([\d.]+)", page)
     if ver:
         res["attack_version"] = "v" + ver.group(1)
@@ -48,6 +51,6 @@ for tid in ids:
     print(f"{tid:12s} {name}")
 res["failed"] = failures()
 json.dump(res, open(out_path, "w"), indent=2)
-print("version:", res["attack_version"], "| missing:", [m["id"] for m in res["missing"]],
+print("version:", res["attack_version"] or ("not read" if res["failed"] else None), "| missing:", [m["id"] for m in res["missing"]],
       *(["| FAILED, not checked:", [f["query"] for f in res["failed"]]] if res["failed"] else []))
 finish()

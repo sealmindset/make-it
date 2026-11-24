@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, arg, failed, finish, graph_all, http, save  # noqa: E402
+from _common import GRAPH, NoRedirect, arg, failed, finish, graph_all, http, save  # noqa: E402
 
 ASSESSMENTS = """securityresources
 | where type == 'microsoft.security/assessments'
@@ -33,13 +33,6 @@ ASSESSMENTS = """securityresources
           threats=properties.metadata.threats, categories=properties.metadata.categories"""
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """The key goes to the host it was given for and nowhere else."""
-
-    def redirect_request(self, *a, **k):
-        return None
-
-
 def auditgithub(outdir, url, key, max_pages=200):
     name, shown = "auditgithub_findings", "GET <AUDITGITHUB_API_URL>/findings/paginated (status=open, false positives and snoozed included)"
     if not url or not key:
@@ -47,7 +40,7 @@ def auditgithub(outdir, url, key, max_pages=200):
     u = urllib.parse.urlsplit(url)
     if u.scheme != "https" and u.hostname not in ("localhost", "127.0.0.1"):
         return save(outdir, name, "auditgithub", shown, 0, {"message": "refused: the API URL must be https"})
-    opener, items, counts = urllib.request.build_opener(_NoRedirect), [], {}
+    opener, items, counts = urllib.request.build_opener(NoRedirect), [], {}  # the key never follows a redirect
     for page in range(1, max_pages + 1):
         q = urllib.parse.urlencode({"page": page, "page_size": 100, "status": "open", "include_snoozed": "true",
                                     "include_false_positives": "true"})

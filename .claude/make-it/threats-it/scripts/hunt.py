@@ -18,7 +18,8 @@ Per workspace, only the queries whose tables exist are run, each over that works
   vendor_new_asn / vendor_tested  outside apps signing in from an ASN unseen before window_start
 Writes one JSON per query and hunt-summary.json (counts, owner classification of initiators).
 A query that failed is printed as FAILED (not a total), listed under "failed_queries", and the script exits 3; an owner
-classification that could not be built reads NOT ASSESSED. A workspace tenant_access.py could not read counts as failed.
+classification that could not be built reads NOT ASSESSED. What tenant_access.py could not read is carried forward
+(read_access): a workspace it had no access to is named "NOT ASSESSED (no access)" here too and the run continues (exit 4).
 """
 import collections
 import datetime as dt
@@ -27,17 +28,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import GRAPH, failed, failures, finish, graph_cached, la, load, owner_class, save, status_text  # noqa: E402
+from _common import GRAPH, failed, failures, finish, graph_cached, la, load, owner_class, read_access, save, status_text, unread  # noqa: E402
 
 od, cfg_path = sys.argv[1], sys.argv[2]
 cfg = json.load(open(cfg_path))
-access = json.load(open(os.path.join(od, "access.json")))
+access = read_access(od, "tenant")
 own = (access.get("tenant") or {}).get("id")
-if not own:  # every app would be classed as outside
-    failed("own tenant id", "access.json (tenant_access.py)", "not read")
-for name in access.get("workspaces_unreadable", []):
-    failed("every hunt", name, "workspace not readable")
-if not access["workspaces_with_security_tables"]:
+if not access["workspaces_with_security_tables"] and not unread("workspace list") and not unread("every workspace"):
     failed("every hunt", "every workspace", "no readable workspace holds a security table")
 today = dt.datetime.now(dt.timezone.utc).date()
 tomorrow = (today + dt.timedelta(days=1)).isoformat()
@@ -130,7 +127,7 @@ AADServicePrincipalSignInLogs
     if ep and terms:
         queries["endpoint_ioc"] = f"search in ({', '.join(ep)}) TimeGenerated >= datetime({since}) and ({terms}) | summarize Count=count(), First=min(TimeGenerated), Last=max(TimeGenerated), Devices=dcount(DeviceId) by $table"
     for qn, q in queries.items():
-        st, rows = la(w["customerId"], LETS + q)
+        st, rows = la(w["customerId"], LETS + q, qn, w["name"])
         name = f"hunt_{w['name']}_{qn}"
         save(od, name, "log_analytics", {"workspace": w["name"], "query": LETS + q}, st, rows)
         if st != 200:
@@ -147,7 +144,7 @@ by_id, by_app = {s["id"]: s for s in sps}, {s["appId"]: s for s in sps}
 NA = "NOT ASSESSED"
 for wname, ws_sum in summary["workspaces"].items():
     # classify only what answered: a failed sweep, or no service principals to classify by, is not an empty table
-    answered = lambda qn: sps_read and ws_sum["queries"][qn]["status"] == 200
+    answered = lambda qn: sps_read and own and ws_sum["queries"][qn]["status"] == 200
     if "audit_sweep" in ws_sum["queries"] and not answered("audit_sweep"):
         ws_sum["audit_sweep_events_by_owner"] = ws_sum["audit_sweep_third_party"] = NA
     elif "audit_sweep" in ws_sum["queries"]:
@@ -171,9 +168,12 @@ for wname, ws_sum in summary["workspaces"].items():
                                                "class": owner_class((by_app.get(r["AppId"]) or {}).get("appOwnerOrganizationId"), own) if r["AppId"] in by_app else "unresolved",
                                                "count": int(r["Count"])} for r in rows]
 summary["failed_queries"] = failures()
+summary["workspaces_not_assessed"] = unread() | ({"every workspace": "NOT ASSESSED (workspace list not read)"} if unread("workspace list") else {})
 json.dump(summary, open(os.path.join(od, "hunt-summary.json"), "w"), indent=1, ensure_ascii=False)
+partial = {(f["where"], f["query"]) for f in failures() if f["kind"] == "partial"}
 for wname, s in summary["workspaces"].items():
-    print(wname, {q: v["total"] if v["status"] == 200 else f"FAILED ({status_text(v['status'])})" for q, v in s["queries"].items()}, "| not run:", s["not_run"])
+    print(wname, {q: f"FAILED ({status_text(v['status'])})" if v["status"] != 200 else f"{v['total']} (partial)" if (wname, q) in partial else v["total"]
+                  for q, v in s["queries"].items()}, "| not run:", s["not_run"])
     if s.get("audit_sweep_third_party") == NA:
         print("   initiators by owner:", NA)
     elif s.get("audit_sweep_third_party"):

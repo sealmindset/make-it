@@ -11,7 +11,8 @@ ioc.json "ips", "unconfirmed_ips", "domains" and "web_terms" (e.g. a scanner's u
   web_bigpost_<ws>  App Service HTTP logs: POST bodies of at least --big-post-bytes (default 20,000,000)
   web_crash_<ws>    App Service / container console logs matching --crash-regex, by app
 Writes web-hunt-summary.json. A query that failed is printed as FAILED, listed there under "failed_queries", and the
-script exits 3: that workspace or query is not assessed, never "none". Pull the full record behind every web_ioc match before reporting it: a term can match
+script exits 3: that workspace or query is not assessed, never "none". A workspace the reader has no access to
+(401/403) is named "NOT ASSESSED (no access)" and the run continues (exit 4), unless none could be read. Pull the full record behind every web_ioc match before reporting it: a term can match
 any column.
 """
 import argparse
@@ -21,7 +22,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import failed, failures, finish, la, load, save  # noqa: E402
+from _common import failed, failures, finish, la, load, save, workspace_unread  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("outdir")
@@ -42,13 +43,13 @@ today = dt.datetime.now(dt.timezone.utc).date()
 summary = {"terms": terms, "big_post_bytes": a.big_post_bytes, "crash_regex": a.crash_regex, "workspaces": {}}
 listed = load(od, "arg_workspaces")
 if listed["http_status"] != 200:  # tenant_access.py could not list the workspaces: there is nothing to search in
-    failed("workspace list (arg_workspaces.json)", "Resource Graph", listed["http_status"])
+    failed("workspace list", "Resource Graph", listed["http_status"], origin="tenant_access.py")
 for w in listed["result"] if listed["http_status"] == 200 else []:
     since = (today - dt.timedelta(days=min(int(w.get("retentionInDays") or 30), 730))).isoformat()
     tag = w["name"]
-    code, rows = la(w["customerId"], f"Usage | where TimeGenerated > ago(30d) | where DataType in ({', '.join(json.dumps(t) for t in WEB)}) | summarize MB=round(sum(Quantity), 1) by DataType")
+    code, rows = la(w["customerId"], f"Usage | where TimeGenerated > ago(30d) | where DataType in ({', '.join(json.dumps(t) for t in WEB)}) | summarize MB=round(sum(Quantity), 1) by DataType", "web tables (Usage)", tag)
     if code != 200:
-        failed("web tables (Usage)", tag, code)
+        workspace_unread(tag, code)
         summary["workspaces"][tag] = {"readable": False, "status": code}
         continue
     tables = {r["DataType"]: r["MB"] for r in rows}
@@ -60,7 +61,7 @@ for w in listed["result"] if listed["http_status"] == 200 else []:
     if terms:
         q = (f"search in ({', '.join(tables)}) TimeGenerated >= datetime({since}) and ({' or '.join(json.dumps(t) for t in terms)})"
              " | summarize Count=count(), First=min(TimeGenerated), Last=max(TimeGenerated) by $table")
-        code, rows = la(w["customerId"], q)
+        code, rows = la(w["customerId"], q, "IOC search (web_ioc)", tag)
         save(od, f"web_ioc_{tag}", "log_analytics", {"workspace": tag, "query": q}, code, rows)
         ws["results"]["web_ioc"] = {"status": code, "rows": rows if code == 200 else None}
         if code != 200:
@@ -68,7 +69,7 @@ for w in listed["result"] if listed["http_status"] == 200 else []:
     if "AppServiceHTTPLogs" in tables:
         q = (f"AppServiceHTTPLogs | where TimeGenerated >= datetime({since}) | where CsMethod == 'POST' and CsBytes >= {a.big_post_bytes}"
              " | summarize Count=count(), First=min(TimeGenerated), Last=max(TimeGenerated), MaxBytes=max(CsBytes), Statuses=make_set(ScStatus), ClientIPs=make_set(CIp, 20) by CsHost")
-        code, rows = la(w["customerId"], q)
+        code, rows = la(w["customerId"], q, "large uploads (big_post)", tag)
         save(od, f"web_bigpost_{tag}", "log_analytics", {"workspace": tag, "query": q}, code, rows)
         ws["results"]["big_post"] = {"status": code, "rows": rows if code == 200 else None}
         if code != 200:
@@ -79,22 +80,29 @@ for w in listed["result"] if listed["http_status"] == 200 else []:
         q = ("union isfuzzy=true " + ", ".join(f"({CONSOLE[t]} | extend Src='{t}')" for t in con) +
              f" | where TimeGenerated >= datetime({since}) | where Text matches regex @'{crash}'"
              " | summarize Count=count(), First=min(TimeGenerated), Last=max(TimeGenerated), Sample=take_any(substring(Text, 0, 240)) by Src, App")
-        code, rows = la(w["customerId"], q)
+        code, rows = la(w["customerId"], q, "crash signals (crash_signals)", tag)
         save(od, f"web_crash_{tag}", "log_analytics", {"workspace": tag, "query": q}, code, rows)
         ws["results"]["crash_signals"] = {"status": code, "rows": rows if code == 200 else None}
         if code != 200:
             failed("crash signals (crash_signals)", tag, code)
+if summary["workspaces"] and not any(v.get("readable") for v in summary["workspaces"].values()):
+    failed("every workspace", "Log Analytics", "none readable")
 summary["failed_queries"] = failures()
 json.dump(summary, open(os.path.join(od, "web-hunt-summary.json"), "w"), indent=1)
 hits = {k: v["results"]["web_ioc"]["rows"] for k, v in summary["workspaces"].items() if v.get("results", {}).get("web_ioc", {}).get("rows")}
 # A query that failed is not a clean result: report it apart from the hits. A workspace whose tables could not be
 # listed was not searched either.
-ioc_failed = {k: v["status"] if "status" in v else v["results"]["web_ioc"]["status"] for k, v in summary["workspaces"].items()
-              if v.get("readable") is False or v.get("results", {}).get("web_ioc", {}).get("status", 200) != 200}
+not_read = {k: v["status"] for k, v in summary["workspaces"].items() if v.get("readable") is False}
+ioc_failed = {k: v["results"]["web_ioc"]["status"] for k, v in summary["workspaces"].items()
+              if v.get("results", {}).get("web_ioc", {}).get("status", 200) != 200}
 searched = [k for k, v in summary["workspaces"].items() if v.get("results", {}).get("web_ioc", {}).get("status") == 200]
-verdict = hits or ("NOT ASSESSED, no workspace answered" if ioc_failed and not searched
-                   else "none in the workspaces that answered" if ioc_failed
+no_list = any(f["query"] == "workspace list" for f in summary.get("failed_queries", []))  # nothing was searched, nothing is "none"
+gap = ioc_failed or not_read
+verdict = hits or ("NOT ASSESSED, the workspace list was not read" if no_list
+                   else "NOT ASSESSED, no workspace answered" if gap and not searched
+                   else "none in the workspaces that answered" if gap
                    else "none" if searched else "not searched (no web tables, or no search terms)")
-print("workspaces with web tables:", sum(1 for v in summary["workspaces"].values() if v.get("web_tables_mb_30d")),
-      "| IOC hits:", verdict, "| IOC query FAILED in:", ioc_failed or "none")
+print("workspaces with web tables:", "NOT ASSESSED" if no_list else sum(1 for v in summary["workspaces"].values() if v.get("web_tables_mb_30d")),
+      "| IOC hits:", verdict, *(["| IOC query FAILED in:", ioc_failed or "none"] if searched or ioc_failed else []),
+      *(["| workspaces not read:", not_read] if not_read else []))
 finish()

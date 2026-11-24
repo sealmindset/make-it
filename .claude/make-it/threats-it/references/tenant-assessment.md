@@ -8,8 +8,9 @@ evidence (export the rows), and do not remediate.
 
 ## Order of work
 1. `tenant_access.py <outdir>` — identity (token claims, roles), probes (Graph sign-in/audit APIs, Intune, Security
-   API, Entra diagnostic settings — record status **and error text**: "Missing application scopes" is a client
-   limitation of the Azure CLI app, not a role denial), licences, every Log Analytics workspace with retention,
+   API, Entra diagnostic settings — record status **and the reason code** (the scripts never keep the error text
+   itself, which can repeat a token): the reason "missing scopes" is a client limitation of the Azure CLI app, not a
+   role denial), licences, every Log Analytics workspace with retention,
    Sentinel onboarding and 30-day ingestion by table. ~4 minutes for ~100 workspaces.
 2. Write `ioc.json` from the extracted IOCs (IPs, /24-style prefixes, unconfirmed IPs kept separate, ASNs, user-agent
    prefixes, app IDs, owner tenants, domains, hashes, file and task names, `window_start` = a few days before the
@@ -48,14 +49,19 @@ Move the outputs into the project as `data/raw/tenant-<date>/`; derive figures w
 - Retention clocks: compute when the attack window falls out of each workspace and put the date in both documents.
   IOCs older than the oldest log cannot be checked from logs at all — say so.
 - "Not checked" is not clean. Name the missing telemetry and the owner who has it.
-- **A failed query is not checked.** Each script ends with `FAILED: <query> in <workspace or service> (<status>)`
-  for every query that did not answer, exits 3, and lists them in its JSON as `failed_queries`; the fields built on
-  them read `NOT ASSESSED` (`exposure.json`, `hunt-summary.json`, `access.json` licences), `null` (Sentinel
-  onboarding in `workspace_coverage.json`) or carry a non-200 `status`. Stop and tell the user (the skill's "A failed
-  query is not a result"). If the run goes on, write that part as "not assessed" with the query, the place and the
-  status: a workspace that answered 403 was not searched, an app list that was not read is not "no outside apps",
-  a licence query that failed is not "no licence". A 429 or a timeout is usually worth one more run later; a 403
-  needs a role (Log Analytics Reader on the workspace, Global Reader or Directory Readers for Graph).
+- **A failed query is not checked.** Each script names every query that did not answer and lists it in its JSON
+  as `failed_queries`; the fields built on it read `NOT ASSESSED` (`exposure.json`, `hunt-summary.json`,
+  `sentinel-coverage.json`, `access.json` licences and workspaces), `null` (Sentinel onboarding in
+  `workspace_coverage.json`) or carry a non-200 `status`. Two cases (the skill's "A failed query is not a result"):
+  - **exit 4, go on:** a workspace that answers 401 or 403 is one the reader has no access to. It is printed as
+    `NOT ASSESSED (no access): workspace <name>`, by `tenant_access.py` and again by every later script, and the run
+    continues. Write it as "not assessed (no access)" in both documents, with the role that would open it (Log
+    Analytics Reader on the workspace). It was not searched: never "none", never part of "N workspaces searched".
+  - **exit 3, stop and ask:** no workspace readable, the workspace list failed, a 429, a 5xx, a timeout, a cut-off
+    or partial answer, a refused Graph call (Global Reader or Directory Readers), an expired sign-in. A 429 or a
+    timeout is usually worth one more run later. If the run goes on, write that part as "not assessed" with the
+    query, the place and the status: an app list that was not read is not "no outside apps", a licence query that
+    failed is not "no licence".
 - **The organisation's own security testing is not an attacker.** AuditGitHub and the scanners it runs, and any
   other tool the profile lists under "Own security tooling", exist to find weaknesses: their test scripts, probes
   and scan traffic look like an attack and are not one. Never report them as attacker behaviour, as an indicator,
