@@ -1232,6 +1232,77 @@ the host, installed once by step 22b. When step 22b couldn't install it or it ca
 item is NOT RUN with the reason "no browser here" and the install's reason, never FAIL, and the
 build goes on.
 
+**Write steps run only where there is no real data.** A write step creates, changes or deletes
+a record or a setting, or restarts the backend: step 26 a's create, update and delete; 28 c's
+write requests and 29 c's DELETE (sent to be refused: a broken guard would let them act); 30 c;
+33 a-c; and all of 33a, 33b, 33c, 33d, 33e, 33f, 33g and 33h. Every other step only reads, and
+runs against the running app as written. Nothing in Part B ever cleans up a database: a test
+record goes only through the app's own delete route, inside a write step.
+- **A brand-new build**: /make-it's own build, where step 22 printed `fresh-db: yes` in this
+  run. The database is the one this build just made and seeded, so the write steps run on the
+  running app. Anything else -- `fresh-db: no`, no such line from this run, /retrofit-it,
+  /resume-it -- is an existing app.
+- **An existing app**: the write steps run in a temporary copy of the app's stack, with its own
+  Compose project name, its own empty database volume and its own ports, named and offset the
+  way `scripts/worktree.sh` does it for a worktree. The person's own containers, volumes and
+  database are never written to, never stopped and never restarted. In this order:
+    1. `count > before` (the person's database; it only reads).
+    2. `wt_start`. When the copy can't be made (Docker isn't running, a port is taken, a
+       migration fails, the copy would share the database's storage) it prints `NOT RUN:
+       [reason]` and removes what it started: every write step is then NOT RUN with that reason,
+       and the build goes on.
+    3. Run the write steps in the copy: start every command with `. "$WTENV"`, so `docker
+       compose` and the ports are the copy's (the app is at `http://localhost:$FRONTEND_PORT`),
+       and sign in there as step 25 does.
+    4. **Remove it, always** -- whether the steps passed, failed, were cut off or errored:
+       `wt_stop`. A copy left by a session that died is removed by the next `wt_start`.
+    5. `count > after`, then compare the two: they must be identical. A difference is a FAIL
+       naming the table, "the write test wrote to your own database, where it must never
+       write", at the top of TODO.md.
+  Then say in the results, in these words: "I tested creating, changing and deleting a record in
+  a temporary copy of your app, then removed the copy."
+  ```bash
+  # Run in the app's folder. <db> is the database service in docker-compose.yml (db in the scaffold).
+  APP="$(env -u COMPOSE_PROJECT_NAME docker compose config 2>/dev/null | sed -n 's/^name: //p')"   # the person's project
+  q() { docker compose -p "$APP" exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
+  # count: one line per table of the person's database, name|rows (it only reads)
+  count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
+    table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
+    information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    \gexec" | q; }
+  # the copy's project name and port offset, the way scripts/worktree.sh derives a worktree's
+  WT="$(printf '%s-%s' "$(basename "$PWD")" make-it-write-test | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '_')"
+  WTENV="${TMPDIR:-/tmp}/$WT.env"
+  # wt_stop: remove the copy with its volume. It names the copy, and refuses when that could be the person's project.
+  wt_stop() { [ -n "$APP" ] && [ "$WT" != "$APP" ] || return 1
+    docker compose -p "$WT" --profile dev down -v --rmi local --remove-orphans; rm -f "$WTENV"; }
+  wt_try() (
+    no() { echo "NOT RUN: $1"; exit 1; }
+    docker info >/dev/null 2>&1 || no "Docker isn't running"
+    [ -n "$APP" ] && [ "$WT" != "$APP" ] || no "a temporary copy can't be told apart from your app"
+    wt_stop >/dev/null 2>&1   # a copy left by a session that died
+    off=$(( ($(printf '%s' "$WT" | cksum | awk '{print $1}') % 80 + 1) * 100 ))
+    { echo "export COMPOSE_PROJECT_NAME=$WT"
+      grep -oE '\$\{[A-Z0-9_]+:-[0-9]+\}' docker-compose.yml | sed -E 's/\$\{([A-Z0-9_]+):-([0-9]+)\}/\1 \2/' \
+        | sort -u | while read -r var def; do echo "export $var=$(( def + off ))"; done; } > "$WTENV"
+    . "$WTENV"
+    # its volumes must be its own, and the database must not keep its data in a folder on this computer
+    docker compose -p "$WT" --profile dev config --format json | python3 -I -c 'import json, sys; c = json.load(sys.stdin); p, db = sys.argv[1:3]; sys.exit(1 if [k for k, v in (c.get("volumes") or {}).items() if v.get("external") or not str(v.get("name", "")).startswith(p + "_")] + [m for m in (c["services"][db].get("volumes") or []) if m.get("type") != "volume" and not m.get("read_only")] else 0)' \
+      "$WT" "<db>" || no "the copy would share your database's storage"
+    # start it: the app's own start runs its migrations and seed on the empty database
+    docker compose -p "$WT" --profile dev up -d --build --wait || no "the temporary copy didn't start (a port is taken, or a migration failed)"
+    bash scripts/seed-mock-services.sh >/dev/null || no "the temporary copy's sign-in seed failed"
+    echo "copy ready: $WT"
+  )
+  # wt_start: make the copy; a failure or an interruption removes it again
+  wt_start() {
+    trap 'wt_stop >/dev/null 2>&1; exit 130' INT TERM HUP
+    wt_try; local r=$?
+    [ "$r" -eq 0 ] || wt_stop >/dev/null 2>&1
+    trap - INT TERM HUP; return "$r"
+  }
+  ```
+
 21. **SSL-inspecting proxy check** -- Before any Docker build or pull, learn which security
     tools are running (the pause ask below matches /try-it step 1's ask and answers, apart from
     the stop message):
@@ -1294,11 +1365,17 @@ build goes on.
 
 22. **Build and start containers:**
     ```bash
+    # fresh database? Once, before the first build attempt, never on a retry. <project> is the
+    # `name` in `docker compose config`. Yes only when no volume of this project exists yet.
+    [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=<project>" 2>/dev/null || echo unknown)" ] \
+      && echo "fresh-db: yes" || echo "fresh-db: no"
     docker rm -f "<project>-live-check" 2>/dev/null   # a leftover changed-setting run (see below)
     docker compose --profile dev build 2>&1
     docker compose --profile dev up -d 2>&1
     ```
-    If the first command printed a name, it removed a leftover changed-setting run: note "Removed
+    The first line says whether this build is about to make the database ("Write steps" above
+    uses it): a volume that is already there, or no answer from Docker, is `fresh-db: no`.
+    If the `docker rm` printed a name, it removed a leftover changed-setting run: note "Removed
     a leftover <project>-live-check container" in the results, and after the start above also run
     `docker compose --profile dev up -d --wait --force-recreate <backend>` so the backend gets its
     network back. Every other service starts as usual.
@@ -1367,71 +1444,7 @@ build goes on.
     a. Call the read routes (GET) as a role allowed to use them. Write routes only as create, then
        update, then delete of this step's own test record per resource, its name or title starting
        `live-check-test-`, never a seed record; a resource with no create route isn't written.
-       The database may hold a person's real data (/retrofit-it runs this step on an app that
-       already exists), so the clean-up deletes only rows this step made:
-       - **Own rows only.** A row is this step's when it is in a table the step writes to and
-         its own name or title column STARTS WITH `live-check-test-`. Never "contains", never a
-         JSON column, never a table the step doesn't write to.
-       - **A mark goes by id.** A side effect a write left (a notification, an audit row) is
-         deleted only when it was made BY a test record: its column is a foreign key to that
-         record's table and holds a test record's id, or its own title starts with the prefix.
-         A shared id column (one that can point at several kinds of record) counts only with
-         the test on its type column beside it; with no type column it is no match. A row that
-         only mentions the words stays.
-       - **Nothing cascades.** `del` never deletes a row another row still points at. Sweep the
-         marks first, then child tables, then their parents, so the step's own rows clear each
-         other. A test row that a real row points at is left: `left` names it; report it by
-         name as "left behind, referenced by real data", a FAIL of the clean-up, not of the
-         app, at the top of TODO.md. Never delete the real row.
-       - **Count three times.** Count every table BEFORE the first sweep, again after it, and
-         again after the last sweep. After the first sweep a table may be smaller only by the
-         rows `del` printed for it (the leftovers of a run that was cut off). The last count
-         must equal the second: a table that grew holds a mark the writes left that the sweep
-         couldn't find; a table that shrank lost a row this step didn't make. Either is a FAIL
-         naming the table, at the top of TODO.md.
-       - **Mentions are named, not swept.** `mentions` lists the tables that still hold the
-         words anywhere: name them in the results and delete nothing in them.
-       - **No safe way, no writes.** A resource whose table has no name or title column the
-         step sets, or a database `q` can't reach this way (it isn't Postgres), has its write
-         routes NOT RUN with the reason "no safe way to tell a test record from a real one";
-         its GET routes still run.
-       ```bash
-       # <db> is the database service in docker-compose.yml (db in the scaffold)
-       q() { docker compose exec -T <db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At'; }
-       P="live-check-test-"
-       # count: one line per table, name|rows
-       count() { printf '%s\n' "SELECT string_agg(format('SELECT %L, count(*) FROM %I.%I', table_name,
-         table_schema, table_name), ' UNION ALL ' ORDER BY table_name) FROM
-         information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-         \gexec" | q; }
-       # del TABLE CONDITION: delete the rows of TABLE (t) that match CONDITION, except a row any
-       # other row points at through a foreign key (so nothing cascades); prints TABLE|DELETE n
-       del() { printf '%s|' "$1"; printf '%s\n' "SELECT format('DELETE FROM %s AS t WHERE (%s)%s',
-         '$1'::regclass, \$c\$$2\$c\$, coalesce(string_agg(format(' AND NOT EXISTS (SELECT 1 FROM %s AS k WHERE %s)',
-         c.conrelid::regclass, (SELECT string_agg(format('k.%I = t.%I', a.attname, f.attname),
-         ' AND ') FROM unnest(c.conkey, c.confkey) AS u(ck, fk) JOIN pg_attribute a ON a.attrelid =
-         c.conrelid AND a.attnum = u.ck JOIN pg_attribute f ON f.attrelid = c.confrelid AND
-         f.attnum = u.fk)), ''), '')) FROM pg_constraint c WHERE c.contype = 'f' AND
-         c.confrelid = '$1'::regclass \gexec" | q; }
-       # sweep TABLE COL: the step's own rows in a table it writes to; COL is its name or title
-       sweep() { del "$1" "t.$2 LIKE '$P%'"; }
-       # mark TABLE REF OWNER COL [TYPE-TEST]: rows of TABLE whose REF holds the id of a test row
-       # of OWNER (COL is OWNER's name or title); TYPE-TEST for a shared id: "t.kind = 'note'"
-       mark() { del "$1" "CAST(t.$2 AS text) IN (SELECT CAST(id AS text) FROM $3 WHERE $4 LIKE '$P%')${5:+ AND ($5)}"; }
-       # left TABLE COL: the test rows still there after a sweep (a real row points at them)
-       left() { printf '%s\n' "SELECT '$1', $2 FROM $1 WHERE $2 LIKE '$P%'" | q; }
-       # mentions: name|rows for each table that still holds the words anywhere (it only reads)
-       mentions() { printf '%s\n' "SELECT format('SELECT %L, count(*) FROM %I.%I WHERE %s HAVING count(*) > 0',
-         table_name, table_schema, table_name, string_agg(format('%I::text LIKE %L', column_name,
-         '%$P%'), ' OR ')) FROM information_schema.columns WHERE table_schema = 'public' AND
-         data_type IN ('text', 'character varying', 'json', 'jsonb') GROUP BY table_schema,
-         table_name \gexec" | q; }
-       # the order, for a notes table whose create route also writes a notification:
-       #   count; mark notifications note_id notes title; sweep notes title; count
-       #   ...this step's writes...
-       #   mark notifications note_id notes title; sweep notes title; left notes title; count
-       #   mentions
-       ```
+       These writes are a write step: they run where "Write steps" above says, and nowhere else.
        Routes that call the AI follow the no-provider rule below. Routes that run a job or issue
        a statement (`run`, `replay`, `curation` or `statement` in the path, and the daily job)
        aren't exercised by V05: V16 covers batch agent runs and BNV02 curation, where they apply;
@@ -1466,7 +1479,8 @@ build goes on.
        either, and reported "not probed: an empty request could act": a DELETE; a route whose
        path takes no id or slug and whose request body has no required field in `/openapi.json`
        (an empty request could run it, like "mark all read"); and a route whose path has
-       `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `email`, `notify`, `mark`,
+       `delete`, `purge`, `reset`, `clear`, `import`, `sync`, `send`, `resend`, `email`, `notify`,
+       `mark`,
        `run`, `replay`, `test`, `curation`, `statement`, `messages`, `chat`, `agents`, `revert`,
        `restore`, `archive`, `publish` or `bulk`. A word counts only as a whole word of the path
        (the path split at `/`, `-`, `_`, `.`, `{`, `}` and each capital letter; a plural `s` still
