@@ -10,12 +10,19 @@ A scenario is a list of rules; the first whose "when" strings are ALL in the req
   {"when": [...], "mode": "timeout"}  no answer for 5 seconds (run.py caps the client's wait at 1 second)
   {"when": [...], "mode": "malformed"} HTTP 200 with JSON cut off half way
   {"when": [...], "mode": "empty"}    HTTP 200, a successful answer with nothing in it
+  {"when": [...], "mode": "null"}     HTTP 200 whose whole body is `null`
+  {"when": [...], "mode": "partial"}  Log Analytics: HTTP 200 with rows AND error PartialError (some of the answer is missing)
+  {"when": [...], "mode": "echo"}     HTTP 403 whose error text repeats the caller's Authorization header (a leaky service)
+  {"when": [...], "mode": "redirect"} HTTP 302 to /elsewhere; a request that arrives there with credentials is noted in <scenario>.seen
+  {"when": [...], "mode": "blocked"}  HTTP 200 with a block page ("Access Denied") where the real page should be
   {"when": [...], "mode": "pass"}     the fixture, as if no rule matched (put it before a wider rule to exempt a call)
 No rule matches: HTTP 200 with the fixture below. scripts/test-threats-it-failed-queries.sh drives every script with it.
 """
 import json
+import os
 import re
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -98,6 +105,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_any(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
+        if self.path.startswith("/elsewhere"):   # where "redirect" points: a caller must never arrive here with credentials
+            if self.headers.get("Authorization"):
+                open(sys.argv[2] + ".seen", "a").write("a request arrived with credentials\n")
+            return self.answer(200, {"value": []})
         query = json.loads(body).get("query", "") if body else ""
         seen = self.path + "\n" + body
         try:
@@ -111,6 +122,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         if mode == "malformed":
             return self.answer(200, b'{"value": [{"id": ')
+        if mode == "null":
+            return self.answer(200, b"null")
+        if mode == "blocked":
+            return self.answer(200, b"<html><head><title>Access Denied</title></head><body>blocked</body></html>", "text/html")
+        if mode == "echo":
+            return self.answer(403, {"error": {"code": "Forbidden", "message": "denied: " + (self.headers.get("Authorization") or "")[-60:]}})
+        if mode == "redirect":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{self.server.server_address[1]}/elsewhere")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if mode == "partial":
+            return self.answer(200, dict(log_analytics(query, False), error={"code": "PartialError", "message": "some rows are missing"}))
         if "status" in rule:
             return self.answer(rule["status"], {"error": {"code": "StandIn", "message": f"stand-in answered {rule['status']}"}})
         if self.path.startswith("/attack/"):
@@ -134,6 +158,13 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     srv.daemon_threads = True
+    parent = os.getppid()
+
+    def gone():   # whoever started the stand-in has gone (killed, crashed, finished): stop too, never linger
+        while os.getppid() == parent != 1:
+            time.sleep(0.5)
+        os._exit(0)
+    threading.Thread(target=gone, daemon=True).start()
     with open(sys.argv[1], "w") as f:
         f.write(str(srv.server_address[1]))
     srv.serve_forever()

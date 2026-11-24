@@ -3,8 +3,11 @@
 It is not a credential and opens nothing. Its last part is a marker the tests look for: no script may print it."""
 import base64
 import json
+import os
 import sys
 
+if os.environ.get("STANDIN_AZ") == "expired":   # a sign-in that has run out: az prints its error and exits 1
+    sys.exit("ERROR: AADSTS700082: the refresh token has expired. Tenant 00000000-aaaa-4bbb-8ccc-00000000dddd. Run az login.")
 if sys.argv[1:3] != ["account", "get-access-token"]:
     sys.exit("stand-in az: only `account get-access-token` is faked")
 b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")

@@ -2,8 +2,9 @@
 
   PATH="scripts/threats-it-stand-in:$PATH" python3 -I scripts/threats-it-stand-in/run.py <port> <script.py> [its arguments]
 
-Every request the script makes is sent to 127.0.0.1:<port>; a request to any host that is not faked is refused, so a
-script under test can never reach a real tenant. The client's wait is capped at 1 second so a timeout is quick to test.
+Every request the script makes, through urlopen or any opener it builds, is sent to 127.0.0.1:<port>; a request to
+anything else (a host that is not faked, another local port) is refused, so a script under test can never reach a real
+tenant or hand a key to another listener. The client's wait is capped at 1 second so a timeout is quick to test.
 """
 import runpy
 import sys
@@ -12,24 +13,26 @@ import urllib.request
 HOSTS = {"https://graph.microsoft.com": "/graph", "https://management.azure.com": "/arm",
          "https://api.loganalytics.io": "/la", "https://attack.mitre.org": "/attack"}
 port, script = sys.argv[1], sys.argv[2]
-real_urlopen = urllib.request.urlopen
+here = f"http://127.0.0.1:{port}/"
+real_open = urllib.request.OpenerDirector.open
 
 
-def urlopen(req, *args, timeout=None, **kw):
+def open_(self, req, data=None, timeout=None):
     url = req if isinstance(req, str) else req.full_url
     for host, prefix in HOSTS.items():
         if url.startswith(host + "/"):
-            local = f"http://127.0.0.1:{port}{prefix}{url[len(host):]}"
+            url = f"http://127.0.0.1:{port}{prefix}{url[len(host):]}"
             break
     else:
-        raise SystemExit("stand-in: refused a request to a host that is not faked: " + url.split("/")[2])
+        if not url.startswith(here):
+            raise SystemExit("stand-in: refused a request to something that is not the stand-in: " + url.split("/")[2])
     if isinstance(req, str):
-        req = local
+        req = url
     else:
-        req.full_url = local
-    return real_urlopen(req, *args, timeout=1, **kw)
+        req.full_url = url
+    return real_open(self, req, data, timeout=1)
 
 
-urllib.request.urlopen = urlopen
+urllib.request.OpenerDirector.open = open_   # every opener: urlopen's own and any a script builds
 sys.argv = sys.argv[2:]
 runpy.run_path(script, run_name="__main__")
