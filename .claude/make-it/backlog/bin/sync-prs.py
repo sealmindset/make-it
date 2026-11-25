@@ -5,6 +5,7 @@ that release passed. Forward only, and never on a guess: when a fact cannot be r
 reason is said.
 
 Usage: sync-prs.py [board_dir] --repo PATH [--project NAME] [--dry-run]
+       sync-prs.py [board_dir] --repo PATH [--project NAME] --sort [--json]
        sync-prs.py --self-test
   --repo  the code repo whose PRs bare numbers in `pr:` name (settings `repo`); `gh` reads its
           remote. A PR in another repo goes in `pr:` as its full URL. With no --repo, no `gh` or
@@ -14,6 +15,11 @@ Usage: sync-prs.py [board_dir] --repo PATH [--project NAME] [--dry-run]
   real run: the closed card says so, and how to reopen it. A bundle closes only when each of its parts has
   passed its own check. A card left at the older Checked stage closes; one at the older Live stage follows
   the rule above. Writes the cards and BOARD.md; the caller commits them (the board's sync step).
+  --sort  every open pull request in exactly one of six groups, from facts (status.py's `sort_prs`): READY, OUT OF
+          DATE, CAN BE SETTLED, STALLED, NEEDS YOU, WILL NEVER MERGE, each line with the action. Read-only. When the
+          facts cannot be read it says so, sorts nothing and exits 2. A plain run (`reconcile --prs`) ends with the
+          same list, so the sort happens after every merge and release without anyone remembering. --json prints
+          the groups for another helper (scripts/release-day.sh).
 """
 import datetime, importlib.util, json, os, re, subprocess, sys
 
@@ -23,6 +29,8 @@ sys.dont_write_bytecode = True  # no __pycache__ beside the installed scripts
 R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
 _cspec = importlib.util.spec_from_file_location('card', os.path.join(_bin, 'card.py'))
 C = importlib.util.module_from_spec(_cspec); _cspec.loader.exec_module(C)  # the one card writer
+_sspec = importlib.util.spec_from_file_location('status_board', os.path.join(_bin, 'status.py'))
+S = importlib.util.module_from_spec(_sspec); _sspec.loader.exec_module(S)  # the rule that sorts open pull requests lives beside the first screen that counts them
 v = R.v
 BEFORE_DONE = ('Reported', 'Cause found', 'Fix ready', 'Live')  # Live: the older stage for "merged"; it follows the same rule now
 URL = r'https?://[^\s,\]]+/pull/\d+'
@@ -151,6 +159,17 @@ def run(B, G, dry, proj=None, T=None):
     lines.append(f"{'Would close' if dry else 'Closed'} {len(out)} · waiting {len(wait)}")
     return '\n'.join(lines)
 
+def sort(B, repo, proj=None, as_json=False, T=None):
+    """(the sorted list of every open pull request, 0) -- or (why nothing was sorted, 2) when the facts cannot be read."""
+    T = T or datetime.date.today()
+    rows, why = S.pr_rows(repo, S.R.load(B), T)
+    if rows is None: return f'Open pull requests could not be read ({why}): nothing was sorted.', 2
+    g = S.sort_prs(rows)
+    if not as_json: return S.sort_text(g, R.arg(proj or os.path.basename(B)), T), 0
+    row = lambda pr, why, act: dict(n=pr['n'], head=pr['head'], title=pr['title'], card=v(pr['card'] or {}, 'id') or None, card_name=R.name(pr['card'], 80) if pr['card'] else None,
+                                    name=S.pr_called(pr), why=why, action=act)
+    return json.dumps({'open': len(rows), 'groups': {k: [row(*x) for x in xs] for k, xs in g.items()}}, ensure_ascii=False), 0
+
 def self_test():
     import tempfile
     T = datetime.date.today()
@@ -230,7 +249,12 @@ if __name__ == '__main__':
             if i + 1 >= len(args) or args[i + 1].startswith('--'): sys.exit(f'sync-prs: {k} needs a value')
             opts[k] = args[i + 1]; del args[i:i + 2]
     dry = '--dry-run' in args; args = [a for a in args if a != '--dry-run']
+    sorting, as_json = '--sort' in args, '--json' in args; args = [a for a in args if a not in ('--sort', '--json')]
     if len(args) > 1 or any(a.startswith('--') for a in args): sys.exit(f'sync-prs: unexpected {args}')
     B = os.path.abspath(os.path.expanduser(args[0] if args else R.default_board('sync-prs')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'sync-prs: no items/ folder in {B}')
-    print(run(B, gh(os.path.expanduser(opts['--repo'])) if '--repo' in opts else None, dry, opts.get('--project')))
+    repo = os.path.expanduser(opts['--repo']) if '--repo' in opts else None
+    if sorting:
+        text, rc = sort(B, repo, opts.get('--project'), as_json); print(text); sys.exit(rc)
+    print(run(B, gh(repo) if repo else None, dry, opts.get('--project')))
+    if repo: print('\n' + sort(B, repo, opts.get('--project'))[0])  # after every merge and release: every open pull request, sorted

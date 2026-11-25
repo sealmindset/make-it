@@ -80,7 +80,9 @@ user's go, and every other skill reads the same board.
 | `status` (no id) | Run `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT"` and print its output as-is, in a code block. Read-only |
 | `move`, `status <id> <status>`, `stage`, `done` | Update the card (`done` posts the end summary) |
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
-| `reconcile --prs [--dry-run]` | Shipped means done, no AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"` closes each card whose pull request is merged, released, and passing its release's checks (a fact it cannot read leaves the card, and it says so). Print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
+| `reconcile --prs [--dry-run]` | Shipped means done, no AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"` closes each card whose pull request is merged, released, and passing its release's checks (a fact it cannot read leaves the card, and it says so). Its report ends with every open pull request sorted by what it needs (Step 4c). Print the report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
+| `sitting` | The weekly sitting (Step 2c): the few held high-stakes cards that free the most other work, each as its own one-click question; the answer is written on the card |
+| `release` | The day's release (Step 4c): every pull request that is ready goes out as one numbered release |
 | `combine [filter]` | Propose bundles (Step 3b): `shrink.py combine` gives the facts, you judge and ask, nothing combines without the pick |
 | `unbundle <id>` | `python3 ~/.claude/make-it/backlog/bin/shrink.py --board "$BOARD" --project "$PROJECT" unbundle <id>`: a bundle's id puts every card back in line as it was; a card's id takes that one out. Relay its line |
 | `reopen <id> <what was seen>` | Pipe the person's words, as typed, to `shrink.py --board "$BOARD" --project "$PROJECT" reopen <id>`: the card goes back in line with the words kept. Relay its line |
@@ -112,8 +114,9 @@ do what was picked, with every gate that step already has:
 | Pick | What runs |
 |------|-----------|
 | Answer now | Each waiting card's `decision:` as its own AskUserQuestion with its `answers:`, most urgent first; the answer goes on the card, which clears `decision:` and `answers:` |
-| Release it | First what the screen could not know: confirm the pull request's review (unless the screen says it is recorded on its card) and bring it up to date with main if it is behind. Then the project's own release steps for the pull request named, with their gates; the pick names the pull request, so it is the go for that one only |
-| Sort them | `reconcile --prs`, then one plain line per pull request named: what it needs (bring up to date, fix its check, close with a note) |
+| Release it | First what the screen could not know: confirm the pull request's review (unless the screen says it is recorded on its card) and record it on the card. Then the day's release (Step 4c): `scripts/release-day.sh --dry-run`, then `--version <the number picked> --go`. The release pull request still needs its own independent review and green checks on current main before it merges. A repo without that script: its own release steps for the pull request named, with their gates |
+| Sort them | `reconcile --prs`, whose report ends with every open pull request in one of six groups; then do what each group says (Step 4c) |
+| Hold the sitting | `sitting` (Step 2c) |
 | Start the wave | `dispatch` |
 | Start the others | `dispatch`, for the wave's cards that share no file with an open pull request; the card named as sharing one waits |
 | Wait for it | Nothing starts: every card in the wave shares a file with an open pull request. Say which pull request, and that releasing or finishing it comes first |
@@ -124,6 +127,33 @@ do what was picked, with every gate that step already has:
 | Full status | `status` |
 
 A dismissed ask starts nothing. Everything the old board printed is under `status` and `list`.
+
+## Step 2c -- The weekly sitting
+
+Held high-stakes cards come to the owner once a week, a few at a time (the reference's `sitting`).
+**The helper picks and records; you brief and ask.**
+
+1. Run `python3 ~/.claude/make-it/backlog/bin/sitting.py --board "$BOARD" --project "$PROJECT" pick`
+   (read-only, no AI) and print its output as-is, in a code block: at most five cards, by its
+   written rule. Never add a card to its list, drop one, or change the order.
+2. For each card, in that order: read the card and the code it names (a high-stakes brief rests
+   on the code, never on the card's own claim), then ask **one AskUserQuestion per card, never batched**
+   with another card or another question. The ask is decision-ready (`approval-block.md`):
+   - what it is, by its title with its id;
+   - what waits and why, in two plain sentences: which cards it frees, and what makes it high-stakes;
+   - 2-4 named answers, each saying what happens if it is picked. The answers are the specifics --
+     `Add alongside -- the new path runs beside the old one; rehearsed on <place>`, `Change the
+     working path -- …`, `Not needed -- the card closes` -- and one is always `Not now -- stays on
+     the board`. Never a plain yes;
+   - exactly one marked Recommended, with the strongest argument against it beside it.
+3. Record each pick before the next card is asked: pipe what the answer does to
+   `python3 ~/.claude/make-it/backlog/bin/sitting.py --board "$BOARD" --project "$PROJECT" answer <id> "<the answer's name>"`;
+   for "Not now", `sitting.py … not-now <id>` (the card stays out of the next sittings for two
+   weeks unless it changes). Relay the line it prints. A dismissed ask records nothing, and that
+   card comes back at the next sitting.
+4. An answer starts nothing by itself. After the last card, one line per card says what was
+   decided. A card that got a go is then started with `start <id>`, on the owner's pick, with
+   every gate `start` has for a high-stakes card.
 
 ## Step 3 -- Adding work
 
@@ -176,7 +206,7 @@ as `pr:` and how the fix is proved live as `signal:`. Dispatch starts with `reco
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, nothing it waits on unfinished (its own `dependsOn` or its epic's; an epic id = its open cards),
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
 Announce each pick before it starts, by its title with its id. Gather every lane's questions into one message, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks). Shipping
-stays serial: one PR through CI and deploy at a time.
+stays serial: one release through CI at a time, and one release a day (Step 4c).
 
 **Plain words, and no flood** (`approval-block.md`, A message to the owner, and A review sorts its
 findings). Every lane and reviewer brief carries both rules' lines. When you pass on a lane's or a
@@ -204,6 +234,43 @@ It stamps `mode:` on the cards (never over `mode_by: you`), drafts `## Task N` p
 mode line after the preamble; `dispatch` follows the plan's next wave. A plan stays in force for
 the cards it lists (new bugs take a free lane first; other new cards go after its waves); re-plan
 when every wave is merged, its next wave is stuck, a spike's finding lands, or when asked. Drafts never run without the user's go.
+
+## Step 4c -- One release a day, and every open pull request sorted
+
+**One release a day carries that day's reviewed fixes** (`release`, and the first screen's
+"Release it"). In a repo that has `scripts/release-day.sh`:
+
+1. `scripts/release-day.sh --dry-run --board "$BOARD"` and print its output as-is. It takes only
+   pull requests that are READY (below), builds one release branch from main, merges each in turn,
+   writes the content manifest once from the merged files, and runs the quick contract tests. A
+   dry run changes nothing. If it stops, it names the pull request: that one goes back through
+   the sort, and the rest can still go out.
+2. The script never picks the version number. You pick it by the repo's own rule (the next patch
+   number for fixes; the next minor number when a skill gains something new) and say it in one line.
+3. `scripts/release-day.sh --board "$BOARD" --version <the number picked> --go`: it makes the
+   version commit, pushes the release branch and opens the release pull request. It never merges
+   and never tags.
+4. The release pull request is merged like any other: an independent review, and checks green on
+   current main. Then the commands the script printed: tag the release, close each original pull
+   request with its note (the branch is kept), and add the release pull request to each card's
+   `pr:` so `reconcile --prs` closes the card once the release's checks pass.
+
+**After every merge and every release**, sort every open pull request, without being asked (the
+owner's rule, 2026-11-24): `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT" --sort`
+(read-only, no AI; `reconcile --prs` ends with the same list). Print it as-is, then act on each
+group. The helper sorts; never move a pull request to another group yourself.
+
+| Group | What it means | What you do |
+|-------|---------------|-------------|
+| READY | Reviewed for the commit that is its head now, every check passed, up to date with main | It goes out with the day's release |
+| OUT OF DATE | Behind main, or in conflict with it | Rebase it onto main and push with `--force-with-lease`; its checks run again, and the new commit needs its review again |
+| CAN BE SETTLED | A failing check, a review that said not ready, or no review of this commit yet | A failing check or a review finding goes through `/resolve-it`; a missing review goes to an independent reviewer, and you record the result on the card (`reviewed:`) |
+| STALLED | Still being worked on, with no activity for two days | Chase its lane; if it does not answer, take the work over |
+| NEEDS YOU | Its card has a question only the owner can answer | Ask it as a one-click question (Answer now) |
+| WILL NEVER MERGE | Its card is already closed, or main already holds everything in it | Close it with a note saying where the work went, and keep the branch |
+
+A pull request that is simply moving is counted and left alone. If the helper says the pull
+requests could not be read, say so and sort nothing by hand.
 
 ## Step 5 -- After every change
 
