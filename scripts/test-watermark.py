@@ -570,6 +570,120 @@ class Seal(Base):
         self.assertFalse(hashlib.sha256(b"hunter2\n").hexdigest() in open(self.p(".make-it/sealed-files.txt")).read(),
                          "the seal hashed a file outside the project")
 
+    # ---- review of the second review (PR #157)
+
+    def tree(self):
+        """Every file, folder and link in the project outside .git, with its bytes or its target."""
+        out = {}
+        for root, dirs, names in os.walk(self.app):
+            if root == self.app and ".git" in dirs:
+                dirs.remove(".git")
+            for n in dirs + names:
+                path = os.path.join(root, n)
+                rel = os.path.relpath(path, self.app)
+                if os.path.islink(path):
+                    out[rel] = "-> " + os.readlink(path)
+                elif os.path.isdir(path):
+                    out[rel] = "folder"
+                else:
+                    with open(path, "rb") as f:
+                        out[rel] = hashlib.sha256(f.read()).hexdigest()
+        return out
+
+    def damage_history(self):
+        self.write()
+        entry = self.p(".make-it/ledger/" + self.ledger()[0])
+        with open(entry, "a") as f:
+            f.write(" ")
+        os.remove(self.p(".make-it/manifest.json"))  # so a refused seal that rewrote them would show
+        os.remove(self.p(".gitattributes"))
+
+    def big_gitattributes(self, size):
+        with open(self.p(".gitattributes"), "wb") as f:
+            f.write(b"#" * (size - 1) + b"\n")
+
+    def folder_link(self):
+        os.makedirs(self.p(".make-it/plugins"))
+        with open(self.p(".make-it/plugins/x.ts"), "w") as f:
+            f.write("export const x = 1\n")
+        os.symlink("../../.make-it/plugins", self.p("frontend/lib/plugins"))
+
+    def read_only(self):
+        self.write()
+        self.edit(self.OTHER)
+        os.chmod(self.app, 0o555)
+
+    def a_file_where_the_history_folder_goes(self):
+        with open(self.p(".make-it/ledger"), "w") as f:
+            f.write("x")
+
+    REFUSALS = [
+        ("MAKE-IT.md is a folder", lambda self: os.makedirs(self.p("MAKE-IT.md")), ()),
+        ("the history folder is a file", a_file_where_the_history_folder_goes, ()),
+        ("the history is damaged", damage_history, ()),
+        ("a .gitattributes over 1 MB", lambda self: self.big_gitattributes((1 << 20) + 10), ()),
+        ("a .gitattributes the seal's lines would take over 1 MB", lambda self: self.big_gitattributes((1 << 20) - 10), ()),
+        ("a link to a folder", folder_link, ()),
+        ("a project folder that cannot be written", read_only, ()),
+        ("no skill name", lambda self: None, ("--skill", "")),
+        ("a results file that is not JSON", lambda self: None, ("--results", os.devnull)),
+    ]
+
+    def test_every_refused_seal_leaves_the_project_as_it_was(self):
+        for name, prepare, extra in self.REFUSALS:
+            if "cannot be written" in name and os.geteuid() == 0:
+                continue  # root writes anywhere
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                prepare(self)
+                before = self.tree()
+                r = run("seal", "--app", self.app, "--skill", "resume-it", *extra)
+                after = self.tree()
+                os.chmod(self.app, 0o755)
+                self.assertNotEqual(r.returncode, 0, r.stdout)
+                self.assertNotIn("sealed", r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+                self.assertEqual({k for k in set(before) | set(after) if before.get(k) != after.get(k)}, set())
+
+    def test_a_link_to_a_folder_is_refused_and_named(self):
+        self.folder_link()
+        r = run("seal", "--app", self.app, "--skill", "make-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("frontend/lib/plugins", r.stderr)
+        self.assertIn("Nothing was sealed", r.stderr)
+
+    def test_a_link_to_a_folder_added_after_the_seal_fails_and_says_why(self):
+        self.write()
+        self.folder_link()
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("points at a folder", r.stdout)
+        self.assertIn("frontend/lib/plugins", r.stdout)
+
+    def test_a_backslash_in_a_name_is_not_mistaken_for_a_newline(self):
+        with open(self.p("a\\nb.ts"), "w") as f:  # a backslash and an n
+            f.write("x\n")
+        self.write()
+        os.rename(self.p("a\\nb.ts"), self.p("a\nb.ts"))  # a real newline
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_git_settings_in_the_callers_environment_do_not_point_the_seal_elsewhere(self):
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(other)
+        git(other, "init", "-q", "-b", "main")
+        env = dict(os.environ, GIT_DIR=os.path.join(other, ".git"), GIT_WORK_TREE=other)
+
+        def run_there(*args):
+            return subprocess.run([sys.executable, "-I", SCRIPT, *args, "--app", self.app], capture_output=True, text=True, env=env)
+
+        r = run_there("seal", "--skill", "make-it")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn(" 0 files", r.stdout)
+        self.assertEqual(run_there("verify").returncode, 0)
+        self.edit(self.OTHER)
+        self.assertEqual(run_there("verify").returncode, 1)
+
     def test_a_newline_in_a_name_is_not_mistaken_for_another_name(self):
         with open(self.p("a\nb.ts"), "w") as f:
             f.write("x\n")
