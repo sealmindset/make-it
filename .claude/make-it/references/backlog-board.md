@@ -233,8 +233,16 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
      item. Below 0.6 confidence for every existing epic, choose `new` -- creating epics on its own
      is intended. `new_epic` only when `mode` is `new`.
    - `dedup` is advisory: never auto-close; surface it on the card and in the questions.
-3. **Validate.** The target epic must exist in the folder listing. Malformed JSON or an unknown
-   epic → stop with an error, write nothing.
+3. **Check the triage output -- the report is never lost.** Save exactly what the call gave back
+   to a file (no file when it failed or timed out) and pipe the raw text, word for word, to
+   `card.py capture <file>`. No AI takes part in this step.
+   - **Bad output** (not JSON, empty, a refusal, missing or bad fields, an epic that is not on the
+     board) → `card.py` files the report itself: under the Bugs epic (made on first use), a bug at
+     Reported, the raw text quoted line for line under `## Captured`, marked `not sorted yet --
+     triage failed: <reason>`. It prints the card by its title and id. Go on to step 5's notice,
+     and say in the reply that the report is filed but not sorted yet, and why.
+   - **Good output** → it prints `triage ok` and writes nothing: go on to step 4. If step 4's write
+     then fails with nothing written, pipe the raw text to `card.py capture` with no file.
 4. **Write the card -- no approval gate** (`undo` is the safety valve for a board in its own repo;
    in a project board the card rides on the branch), with `card.py new <epic>`: the understanding template,
    then:
@@ -1126,6 +1134,10 @@ Write cards only through `card.py`, never `printf`, `sed`, or a shell glob:
   `decision` also clears `answers:` unless the same write sets `answers=`. `id` is never settable.
 - `card.py new <epic>` -- a whole card on stdin with `id: NEW`; it gets the next id **after a pull**,
   a slugged file name, and `parent:` / `created:` if missing. Prints the new id.
+- `card.py capture [<triage-file>]` -- a report on stdin, word for word, and what the triage call
+  gave back in the file (no file = it gave nothing). Bad triage output → the report becomes a bug
+  under the Bugs epic at Reported, marked `not sorted yet -- triage failed: <reason>`; it is written
+  even when the pull fails. Good output → `triage ok`, nothing written.
 
 Call it as `card.py --board "$BOARD" --project "$PROJECT" <verb> …`. Every verb reads its stdin
 first (never from a terminal; empty text is refused), then takes the board's writer lock (one card
@@ -1134,7 +1146,20 @@ its own repo; a failed pull, a detached HEAD or a half-done rebase writes nothin
 by its `id:` (exactly one match), writes the whole file then swaps it in, bumps `updated:`,
 regenerates `BOARD.md`, and syncs as below (`--no-sync` leaves the commit to you). If another session
 pushed first, it rebases onto theirs, regenerating `BOARD.md` when that is the only conflict, and
-never leaves the board mid-rebase. **Any write that didn't sync exits non-zero** with the reason.
+never leaves the board mid-rebase; if both clones gave a new card the same id meanwhile, ours takes
+the next free id before it is sent.
+
+**The line it prints is true, and so is its exit.** It ends `committed + pushed` only when the shared
+board has the write. Otherwise it ends `… NOT sent to …: <reason>`, and you **relay that line** to
+the person:
+- **exit 0**, `NOT sent to a shared board` -- the board has no shared copy to send to: no remote
+  ("not shared yet"), inside a project (staged; it goes with the project's next commit), not in git,
+  or `--no-sync`.
+- **exit 3**, `NOT sent to the shared board` -- written here, but the shared board did not get it:
+  the send was refused, the board could not catch up, the branch follows nothing, or the commit
+  failed. The card exists: do not write it again. The next card write that can send carries it across.
+- **any other non-zero exit** -- nothing was written; the message says why.
+
 `sync-prs.py` writes through the same function, under the same lock.
 
 ## Sync
