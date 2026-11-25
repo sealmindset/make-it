@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# test-activity-log.sh -- contract test for build-standards L09-L11, three faults in the fastapi-nextjs scaffold's logs.
+# test-activity-log.sh -- contract test for build-standards L04 and L09-L11, faults in the fastapi-nextjs scaffold's logs.
 #
+# L04: the activity log masked an outgoing address by a list of bad names matched exactly, so access_token, client_secret
+#      and code went through; a call that got no response left no entry; and the console printed whole addresses in an
+#      unhandled error's traceback and in httpx's own request line. Masking is now an allow-list (a value is kept only
+#      under a name known to be safe), a failed call is recorded with the error's type, and the console is masked too.
 # L09: RequestLoggingMiddleware filled user_sub and user_email from request.state.user and nothing set it, so the
 #      Activity Logs page showed "-" for every user. get_current_user now puts the verified UserInfo there.
 # L10: uvicorn's access log printed each request's query string, and the sign-in return route carries the one-time code
@@ -47,6 +51,10 @@ REL_FF=$SC/frontend/forwarded-for.mjs
 REL_UT=$SB/tests/integration/test_activity_log_user.py
 REL_CT=$SB/tests/integration/test_console_access_log.py
 REL_VT=$SB/tests/integration/test_visitor_address.py
+REL_LS=$SB/app/services/log_service.py
+REL_ST=$SB/tests/integration/test_log_secrets.py
+REL_GR=.claude/make-it/references/guardrails.md
+REL_RM=$SC/README.md
 REL_BS=.claude/make-it/references/build-standards.md
 REL_PT=.claude/make-it/references/prompt-templates.md
 REL_DB=.claude/make-it/references/design-blueprint.md
@@ -56,7 +64,7 @@ REL_RF=.claude/commands/retrofit-it.md
 REL_GV=docs/AI-GOVERNANCE-HOMEGROWN.md
 REL_PR=docs/PENTEST-READINESS.md
 FILES="$REL_AU $REL_LG $REL_UI $REL_AL $REL_TP $REL_MA $REL_CF $REL_EP $REL_DC $REL_FD $REL_FF $REL_UT $REL_CT $REL_VT"
-FILES="$FILES $REL_BS $REL_PT $REL_DB $REL_MK $REL_RS $REL_RF $REL_GV $REL_PR"
+FILES="$FILES $REL_BS $REL_PT $REL_DB $REL_MK $REL_RS $REL_RF $REL_GV $REL_PR $REL_LS $REL_ST $REL_GR $REL_RM"
 
 # line number of the first (or, with "last", the last) line of file $1 matching $2 (0 when none)
 at() { awk -v a="$2" '$0 ~ a {print NR; f=1; exit} END {if (!f) print 0}' "$1"; }
@@ -69,12 +77,39 @@ verify() {
   local R="$1" AU="$1/$REL_AU" LG="$1/$REL_LG" UI="$1/$REL_UI" AL="$1/$REL_AL" TP="$1/$REL_TP" MA="$1/$REL_MA"
   local CF="$1/$REL_CF" EP="$1/$REL_EP" DC="$1/$REL_DC" FD="$1/$REL_FD" FF="$1/$REL_FF" UT="$1/$REL_UT" CT="$1/$REL_CT"
   local VT="$1/$REL_VT" BS="$1/$REL_BS" PT="$1/$REL_PT" DB="$1/$REL_DB" MK="$1/$REL_MK" RS="$1/$REL_RS" RF="$1/$REL_RF"
-  local GV="$1/$REL_GV" PR="$1/$REL_PR" L09 L10 L11 f
+  local GV="$1/$REL_GV" PR="$1/$REL_PR" LS="$1/$REL_LS" ST="$1/$REL_ST" GR="$1/$REL_GR" L04 L09 L10 L11 f
   fail=0
   for f in $FILES; do check "found: $f" '[ -s "$R/$f" ]'; done
+  L04="$(grep -E '^[*][*]L04[*][*] ' "$BS" || true)"
   L09="$(grep -E '^[*][*]L09[*][*] ' "$BS" || true)"
   L10="$(grep -E '^[*][*]L10[*][*] ' "$BS" || true)"
   L11="$(grep -E '^[*][*]L11[*][*] ' "$BS" || true)"
+
+  # L04 -- addresses masked by an allow-list, a failed call recorded, the console masked too
+  check "log_service.py: masking keeps values by a list of safe names, and no list of bad names is left" \
+    'lines "$LS" "_SAFE_QUERY_PARAMS = frozenset(" 1 && lines "$LS" "        if name.lower() in _SAFE_QUERY_PARAMS and len(value) < _LONG" 1 && ! gq -F "_SENSITIVE_PARAMS" "$LS"'
+  check "log_service.py: no name of a secret is on the safe list" \
+    '! sed -n "/^_SAFE_QUERY_PARAMS = frozenset(/,/^)/p" "$LS" | gq -iE "token|secret|key|code|pass|auth|sig|state|session|cred"'
+  check "log_service.py: user:password@ and the fragment are dropped, an unreadable address is not kept" \
+    'lines "$LS" "    return urlunsplit((parts.scheme, parts.netloc.rpartition(\"@\")[2], path, query, \"\"))" 1 && [ "$(grep -c "        return \"[*][*][*]\"\$" "$LS")" = 1 ]'
+  check "log_service.py: the client's send is wrapped, and a failed call is recorded with the error's type only" \
+    'lines "$LS" "    client.send = _send  # type: ignore[method-assign]" 1 && lines "$LS" "            _record(failed, None, type(exc).__name__)" 1 && ! gq -E "str[(]exc[)]|repr[(]exc[)]|exc[.]args" "$LS"'
+  check "log_service.py: the stats count an event with an error and no status" \
+    'lines "$LS" "        error_count = sum(1 for e in self._buffer if e.error or (e.status and e.status >= 400))" 1'
+  check "access_log.py: full addresses are masked on uvicorn.error (tracebacks) and httpx (its request line)" \
+    'lines "$AL" "_ADDRESS_LOGGERS = (\"uvicorn.error\", \"httpx\")" 1 && lines "$AL" "    for names, kind in ((_LOGGERS, DropQueryString), (_ADDRESS_LOGGERS, MaskAddresses)):" 1 && gq -F "record.exc_text = sanitize_text(" "$AL"'
+  check "L04 test: a real uvicorn server, secrets made at run time, the six cases" \
+    'gq -F "server = uvicorn.Server(uvicorn.Config(\"app.main:app\", proxy_headers=False))" "$ST" && lines "$ST" "        self[label] = secrets.token_hex(16)" 1 && (for t in "test_no_secret_in_a_request_reaches_anything_the_app_writes(minted, jwt_secret, probe, capsys):" "test_no_secret_in_an_outgoing_call_reaches_anything_the_app_writes(" "test_an_error_raised_from_a_refused_outgoing_call_prints_no_secret(" "test_a_failed_outgoing_call_leaves_an_entry_that_says_it_failed(" "test_with_httpx_logging_turned_up_the_console_still_prints_no_secret("; do lines "$ST" "async def $t" 1 || exit 1; done) && lines "$ST" "def test_an_address_keeps_only_what_is_known_to_be_safe():" 1'
+  check "L04 test: it reads the log store, the logs API's events and stats, and the console" \
+    'gq -F "wrote = dict(zip((\"the log store\", \"the logs API'"'"'s events\", \"the logs API'"'"'s stats\"), seen[\"texts\"], strict=True))" "$ST" && lines "$ST" "    wrote[\"the console\"] = console" 1 && lines "$ST" "            assert value not in text, f\"the value of [{label}] is in {where}\"" 1'
+  check "L04 exists once, [Tier 1, 5] [FIX], not a [SECURITY FIX], with its title" \
+    '[ "$(grep -cE "^[*][*]L04[*][*] " "$BS")" = 1 ] && has "$L04" "**L04** [Tier 1, 5] [FIX] **URL sanitization, and a failed call is recorded** -- " && ! printf "%s" "$L04" | gq -F "[SECURITY FIX]"'
+  check "L04 says allow-list, the failed call, the console, its test, the fix and what it does not cover" \
+    'has "$L04" "by an allow-list, not a list of bad names" && has "$L04" "A call that got no response (refused, timed out, name not found) is logged too, with no status and the error'"'"'s type as its error, never the error'"'"'s text" && has "$L04" "\`backend/app/access_log.py\` puts \`MaskAddresses\` on \`uvicorn.error\` and \`httpx\`" && has "$L04" "\`backend/tests/integration/test_log_secrets.py\` exists and passes" && has "$L04" "Fix: copy the scaffold'"'"'s \`log_service.py\`, \`access_log.py\` and the test" && has "$L04" "no security file changes" && has "$L04" "Not covered: logs already written keep what they hold; a secret shorter than 20 characters in a path; an address the app'"'"'s own code prints itself." && has "$L04" "An app built before this check fails it; /resume-it'"'"'s catch-up offers it with the other activity-log gaps."'
+  check "no instruction still describes masking by a list of bad names" \
+    '[ "$(cat "$BS" "$PT" "$DB" "$GR" "$MK" "$RF" "$R/$REL_RM" | grep -ciE "params containing|key contains .token|sensitive query params" || true)" = 0 ]'
+  check "the prompt, the blueprint and the guardrails say allow-list and the failed call; resume-it's scan looks for both" \
+    'gq -F "Allow-list, never a list of bad names: keep a query parameter'"'"'s value only if its key is one known to" "$PT" && gq -F "3. httpx has no hook for a call that got no response: wrap the client'"'"'s send, log the error'"'"'s type, re-raise" "$PT" && gq -F "URL sanitization is an allow-list, not a list of bad names" "$DB" && gq -F "A call that got no response (refused, timed out) is logged too, with the error'"'"'s type, never its text (L04)" "$GR" && gq -F "(L04: \`_SAFE_QUERY_PARAMS\` and \`client.send = _send\` in \`log_service.py\`, \`MaskAddresses\` in \`access_log.py\`)" "$RS"'
 
   # L09 -- the sign-in code puts the verified user on the request
   check "auth.py: get_current_user sets request.state.user = user, once" 'lines "$AU" "    request.state.user = user" 1'
@@ -174,6 +209,13 @@ plant "the middleware reading a name UserInfo does not have" "$REL_LG" 's.replac
 plant "the L09 test overriding get_current_user" "$REL_UT" \
   's.replace("    _fastapi_app.dependency_overrides.clear()\n", "    _fastapi_app.dependency_overrides.clear()\n    _fastapi_app.dependency_overrides[get_current_user] = lambda: ADMIN_USER\n", 1)'
 plant "the console filter left off uvicorn.error" "$REL_AL" 's.replace("_LOGGERS = (\"uvicorn.access\", \"uvicorn.error\")", "_LOGGERS = (\"uvicorn.access\",)", 1)'
+plant "a secret's name put on the safe list" "$REL_LS" 's.replace("        \"page\",\n", "        \"page\",\n        \"access_token\",\n", 1)'
+plant "the failed-call wrap taken out" "$REL_LS" 's.replace("    client.send = _send  # type: ignore[method-assign]\n", "", 1)'
+plant "a failed call recorded with the error text" "$REL_LS" 's.replace("_record(failed, None, type(exc).__name__)", "_record(failed, None, str(exc))", 1)'
+plant "httpx left off the address filter" "$REL_AL" 's.replace("_ADDRESS_LOGGERS = (\"uvicorn.error\", \"httpx\")", "_ADDRESS_LOGGERS = (\"uvicorn.error\",)", 1)'
+plant "the L04 test with a fixed secret value" "$REL_ST" 's.replace("        self[label] = secrets.token_hex(16)\n", "        self[label] = \"fixed-value-0001\"\n", 1)'
+plant "L04 marked [SECURITY FIX]" "$REL_BS" 's.replace("**L04** [Tier 1, 5] [FIX] ", "**L04** [Tier 1, 5] [FIX] [SECURITY FIX] ", 1)'
+plant "the bad-name wording back in the blueprint" "$REL_DB" 's.replace("- URL sanitization is an allow-list, not a list of bad names: ", "- URL sanitization: strips query params containing token: ", 1)'
 plant "the console filter not installed" "$REL_MA" 's.replace("\ndrop_query_strings_from_server_log()\n", "\n", 1)'
 plant "the trusted-proxy wrap dropped" "$REL_MA" 's.replace("app = TrustedProxyHeaders(app, settings.TRUSTED_PROXIES)  # type: ignore[assignment]\n", "", 1)'
 plant "a wrap added outside the trusted-proxy one" "$REL_MA" 's + "\napp = TrailingSlashASGI(app)  # type: ignore[assignment]\n"'
@@ -216,6 +258,15 @@ PY
     check "(control) $1: its test fails ($WANT)" \
       '! (cd "$TMPD/b" && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider "$TF" </dev/null >"$TMPD/red.out" 2>&1) && gq -E "^$WANT in " "$TMPD/red.out" || { tail -n 5 "$TMPD/red.out"; false; }'
   }
+  check "the scaffold's L04 test file passes, every case run (7)" \
+    '(cd "$SB" && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/integration/test_log_secrets.py </dev/null >"$TMPD/pytest4.out" 2>&1) || { tail -n 25 "$TMPD/pytest4.out"; false; }'
+  check "  ... 7 passed, none skipped" 'gq -E "^7 passed" "$TMPD/pytest4.out" && [ "$(grep -c "skipped" "$TMPD/pytest4.out")" = 0 ]'
+  red "masking by the old list of bad names" app/services/log_service.py 's.replace("if name.lower() in _SAFE_QUERY_PARAMS and len(value) < _LONG", "if name.lower() not in {\"token\", \"key\", \"secret\", \"password\", \"auth\", \"api_key\", \"apikey\"}", 1)' tests/integration/test_log_secrets.py "6 failed, 1 passed"
+  red "user:password@ left in the address" app/services/log_service.py 's.replace("parts.netloc.rpartition(\"@\")[2]", "parts.netloc", 1)' tests/integration/test_log_secrets.py "2 failed, 5 passed"
+  red "the failed-call wrap taken out" app/services/log_service.py 's.replace("    client.send = _send  # type: ignore[method-assign]\n", "", 1)' tests/integration/test_log_secrets.py "2 failed, 5 passed"
+  red "the stats not counting a call with no status" app/services/log_service.py 's.replace("if e.error or (e.status and e.status >= 400)", "if e.status and e.status >= 400", 1)' tests/integration/test_log_secrets.py "2 failed, 5 passed"
+  red "httpx left off the address filter" app/access_log.py 's.replace("_ADDRESS_LOGGERS = (\"uvicorn.error\", \"httpx\")", "_ADDRESS_LOGGERS = (\"uvicorn.error\",)", 1)' tests/integration/test_log_secrets.py "1 failed, 6 passed"
+  red "uvicorn.error left off the address filter" app/access_log.py 's.replace("_ADDRESS_LOGGERS = (\"uvicorn.error\", \"httpx\")", "_ADDRESS_LOGGERS = (\"httpx\",)", 1)' tests/integration/test_log_secrets.py "1 failed, 6 passed"
   red "the user fix taken out" app/middleware/auth.py 's.replace("    request.state.user = user\n", "", 1)' tests/integration/test_activity_log_user.py "3 failed, 13 passed"
   red "the log takes the user from an X-User header" app/middleware/logging.py 's.replace("        user_sub = None\n        user_email = None\n", "        user_sub = request.headers.get(\"x-user\")\n        user_email = request.headers.get(\"x-user\")\n", 1)' tests/integration/test_activity_log_user.py "2 failed, 14 passed"
   red "auth signs in from an X-User header" app/middleware/auth.py 's.replace("    token = request.cookies.get(\"token\")\n", "    token = request.cookies.get(\"token\")\n    if request.headers.get(\"x-user\"):\n        request.state.user = UserInfo(sub=request.headers[\"x-user\"], email=request.headers[\"x-user\"], name=\"\", role_id=\"\", role_name=\"\", permissions=[])\n", 1)' tests/integration/test_activity_log_user.py "2 failed, 14 passed"

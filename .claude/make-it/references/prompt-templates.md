@@ -918,16 +918,24 @@ For Axios (Node.js):
 1. Request interceptor: stamp config._logStartTime = Date.now()
 2. Response interceptor (success): calculate duration, call logService.logOutbound()
 3. Response interceptor (error): calculate duration, extract error message, call logService.logOutbound()
+   A call that got no response (refused, timed out, name not found) is logged too: no status, and the
+   error's type or code (error.code) as the error, never its message, which can hold the address
 
 For httpx (Python):
 1. Create a custom transport or event hook that captures timing and status
 2. Same capture fields as Axios pattern
+3. httpx has no hook for a call that got no response: wrap the client's send, log the error's type, re-raise
 
 URL sanitization (MUST apply before logging):
 - Parse the full URL (resolve relative URLs against baseURL)
-- For each query parameter, if key contains 'token', 'key', 'secret', or 'password'
-  (case-insensitive), replace the value with '***'
+- Allow-list, never a list of bad names: keep a query parameter's value only if its key is one known to
+  be safe (page, per_page, page_size, limit, offset, sort, sort_by, order, order_by, format, lang, locale,
+  version, api-version) and the value is under 20 characters; replace every other value with '***'
+  (access_token, client_secret, code, X-Amz-Signature and any name nobody listed); a value with no key is '***'
+- Drop user:password@ and the fragment; replace a path segment of 20+ characters that is not a UUID with '***'
 - Return the sanitized URL string
+- Apply the same masking to every address in what the server prints (an unhandled error's traceback, the
+  HTTP client's own request log line) (build-standards L04)
 
 Error message extraction:
 - Try: response.data.errorMessages[0], response.data.message, error.message

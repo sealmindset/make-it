@@ -1,13 +1,15 @@
 """In-memory activity log service with circular buffer.
 
-Captures inbound API requests and outbound HTTP calls for observability.
+Captures inbound API requests and outbound HTTP calls (answered or not) for observability.
 Buffer size configurable via LOG_BUFFER_SIZE env var (default 10000).
 """
 
+import re
 import time
 from collections import Counter, deque
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -144,7 +146,8 @@ class LogStore:
         return results
 
     def stats(self) -> dict[str, Any]:
-        error_count = sum(1 for e in self._buffer if e.status and e.status >= 400)
+        # an outbound call that got no response has an error and no status
+        error_count = sum(1 for e in self._buffer if e.error or (e.status and e.status >= 400))
 
         by_type: Counter[str] = Counter()
         by_service: Counter[str] = Counter()
@@ -194,22 +197,60 @@ log_store = LogStore()
 # ---------------------------------------------------------------------------
 # URL sanitization
 # ---------------------------------------------------------------------------
-_SENSITIVE_PARAMS = {"token", "key", "secret", "password", "auth", "api_key", "apikey"}
+# An allow-list, not a list of bad names: a query value is kept only when its name is one of these
+# (and the value is short). Every other value is written as ***, whatever it is called, so the next
+# secret-carrying name nobody thought of is masked too. Add a name here only if it never carries a secret.
+_SAFE_QUERY_PARAMS = frozenset(
+    {
+        "page",
+        "per_page",
+        "page_size",
+        "limit",
+        "offset",
+        "sort",
+        "sort_by",
+        "order",
+        "order_by",
+        "format",
+        "lang",
+        "locale",
+        "version",
+        "api-version",
+        "api_version",
+    }
+)
+# A path segment or a "safe" value this long could be a key (a webhook address carries one in its path).
+_LONG = 20
+_UUID = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
+_ADDRESS = re.compile(r"https?://[^\s'\"<>]+")
 
 
 def sanitize_url(url: str) -> str:
-    """Strip sensitive query params from a URL before logging."""
-    if "?" not in url:
-        return url
-    base, query = url.split("?", 1)
-    params = []
-    for param in query.split("&"):
-        name = param.split("=", 1)[0].lower()
-        if name in _SENSITIVE_PARAMS:
-            params.append(f"{param.split('=', 1)[0]}=***")
-        else:
-            params.append(param)
-    return f"{base}?{'&'.join(params)}"
+    """An address that is safe to log: no user:password, no fragment, query values masked unless known safe.
+
+    A path segment of 20 or more characters that is not a UUID is masked too. That part is a guess, not a
+    proof: a shorter secret in a path is not caught.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "***"
+    path = "/".join(
+        "***" if len(segment) >= _LONG and not _UUID.fullmatch(segment) else segment
+        for segment in parts.path.split("/")
+    )
+    query = "&".join(
+        f"{name}={value}"
+        if name.lower() in _SAFE_QUERY_PARAMS and len(value) < _LONG
+        else (f"{name}=***" if has_value else "***")
+        for name, has_value, value in (param.partition("=") for param in parts.query.split("&") if param)
+    )
+    return urlunsplit((parts.scheme, parts.netloc.rpartition("@")[2], path, query, ""))
+
+
+def sanitize_text(text: str) -> str:
+    """The same masking for every http(s) address inside a longer text (an error message, a traceback)."""
+    return _ADDRESS.sub(lambda found: sanitize_url(found.group()), text)
 
 
 # ---------------------------------------------------------------------------
@@ -218,34 +259,52 @@ def sanitize_url(url: str) -> str:
 
 
 def attach_outbound_logging(client: httpx.AsyncClient, service_name: str) -> httpx.AsyncClient:
-    """Attach logging hooks to an httpx.AsyncClient for outbound call tracking.
+    """Attach logging to an httpx.AsyncClient: one entry per outbound call, answered or not.
 
     Usage in service clients:
         client = httpx.AsyncClient(base_url=settings.JIRA_BASE_URL)
         attach_outbound_logging(client, "jira")
     """
 
+    def _record(request: httpx.Request, status: int | None, error: str | None) -> None:
+        start = request.extensions.get("log_start")
+        safe_url = sanitize_url(str(request.url))
+        log_store.add(
+            LogEvent(
+                event_type="outbound",
+                method=request.method,
+                path=urlsplit(safe_url).path,
+                url=safe_url,
+                status=status,
+                duration_ms=round((time.time() - start) * 1000, 2) if start else None,
+                service=service_name,
+                error=error,
+            )
+        )
+
     async def _on_request(request: httpx.Request) -> None:
         request.extensions["log_start"] = time.time()
 
     async def _on_response(response: httpx.Response) -> None:
-        start = response.request.extensions.get("log_start")
-        duration = round((time.time() - start) * 1000, 2) if start else None
-        raw_url = str(response.request.url)
-        safe_url = sanitize_url(raw_url)
+        status = response.status_code
+        _record(response.request, status, str(status) if status >= 400 else None)
 
-        event = LogEvent(
-            event_type="outbound",
-            method=response.request.method,
-            path=response.request.url.path,
-            url=safe_url,
-            status=response.status_code,
-            duration_ms=duration,
-            service=service_name,
-            error=str(response.status_code) if response.status_code >= 400 else None,
-        )
-        log_store.add(event)
+    # httpx has no hook for a call that got no response (refused, timed out, name not found), so the
+    # client's send is wrapped. The entry carries the error's type only: its text can hold the address.
+    send = client.send
 
+    async def _send(request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
+        try:
+            return await send(request, *args, **kwargs)
+        except Exception as exc:
+            try:
+                failed = exc.request  # type: ignore[attr-defined]  # the hop that failed, after a redirect
+            except (AttributeError, RuntimeError):
+                failed = request
+            _record(failed, None, type(exc).__name__)
+            raise
+
+    client.send = _send  # type: ignore[method-assign]
     client.event_hooks["request"].append(_on_request)
     client.event_hooks["response"].append(_on_response)
     return client

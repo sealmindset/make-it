@@ -2047,7 +2047,8 @@ interface LogEvent {
 - Attaches to every axios/httpx instance that calls an external service
 - Stamps request start time, calculates duration on response
 - Captures: service name, sanitized URL, method, status, duration, error message
-- URL sanitization: strips query params containing 'token', 'key', 'secret', 'password' (replaced with `***`)
+- URL sanitization is an allow-list, not a list of bad names: a query value is kept only under a name known to be safe (paging, sorting, format, language, version) and under 20 characters; every other value is `***`, `user:password@` and the fragment are dropped, and a path segment of 20+ characters that is not a UUID is `***`. The same masking applies to every address the server prints (build-standards L04)
+- A call that got no response (refused, timed out, name not found) is logged too: no status, the error's type as the error, never its text
 - Error messages: truncated to 500 chars, extracts meaningful message from response body
 - Must be attached at every point where an HTTP client is created (constructor, reconnect, OAuth refresh)
 
@@ -2135,7 +2136,7 @@ LOG_BUFFER_SIZE: ${LOG_BUFFER_SIZE:-10000}
 - Ephemeral -- all data lost on restart, no database tables, no persistent storage
 - Zero external dependencies -- no Redis, no log aggregator needed for basic functionality
 - Low overhead -- circular buffer with configurable size, noise-filtered middleware
-- Security -- URL sanitization strips sensitive query params, auth required for all endpoints
+- Security -- URL sanitization keeps only query values known to be safe and masks the rest, auth required for all endpoints
 - Framework-agnostic design -- same pattern works in NestJS, FastAPI, Express, or any HTTP framework
 
 ---
@@ -3089,7 +3090,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] Activity Log module exists with circular buffer, inbound middleware, outbound interceptors
 - [ ] Activity Log middleware skips health checks and static assets
 - [ ] Outbound logger attached to ALL HTTP client creation points (including reconnect/OAuth refresh)
-- [ ] URL sanitization strips sensitive query params (token, key, secret, password)
+- [ ] URL sanitization is an allow-list: only query values known to be safe are kept, every other value is `***`; a call with no response leaves an entry (L04)
 - [ ] admin.logs RBAC resource with read and delete actions seeded in migration
 - [ ] Admin UI Activity Logs tab with stats cards, filters, event table, auto-refresh
 - [ ] Clear Buffer action gated by admin.logs.delete (Super Admin only)

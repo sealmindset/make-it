@@ -812,7 +812,9 @@ say); it works as both, instead of inferring a specialist of its own.
         console log prints no query string (L10).
      d. **Outbound HTTP interceptor** -- Axios/httpx interceptor factory attached to ALL
         service client creation points. Captures service name, method, URL, status, duration.
-        URL sanitization strips sensitive query params (token, key, secret, password, auth).
+        URL sanitization is an allow-list: a query value is kept only under a name known to be
+        safe; every other value is written *** (L04). A call that got no response (refused,
+        timed out) is logged too, with the error's type.
      e. **REST API** -- Three endpoints under /api/admin/logs:
         - GET /events (query params: type, service, method, since, limit) -- requires admin.logs.read
         - GET /stats -- requires admin.logs.read

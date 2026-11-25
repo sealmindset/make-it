@@ -925,7 +925,8 @@ Execute all changes in sequence, following the /make-it prompt order but ADAPTED
     - The server's console log prints no query string (L10), and the visitor's address is
       taken from X-Forwarded-For only from the proxies in TRUSTED_PROXIES (L11)
     - Add outbound HTTP interceptor to ALL existing service client creation points
-    - Add URL sanitization to strip sensitive query params before logging
+    - Add URL sanitization before logging: an allow-list that keeps only query values known to be
+      safe and masks the rest (L04); a call that got no response is logged too, with the error's type
     - Add REST API: GET /api/admin/logs/events, GET /api/admin/logs/stats,
       DELETE /api/admin/logs/events (with RBAC permissions)
     - Add admin.logs resource with read and delete actions to RBAC seed data
