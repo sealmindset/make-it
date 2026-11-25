@@ -32,6 +32,7 @@ SIT = (3, 5)      # held cards brought to a weekly sitting: three when questions
 EXPIRE_DAYS = 30  # quiet days after which a card marked safe to close closes itself: a month with no change, no pull request and no mention means nobody is asking
 EXPIRE_WARN = 7   # the first screen counts the cards that will close within this many days: a week's notice, so one look a week is enough to save one
 SAFETY = r'secur|secret|credential|password|token|\bkey\b|leak|vulnerab|\bCVE|auth|permission|privacy|personal|data loss|los\w* (?:\w+ )?data|delet|destroy|overwrit|corrupt|wrong|untrue|false|mislead|\blie[sd]?\b|\bpay|\bbill|money|\bgate|guard|\bscan|fail'  # words in a title or category that mark a card as one that can hurt someone (lose data, leak a secret, send something wrong, say something untrue) or as a gate or failed check: it never expires, marked or not. A guard on top of the judge's mark, never the judgement itself: a word list always misses the next one
+STAMP_SKIP = ('updated', 'expires', 'expires_why', 'expires_by', 'expires_of', 'mode', 'plan', 'files', 'reconciled')  # the fields a helper itself writes as bookkeeping (the date of the last write, the mark, plan's and groom's notes-to-self): changing one says nothing new about the card, so it does not clear a judge's mark; any other change does
 MARK = '.last-seen.json'  # when the owner last opened the first screen, and what the board held then
 
 def day(s):
@@ -437,9 +438,12 @@ def first(f, proj, prs, lane_cap, seen=False):
         out += [f"    {name(p)} -- " + (f"frees {n(p)} other card{'s' * (n(p) != 1)}" if n(p) else 'nothing else waits on it') for p in sit]
     items, areas = running_list(f)
     if items: out.append(f"  Running list: {items} small item{'s' * (items != 1)} across {areas} area{'s' * (areas != 1)}")
+    listed = len(out) - 1 if items else None
     if ro := f['reopened']: out.append('  ' + fit(f"Reopened: {len(ro)} fix{'es' * (len(ro) != 1)} did not hold -- ", ro))  # the signal that matters
     ex = expiry(f); due = len(ex['close']) + len(ex['soon'])
-    if due: out.append(f"  Quiet cards: {due} will close in the next {EXPIRE_WARN} days (`/backlog-it expire --dry-run` lists them)")
+    short = f" · {due} quiet card{'s' * (due != 1)} close{'s' * (due == 1)} within {EXPIRE_WARN} days (`expire --dry-run`)"
+    if due and listed is not None and len(out[listed]) + len(short) <= 110: out[listed] += short  # two small counts share a line, so the fullest screen keeps to its 25
+    elif due: out.append(f"  Quiet cards: {due} will close in the next {EXPIRE_WARN} days (`/backlog-it expire --dry-run` lists them)")
     unmarked = len(out) if not due and not ex['later'] and f['open'] else None  # where "nothing is marked" goes, if the screen has room for it
     # what changed: against the mark the last --seen look left, else the last 24 hours (dates are whole days)
     stuck_prs_now = prs[1] if prs[0] is not None else []
@@ -494,18 +498,20 @@ def first(f, proj, prs, lane_cap, seen=False):
     if seen and not mark_seen(B, snap): out.append('  (this look was not recorded: the board folder could not be written)')
     return '\n'.join(out)
 
-def stamp_of(title, text):
-    """What a judge read when it marked a card safe to close: a short print of the title, the `## Goal` section and
-    the `## Found` section (its heading line too). The mark holds only while this still matches the card."""
-    sec = lambda h: (re.search(rf'^## {h}\b[^\n]*\n.*?(?=^## |\Z)', text, re.M | re.S) or [''])[0]
-    return hashlib.sha256(' '.join(f"{title.strip()} {sec('Goal')} {sec('Found')}".split()).encode()).hexdigest()[:12]
+def stamp_of(text):
+    """What a judge read when it marked a card safe to close: a short print of the WHOLE card -- every frontmatter
+    field and the whole body -- leaving out only the bookkeeping fields in STAMP_SKIP. The mark holds only while
+    this still matches the card: any other change (a new note, a new section, a changed field) clears it."""
+    m = re.match(r'---\n(.*?)\n---', text.replace('\r\n', '\n'), re.S)
+    head = [l for l in (m.group(1).split('\n') if m else []) if l.split(':', 1)[0].strip() not in STAMP_SKIP]
+    return hashlib.sha256(' '.join(('\n'.join(head) + text.replace('\r\n', '\n')[m.end() if m else 0:]).split()).encode()).hexdigest()[:12]
 
 def expiry(f):
     """Which cards close by themselves, and why every other card never does: {'close': [(path, quiet days)],
     'soon': [(path, quiet days, days left)], 'later': [(path, quiet days)] not quiet long enough yet, 'kept': {path: reason}}.
     The written rule (the reference's `expire`). No mark, never: a card can close only if a judge who read the whole
-    card marked it `expires: ok` with `expires_why:` and `expires_by:` (groom, or you), and its title, goal and found
-    text are still what the judge read (`expires_of:`). Fields and headings cannot tell that a card is safe or that
+    card marked it `expires: ok` with `expires_why:` and `expires_by:` (groom, or you), and the card is still what
+    the judge read (`expires_of:`, a print of the whole card but its bookkeeping fields). Fields and headings cannot tell that a card is safe or that
     nobody asked for it -- that is the judge's call, never this helper's. Every hard rule below is applied on top,
     so a wrong mark alone cannot close a protected card. Quiet = days since the later of the card's own last
     change and the last change of any card that mentions it; a date in the future counts as today."""
@@ -540,7 +546,7 @@ def expiry(f):
         # the hard rules are passed; now the mark, without which nothing closes
         if v(d, 'expires') != 'ok': return 'not marked as safe to close (`expires: ok`): groom marks it, or you do'
         if not v(d, 'expires_why') or v(d, 'expires_by') not in ('groom', 'you'): return 'marked, but without who judged it (`groom` or `you`) and why: the mark does not count'
-        if v(d, 'expires_of') != stamp_of(v(d, 'title'), t): return 'marked safe to close, but its title, goal or found text changed since: the mark no longer counts'
+        if v(d, 'expires_of') != stamp_of(t): return 'marked safe to close, but the card changed since: the mark no longer counts'
         if f['last'](p) == datetime.date.min: return 'no date can be read on it'
         return ''
     out = dict(close=[], soon=[], later=[], kept={})

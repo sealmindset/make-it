@@ -256,6 +256,8 @@ rc, why = plan_check(d, D3(bid, 'E01-S61', 'E01-S62'), '--serial', 'billing')
 ok('a part moved to a one-at-a-time category AFTER bundling makes the bundle one-at-a-time in that category', rc != 0 and 'serial category billing' in why, why)
 b = rd(f'{d}/board/BOARD.md'); line = (re.search(rf'^- .*{bid} · .*$', b, re.M) or [''])[0]
 ok('a part raised to P1 or pinned AFTER bundling raises and pins the bundle', ' P1_' in line and '📌1' in line, line)
+cset(d, 'E02-S20', 'priority=P3'); cset(d, 'E02-S21', 'priority=P3'); line = (re.search(rf'^- .*{bid} · .*$', rd(f'{d}/board/BOARD.md'), re.M) or [''])[0]
+ok('... and parts lowered AFTER bundling lower it: the bundle\'s priority is its parts\', worked out on every read', ' P3_' in line, line)
 ok('nothing of this is stored: the bundle card\'s own file never gains stakes, a decision, a pin or a conflict', not re.search(r'^(stakes|decision|pin|conflictsWith):', text(d, bid), re.M) and fmv(d, bid, 'priority') == 'P2', text(d, bid))
 
 # ============================== THE REVIEW'S SMALL ONES ==============================
@@ -330,14 +332,28 @@ for cid, says in (('E02-S33', 'high-stakes'), ('E01-S80', 'a bug'), ('E02-S93', 
     r = shrink(d, 'stamp', cid, '--by', 'you', stdin='x\n')
     ok(f'stamp refuses a card a hard rule protects ({says})', r.returncode != 0 and says in r.stderr, r.stdout + r.stderr)
 ok('stamp needs a reason and a known judge', shrink(d, 'stamp', 'E02-S90', '--by', 'me', stdin='x\n').returncode != 0 and shrink(d, 'stamp', 'E02-S90', '--by', 'groom', stdin='\n').returncode != 0 and fmv(d, 'E02-S90', 'expires') is None)
+far_of = lambda d: run('shrink.py', d, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=90)), board_flag=True)
+would = lambda d, cid: f'({cid})' in far_of(d).split('Kept')[0]  # 90 days on, would this card close?
+def rewrite(d, cid, old, new): pth, txt = path(d, cid), text(d, cid); open(pth, 'w', encoding='utf-8').write(txt.replace(old, new))
+EDITS = (('its title', lambda d: cset(d, 'E02-S30', 'title="A tidy-up of the report page"')),
+         ('its goal', lambda d: rewrite(d, 'E02-S30', '## Goal\nx\n', '## Goal\nRob needs this for the audit.\n')),
+         ('its found text', lambda d: rewrite(d, 'E02-S30', 'In a review of other work.', 'Rob asked for this in a review.')),
+         ('a note added under a new section (the review\'s case)', lambda d: call('card.py', d, 'append', 'E02-S30', 'Notes', stdin='Rob: the owner asked for this, I need it.\n', board_flag=True)),
+         ('a new section written by hand', lambda d: rewrite(d, 'E02-S30', '## Found', '## Why it matters\nIt loses a row.\n\n## Found')),
+         ('a field a person sets (its size)', lambda d: cset(d, 'E02-S30', 'size=XL')))
+for how, edit in EDITS:
+    d = board(*QUIET, '--with', 'quiet'); was = would(d, 'E02-S30'); edit(d); far = far_of(d)
+    ok(f'a change to the card after the mark clears the mark: {how}', was and '(E02-S30)' not in far.split('Kept')[0] and 'changed since' in far.split('Kept')[1], far)
+shrink(d, 'expire', '--no-sync')
+ok('... so the changed card does not close', fmv(d, 'E02-S30', 'status') == 'backlog')
 d = board(*QUIET, '--with', 'quiet')
-for how, edit in (('its title', lambda: cset(d, 'E02-S30', 'title="A tidy-up of the report page"')),
-                  ('its found text', lambda: (lambda pth, new: open(pth, 'w', encoding='utf-8').write(new))(path(d, 'E02-S31'), text(d, 'E02-S31').replace('In a review of other work.', 'Rob asked for this in a review.')))):
-    edit(); far = run('shrink.py', d, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=90)), board_flag=True)
-    ok(f'an edit to {how} after the mark clears the mark: the judgement was about the old words', 'changed since' in far and far.count('nobody asked for (E02-S3') == (1 if how == 'its title' else 0), far)
-shrink(d, 'expire')
-ok('... so neither edited card closes', fmv(d, 'E02-S30', 'status') == 'backlog' and fmv(d, 'E02-S31', 'status') == 'backlog')
+cset(d, 'E02-S30', 'mode=solo', 'files=[src/a.py]', 'reconciled=2026-11-01'); subprocess.run([sys.executable, f'{BIN}/regen-board.py', f'{d}/board'], check=True)
+ok('bookkeeping alone does not clear it: a helper\'s own fields (updated:, mode:, files:, reconciled:) and a regenerate leave the mark standing',
+   would(d, 'E02-S30') and re.search(r'^STAMP_SKIP = .+#.{30,}', src('status.py'), re.M) is not None, far_of(d))
 dn = board(*QUIET, '--with', 'bundle-set'); dry = run('shrink.py', dn, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=400)), board_flag=True); fs = first(dn)
+df = board('--with', 'bundle-set,quiet,shipped,running-list'); shrink(df, 'reopen', 'E01-S30', stdin='still wrong\n'); fsf = first(df)
+ok('the fullest first screen (a question, held cards, the running list, a reopened fix, quiet cards) fits its 25 lines, hiding none of them',
+   len(fsf.splitlines()) <= 25 and max(map(len, fsf.splitlines())) <= 110 and all(x in fsf for x in ('Filings give up after two tries (E01-S3):', 'Held, high-stakes:', 'Running list: 2 small items', 'Reopened: ', 'quiet cards close within 7 days')), f'{len(fsf.splitlines())} lines\n' + fsf)
 ok('with no card marked, nothing ever closes, and both the dry run and the first screen say so',
    'Would close 0 cards' in dry and 'no card is marked as safe to close yet: groom marks them' in dry and 'no card is marked as safe to close yet: groom marks them' in fs and max(map(len, fs.splitlines())) <= 110, dry + fs)
 import shutil

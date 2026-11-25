@@ -60,6 +60,9 @@ def main(args):
               'status': 'backlog', 'priority': 'P2', 'created': d(ago), 'updated': d(ago), **kv}
         if s and e == 'E01' and kv['status'] != 'done': kv.setdefault('stage', 'Reported')
         body = kv.pop('body', '')
+        if kv.pop('stamp', False):  # a judge's mark, with the board's own print of the whole card as it will be written
+            text = '---\n' + ''.join(f'{k}: {x}\n' for k, x in kv.items()) + '---\n' + body
+            kv = {**kv, 'expires': 'ok', 'expires_why': 'a tidy-up nobody asked for; it cannot hurt anyone', 'expires_by': 'groom', **{'expires_of': kv.pop('expires_of', None) or STAMP(text)}}
         ev.append((ago, f'{B}/items/{folder}/' + ('epic.md' if not s else f'stories/{s}.md'), kv, body))
     card(40, 'E01', 'Bugs', status='in-progress'); card(40, 'E02', 'Board work', status='in-progress')
     held = dict(stakes='critical')
@@ -115,12 +118,10 @@ def main(args):
         import importlib.util  # the mark a judge leaves on a card that may close when quiet, made by the board's own function
         spec = importlib.util.spec_from_file_location('status_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '.claude', 'make-it', 'backlog', 'bin', 'status.py'))
         S = importlib.util.module_from_spec(spec); spec.loader.exec_module(S)
-        def q(n, title, ago=40, stamp=True, **kv):
-            body = kv.pop('body', found)
-            ok = dict(expires='ok', expires_why='a tidy-up nobody asked for; it cannot hurt anyone', expires_by='groom', expires_of=S.stamp_of(f'"{title}"', body)) if stamp else {}
-            card(ago, f'E02-S{n}', title, **{'body': body, **ok, **kv})
+        STAMP = S.stamp_of
+        q = lambda n, title, ago=40, stamp=True, **kv: card(ago, f'E02-S{n}', title, **{'body': found, 'stamp': stamp, **kv})
         q(30, 'A tidy-up nobody asked for', 30); q(31, 'Another tidy-up nobody asked for', 29)
-        card(40, 'E01-S80', 'An old bug found in a review', body=found, expires='ok', expires_why='x', expires_by='groom', expires_of=S.stamp_of('"An old bug found in a review"', found))
+        card(40, 'E01-S80', 'An old bug found in a review', body=found, stamp=True)
         q(33, 'Rework the page that moves customer records', stakes='critical')
         q(34, 'Rotate the API token every month')
         q(35, 'The page you asked for', body='\n## Captured\n> make me a page\n_via /backlog-it capture_\n')

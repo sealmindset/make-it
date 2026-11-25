@@ -537,7 +537,9 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
    open lines and how many areas they are in. Then, only when there are any: **Reopened** -- how many
    fixes did not hold, by title with id (the signal that matters most); and **Quiet cards** -- how many
    marked cards will close by themselves in the next 7 days, with the command that lists them (or,
-   while the screen has room, that no card is marked yet).
+   while the screen has room, that no card is marked yet). When the running list is shown too, the
+   two counts share its line, so the fullest screen keeps to 25 lines without hiding a question or
+   the held list.
 3. **SINCE YOU LAST LOOKED** -- three lines: what shipped (cards closed as not needed are counted
    apart), what was found, what got stuck. "Last looked" is the last time the skill showed this
    screen: `--seen` writes `<board>/.last-seen.json` (the time, and the ids that were open, done and
@@ -712,8 +714,8 @@ never stored** on the bundle card (`regen-board.py`'s `lift` and `needs`, which 
 through). So a part that changes after bundling carries the bundle with it: the bundle is
 high-stakes if any part is (held, never in a wave); it waits on your answer if any part does (the
 question is listed once, on the part); it waits on whatever any part waits on, and on a part
-somebody started alone; it conflicts with whatever any part conflicts with; it takes the highest
-priority and the pin of its parts; and it is one-at-a-time in every `serial` category a part is in.
+somebody started alone; it conflicts with whatever any part conflicts with; it takes its parts' highest
+priority (and drops when they are lowered) and their pin; and it is one-at-a-time in every `serial` category a part is in.
 A part's own `pr:` is not lifted: one pull request does the bundle, and it is the bundle's.
 
 **A bundle counts as ONE thing to do**, and its parts are still shown by title with id: `BOARD.md`
@@ -764,7 +766,7 @@ expire" means. A card can expire ONLY if a judge who read the whole card marked 
 expires: ok
 expires_why: a tidy-up of names; it cannot hurt anyone, and nobody asked for it   # one plain line
 expires_by: groom        # who judged: groom (its judge) or you (the owner's pick)
-expires_of: 3f9a1c0b7d2e # set by the helper: a print of the title, goal and found text that were judged
+expires_of: 3f9a1c0b7d2e # set by the helper: a print of the whole card that was judged
 ```
 
 Two judges give the mark, and nobody else:
@@ -780,9 +782,11 @@ Two judges give the mark, and nobody else:
 
 **The helper stays no-AI.** `shrink.py expire` closes only marked cards, and **every hard rule still
 applies on top of the mark**, so a wrong mark alone cannot close a protected card. `shrink.py stamp`
-refuses a card a hard rule protects. **An edit clears the mark**: when the card's title, `## Goal` or
-`## Found` text is no longer what the judge read, the mark does not count (the judgement was about the
-old words) until a judge marks it again.
+refuses a card a hard rule protects. **An edit clears the mark**: the print covers the whole card, every field and every section, so any
+change after the judgement -- a new note, a new section, a changed title or field -- means the mark
+does not count (the judgement was about the old card) until a judge marks it again. Only bookkeeping a
+helper itself writes is left out of the print, and so leaves the mark standing: `updated:`, the
+`expires…` fields, `mode:`, `plan:`, `files:` and `reconciled:` (the named constant `STAMP_SKIP`).
 
 **Never expires**, marked or not:
 - a bug (`type: breakfix`), or a card whose type is not recorded;

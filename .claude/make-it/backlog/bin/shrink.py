@@ -273,7 +273,7 @@ def stamp(B, cid, by, text, proj, nosync, T=None):
     p = next(q for q, x in f['cards'].items() if x is d)
     kept = S.expiry(f)['kept'].get(p, '')
     if kept and not kept.startswith(('not marked', 'marked', 'no date')): no(f'{full(d)} can never close by itself: {kept}')  # a hard rule protects it: a mark would change nothing, and would mislead
-    C.write(p, {'expires': 'ok', 'expires_why': why, 'expires_by': by, 'expires_of': S.stamp_of(v(d, 'title'), open(p, encoding='utf-8-sig').read())}, T=T)
+    C.write(p, {'expires': 'ok', 'expires_why': why, 'expires_by': by, 'expires_of': S.stamp_of(open(p, encoding='utf-8-sig').read())}, T=T)
     sent, rc = send(B, [p], f"card: {v(d, 'id')}: marked safe to close when quiet (by {by})", proj, nosync)
     print(f"Marked safe to close when quiet: {R.name(d)} · judged by {by} · it closes after {S.EXPIRE_DAYS} quiet days unless a hard rule or an edit stops it · {sent}")
     return rc

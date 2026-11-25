@@ -43,8 +43,8 @@ def lift(cards):
     """A bundle's state is its open parts', worked out from its parts every time the board is read and never stored on
     the bundle card -- so a part that changes after bundling carries the bundle with it, for every helper (they all
     read cards through load). The bundle is high-stakes if any part is; it waits on your answer if any part does
-    (`decisionFrom:` names that part: the question is listed once, on the part); it takes the highest priority and
-    the first pin among them; it conflicts with whatever any part conflicts with; `categories:` holds every part's
+    (`decisionFrom:` names that part: the question is listed once, on the part); it takes its parts' highest priority
+    (so it also drops when they are lowered) and the first pin among them; it conflicts with whatever any part conflicts with; `categories:` holds every part's
     category, for the one-at-a-time rule. What the parts wait on, and a part somebody started alone, are in needs().
     A part's own `pr:` is not lifted on purpose: one pull request does the bundle, and it is the bundle's."""
     byid = {v(d, 'id').upper(): d for d in cards.values()}
@@ -56,7 +56,7 @@ def lift(cards):
         if any(warn(p) for p in ps): d['stakes'] = 'critical'
         q = next((p for p in ps if waiting(p)), None)
         if q and not waiting(d): d['decision'] = f'{name(q)}, a card in this bundle, waits on your answer'; d['decisionFrom'] = v(q, 'id')
-        if (pr := [v(x, 'priority') for x in both if v(x, 'priority')]): d['priority'] = min(pr)
+        if (pr := [v(x, 'priority') for x in ps if v(x, 'priority')]): d['priority'] = min(pr)  # its parts' highest, up or down: never what was written at bundle time
         if (pins := [v(x, 'pin') for x in both if v(x, 'pin')]): d['pin'] = min(pins, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else 0, x))
         if (cw := sorted({i for x in both for i in ids(v(x, 'conflictsWith'))})): d['conflictsWith'] = '[' + ', '.join(cw) + ']'
         d['categories'] = ', '.join(sorted({v(x, 'category') for x in both if v(x, 'category')}))
