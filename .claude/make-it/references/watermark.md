@@ -41,7 +41,15 @@ a new file that was sealed but not committed makes the next clean checkout fail.
 **What it sets up.** The first seal adds four lines to the project's `.gitattributes`: `* -text`,
 so git never rewrites line endings (that would change every fingerprint on some machines), and
 `merge=union` for the three files the seal regenerates, so two sealed branches merge without a
-conflict in them.
+conflict in them. What the file already holds is kept byte for byte. A `.gitattributes` over 1 MB,
+or one that cannot be read, is left as it is and the seal is refused.
+
+**A refused seal writes nothing.** `seal` first checks every place it writes to (a link or a folder
+where a file belongs is refused), so a refusal leaves no record and no history entry behind.
+
+**Git only reads.** `seal` and `verify` ask git which files exist and nothing more. A project's own
+git settings cannot make them fetch a missing object or run a command (a missing object is simply
+missing), and a file a hand-made git index names outside the project is never opened.
 
 **Who seals.** Every make-it skill that changes a project, at its end, after its own checks:
 /make-it, /retrofit-it, /resume-it, /fix-it, /deadcode-it, /argo-it, and /try-it when its fix

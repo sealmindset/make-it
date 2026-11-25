@@ -176,16 +176,22 @@ def build_record(app, fw, results=None):
     }
 
 
-def write_inside(app, rel, text):
-    """Write one file inside the project and nowhere else. False: refused (a link on the way, or not a plain file)."""
+def can_write_inside(app, rel):
+    """May this file be written inside the project? False: a link on the way, or something there that is not a plain file."""
     path, d = os.path.join(app, rel), app
     for part in os.path.dirname(rel).split(os.sep):
         if part:
             d = os.path.join(d, part)
             if os.path.islink(d) or (os.path.lexists(d) and not os.path.isdir(d)):
                 return False
-    if os.path.islink(path) or (os.path.lexists(path) and not os.path.isfile(path)):
+    return not (os.path.islink(path) or (os.path.lexists(path) and not os.path.isfile(path)))
+
+
+def write_inside(app, rel, text):
+    """Write one file inside the project and nowhere else. False: refused (see can_write_inside)."""
+    if not can_write_inside(app, rel):
         return False
+    path = os.path.join(app, rel)
     folder = os.path.dirname(path) or app
     os.makedirs(folder, exist_ok=True)
     data = text.encode("utf-8", "surrogateescape")
@@ -284,10 +290,15 @@ def git_dir_ok(app):
 
 
 def git(app, *args):
-    """Run git reading only. A project's own git settings must not make it fetch, prompt or run a helper."""
-    env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
+    """Run git reading only. A project's own git settings must not make it fetch, prompt or run a helper.
+
+    Two guards against fetching a missing object on demand, each enough alone: GIT_NO_LAZY_FETCH (an older git
+    does not know it) and GIT_ALLOW_PROTOCOL, set to no protocol at all. It is the environment, not
+    `-c protocol.allow=never`, because the project's own `protocol.<name>.allow = always` overrides that.
+    """
+    env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
     return subprocess.run(["git", "--no-replace-objects", "-c", "safe.bareRepository=explicit",
-                           "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-C", app, *args],
+                           "-c", "core.fsmonitor=false", "-C", app, *args],
                           capture_output=True, env=env)
 
 
@@ -308,6 +319,8 @@ def stream_hash(path):
 def file_mark(app, rel):
     """A short, stable description of one file's content. Never blocks, and never reads outside the project."""
     path, d = os.path.join(app, rel), app
+    if os.path.isabs(rel) or ".." in rel.split("/"):
+        return "outside"  # a hand-made git index can name a file outside the project: never opened
     for part in rel.split("/")[:-1]:
         d = os.path.join(d, part)
         if os.path.islink(d):
@@ -370,7 +383,8 @@ def code_listing(app):
     lines = []
     for rel in sorted(marks):
         if sealed_path(rel) and (marks[rel] or os.path.lexists(os.path.join(app, rel))):
-            lines.append(f"{marks[rel] or file_mark(app, rel)}  {rel}".replace("\n", "?") + "\n")
+            name = rel.replace("\\", "\\\\").replace("\n", "\\n")  # one line per file, and no two names alike
+            lines.append(f"{marks[rel] or file_mark(app, rel)}  {name}\n")
     return "".join(lines)
 
 
@@ -384,7 +398,11 @@ ATTRS = ["* -text", "MAKE-IT.md merge=union", ".make-it/sealed-files.txt merge=u
 def keep_git_steady(app):
     """Lines the seal needs in .gitattributes: no line-ending rewriting (it would change every fingerprint), and
     generated files that merge without a conflict (the next seal rewrites them)."""
-    have = (read_plain(os.path.join(app, ".gitattributes")) or b"").decode("utf-8", "replace")
+    path = os.path.join(app, ".gitattributes")
+    raw = read_plain(path)
+    if raw is None and os.path.lexists(path):
+        return False  # over 1 MB or unreadable: never replaced by a file holding only the seal's lines
+    have = (raw or b"").decode("utf-8", "surrogateescape")  # written back byte for byte
     missing = [a for a in ATTRS if a not in have.splitlines()]
     if not missing:
         return True
@@ -489,7 +507,17 @@ def cmd_seal(app, fw, opts):
             sys.exit(f"watermark: {opts['--results']} is not a plain file holding a JSON object")
     refused = "watermark: refused: a folder or file the seal writes to is a link or not a plain file"
     rec = build_record(app, fw, results if results is not None else {})  # never what an older record claimed
-    if not save_record(app, rec) or (git_dir_ok(app) and not keep_git_steady(app)):
+    backend = {e["path"][len("backend/"):]: e["expected"] for e in rec["security_files"]
+               if e["path"].startswith("backend/") and e.get("expected")}
+    backend_dir = os.path.join(app, "backend")
+    stamped = bool(backend) and os.path.isdir(backend_dir) and not os.path.islink(backend_dir)
+    in_git = git_dir_ok(app)
+    targets = [RECORD, os.path.join(LEDGER, "entry"), SEALED, READABLE] + [STAMP] * stamped + [".gitattributes"] * in_git
+    if not all(can_write_inside(app, rel) for rel in targets):
+        sys.exit(refused)  # before anything is written: a refused seal leaves nothing behind
+    if in_git and not keep_git_steady(app):
+        sys.exit("watermark: refused: .gitattributes is over 1 MB or cannot be read, so it was left as it is. Nothing was sealed.")
+    if not save_record(app, rec):
         sys.exit(refused)
     entries, problems = load_ledger(app)
     restart = clean(opts["--restart"], 120) if opts.get("--restart") else None
@@ -525,13 +553,10 @@ def cmd_seal(app, fw, opts):
             sys.exit(refused)
         entries[entry["_hash"]] = entry
         print(f"sealed: run {entry['n']} by /{skill}, {entry['files']} files")
-    backend = {e["path"][len("backend/"):]: e["expected"] for e in rec["security_files"]
-               if e["path"].startswith("backend/") and e.get("expected")}
     # only what the release fixes: two branches at the same release write the same stamp, so merges don't clash
     stamp = {"schema": 1, "make_it_version": fw.version, "scaffold": rec["project"]["scaffold"], "security_files": backend}
     ok = write_inside(app, SEALED, listing) and write_inside(app, READABLE, readable(entries, rec))
-    backend_dir = os.path.join(app, "backend")
-    if backend and os.path.isdir(backend_dir) and not os.path.islink(backend_dir):
+    if stamped:
         ok = ok and write_inside(app, STAMP, json.dumps(stamp, indent=2, sort_keys=True) + "\n")
     if not ok:
         sys.exit(refused)
@@ -540,7 +565,7 @@ def cmd_seal(app, fw, opts):
 
 def listing_map(text):
     out = {}
-    for line in text.splitlines():
+    for line in text.split("\n"):  # never splitlines(): a name may hold a carriage return, and would read as a second line
         mark, sep, rel = line.partition("  ")
         if sep:
             out[rel] = mark
