@@ -37,6 +37,9 @@ Usage: make-board.py DIR [--without a,b,...] [--with x,y,...] [--plan wave|ran-o
                   checks-unreadable, checks-fail, checks-running, no-checks (none ran), many-checks (150, of which
                   one page of 100 is read), no-tags (the repo has no
                   release at all: the merge is the release)
+    sort-set      three more open pull requests, so every group of the sort holds one: a failing check on a pull request
+                  whose title names a card, one whose card has a question for the owner, one whose card is closed
+    sat           a sitting is on record today (one held card carries `sat:`), so none is due
     quiet         cards quiet for 40 days, one for each reason a card never closes by itself (each marked `expires: ok`,
                   so only the hard rule keeps it), cards nobody has marked (three of them the kind only a judge
                   can tell is unsafe), one whose words changed after the mark, and two marked plain ideas quiet
@@ -69,7 +72,7 @@ def main(args):
     card(30, 'E02-S1', 'Move sign-in to the new provider', priority='P1', **held)
     card(30, 'E02-S2', 'Change the billing tables', **held)
     card(30, 'E02-S3', 'Delete the old audit data', **held)
-    card(30, 'E02-S4', 'Send the monthly statement to every customer', **held)
+    card(30, 'E02-S4', 'Send the monthly statement to every customer', **held, **({'sat': f'{d(0)} not-now 000000000000'} if 'sat' in extra else {}))
     card(30, 'E02-S5', 'The sign-in page uses the new provider', dependsOn='[E02-S1]')
     card(30, 'E02-S6', 'The roles screen reads the new provider', dependsOn='[E02-S1]')
     card(30, 'E02-S7', 'Invoices read the new billing tables', dependsOn='[E02-S2]')
@@ -86,11 +89,12 @@ def main(args):
     card(12, 'E01-S20', 'The old report shows stale numbers', dependsOn='[E02-S1]')
     card(11, 'E01-S22', 'The help page links to a page that is gone', dependsOn='[E02-S2]')
     card(1, 'E01-S21', 'The export button does nothing for one role', dependsOn='[E02-S2]')
-    card(25, 'E01-S30', 'A finished fix'); card(10, 'E01-S30', 'A finished fix', status='done', created=d(25))
+    card(25, 'E01-S30', 'A finished fix'); card(10, 'E01-S30', 'A finished fix', status='done', created=d(25), **({'pr': '[17]'} if 'sort-set' in extra else {}))
     if on('waiting'):
         card(3, 'E01-S3', 'Filings give up after two tries',
              decision='The retry job gave up on 3 filings after two tries; nothing else waits on them. Retry, or refile by hand?',
-             answers='Retry -- runs them again tonight (Recommended; against: a third failure costs another day) | Refile -- you re-enter the 3 by hand')
+             answers='Retry -- runs them again tonight (Recommended; against: a third failure costs another day) | Refile -- you re-enter the 3 by hand',
+             **({'pr': '[16]'} if 'sort-set' in extra else {}))
     if on('safe-card') or plan in ('wave', 'share'):
         run = dict(status='in-progress', stage='Cause found', updated=d(0)) if plan == 'share' else {}
         card(10, 'E01-S10', 'Export drops the last row', **run)
@@ -183,6 +187,9 @@ def main(args):
     if on('stalled-pr'):
         prs += [pr(12, 'fix: slow search', mergeStateStatus='BEHIND'),
                 pr(13, 'chore: tidy the logs', 5, isDraft=True, statusCheckRollup=[{'__typename': 'CheckRun', 'status': 'COMPLETED', 'conclusion': 'FAILURE'}])]
+    if 'sort-set' in extra:
+        prs += [pr(15, 'fix: the export header (E01-S10)', statusCheckRollup=[{'__typename': 'CheckRun', 'name': 'unit tests', 'status': 'COMPLETED', 'conclusion': 'FAILURE'}]),
+                pr(16, 'fix: retry the filings'), pr(17, 'fix: an old fix')]
     open(os.path.join(out, 'prs.json'), 'w', encoding='utf-8').write(json.dumps(prs))
     if 'shipped' in extra:  # what the gh stand-in answers about merged pull requests, the newest release and its checks
         os.makedirs(f'{out}/prstate'); os.makedirs(f'{out}/checks')
