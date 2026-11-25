@@ -28,8 +28,10 @@ and waiting to be checked, and what's next.
   ready*, and then it is done. A fix counts as fixed once it is released and its tests pass.
   If using the app later shows it was not fixed, the card is reopened with what you saw.
 - **Keeping the pile small.** Cards that belong together are combined into one piece of work, and
-  each keeps its own check. A card nobody asks for closes by itself after 30 quiet days, never one
-  about safety, and one command brings it back.
+  each keeps its own check. A card closes by itself after 30 quiet days only if it was first judged
+  safe to close: the tidy-up (`groom`) reads the whole card, or you pick it yourself. A card nobody
+  judged never closes this way, nor does a bug or anything about safety. One command brings a
+  closed card back.
 - **Fixing several bugs at once**, when they don't touch the same parts of the app (three at a
   time by default).
 - **Picking a card back up** later: `/backlog-it start <id>` turns the card into an instruction

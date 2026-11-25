@@ -34,10 +34,13 @@ Usage: make-board.py DIR [--without a,b,...] [--with x,y,...] [--plan wave|ran-o
     shipped       fixes whose pull request is merged: one in the newest release (v1.2.0) with passing checks, one
                   still at the old Live stage, one whose own pull request was closed and a release pull request
                   carried it, one merged after that release, one still open. What `gh` then says of the release:
-                  checks-unreadable, checks-fail, checks-running, no-checks (none ran), no-tags (the repo has no
+                  checks-unreadable, checks-fail, checks-running, no-checks (none ran), many-checks (150, of which
+                  one page of 100 is read), no-tags (the repo has no
                   release at all: the merge is the release)
-    quiet         cards quiet for 40 days, one for each reason a card never closes by itself, plus one plain found
-                  card quiet for exactly 30 days and one for 29
+    quiet         cards quiet for 40 days, one for each reason a card never closes by itself (each marked `expires: ok`,
+                  so only the hard rule keeps it), cards nobody has marked (three of them the kind only a judge
+                  can tell is unsafe), one whose words changed after the mark, and two marked plain ideas quiet
+                  for exactly 30 days and for 29
   --groom-days (default 20): GROOM-PLAN.md dated that many days ago; none = no GROOM-PLAN.md.
 """
 import datetime, json, os, subprocess, sys
@@ -109,13 +112,19 @@ def main(args):
         card(6, 'E01-S75', 'A fix carried by the release pull request', pr='[25, 21]', **fix)
         card(6, 'E01-S76', 'A fix still in review', pr='[26]', **fix)
     if 'quiet' in extra:
-        q = lambda n, title, ago=40, **kv: card(ago, f'E02-S{n}', title, **{'body': found, **kv})
+        import importlib.util  # the mark a judge leaves on a card that may close when quiet, made by the board's own function
+        spec = importlib.util.spec_from_file_location('status_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '.claude', 'make-it', 'backlog', 'bin', 'status.py'))
+        S = importlib.util.module_from_spec(spec); spec.loader.exec_module(S)
+        def q(n, title, ago=40, stamp=True, **kv):
+            body = kv.pop('body', found)
+            ok = dict(expires='ok', expires_why='a tidy-up nobody asked for; it cannot hurt anyone', expires_by='groom', expires_of=S.stamp_of(f'"{title}"', body)) if stamp else {}
+            card(ago, f'E02-S{n}', title, **{'body': body, **ok, **kv})
         q(30, 'A tidy-up nobody asked for', 30); q(31, 'Another tidy-up nobody asked for', 29)
-        card(40, 'E01-S80', 'An old bug found in a review', body=found)
+        card(40, 'E01-S80', 'An old bug found in a review', body=found, expires='ok', expires_why='x', expires_by='groom', expires_of=S.stamp_of('"An old bug found in a review"', found))
         q(33, 'Rework the page that moves customer records', stakes='critical')
         q(34, 'Rotate the API token every month')
         q(35, 'The page you asked for', body='\n## Captured\n> make me a page\n_via /backlog-it capture_\n')
-        q(36, 'A card that does not say where it came from', body='\n## Goal\nx\n')
+        q(36, 'A plain idea nobody has marked', stamp=False)
         q(37, 'A pinned tidy-up', pin='1')
         q(38, 'A tidy-up another card waits on')
         q(39, 'A tidy-up the owner decided on', dependsOn='[E02-S38]', body=found + '\n## Owner decision\nDo it after the move.\n')
@@ -127,6 +136,14 @@ def main(args):
         q(46, 'Two tidy-ups in one sitting', bundles='[E02-S44, E02-S45]')
         q(47, 'A tidy-up somebody brought back', reopened=d(40))
         q(48, 'A tidy-up of no known type', type='')
+        # the independent review's cards: nothing in their fields says "safety" or "a person asked" -- only a judge who reads them can
+        q(90, 'Anyone can read other customers invoices', stamp=False)
+        q(91, 'Drops the customer table on upgrade', stamp=False)
+        q(92, 'Owner asked in Found line', stamp=False, body='\n## Goal\nx\n\n## Found (2026-09-01, the owner asked for this)\nRob said: I want this.\n')
+        q(93, 'The page must say the true total', maturity='mandate')
+        q(94, 'A tidy-up whose words changed after it was marked', expires_of='000000000000')
+        q(95, 'A tidy-up dated in the future', updated=str(T + datetime.timedelta(days=96)))
+        q(96, 'A tidy-up with no dates', 0, created='', updated='')  # git still dates it; on a copy with no git nothing does
     git = lambda *a, when: subprocess.run(['git', '-C', B, '-c', 'user.name=stand-in', '-c', 'user.email=stand-in@example.invalid', '-c', 'commit.gpgsign=false',
                                            '-c', 'core.hooksPath=/dev/null', *a], check=True, capture_output=True,
                                           env=dict(os.environ, GIT_AUTHOR_DATE=f'{when}T12:00:00', GIT_COMMITTER_DATE=f'{when}T12:00:00'))
@@ -178,9 +195,10 @@ def main(args):
         run = lambda name, concl='success', st='completed': {'name': name, 'status': st, 'conclusion': concl}
         runs = ([run('unit tests'), run('lint'), run('build', 'skipped')] if not extra & {'checks-fail', 'checks-running', 'no-checks'}
                 else [run('unit tests', 'failure'), run('lint')] if 'checks-fail' in extra else [run('unit tests', None, 'in_progress')] if 'checks-running' in extra else [])
+        if 'many-checks' in extra: runs = [run(f'check {k}') for k in range(100)]  # one page of 100, and GitHub says there are 150
         if 'checks-unreadable' not in extra:
             for ref in ([tag] if tag else ['c21', 'c23']):
-                open(f'{out}/checks/{ref}.json', 'w', encoding='utf-8').write(json.dumps({'total_count': len(runs), 'check_runs': runs}))
+                open(f'{out}/checks/{ref}.json', 'w', encoding='utf-8').write(json.dumps({'total_count': 150 if 'many-checks' in extra else len(runs), 'check_runs': runs}))
     for p in prs:  # what the gh stand-in answers about each pull request: how far behind main, and its files
         if 'cannot-compare' not in extra:
             open(f"{out}/behind/{p['number']:040x}", 'w', encoding='utf-8').write(json.dumps({'behind_by': 2 if 'behind' in extra and p['number'] == 11 else 0}))

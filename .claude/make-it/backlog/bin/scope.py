@@ -71,8 +71,7 @@ def scope(board, flt='', with_deps=False):
                 if d not in byid:
                     n = f"{c} depends on {d}{'' if a == c else f' (through {a})'}, which isn't on this board -- it doesn't block (it may live on another board)"
                     if n not in notes: notes.append(n)
-        for leaf in dict.fromkeys(whole(l) for l, _, _ in R.needs(c, T)):
-            if leaf == c: continue
+        for leaf in dict.fromkeys(l if whole(l) == c else whole(l) for l, _, _ in R.needs(c, T)):  # a bundle's own part, started alone, is named as itself
             edges.setdefault(c, []).append(leaf)
             if leaf in S: continue
             if not with_deps: outside.setdefault(leaf, set()).add(c); continue

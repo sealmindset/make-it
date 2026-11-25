@@ -74,7 +74,7 @@ notifications are a silent no-op and the board works the same.
   report (read-only; shares `regen-board.py`'s rules); `--needs-you` prints only its Needs you section.
 - `~/.claude/make-it/backlog/bin/sync-prs.py <board> --repo <repo> [--dry-run]` -- `reconcile --prs`:
   closes cards whose fix is merged, released and passing its checks (needs `gh`; writes the cards, the caller syncs).
-- `~/.claude/make-it/backlog/bin/shrink.py {combine [filter] | bundle <ids> | part-done <id> | unbundle <id> | reopen <id> | expire [--dry-run]}` --
+- `~/.claude/make-it/backlog/bin/shrink.py {combine [filter] | bundle <ids> | part-done <id> | unbundle <id> | reopen <id> | stamp <id> --by groom\|you | expire [--dry-run]}` --
   what makes the pile shrink: candidate groups to combine, bundles, reopening a fix that did not hold, and closing
   quiet cards (no AI call; see [`combine`](#combine-filter), [`reopen`](#reopen-id-what-was-seen), [`expire`](#expire---dry-run)).
 - `~/.claude/make-it/backlog/bin/card.py {append <id> <section> | set <id> k=v … | new <epic>}` -- the
@@ -141,6 +141,7 @@ bundles:   [E07-S3, E07-S9]   # a bundle card only: the cards it does as one pie
 bundledIn: E07-S12        # a part of a bundle: the bundle card that carries it; the part closes only on its own check
 ground:    same file | same root cause | same goal   # a bundle card only: why its parts go together
 closed_as: shipped-tests-pass | not-needed | expired | unbundled   # with status: done -- how it closed; absent = plain done
+expires:   ok             # a judge's mark that the card may close after 30 quiet days, with expires_why:, expires_by: and expires_of: (see expire). No mark, never
 reopened:  2026-11-25     # set by `reopen`: a fix that did not hold, or a card someone brought back; it never expires
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
@@ -369,7 +370,7 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `combine [filter]` | Propose bundles: cards that go together as one piece of work, each keeping its own check. Nothing combines without your pick |
 | `unbundle <id>` | Put a bundle's cards back in line as they were (a bundle's id), or take one card out (that card's id) |
 | `reopen <id> <what was seen>` | Put a closed card back in line, with your words kept on it |
-| `expire [--dry-run]` | Close the quiet cards nobody asks for (30 quiet days; never a safety one); `--dry-run` only lists them |
+| `expire [--dry-run]` | Close the quiet cards a judge marked safe to close (30 quiet days; no mark, never; never a safety one); `--dry-run` only lists them |
 | `reconcile [<id>\|all]` | Check cards against the code, tests, and live system; `--prs` closes cards whose fix is released with passing tests |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md`; `--with-deps` also plans the cards the filter waits on, across epics |
@@ -535,7 +536,8 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
    for the weekly sitting), never the whole list. Then one line counting the running list: its
    open lines and how many areas they are in. Then, only when there are any: **Reopened** -- how many
    fixes did not hold, by title with id (the signal that matters most); and **Quiet cards** -- how many
-   will close by themselves in the next 7 days, with the command that lists them.
+   marked cards will close by themselves in the next 7 days, with the command that lists them (or,
+   while the screen has room, that no card is marked yet).
 3. **SINCE YOU LAST LOOKED** -- three lines: what shipped (cards closed as not needed are counted
    apart), what was found, what got stuck. "Last looked" is the last time the skill showed this
    screen: `--seen` writes `<board>/.last-seen.json` (the time, and the ids that were open, done and
@@ -705,6 +707,15 @@ is refused, and so is closing the bundle while a part is open; `reconcile --prs`
 bundle open, naming the parts, until every part has passed. A part whose check fails is taken out
 (`unbundle <its id>`) and goes back in line, so the rest can still ship.
 
+**A bundle's state is its parts' state, worked out from its parts every time the board is read and
+never stored** on the bundle card (`regen-board.py`'s `lift` and `needs`, which every helper reads
+through). So a part that changes after bundling carries the bundle with it: the bundle is
+high-stakes if any part is (held, never in a wave); it waits on your answer if any part does (the
+question is listed once, on the part); it waits on whatever any part waits on, and on a part
+somebody started alone; it conflicts with whatever any part conflicts with; it takes the highest
+priority and the pin of its parts; and it is one-at-a-time in every `serial` category a part is in.
+A part's own `pr:` is not lifted: one pull request does the bundle, and it is the bundle's.
+
 **A bundle counts as ONE thing to do**, and its parts are still shown by title with id: `BOARD.md`
 lists the bundle with a `part:` line per card, and Next up never offers a part; `status` counts
 "things to do" and lists every bundle with its parts; `scope.py` puts the bundle in a plan's or a
@@ -718,7 +729,8 @@ on the bundle.
   counts as M): a bundle is at most five cards **and** one sitting. Past that the helper refuses and
   says to split.
 - **A high-stakes card is never bundled with a card that is not**: the gate must not be lost. A bundle
-  of only high-stakes cards is itself `stakes: critical`, and is held like any other.
+  of high-stakes cards is held like any other, and so is a bundle one of whose parts becomes
+  high-stakes later.
 - Cards of different priority may bundle, and the bundle takes the highest. It is a bug if any of
   its parts is one, so it keeps its place in the bug line.
 
@@ -740,41 +752,57 @@ cards, and a card a person brought back never expires.
 ### `expire [--dry-run]`
 
 The owner's choice (2026-11-24): "Yes, after 30 days, never a safety one". A card that nobody asks
-for closes itself after **30 quiet days**, with a note saying why and how to bring it back
-(`status: done`, `closed_as: expired`; never deleted; `reopen` brings it back). No AI takes part:
-`shrink.py expire` applies a written rule (`status.py`'s `expiry`), `--dry-run` lists what would
-close, what will close within 7 days, what could close later if it stays quiet, and why every
-other card is kept, and writes nothing.
-`groom` runs it; the first screen offers the count ("N will close in the next 7 days") and says how
-many closed this way since the last look. The 30 and the 7 are the named constants `EXPIRE_DAYS`
-and `EXPIRE_WARN`.
+for closes itself after **30 quiet days**, with a note saying why, who judged it safe, and how to
+bring it back (`status: done`, `closed_as: expired`; never deleted; `reopen` brings it back).
 
-**The rule.** A card closes only when ALL of these can be told from the card:
-- it is a single card (not an epic, no cards under it) that nobody has started: `backlog`, `ready`
-  or `designing`;
-- **no report behind it**: it has a `## Found` section (a lane, a review or a groom found it) and no
-  `## Captured` section (the owner's own words);
-- **no person named**: no `decision:`, no `## Answers`, no `## Owner decision…` section, no
-  `mode_by: you`, never reopened;
-- **no card waiting on it**, and it is in no bundle;
-- **quiet for 30 days**: no change to the card, no `pr:`, and no change to any card that mentions
-  its id.
+**No mark, never.** Whether a card is safe to close, and whether anyone asked for it, cannot be read
+from its fields or headings: a security matter may use no security word, and "the owner asked" may
+sit in any sentence. So the rule is turned round, which is what "when it cannot be told, it does NOT
+expire" means. A card can expire ONLY if a judge who read the whole card marked it:
 
-**Never expires**, whatever its age:
-- a bug (`type: breakfix`): it is a failed check, or a fault that can lose data, leak a secret, send
-  something wrong or tell the person something untrue -- the only faults that become cards;
-- anything stamped high-stakes (`stakes: critical`), or with a `## High-stakes` section: a gate;
-- a card whose title or category names a safety matter -- security, a secret, sign-in or
-  permissions, data that can be lost or deleted, money, something wrong or untrue, a gate, a guard,
-  a scan, a failed check (the word list is the named constant `SAFETY`);
+```yaml
+expires: ok
+expires_why: a tidy-up of names; it cannot hurt anyone, and nobody asked for it   # one plain line
+expires_by: groom        # who judged: groom (its judge) or you (the owner's pick)
+expires_of: 3f9a1c0b7d2e # set by the helper: a print of the title, goal and found text that were judged
+```
+
+Two judges give the mark, and nobody else:
+- **`groom`'s judge** (step 2, Safe to close when quiet) reads the whole card and answers four
+  questions, each `yes`, `no` or `unsure`: can it lose data, leak a secret, send something wrong, or
+  tell the person something untrue (`"can_hurt"`)? Did a person ask for it, in any wording, anywhere
+  in the card (`"person_asked"`)? Is it a rule the product must meet, such as `maturity: mandate`
+  (`"must_meet"`)? Does anything else on the card say to keep it (`"keep"`)? On any `yes` or `unsure`
+  there is no mark. Only four `no`s give one, written with `shrink.py stamp <id> --by groom` (the
+  reason on stdin).
+- **The owner**, picking cards in a one-click list (a multi-select, one option per card with its
+  title and the reason in a line, no "all of them"): `shrink.py stamp <id> --by you`.
+
+**The helper stays no-AI.** `shrink.py expire` closes only marked cards, and **every hard rule still
+applies on top of the mark**, so a wrong mark alone cannot close a protected card. `shrink.py stamp`
+refuses a card a hard rule protects. **An edit clears the mark**: when the card's title, `## Goal` or
+`## Found` text is no longer what the judge read, the mark does not count (the judgement was about the
+old words) until a judge marks it again.
+
+**Never expires**, marked or not:
+- a bug (`type: breakfix`), or a card whose type is not recorded;
+- anything high-stakes (`stakes: critical`, or a `## High-stakes` section), and `maturity: mandate`;
 - a card the owner captured himself (`## Captured`): his own reports never expire;
-- a pinned card; a card with a pull request; a card another open card waits on; a part of a
-  bundle that is still open, and the bundle itself;
-- a card whose type is not recorded, or that says neither `## Captured` nor `## Found`: **when it
-  cannot be told, it does NOT expire.**
+- a card with a question, an answer or an owner decision on it, or one that was reopened;
+- a pinned card; a card with a pull request; a card another open card waits on; a part of a bundle
+  that is still open, and the bundle itself; a card somebody has started;
+- a card whose title or category holds a safety word (the named constant `SAFETY`): a guard on top of
+  the judge, never the judgement;
+- a card with no date that can be read.
 
-So a card nobody reported must say so: whoever files one (a lane, a review, a groom) writes where
-it came from under `## Found`.
+**Quiet** means no change to the card and no change to any card that mentions its id; a date in the
+future counts as today. `expire --dry-run` lists what would close, what will close within 7 days,
+what could close later, and why every other card is kept, and writes nothing; `--dry-run --as-of
+YYYY-MM-DD` works the same out for a later day (dry run only: a real expire always uses today).
+`groom` runs it. The first screen counts the marked cards that will close in the next 7 days and
+says how many closed since the last look; with none marked, it and the dry run say "no card is
+marked as safe to close yet: groom marks them" (on the first screen only while it has room). The 30
+and the 7 are the named constants `EXPIRE_DAYS` and `EXPIRE_WARN`.
 
 ### `reconcile [<id> | all]`
 
@@ -1082,7 +1110,7 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 ([Which model does what](#which-model-does-what)). Don't ask permission for it; the user doesn't need any extra keyword.
 
 0. **Close what is already settled, with no AI.** `reconcile --prs` (fixes released with passing
-   tests are done), then `shrink.py expire` (quiet cards nobody asks for close; `--dry-run` under
+   tests are done), then `shrink.py expire` (marked quiet cards close; `--dry-run` under
    `groom --dry-run`). Say both counts in the report.
 1. **Ground in code (reuse `reconcile`).** Run the reconcile ladder for every card in scope --
    `--dry-run` by default; `--apply` lets reconcile auto-apply as usual. For `partial`, name why:
@@ -1117,6 +1145,18 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
    the board's way: `status: done`, `closed_as: not-needed`, and a `## Not needed (YYYY-MM-DD)`
    block with the reason and the evidence. It is never deleted, and `undo` brings it back. A
    not-needed card leaves the burn-down only once picked; until then it ranks last, marked.
+   **Safe to close when quiet.** For each card that `shrink.py expire --dry-run` keeps only because
+   it is "not marked", the judge reads the whole card and returns strict JSON:
+   ```json
+   { "id": "E09-S2", "can_hurt": "yes|no|unsure", "person_asked": "yes|no|unsure",
+     "must_meet": "yes|no|unsure", "keep": "yes|no|unsure", "why": "one plain line" }
+   ```
+   On any `yes` or `unsure` the card gets no mark. Only when all four are `no`, and under `--apply`,
+   the card is marked: `shrink.py stamp <id> --by groom`, the `why` on stdin (without `--apply` the
+   cards are listed under `## Safe to close when quiet` in `GROOM-PLAN.md`). The mark closes nothing
+   by itself: the card must then stay quiet for 30 days, and every hard rule of
+   [`expire`](#expire---dry-run) still applies. After the report the owner may mark more himself in
+   one multi-select ask (`--by you`).
    **Combine.** Run [`combine`](#combine-filter) over the scope: the helper's groups, the judge's
    proposals (at most five, each with its ground and evidence), listed under `## Combine` in
    `GROOM-PLAN.md`, then the one multi-select ask after the report. A bundle is made only on the

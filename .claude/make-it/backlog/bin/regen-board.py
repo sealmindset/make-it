@@ -37,8 +37,31 @@ def cut(s, n):  # shorten at a word boundary, so a long title never ends mid-wor
 def name(d, n=60):  # how every helper names a card to a person: its title with its id, never a bare id
     t = v(d, 'title').strip('"')
     return f"{cut(t, n) if t else 'Untitled card'} ({v(d, 'id')})"
-def load(B):  # card path -> frontmatter, epics first
-    return {p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None}
+def load(B):  # card path -> frontmatter, epics first; a bundle already carries its parts' state (lift)
+    return lift({p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None})
+def lift(cards):
+    """A bundle's state is its open parts', worked out from its parts every time the board is read and never stored on
+    the bundle card -- so a part that changes after bundling carries the bundle with it, for every helper (they all
+    read cards through load). The bundle is high-stakes if any part is; it waits on your answer if any part does
+    (`decisionFrom:` names that part: the question is listed once, on the part); it takes the highest priority and
+    the first pin among them; it conflicts with whatever any part conflicts with; `categories:` holds every part's
+    category, for the one-at-a-time rule. What the parts wait on, and a part somebody started alone, are in needs().
+    A part's own `pr:` is not lifted on purpose: one pull request does the bundle, and it is the bundle's."""
+    byid = {v(d, 'id').upper(): d for d in cards.values()}
+    for d in cards.values():
+        me = v(d, 'id').upper()
+        ps = [byid[i] for i in parts(d) if i in byid and v(byid[i], 'status') != 'done' and v(byid[i], 'bundledIn').upper() == me]
+        if not ps or v(d, 'status') == 'done': continue
+        both = [d] + ps
+        if any(warn(p) for p in ps): d['stakes'] = 'critical'
+        q = next((p for p in ps if waiting(p)), None)
+        if q and not waiting(d): d['decision'] = f'{name(q)}, a card in this bundle, waits on your answer'; d['decisionFrom'] = v(q, 'id')
+        if (pr := [v(x, 'priority') for x in both if v(x, 'priority')]): d['priority'] = min(pr)
+        if (pins := [v(x, 'pin') for x in both if v(x, 'pin')]): d['pin'] = min(pins, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else 0, x))
+        if (cw := sorted({i for x in both for i in ids(v(x, 'conflictsWith'))})): d['conflictsWith'] = '[' + ', '.join(cw) + ']'
+        d['categories'] = ', '.join(sorted({v(x, 'category') for x in both if v(x, 'category')}))
+    return cards
+def asks(d): return waiting(d) and not v(d, 'decisionFrom')  # a card whose own question waits on you (a bundle held by a part's question is not listed again)
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
     return v(d, 'status') != 'done' and bool(v(d, 'decision') or v(d, 'stage') == 'Needs decision')
 def ask(d):
@@ -95,6 +118,7 @@ def needs(i, T, _top=True):
                 if leaf not in got and leaf not in line: got.add(leaf); out.append((leaf, a, d))
     mine = parts(byid.get(i.upper(), {})) if _top else []  # a bundle waits on whatever its parts wait on (a part is never a bundle)
     for m in mine:
+        if m in byid and v(byid[m], 'status') in ('in-progress', 'blocked') and m not in got: got.add(m); out.append((m, i.upper(), m))  # a part somebody started alone: the bundle waits until it is settled
         out += [x for x in (needs(m, T, False) if m in byid and v(byid[m], 'status') != 'done' else []) if x[0] not in got and x[0] not in line and x[0] not in mine and not got.add(x[0])]
     return out
 def parts(d): return ids(v(d, 'bundles'))  # a bundle card names the cards it does together (see Bundles in the reference)
@@ -121,7 +145,7 @@ def render(B, proj):
     L = load(B); CARDS = list(L.values())
     TREE = tree(L)
     out = [f'# BACKLOG BOARD — {proj}', '']
-    wait = sorted(filter(waiting, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
+    wait = sorted(filter(asks, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
     if wait:
         out += [f'## Waiting on you ({len(wait)})', '_each card · days since it last changed, then what waits and why, and the answers to pick from_', '']
         for d in wait:
@@ -133,7 +157,7 @@ def render(B, proj):
         e = L.get(ep, {})
         stories = [L[s] for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md')) if s in L]
         stories.sort(key=lambda s: (ORDER.index(v(s, 'status')) if v(s, 'status') in ORDER else 9, num(s)))
-        counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories)))
+        counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories if not parts(s))))  # a bundle card wraps cards already counted
         out += [f"## {warn(e)}{v(e,'id')} · {v(e,'title')}  _[{v(e,'status')}]_{chips(e)}", f'_{counts}_', '']
         if any(v(s, 'type') == 'breakfix' for s in stories):
             # The bug queue status line: Reported -> Cause found -> Fix ready -> done (released, tests pass).
@@ -144,7 +168,7 @@ def render(B, proj):
         for st in ORDER:
             group = [s for s in stories if v(s, 'status') == st]
             if not group: continue
-            out.append(f'### {st} ({len(group)})')
+            out.append(f'### {st} ({sum(not parts(s) for s in group)})')
             if big and st == 'done':
                 out += [f"_listed by `/backlog-it show {v(e,'id')}`_", '']; continue
             if big: group.sort(key=lambda s: (v(s, 'category') or '~', num(s)))

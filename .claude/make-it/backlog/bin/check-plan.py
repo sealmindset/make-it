@@ -55,7 +55,8 @@ def overlap(a, b):  # same path, or one is a folder holding the other
 
 
 def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
-    raw = {p: d for p in glob.glob(f'{board}/items/*/epic.md') + glob.glob(f'{board}/items/*/stories/*.md') if (d := fm(p)) is not None}
+    raw = {p: {k.strip(): str(x).strip() for k, x in d.items()} for p, d in R.load(board).items()}  # the board's reader: a bundle carries its parts' state
+    cats = lambda d: {c.strip() for c in (d.get('categories') or d.get('category') or '').split(',') if c.strip()}
     cards = {d['id'].upper(): d for d in raw.values() if d.get('id')}
     T = R.tree(raw)  # what each card waits on, by the board's one rule
     is_open = lambda i: i in cards and cards[i].get('status') != 'done'
@@ -82,8 +83,8 @@ def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
                         errs.append(f"wave {n}: {a['id']} and {b['id']} share files")
                     if set(a.get('data', [])) & set(b.get('data', [])):
                         errs.append(f"wave {n}: {a['id']} and {b['id']} share data")
-                    if A.get('category') and A.get('category') == Bc.get('category') and A['category'] in serial:
-                        errs.append(f"wave {n}: {a['id']} and {b['id']} are both serial category {A['category']}")
+                    for c in sorted(cats(A) & cats(Bc) & set(serial)):
+                        errs.append(f"wave {n}: {a['id']} and {b['id']} are both serial category {c}")
                     if b['id'].upper() in ids(A.get('conflictsWith', '')) or a['id'].upper() in ids(Bc.get('conflictsWith', '')):
                         errs.append(f"wave {n}: {a['id']} and {b['id']} conflict")
         elif len(items) != 1:
@@ -104,8 +105,8 @@ def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
             if mode not in MODES: errs.append(f'{i}: unknown mode {mode!r}')
             if cards[i].get('stakes') == 'critical': errs.append(f'{i}: high-stakes -- hold it, never put it in a wave')
             for d, src, named in R.needs(i, T):
-                d = R.whole(d, T)  # waiting on a part of a bundle is waiting on the bundle
-                if d != i and not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
+                d = d if R.whole(d, T) == i else R.whole(d, T)  # waiting on a part of a bundle is waiting on the bundle (its own part, started alone, is named as itself)
+                if not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
                     via = '' if (src, named) == (i, d) else f' (via {src}: dependsOn {named})'
                     errs.append(f'{i}: depends on {d}{via}, which is not planned in an earlier wave')
             if mode == 'spike' and not ((it.get('spike') or {}).get('question') and (it.get('spike') or {}).get('timebox')):

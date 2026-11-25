@@ -14,7 +14,7 @@ Usage: status.py [board_dir] [--project NAME] [--needs-you]
   This file also holds the rule for which quiet cards close by themselves (`expiry`); `shrink.py
   expire` is what closes them.
 """
-import datetime, importlib.util, json, os, re, statistics, subprocess, sys
+import datetime, hashlib, importlib.util, json, os, re, statistics, subprocess, sys
 
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
 sys.dont_write_bytecode = True  # no __pycache__ beside the installed scripts
@@ -29,9 +29,9 @@ GROOM_AGE = 14    # days after which the last groom is too old to trust, whateve
 GROOM_REST = 7    # days a groom is left alone even while the pile grows, so the board never answers "groom" twice in the same week
 SIT = (3, 5)      # held cards brought to a weekly sitting: three when questions also wait, five at most, so the screen stays short enough to read
 # Expiry (owner's choice, 2026-11-24: "Yes, after 30 days, never a safety one"):
-EXPIRE_DAYS = 30  # quiet days after which a card nobody asks for closes itself: a month with no change, no pull request and no mention means nobody is asking
+EXPIRE_DAYS = 30  # quiet days after which a card marked safe to close closes itself: a month with no change, no pull request and no mention means nobody is asking
 EXPIRE_WARN = 7   # the first screen counts the cards that will close within this many days: a week's notice, so one look a week is enough to save one
-SAFETY = r'secur|secret|credential|password|token|\bkey\b|leak|vulnerab|\bCVE|auth|permission|privacy|personal|data loss|los\w* (?:\w+ )?data|delet|destroy|overwrit|corrupt|wrong|untrue|false|mislead|\blie[sd]?\b|\bpay|\bbill|money|\bgate|guard|\bscan|fail'  # words in a title or category that mark a card as one that can hurt someone (lose data, leak a secret, send something wrong, say something untrue) or as a gate or failed check: it never expires
+SAFETY = r'secur|secret|credential|password|token|\bkey\b|leak|vulnerab|\bCVE|auth|permission|privacy|personal|data loss|los\w* (?:\w+ )?data|delet|destroy|overwrit|corrupt|wrong|untrue|false|mislead|\blie[sd]?\b|\bpay|\bbill|money|\bgate|guard|\bscan|fail'  # words in a title or category that mark a card as one that can hurt someone (lose data, leak a secret, send something wrong, say something untrue) or as a gate or failed check: it never expires, marked or not. A guard on top of the judge's mark, never the judgement itself: a word list always misses the next one
 MARK = '.last-seen.json'  # when the owner last opened the first screen, and what the board held then
 
 def day(s):
@@ -110,6 +110,7 @@ def facts(B, T=None):
     flight['Other work'] = pick(lambda d: not bug(d) and not R.bucket(d) and v(d, 'status') == 'in-progress')
     epics = {os.path.dirname(p): d for p, d in cards.items() if p.endswith('/epic.md')}
     kids = lambda e: [p for p in leaf if os.path.dirname(os.path.dirname(p)) == e]
+    real = lambda e: [p for p in kids(e) if not wrap(leaf[p])]  # an epic's cards, without the bundle cards that wrap some of them
     next_bugs = []  # the board's own Next up, per bug epic
     for e in sorted(epics):
         if any(bug(leaf[p]) for p in kids(e)):
@@ -155,11 +156,11 @@ def facts(B, T=None):
                 things=sum(not R.bundle_of(d, TREE) for d in op.values()), bundles=sorted(p for p, d in op.items() if wrap(d)),
                 reopened=sorted((p for p, d in op.items() if v(d, 'reopened')), key=lambda p: v(op[p], 'reopened'), reverse=True), last=lambda p: last(p, cards[p]),
                 flight=flight, next_bugs=next_bugs, plan=plan, can=can,
-                waiting=sorted((p for p, d in opn.items() if R.waiting(d)), key=lambda p: rank(p, opn[p])),
-                held=sorted((p for p, d in opn.items() if R.warn(d) and not R.waiting(d)), key=lambda p: rank(p, opn[p])),  # waiting: listed there
+                waiting=sorted((p for p, d in opn.items() if R.asks(d)), key=lambda p: rank(p, opn[p])),  # a question is listed on the card it is on, not again on its bundle
+                held=sorted((p for p, d in opn.items() if R.warn(d) and not R.asks(d) and not R.bundle_of(d, TREE)), key=lambda p: rank(p, opn[p])),  # waiting: listed there; a part: its bundle is held for it
                 lane_idle=[p for p in flight['Now fixing'] if idle(p, op[p]) >= LANE],  # lanes work in hours: idle days = it stopped
                 stalled=[p for p in flight['Other work'] if idle(p, op[p]) >= STALL],
-                epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in kids(e)), len(kids(e))) for e in epics if kids(e)),
+                epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in real(e)), len(real(e))) for e in epics if real(e)),
                              key=lambda x: (-(x[2] - x[1]), x[0])),
                 cycle=cyc,
                 cards=cards, idle=lambda p: idle(p, cards[p]), title=lambda p: title(cards[p]), epic_cards=epics,
@@ -181,7 +182,7 @@ def render(f, proj, needs_only=False):
     names = lambda ps, extra=lambda p: '': [f'    {name(p)}{extra(p)}' for p in ps[:TOP]] + [f'    +{len(ps) - TOP} more'] * (len(ps) > TOP)
     since = f" since {f['first']}" if f['first'] else ''
     nb, held_in = len(f['bundles']), f['open'] + len(f['bundles']) - f['things']  # a bundle is one thing to do, however many cards it does
-    one = f" · {f['things']} things to do ({nb} bundle{'s hold' if nb != 1 else ' holds'} {held_in} cards)" if nb else ''
+    one = f" · {f['things']} things to do ({nb} bundle{'s hold' if nb != 1 else ' holds'} {held_in} card{'s' * (held_in != 1)})" if nb else ''
     out = [f"BOARD STATUS — {proj} · {T}",
            f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done{one} · dates from {f['src']}{since}", '', 'IN FLIGHT']
     for k, ps in f['flight'].items():
@@ -439,6 +440,7 @@ def first(f, proj, prs, lane_cap, seen=False):
     if ro := f['reopened']: out.append('  ' + fit(f"Reopened: {len(ro)} fix{'es' * (len(ro) != 1)} did not hold -- ", ro))  # the signal that matters
     ex = expiry(f); due = len(ex['close']) + len(ex['soon'])
     if due: out.append(f"  Quiet cards: {due} will close in the next {EXPIRE_WARN} days (`/backlog-it expire --dry-run` lists them)")
+    unmarked = len(out) if not due and not ex['later'] and f['open'] else None  # where "nothing is marked" goes, if the screen has room for it
     # what changed: against the mark the last --seen look left, else the last 24 hours (dates are whole days)
     stuck_prs_now = prs[1] if prs[0] is not None else []
     stuck_now = f['lane_idle'] + f['stalled'] + [p for p in f['leaf'] if f['plan'] and v(c[p], 'id').upper() in f['plan'][4]]
@@ -487,15 +489,26 @@ def first(f, proj, prs, lane_cap, seen=False):
         else: trend = 'the pile stayed level'
         out.append(f'TREND  This week: {o} opened, {cl} closed: {trend}.')
     else: out.append('TREND  No full week of history yet.')
+    # the least urgent line on the screen (nothing will close): said only while the screen stays within its 25 lines
+    if unmarked and len(out) < 25: out.insert(unmarked, '  Quiet cards: no card is marked as safe to close yet: groom marks them')
     if seen and not mark_seen(B, snap): out.append('  (this look was not recorded: the board folder could not be written)')
     return '\n'.join(out)
 
+def stamp_of(title, text):
+    """What a judge read when it marked a card safe to close: a short print of the title, the `## Goal` section and
+    the `## Found` section (its heading line too). The mark holds only while this still matches the card."""
+    sec = lambda h: (re.search(rf'^## {h}\b[^\n]*\n.*?(?=^## |\Z)', text, re.M | re.S) or [''])[0]
+    return hashlib.sha256(' '.join(f"{title.strip()} {sec('Goal')} {sec('Found')}".split()).encode()).hexdigest()[:12]
+
 def expiry(f):
     """Which cards close by themselves, and why every other card never does: {'close': [(path, quiet days)],
-    'soon': [(path, quiet days, days left)], 'later': [(path, quiet days)] not quiet long enough yet, 'kept': {path: reason}}. The written rule (the reference's `expire`):
-    a card closes after EXPIRE_DAYS quiet days only when it is positively known to be one nobody asks for and that
-    cannot hurt anyone. Each test below keeps a card; when a fact cannot be told, the card is kept.
-    Quiet = days since the later of the card's own last change and the last change of any card that mentions it."""
+    'soon': [(path, quiet days, days left)], 'later': [(path, quiet days)] not quiet long enough yet, 'kept': {path: reason}}.
+    The written rule (the reference's `expire`). No mark, never: a card can close only if a judge who read the whole
+    card marked it `expires: ok` with `expires_why:` and `expires_by:` (groom, or you), and its title, goal and found
+    text are still what the judge read (`expires_of:`). Fields and headings cannot tell that a card is safe or that
+    nobody asked for it -- that is the judge's call, never this helper's. Every hard rule below is applied on top,
+    so a wrong mark alone cannot close a protected card. Quiet = days since the later of the card's own last
+    change and the last change of any card that mentions it; a date in the future counts as today."""
     c, T, tree = f['cards'], f['T'], f['tree']
     txt, said, waited = {}, {}, set()
     for p, d in c.items():
@@ -518,19 +531,24 @@ def expiry(f):
         if i in waited: return 'another open card waits on it'
         if v(d, 'type') == 'breakfix': return 'a bug: a failed check, or a fault that can hurt someone'
         if v(d, 'type') not in ('story', 'task', 'spike'): return 'its type is not recorded, so it cannot be told whether it can hurt someone'
+        if v(d, 'maturity') == 'mandate': return 'a rule the product must meet (`maturity: mandate`)'
         if re.search(SAFETY, f"{v(d, 'title')} {v(d, 'category')}", re.I) or sec('High-stakes|Why high-stakes'): return 'its title or category names a safety matter (security, data, money, a gate, a failed check)'
         if sec('Captured'): return 'you reported it yourself'
         if v(d, 'reopened') or sec('Reopened'): return 'a person brought it back'
         if v(d, 'decision') or v(d, 'mode_by') == 'you' or sec('Owner|Answers'): return 'a person is named on it (a question, an answer, or an owner decision)'
-        if not sec('Found'): return 'it does not say where it came from (no `## Captured`, no `## Found`), so it cannot be told that nobody asked'
         if v(d, 'pr'): return 'it has a pull request'
+        # the hard rules are passed; now the mark, without which nothing closes
+        if v(d, 'expires') != 'ok': return 'not marked as safe to close (`expires: ok`): groom marks it, or you do'
+        if not v(d, 'expires_why') or v(d, 'expires_by') not in ('groom', 'you'): return 'marked, but without who judged it (`groom` or `you`) and why: the mark does not count'
+        if v(d, 'expires_of') != stamp_of(v(d, 'title'), t): return 'marked safe to close, but its title, goal or found text changed since: the mark no longer counts'
+        if f['last'](p) == datetime.date.min: return 'no date can be read on it'
         return ''
     out = dict(close=[], soon=[], later=[], kept={})
     for p, d in sorted(c.items()):
         if v(d, 'status') == 'done': continue
         why = keeps(p, d)
         if why: out['kept'][p] = why; continue
-        quiet = (T - max(f['last'](p), said.get(v(d, 'id').upper(), datetime.date.min))).days
+        quiet = max(0, (T - max(f['last'](p), said.get(v(d, 'id').upper(), datetime.date.min))).days)
         if quiet >= EXPIRE_DAYS: out['close'].append((p, quiet))
         elif quiet >= EXPIRE_DAYS - EXPIRE_WARN: out['soon'].append((p, quiet, EXPIRE_DAYS - quiet))
         else: out['later'].append((p, quiet))

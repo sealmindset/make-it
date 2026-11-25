@@ -11,9 +11,13 @@
 #             run and how to reopen. Checks that cannot be read, failed, are still running, or a merge no release
 #             carries yet: the card is left and the reason is said. No card is parked at "Live, to check" any more.
 #             `reopen` puts a card back in line with the person's words kept; the first screen counts reopened cards.
-#   EXPIRY    `shrink.py expire` closes a card nobody asks for after EXPIRE_DAYS quiet days (day 30, not day 29), with
-#             a note on why and how to bring it back; `--dry-run` changes nothing. One fixture per reason a card never
-#             closes by itself, and each stays open. The first screen counts what will close soon and what did.
+#             A bundle's held state is worked out from its parts every time it is read: a part that becomes
+#             high-stakes, gets a question, a wait, a conflict, a pin, a higher priority, a serial category or is
+#             started AFTER bundling holds or moves the bundle with it.
+#   EXPIRY    `shrink.py expire` closes a card after EXPIRE_DAYS quiet days (day 30, not day 29) ONLY when a judge
+#             marked it `expires: ok` (groom, or the owner's pick) -- no mark, never. Every hard rule still applies
+#             on top of the mark, an edit to the card's title, goal or found text clears it, a card with no
+#             readable date never closes, and `--dry-run` (with `--as-of` for a later day) changes nothing.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
@@ -210,34 +214,136 @@ ok('the first screen counts reopened cards, by title with id', re.search(r'Reope
 r = shrink(d, 'reopen', 'E01-S76', stdin='x\n')
 ok('reopen refuses a card that is not closed', r.returncode != 0 and 'not closed' in r.stderr, r.stdout + r.stderr)
 
+# ============================== A PART GAINS A PROPERTY AFTER BUNDLING ==============================
+def bundled(*extra):
+    d = board(*QUIET, '--with', 'bundle-set', *extra)
+    r = shrink(d, 'bundle', 'E02-S20', 'E02-S21', stdin='title: Two report changes in one sitting\nground: same goal\nwhy: one report page\nE02-S20: the report sorts by date\nE02-S21: the report has a date column\n')
+    return d, (re.search(r'\((E\d+-S\d+)\)', r.stdout) or [0, ''])[1]
+cset = lambda d, cid, *kv: call('card.py', d, 'set', cid, *kv, board_flag=True)
+def plan_check(d, items, *flags):
+    pj = f'{d}/plan.json'; open(pj, 'w', encoding='utf-8').write(json.dumps({'waves': [{'items': items}]}))
+    r = subprocess.run([sys.executable, f'{BIN}/check-plan.py', f'{d}/board', pj, '--partial', *flags], capture_output=True, text=True, encoding='utf-8')
+    return r.returncode, r.stdout + r.stderr
+can_start = lambda d: run('status.py', d).split('UP NEXT')[1].split('BURN-DOWN')[0]
+d, bid = bundled(); NAME = f'Two report changes in one sitting ({bid})'
+ok('(control) a bundle of two plain cards can start, and a plan may hold it', NAME in can_start(d) and plan_check(d, [{'id': bid, 'mode': 'solo'}])[0] == 0, can_start(d) + plan_check(d, [{'id': bid, 'mode': 'solo'}])[1])
+held0 = int(re.search(r'Held, high-stakes \((\d+)\)', run('status.py', d, '--needs-you')).group(1))
+cset(d, 'E02-S21', 'stakes=critical')
+fs = first(d); rc, why = plan_check(d, [{'id': bid, 'mode': 'solo'}]); b = rd(f'{d}/board/BOARD.md')
+ok('a part made high-stakes AFTER bundling holds the bundle: it is no longer offered as work that can start',
+   NAME not in can_start(d) and NAME not in fs.split('NEEDS YOU')[0] and re.search(rf'^- ⚠️{bid} · ', b, re.M) is not None, can_start(d) + fs + b[-900:])
+ok('... the plan gate refuses a wave that holds it', rc != 0 and 'high-stakes' in why, why)
+ok('... and it is counted once with the held high-stakes cards (the bundle, not the bundle and its part)', f'Held, high-stakes ({held0 + 1})' in run('status.py', d, '--needs-you'), run('status.py', d, '--needs-you'))
+d, bid = bundled(); NAME = f'Two report changes in one sitting ({bid})'
+cset(d, 'E02-S20', 'decision=The report has two date fields; which one sorts it? Created, or changed?', 'answers=Created -- sorts by when it was made | Changed -- sorts by the last edit')
+st = run('status.py', d); b = rd(f'{d}/board/BOARD.md')
+ok('a question put on a part AFTER bundling holds the bundle, and the question is listed once (on the part)',
+   NAME not in can_start(d) and '## Waiting on you (1)' in b and 'Waiting on you (1)' in st and 'Sort the report by date (E02-S20)' in st.split('NEEDS YOU')[1], can_start(d) + b[:600])
+d, bid = bundled(); NAME = f'Two report changes in one sitting ({bid})'
+cset(d, 'E02-S21', 'dependsOn=[E02-S22]')
+rc, why = plan_check(d, [{'id': bid, 'mode': 'solo'}])
+ok('a wait put on a part AFTER bundling makes the bundle wait: it cannot start, and a plan must place what it waits on first', NAME not in can_start(d) and rc != 0 and 'E02-S22' in why, can_start(d) + why)
+d, bid = bundled(); NAME = f'Two report changes in one sitting ({bid})'
+cset(d, 'E02-S20', 'status=in-progress')
+rc, why = plan_check(d, [{'id': bid, 'mode': 'solo'}])
+ok('a part somebody started on its own AFTER bundling holds the bundle until it is settled', NAME not in can_start(d) and rc != 0 and 'E02-S20' in why, can_start(d) + why)
+d, bid = bundled()
+cset(d, 'E02-S21', 'conflictsWith=[E01-S60]'); cset(d, 'E02-S20', 'category=billing', 'priority=P1', 'pin=1'); cset(d, 'E01-S61', 'category=billing')
+D3 = lambda *ids: [{'id': i, 'mode': 'dispatch-it', 'files': [f'src/{k}.py']} for k, i in enumerate(ids)]
+rc, why = plan_check(d, D3(bid, 'E01-S60', 'E01-S62'))
+ok('a conflict put on a part AFTER bundling is the bundle\'s conflict: the two never share a side-by-side wave', rc != 0 and re.search(rf'{bid} and E01-S60 conflict|E01-S60 and {bid} conflict', why) is not None, why)
+rc, why = plan_check(d, D3(bid, 'E01-S61', 'E01-S62'), '--serial', 'billing')
+ok('a part moved to a one-at-a-time category AFTER bundling makes the bundle one-at-a-time in that category', rc != 0 and 'serial category billing' in why, why)
+b = rd(f'{d}/board/BOARD.md'); line = (re.search(rf'^- .*{bid} · .*$', b, re.M) or [''])[0]
+ok('a part raised to P1 or pinned AFTER bundling raises and pins the bundle', ' P1_' in line and '📌1' in line, line)
+ok('nothing of this is stored: the bundle card\'s own file never gains stakes, a decision, a pin or a conflict', not re.search(r'^(stakes|decision|pin|conflictsWith):', text(d, bid), re.M) and fmv(d, bid, 'priority') == 'P2', text(d, bid))
+
+# ============================== THE REVIEW'S SMALL ONES ==============================
+d, bid = bundled('--with', 'bundle-set,shipped')
+for val in ('status=done ', 'status=Done', 'status= DONE'):
+    r = cset(d, 'E02-S20', val)
+    ok(f'a part cannot be closed by a plain write, however "done" is typed ({val!r})', r.returncode != 0 and 'own check' in r.stderr and fmv(d, 'E02-S20', 'status') == 'backlog', r.stdout + r.stderr)
+r = cset(d, bid, 'status=Done ')
+ok('nor can a bundle with open parts ("1 of its parts has", "2 ... have")', r.returncode != 0 and '2 of its parts have not passed their own check' in r.stderr, r.stderr)
+cset(d, 'E02-S20', 'stage=Checked'); cset(d, bid, 'stage=Checked')
+o = run('sync-prs.py', d, '--repo', f'{d}/board')
+ok('reconcile --prs never closes a part (only its own check does), and never a bundle with open parts, whatever their stage',
+   fmv(d, 'E02-S20', 'status') == 'backlog' and fmv(d, bid, 'status') == 'backlog' and re.search(r'Two report changes in one sitting \(' + bid + r'\) · .*2 of its parts have not passed their own check', o) is not None, o)
+shrink(d, 'part-done', 'E02-S20', stdin='seen\n')
+r = shrink(d, 'reopen', 'E02-S20', stdin='it sorts by name again\n')
+ok('reopening a part of a bundle that is still open says where it went: back inside its bundle, its line there open again',
+   r.returncode == 0 and 'back in its bundle' in r.stdout and 'back in line' not in r.stdout and re.search(r'^- \[ \] Sort the report by date \(E02-S20\)', text(d, bid), re.M) is not None, r.stdout + text(d, bid))
+shrink(d, 'part-done', 'E02-S20', stdin='seen\n'); st = run('status.py', d); b = rd(f'{d}/board/BOARD.md')
+ok('counts say what they count: "1 bundle holds 1 card"', '(1 bundle holds 1 card)' in st, st[:300])
+n_open = sum(1 for i in titles(d) if '-S' in i and i.startswith('E02') and fmv(d, i, 'status') == 'backlog' and i != bid)
+ok('BOARD.md\'s counts leave the bundle card out: it wraps cards that are already counted', re.search(rf'## E02 · .*\n_.*backlog {n_open}\b', b) is not None and re.search(rf'### backlog \({n_open}\)', b.split('## E02')[1]) is not None, b.split('## E02')[1][:300])
+dk = board(*QUIET, '--with', 'shipped,many-checks'); o = run('sync-prs.py', dk, '--repo', f'{dk}/board')
+ok('a release with more checks than were read is left, and the report says how many were read', fmv(dk, 'E01-S70', 'status') == 'in-progress' and re.search(r'only 100 of its 150 checks could be read', o) is not None, o)
+
 # ============================== EXPIRY ==============================
 d = board(*QUIET, '--with', 'quiet'); T = titles(d); before = state(d)
-KEEP = {'E02-S31': 'day 29', 'E01-S80': 'a bug', 'E02-S33': 'high-stakes', 'E02-S34': 'a safety word in its title', 'E02-S35': 'the owner captured it', 'E02-S36': 'it does not say where it came from',
+KEEP = {'E02-S31': 'day 29', 'E01-S80': 'a bug', 'E02-S33': 'high-stakes', 'E02-S34': 'a safety word in its title', 'E02-S35': 'the owner captured it', 'E02-S36': 'nobody marked it',
         'E02-S37': 'pinned', 'E02-S38': 'another open card waits on it', 'E02-S39': 'a person is named on it', 'E02-S40': 'another card mentioned it lately', 'E02-S42': 'it has a pull request',
         'E02-S43': 'somebody started it', 'E02-S44': 'in a bundle whose other part is alive', 'E02-S45': 'in a bundle whose other part is alive', 'E02-S46': 'a bundle with open parts',
-        'E02-S47': 'a person brought it back', 'E02-S48': 'its type is not recorded'}
+        'E02-S47': 'a person brought it back', 'E02-S48': 'its type is not recorded', 'E02-S90': 'not marked: a security matter no word list would catch', 'E02-S91': 'not marked: it can lose data',
+        'E02-S92': 'not marked: the owner asked, in a heading', 'E02-S93': 'a rule the product must meet (maturity: mandate), marked or not', 'E02-S94': 'its words changed after it was marked',
+        'E02-S95': 'dated in the future: 0 quiet days', 'E02-S96': 'marked, changed lately'}
 dry = run('shrink.py', d, 'expire', '--dry-run', board_flag=True)
 ok('expire --dry-run lists what would close and why, and changes nothing',
    re.search(r'Would close 1 card.*\n\s+A tidy-up nobody asked for \(E02-S30\) · quiet 30 days', dry) is not None and state(d) == before, dry)
 ok('expire --dry-run: a card one day short is not closed, and is listed as closing soon', re.search(r'Another tidy-up nobody asked for \(E02-S31\) · quiet 29 days, closes in 1 day', dry) is not None, dry)
-ok('expire --dry-run says why the others are kept, as counts by reason, with no bare id', 'Kept' in dry and 'a bug' in dry and 'high-stakes' in dry and not bare(dry, T) and '[exit' not in dry, bare(dry, T) or dry)
+ok('expire --dry-run says why the others are kept, as counts by reason, with no bare id', 'Kept' in dry and 'a bug' in dry and 'high-stakes' in dry and 'not marked as safe to close' in dry and 'changed since' in dry and 'maturity: mandate' in dry
+   and not bare(dry, T) and '[exit' not in dry and 'quiet -' not in dry, bare(dry, T) or dry)
+import datetime
+later = str(datetime.date.today() + datetime.timedelta(days=1))
+asof = run('shrink.py', d, 'expire', '--dry-run', '--as-of', later, board_flag=True)
+ok('expire --dry-run --as-of <a later day> works out what closes then, and changes nothing', re.search(r'Would close 2 cards', asof) is not None and 'Another tidy-up nobody asked for (E02-S31) · quiet 30 days' in asof and later in asof and state(d) == before, asof)
+r = shrink(d, 'expire', '--as-of', later)
+ok('--as-of is for a dry run only: a real expire refuses it and closes nothing', r.returncode != 0 and 'dry' in r.stderr and state(d) == before, r.stdout + r.stderr)
 fs = first(d)
-ok('the first screen offers the count of quiet cards about to close, and how to see them',
-   re.search(r'Quiet cards: 2 will close in the next 7 days .*expire --dry-run', fs) is not None and len(fs.splitlines()) <= 25 and max(map(len, fs.splitlines())) <= 110, fs)
+ok('the first screen offers the count of marked quiet cards about to close, and how to see them',
+   re.search(r'Quiet cards: 2 will close in the next 7 days .*expire --dry-run', fs) is not None and max(map(len, fs.splitlines())) <= 110, fs)
 first(d, '--seen')
 r = shrink(d, 'expire'); c = text(d, 'E02-S30')
-ok('expire closes the plain quiet card on day 30: done, closed as expired', r.returncode == 0 and fmv(d, 'E02-S30', 'status') == 'done' and fmv(d, 'E02-S30', 'closed_as') == 'expired' and 'A tidy-up nobody asked for (E02-S30)' in r.stdout, r.stdout + r.stderr)
-ok('the closed card says why it closed and how to bring it back, and nothing was deleted', '## Expired' in c and 'quiet for 30 days' in c and '/backlog-it reopen E02-S30' in c and '## Found' in c, c)
+ok('expire closes the marked plain card on day 30: done, closed as expired', r.returncode == 0 and fmv(d, 'E02-S30', 'status') == 'done' and fmv(d, 'E02-S30', 'closed_as') == 'expired' and 'A tidy-up nobody asked for (E02-S30)' in r.stdout, r.stdout + r.stderr)
+ok('the closed card says why it closed, who marked it safe and why, and how to bring it back; nothing was deleted',
+   '## Expired' in c and 'quiet for 30 days' in c and 'groom' in c.split('## Expired')[1] and 'it cannot hurt anyone' in c.split('## Expired')[1] and '/backlog-it reopen E02-S30' in c and '## Found' in c, c)
 for i, why in KEEP.items():
     ok(f'never closes by itself: {why} ({T[i]})', fmv(d, i, 'status') != 'done', text(d, i))
 ok('nothing else on the board closed', sum(fmv(d, i, 'closed_as') == 'expired' for i in T) == 1)
+far = run('shrink.py', d, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=400)), board_flag=True)
+ok('a year on, the cards nobody marked and the ones a hard rule keeps are still open: only marked plain cards would close',
+   not any(f'({i})' in far.split('Kept')[0] for i in KEEP if i not in ('E02-S31', 'E02-S40', 'E02-S95', 'E02-S96')) and 'Another tidy-up nobody asked for (E02-S31)' in far.split('Kept')[0], far)
 fs = first(d)
-ok('the first screen says how many closed this way since the last look', re.search(r'Shipped: .*· 1 expired', fs) is not None and len(fs.splitlines()) <= 25 and max(map(len, fs.splitlines())) <= 110, fs)
+ok('the first screen says how many closed this way since the last look', re.search(r'Shipped: .*· 1 expired', fs) is not None and max(map(len, fs.splitlines())) <= 110, fs)
 ok('running it again closes nothing more', 'Closed 0' in shrink(d, 'expire').stdout)
 r = shrink(d, 'reopen', 'E02-S30', stdin='I do want this page tidied.\n')
 dry = run('shrink.py', d, 'expire', '--dry-run', board_flag=True)
 ok('an expired card comes back with one command, and a card a person brought back never expires again',
    r.returncode == 0 and fmv(d, 'E02-S30', 'status') == 'backlog' and fmv(d, 'E02-S30', 'closed_as') is None and '> I do want this page tidied.' in text(d, 'E02-S30') and '## Expired' in text(d, 'E02-S30') and 'a person brought it back' in dry, dry)
+# --- the mark: who gives it, what clears it ---
+d = board(*QUIET, '--with', 'quiet'); before = state(d)
+r = shrink(d, 'stamp', 'E02-S36', '--by', 'groom', stdin='a tidy-up of names; it cannot hurt anyone, and nobody asked for it\n')
+ok('stamp: a judge (groom, or you) marks a card as safe to close when quiet, with the reason and who judged',
+   r.returncode == 0 and fmv(d, 'E02-S36', 'expires') == 'ok' and fmv(d, 'E02-S36', 'expires_by') == 'groom' and 'cannot hurt anyone' in (fmv(d, 'E02-S36', 'expires_why') or '') and 'A plain idea nobody has marked (E02-S36)' in r.stdout, r.stdout + r.stderr)
+for cid, says in (('E02-S33', 'high-stakes'), ('E01-S80', 'a bug'), ('E02-S93', 'mandate'), ('E02-S35', 'reported it yourself')):
+    r = shrink(d, 'stamp', cid, '--by', 'you', stdin='x\n')
+    ok(f'stamp refuses a card a hard rule protects ({says})', r.returncode != 0 and says in r.stderr, r.stdout + r.stderr)
+ok('stamp needs a reason and a known judge', shrink(d, 'stamp', 'E02-S90', '--by', 'me', stdin='x\n').returncode != 0 and shrink(d, 'stamp', 'E02-S90', '--by', 'groom', stdin='\n').returncode != 0 and fmv(d, 'E02-S90', 'expires') is None)
+d = board(*QUIET, '--with', 'quiet')
+for how, edit in (('its title', lambda: cset(d, 'E02-S30', 'title="A tidy-up of the report page"')),
+                  ('its found text', lambda: (lambda pth, new: open(pth, 'w', encoding='utf-8').write(new))(path(d, 'E02-S31'), text(d, 'E02-S31').replace('In a review of other work.', 'Rob asked for this in a review.')))):
+    edit(); far = run('shrink.py', d, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=90)), board_flag=True)
+    ok(f'an edit to {how} after the mark clears the mark: the judgement was about the old words', 'changed since' in far and far.count('nobody asked for (E02-S3') == (1 if how == 'its title' else 0), far)
+shrink(d, 'expire')
+ok('... so neither edited card closes', fmv(d, 'E02-S30', 'status') == 'backlog' and fmv(d, 'E02-S31', 'status') == 'backlog')
+dn = board(*QUIET, '--with', 'bundle-set'); dry = run('shrink.py', dn, 'expire', '--dry-run', '--as-of', str(datetime.date.today() + datetime.timedelta(days=400)), board_flag=True); fs = first(dn)
+ok('with no card marked, nothing ever closes, and both the dry run and the first screen say so',
+   'Would close 0 cards' in dry and 'no card is marked as safe to close yet: groom marks them' in dry and 'no card is marked as safe to close yet: groom marks them' in fs and max(map(len, fs.splitlines())) <= 110, dry + fs)
+import shutil
+nd = f'{tmp}/nodates'; shutil.copytree(f'{d}/board', f'{nd}/board', ignore=shutil.ignore_patterns('.git')); dry = run('shrink.py', nd, 'expire', '--dry-run', board_flag=True)
+ok('a card with no date that can be read never closes, and is listed as that; no card is ever "quiet" for a made-up number of days',
+   'no date can be read on it' in dry and 'A tidy-up with no dates (E02-S96)' not in dry.split('Kept')[0] and not re.search(r'quiet (-|\d{4,})', dry), dry)
 s = src('status.py')
 ok('the 30 days and the 7 days\' notice are named constants, each with its reason, and so is the list of safety words',
    all(re.search(rf'^{k} = .+#.{{30,}}', s, re.M) for k in ('EXPIRE_DAYS', 'EXPIRE_WARN', 'SAFETY')) and re.search(r'^EXPIRE_DAYS = 30\b', s, re.M) is not None, 'missing')
@@ -254,7 +360,11 @@ ok('the reference names the three grounds and says who judges the last two', all
 ok('the reference defines ONE place a card lists the files it would change, and who fills it', 'files: [src/export.py, src/csv.py]' in ref and all(x in ref for x in ('`plan` writes it', 'grounder', 'A lane')), '')
 ok('the reference: the bug line ends at released with passing tests; no stage parks a card to be checked',
    '**Reported → Cause found → Fix ready → done**' in ref and 'shipped-tests-pass' in ref and '| Live |' not in ref and '| Checked |' not in ref and '**Live, to check**' not in ref, '')
-ok('the reference: expiry is written as a rule, with what never expires', '### `expire [--dry-run]`' in ref and all(x in ref for x in ('30 quiet days', 'Never expires', '`## Captured`', '`## Found`', 'closed_as: expired', 'when it cannot be told')), '')
+ok('the reference: expiry is written as a rule -- only a marked card, every hard rule on top, an edit clears the mark', '### `expire [--dry-run]`' in ref and all(x in ref for x in ('30 quiet days', 'Never expires', '`## Captured`', 'closed_as: expired', 'when it cannot be told',
+   'expires: ok', 'expires_why:', 'expires_by:', 'No mark, never', 'maturity: mandate', 'clears the mark', '--as-of')), '')
+ok('the reference and the skill: groom\'s judge gives the mark from four questions (any yes or unsure: no mark), or the owner picks in a one-click list',
+   all(x in ref for x in ('"can_hurt"', '"person_asked"', '"must_meet"', 'any `yes` or `unsure`', 'shrink.py stamp')) and all(x in cmd for x in ('expires: ok', 'shrink.py', 'stamp <id> --by groom', '--by you', 'unsure')), '')
+ok('the reference: a bundle\'s state is worked out from its parts every time, never stored', all(x in ref for x in ('worked out from its parts every time', 'never stored', 'high-stakes if any part is')), '')
 for f in ('.claude/commands/resume-it.md', '.claude/commands/wrap-it.md', '.claude/commands/clear-it.md', '.claude/make-it/references/ship-it-guide.md', '.claude/make-it/confluence-docs/16-backlog-it.md', '.claude/commands/make-it.md'):
     x = flat(f)
     ok(f'{f} no longer parks cards at Live or Checked', 'Live, to check' not in x and 'stage: Live' not in x and 'to `Live`' not in x and 'Live and Checked' not in x and '→ Live → Checked' not in x, '')

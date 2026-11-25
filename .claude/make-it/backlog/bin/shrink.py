@@ -7,7 +7,8 @@ Usage: shrink.py [--board PATH] [--project NAME] [--no-sync] combine [filter]   
        shrink.py [--board PATH] [--project NAME] [--no-sync] part-done <id>           (stdin: what showed that card's own check passed)
        shrink.py [--board PATH] [--project NAME] [--no-sync] unbundle <id>            (a bundle's id: every part goes back; a part's id: that one)
        shrink.py [--board PATH] [--project NAME] [--no-sync] reopen <id>              (stdin: what was seen, word for word)
-       shrink.py [--board PATH] [--project NAME] [--no-sync] expire [--dry-run]
+       shrink.py [--board PATH] [--project NAME] [--no-sync] stamp <id> --by groom|you  (stdin: why it is safe to close, one plain line)
+       shrink.py [--board PATH] [--project NAME] [--no-sync] expire [--dry-run [--as-of YYYY-MM-DD]]
        shrink.py --self-test
   --board defaults to $BACKLOG_DIR, then ./.claude/backlog.
 
@@ -27,8 +28,12 @@ part-done  closes one part on its own check. A part never closes any other way, 
          after every part has.
 unbundle puts the parts back in line, each file byte for byte as it was; the bundle card is kept, closed.
 reopen   puts a closed card back in line with the person's words kept (`reopened: <date>`).
-expire   closes the cards status.py's written rule (`expiry`) says nobody asks for, after EXPIRE_DAYS quiet days;
-         --dry-run lists what would close, what closes soon or later, and why the rest are kept, and writes nothing.
+stamp    marks a card `expires: ok` (with `expires_why:`, `expires_by:` and a print of the words that were judged).
+         The judging is not done here: groom's judge, or the owner's pick, decides, and this only records it. It
+         refuses a card a hard rule protects. No mark, never: `expire` closes nothing that is not marked.
+expire   closes the marked cards status.py's written rule (`expiry`) allows, after EXPIRE_DAYS quiet days; every hard
+         rule still applies on top of the mark. --dry-run lists what would close, what closes soon or later, and why
+         the rest are kept, and writes nothing; with --as-of it works that out for a later day (dry run only).
 ponytail: if two clones give a new bundle card and another new card the same id, card.py renumbers ours and names
 the parts that still point at the old id ("check them"): re-run `bundle` then; nothing is lost meanwhile.
 Writes go through card.py's lock, pull and sync: the line printed ends with what happened, and exit 3 means
@@ -182,7 +187,7 @@ def bundle(B, ids, text, proj, nosync, T=None):
     size = next(k for k, x in POINTS.items() if x >= pts)
     fm = [('id', 'NEW'), ('title', '"' + ' '.join(spec['title'].replace('"', "'").split()) + '"'), ('type', 'breakfix' if bug else 'story'), ('status', 'backlog')] + [('stage', 'Reported')] * bool(bug) + [
           ('category', cats.pop() if len(cats) == 1 else v(byid[ids[0]], 'category')), ('priority', min(v(byid[i], 'priority') or 'P9' for i in ids).replace('P9', '')), ('size', size)] + [
-          ('stakes', 'critical')] * bool(hot) + [('bundles', '[' + ', '.join(ids) + ']'), ('ground', spec['ground'])]
+          ('bundles', '[' + ', '.join(ids) + ']'), ('ground', spec['ground'])]
     body = (f"\n## Goal\nOne piece of work -- one lane, one pull request -- that does these {len(ids)} cards together, without watering any of them down:\n"
             "each keeps its own check below and closes only when that check passes.\n\n"
             f"## Why together\n- ground: {spec['ground']}\n- {spec['why']}\n\n## Parts\n" + ''.join(f'- [ ] {full(byid[i])} -- check: {spec[i]}\n' for i in ids)
@@ -248,17 +253,36 @@ def reopen(B, cid, text, proj, nosync, T=None):
     how = {'shipped-tests-pass': 'as shipped (its tests passed; no real run confirmed it)', 'expired': 'by the board, as a quiet card nobody asked for', '': 'as done'}.get(v(d, 'closed_as'), f"as {v(d, 'closed_as')}")
     note = '\n'.join(f'> {l}' if l else '>' for l in text.replace('\r\n', '\n').strip('\n').split('\n'))  # quoted, line for line: the person's words
     note += f"\n- it was closed {how}, last changed {v(d, 'updated') or 'on an unknown date'}" + (f"; the fix was pull request {v(d, 'pr')}, which no longer closes this card" if v(d, 'pr') else '')
-    # ponytail: a part reopened while its bundle is still open keeps its ticked line there; the bundle then waits on it again, which is the point
     C.write(p, {'status': 'backlog', 'stage': 'Reported' if bug else None, 'closed_as': None, 'pr': None, 'checkAfter': None, 'reopened': str(T)}, f'Reopened ({T})', note, T)
-    sent, rc = send(B, [p], f"card: {v(d, 'id')}: reopened", proj, nosync)
-    print(f"Reopened: {R.name(d)} is back in line ({'a bug at Reported' if bug else 'in the backlog'}), with what was seen kept on it · {sent}")
+    b = tree[0].get(v(d, 'bundledIn').upper()); b = b if b and v(b, 'status') != 'done' and cid.upper() in R.parts(b) else None
+    paths = [p]
+    if b:  # a part of a bundle that is still open: it is open inside the bundle again, and its own check must pass again
+        bp = where[v(b, 'id').upper()]; tick(bp, v(d, 'id'), ' '); C.write(bp, {}, T=T); paths.append(bp)
+    sent, rc = send(B, paths, f"card: {v(d, 'id')}: reopened", proj, nosync)
+    print(f"Reopened: {R.name(d)} is " + (f"back in its bundle {R.name(b)}, open again: its own check must pass again" if b else f"back in line ({'a bug at Reported' if bug else 'in the backlog'})")
+          + f", with what was seen kept on it · {sent}")
+    return rc
+
+def stamp(B, cid, by, text, proj, nosync, T=None):
+    """Record a judge's mark that a card is safe to close when quiet. The judgement is groom's judge's or the owner's;
+    here it is only written down, with a print of the words judged, so a later edit clears it."""
+    f = S.facts(B, T); d = f['tree'][0].get(cid.upper()); why = ' '.join(text.split())
+    if not d: no(f'{cid} matches no card on this board')
+    if by not in ('groom', 'you'): no('say who judged it: `--by groom` (groom\'s judge) or `--by you` (the owner\'s pick)')
+    if not why: no('say why it is safe to close, in one plain line on stdin')
+    p = next(q for q, x in f['cards'].items() if x is d)
+    kept = S.expiry(f)['kept'].get(p, '')
+    if kept and not kept.startswith(('not marked', 'marked', 'no date')): no(f'{full(d)} can never close by itself: {kept}')  # a hard rule protects it: a mark would change nothing, and would mislead
+    C.write(p, {'expires': 'ok', 'expires_why': why, 'expires_by': by, 'expires_of': S.stamp_of(v(d, 'title'), open(p, encoding='utf-8-sig').read())}, T=T)
+    sent, rc = send(B, [p], f"card: {v(d, 'id')}: marked safe to close when quiet (by {by})", proj, nosync)
+    print(f"Marked safe to close when quiet: {R.name(d)} · judged by {by} · it closes after {S.EXPIRE_DAYS} quiet days unless a hard rule or an edit stops it · {sent}")
     return rc
 
 def expire(B, dry, said, proj, nosync, T=None):
     f = S.facts(B, T); T = f['T']; ex = S.expiry(f); c = f['cards']
     days = lambda k: f"{k} day{'s' * (k != 1)}"
     out = [f"EXPIRE -- {said} · {T}" + (' · dry run, nothing written' if dry else '')]
-    out.append(f"{'Would close' if dry else 'Closed'} {len(ex['close'])} card{'s' * (len(ex['close']) != 1)}: quiet for {S.EXPIRE_DAYS} days or more, with nobody asking and nothing waiting")
+    out.append(f"{'Would close' if dry else 'Closed'} {len(ex['close'])} card{'s' * (len(ex['close']) != 1)}: " + (f"marked safe to close, quiet for {S.EXPIRE_DAYS} days or more, with nothing waiting" if ex['close'] or ex['soon'] or ex['later'] else 'no card is marked as safe to close yet: groom marks them'))
     out += [f"  {R.name(c[p])} · quiet {days(q)}" for p, q in ex['close']]
     if ex['soon']: out += [f"Closing within {S.EXPIRE_WARN} days: {len(ex['soon'])}"] + [f"  {R.name(c[p])} · quiet {days(q)}, closes in {days(k)}" for p, q, k in ex['soon']]
     later = sorted(ex['later'], key=lambda x: -x[1])  # the kind of card that expires, not quiet long enough yet: the quietest three, so nothing closes as a surprise
@@ -269,6 +293,7 @@ def expire(B, dry, said, proj, nosync, T=None):
         for p, q in ex['close']:
             C.write(p, {'status': 'done', 'closed_as': 'expired', 'pin': None}, f'Expired ({T})',
                     f"- closed by the board: quiet for {days(q)} (no change to this card, no pull request, no card mentioning it), with no report behind it, no person named on it, and no card waiting on it\n"
+                    f"- marked safe to close by {v(c[p], 'expires_by')}: {v(c[p], 'expires_why')}\n"
                     f"- nothing was deleted. To bring it back: `/backlog-it reopen {v(c[p], 'id')} <why it is needed>`", T)
         if ex['close']:
             sent, rc = send(B, [p for p, _ in ex['close']], f"expire: closed {len(ex['close'])} quiet card{'s' * (len(ex['close']) != 1)}", proj, nosync)
@@ -283,7 +308,14 @@ def main(args):
             if i + 1 >= len(args) or args[i + 1].startswith('--'): sys.exit(f'shrink: {k} needs a value')
             opts[k] = args[i + 1]; del args[i:i + 2]
     flag = lambda k: k in args and not args.remove(k)
+    for k in ('--by', '--as-of'):
+        if k in args:
+            i = args.index(k)
+            if i + 1 >= len(args): sys.exit(f'shrink: {k} needs a value')
+            opts[k] = args[i + 1]; del args[i:i + 2]
     nosync, dry = flag('--no-sync'), flag('--dry-run')
+    asof = S.day(opts['--as-of']) if '--as-of' in opts else None
+    if '--as-of' in opts and (not dry or not asof): sys.exit('shrink: nothing written -- --as-of takes a date (YYYY-MM-DD) and is for `expire --dry-run` only: a real expire always uses today')
     B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'shrink: no items/ folder in {B}')
     proj = opts.get('--project')
@@ -296,10 +328,11 @@ def main(args):
         except UnicodeDecodeError: sys.exit('shrink: the text on stdin is not UTF-8, nothing written')
         return t if t.strip() else sys.exit('shrink: empty text on stdin, nothing written')
     if verb == 'combine': return print(combine(B, ' '.join(rest), said))
-    if verb == 'expire' and not rest and dry: return expire(B, True, said, proj, True)
+    if verb == 'expire' and not rest and dry: return expire(B, True, said, proj, True, asof)
     if verb == 'bundle' and rest: t = stdin(); C.lock(B); C.pull(B, proj); rc = bundle(B, rest, t, proj, nosync)
     elif verb == 'part-done' and len(rest) == 1: t = stdin(); C.lock(B); C.pull(B, proj); rc = part_done(B, rest[0], t, proj, nosync)
     elif verb == 'unbundle' and len(rest) == 1: C.lock(B); C.pull(B, proj); rc = unbundle(B, rest[0], proj, nosync)
+    elif verb == 'stamp' and len(rest) == 1: t = stdin(); C.lock(B); C.pull(B, proj); rc = stamp(B, rest[0], opts.get('--by', ''), t, proj, nosync)
     elif verb == 'reopen' and len(rest) == 1: t = stdin(); C.lock(B); C.pull(B, proj); rc = reopen(B, rest[0], t, proj, nosync)
     elif verb == 'expire' and not rest: C.lock(B); C.pull(B, proj); rc = expire(B, False, said, proj, nosync)
     else: sys.exit(__doc__)

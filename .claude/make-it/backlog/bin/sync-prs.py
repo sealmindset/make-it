@@ -69,10 +69,12 @@ def gh(repo):
         if not isinstance(cmp, dict) or not isinstance(cmp.get('behind_by'), int): return 'unreadable', why or 'the release could not be compared'
         return ('in' if cmp['behind_by'] == 0 else 'not yet'), tag
     def checks(n, ref):
-        """('pass', count) · ('fail', (failed names, count)) · ('running', count) · ('none', 0) · ('unreadable', why)."""
-        j, why = api(n, f'commits/{ref}/check-runs?per_page=100')  # ponytail: the first 100 checks; a release with more needs paging
+        """('pass', count) · ('fail', (failed names, count)) · ('running', count) · ('none', 0) · ('partial', 'N of its M') · ('unreadable', why)."""
+        j, why = api(n, f'commits/{ref}/check-runs?per_page=100')
         runs = j.get('check_runs') if isinstance(j, dict) else None
         if not isinstance(runs, list): return 'unreadable', why or 'no answer'
+        # ponytail: one page of 100 is read. A release with more is never called passed on a part of its checks: the card is left and the count said; page here if that ever bites
+        if isinstance(j.get('total_count'), int) and j['total_count'] > len(runs): return 'partial', f"{len(runs)} of its {j['total_count']}"
         bad = [c.get('name') or '?' for c in runs if c.get('conclusion') in BAD]
         if bad: return 'fail', (bad, len(runs))
         if any(c.get('status') != 'completed' or c.get('conclusion') not in GOOD for c in runs): return 'running', len(runs)
@@ -89,8 +91,15 @@ def moves(B, G):
     cards = R.load(B); T = R.tree(cards)
     for p, d in cards.items():
         if '/stories/' not in p: continue
-        if eligible(d, True): out.append((p, {'status': 'done'}, 'Checked → done (the live check passed)', None)); continue
-        if not eligible(d, False) or R.bundle_of(d, T): continue  # a part of a bundle closes on its own check, never on a pull request
+        if v(d, 'status') == 'done' or R.bundle_of(d, T): continue  # a part of a bundle closes on its own check (`part-done`), never here, whatever its stage
+        still = R.open_parts(d, T)  # a bundle: each card in it closes on its own check, and the bundle only after them
+        unchecked = (f"{len(still)} of its parts ha{'s' if len(still) == 1 else 've'} not passed {'its' if len(still) == 1 else 'their'} own check: "
+                     + ', '.join(R.name(m) for m in still) + ' -- record each with `part-done`, or take it out with `unbundle`')
+        if eligible(d, True):
+            if still: wait.append((p, f'at Checked, but {unchecked}'))
+            else: out.append((p, {'status': 'done'}, 'Checked → done (the live check passed)', None))
+            continue
+        if not eligible(d, False): continue
         nums = prs(d)
         if nums is None: wait.append((p, 'pr: names another repo by short form -- use the PR URL')); continue
         if not nums:
@@ -110,12 +119,9 @@ def moves(B, G):
         rel, its = (f'released in {tag}', "that release's") if how == 'in' else ('the merge is the release (the repo has no release tag)', "the merge's")
         res, x = G['checks'](n, tag if how == 'in' else sha)
         if res != 'pass':
-            wait.append((p, f'{did}, {rel}, but ' + ({'unreadable': f'its checks could not be read ({x}) -- left as it is', 'none': 'no checks ran on it, so nothing says the tests pass -- left as it is',
+            wait.append((p, f'{did}, {rel}, but ' + ({'unreadable': f'its checks could not be read ({x}) -- left as it is', 'partial': f'only {x} checks could be read -- left as it is', 'none': 'no checks ran on it, so nothing says the tests pass -- left as it is',
                                                     'running': 'its checks are still running'}.get(res) or f"{len(x[0])} of its {x[1]} checks failed ({', '.join(x[0][:3])}) -- not done: a test says otherwise"))); continue
-        still = R.open_parts(d, T)  # a bundle: each card in it closes on its own check, and the bundle only after them
-        if still:
-            wait.append((p, f"{did}, {rel}, but {len(still)} of its parts ha{'s' if len(still) == 1 else 've'} not passed {'its' if len(still) == 1 else 'their'} own check: "
-                            + ', '.join(R.name(m) for m in still) + ' -- record each with `part-done`, or take it out with `unbundle`')); continue
+        if still: wait.append((p, f'{did}, {rel}, but {unchecked}')); continue
         proof = f"{did}; {rel}; all {x} of {its} checks passed"
         note = f"{v(d, 'stage')} → done · {proof} · not confirmed by a real run: reopen it if use shows otherwise"
         if v(d, 'decision'): note += ' · it still has a decision: -- if that was answered, clear decision: and answers:'
