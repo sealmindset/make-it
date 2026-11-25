@@ -267,6 +267,28 @@ ok('`triage ok` says when to fall back: if the write says nothing was written', 
 for f in ('.claude/commands/dispatch-it.md', '.claude/make-it/sdd/task-reviewer-prompt.md'):
     ok(f'{f} tells a lane what exit 3 means', 'exit 3 means saved here but not sent: do not repeat the write' in re.sub(r'\s+', ' ', open(f'{root}/{f}', encoding='utf-8').read()))
 
+B, S = shared(); open(f'{tmp}/outside.md', 'w', encoding='utf-8').write('---\nid: E01-S99\ntitle: "Outside the board"\nstatus: backlog\n---\n')
+os.symlink(f'{tmp}/outside.md', f'{B}/items/EPIC-01-bugs/stories/S99-link.md')  # card-shaped, but a link to a file outside the board
+r1 = card(B, 'set', 'E01-S2', 'size=M')
+ok('a link under items/ is never committed', r1[0] == 0 and 'S99-link.md' in git(B, 'ls-files', '--others', '--', 'items') and 'S99-link' not in git(S, 'ls-tree', '-r', '--name-only', 'HEAD'), r1)
+
+B, S = shared(); O = clone(S); refuse(S)
+r1 = card(B, 'new', 'E02', stdin=NEWC('mine first')); old = new_id(r1[1])
+ra = card(B, 'new', 'E02', stdin=NEWC('needs mine').replace('status: backlog', f'status: backlog\ndependsOn: [{old}, E01-S2]'))
+rb = card(B, 'new', 'E02', stdin=NEWC('talks about mine', f'start after {old} lands'))
+rc_ = card(B, 'append', 'E01-S3', 'Notes', stdin=f'- blocked by {old}\n')  # a card the shared board already holds: named, never edited
+os.remove(f'{S}/hooks/pre-receive')
+r2 = card(O, 'new', 'E02', stdin=NEWC('theirs meanwhile'))
+r3 = card(B, 'set', 'E01-S2', 'size=M'); c = cards(B)
+text = lambda title: next(x[1] for v in c.values() for x in v if f'title: "{title}"' in x[1])
+now = next((i for i, v in c.items() if 'title: "mine first"' in v[0][1]), None)
+line = next((l for l in r3[1].split('\n') if l.startswith('Your card')), '')
+ok('after a renumber, our unsent cards that depend on it follow, and cards that still mention the old id are named',
+   r3[0] == 0 and now and now != old and old == new_id(r2[1]) and re.search(rf'^dependsOn: \[{now}, E01-S2\]$', text('needs mine'), re.M)
+   and f'these cards still mention {old}: ' in line and line.endswith(': check them') and f'talks about mine ({new_id(rb[1])})' in line and '(E01-S3)' in line
+   and 'needs mine' not in line and f'- blocked by {old}' in c['E01-S3'][0][1] and f'start after {old} lands' in text('talks about mine')
+   and on_shared(S, f'dependsOn: [{now}, E01-S2]'), f'{r1}\n{ra}\n{rb}\n{rc_}\n{r2}\n{r3}')
+
 # ---- 4. the skill and its reference --------------------------------------------------------------------------
 ref = open(f'{root}/.claude/make-it/references/backlog-board.md', encoding='utf-8').read()
 skill = open(f'{root}/.claude/commands/backlog-it.md', encoding='utf-8').read()
