@@ -27,8 +27,9 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.config import settings
+from app.lib.ai.providers.ollama import OllamaProvider
 from app.main import _fastapi_app
-from app.services.log_service import attach_outbound_logging, log_store, sanitize_url
+from app.services.log_service import attach_outbound_logging, log_store, sanitize_text, sanitize_url
 from tests.conftest import ADMIN_USER
 
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
@@ -366,3 +367,165 @@ def test_an_address_keeps_only_what_is_known_to_be_safe():
         (f"http://[not-an-address/?token={s}", "***"),  # cannot be read as an address: nothing is kept
     ]:
         assert sanitize_url(raw) == safe
+
+
+def _a_jwt() -> str:
+    return jwt.encode({"sub": secrets.token_hex(8)}, secrets.token_hex(32), algorithm="HS256")
+
+
+def _an_email() -> str:
+    return f"{secrets.token_hex(4)}@{secrets.token_hex(3)}.example"
+
+
+@pytest.mark.asyncio
+async def test_a_secret_in_the_path_of_a_request_reaches_nothing_the_app_writes(minted, jwt_secret, capsys):
+    minted["a JWT in the path"] = _a_jwt()
+    minted.new("a 32-character token in the path")
+    email = minted["an e-mail address in the path"] = _an_email()
+    minted["the same e-mail address, percent-encoded"] = email.replace("@", "%40")
+    in_path = [minted["a JWT in the path"], minted["a 32-character token in the path"], email]
+    async with _served() as base:
+        async with httpx.AsyncClient(base_url=base) as caller:
+            for value in in_path:
+                assert (await caller.get(f"/api/items/{value}/notes")).status_code == 404
+            assert (await caller.get("/api/a-long-but-plain-route-name/7")).status_code == 404
+        seen = await _what_the_admin_sees(base, jwt_secret)
+    console = _assert_no_secret(minted, seen, capsys)
+    assert console.count('"GET /api/items/***/notes HTTP/1.1" 404') == 3  # the rest of the line is still printed
+    assert sum(1 for e in seen["events"] if e["path"] == "/api/items/***/notes") == 3
+    plain = "/api/a-long-but-plain-route-name/7"  # a long segment of plain words is not a secret
+    assert f'"GET {plain} HTTP/1.1" 404' in console
+    assert any(e["path"] == plain for e in seen["events"])
+
+
+@pytest.mark.asyncio
+async def test_with_logging_at_debug_a_redirect_address_stays_out_of_the_console(
+    minted, jwt_secret, probe, far_side, capsys
+):
+    # At DEBUG the HTTP library under httpx prints every response header, a redirect's Location included.
+    far_side.redirect_to = f"/landed?access_token={minted.new('access_token in a redirect address')}"
+
+    async def calls(client):
+        await client.get(f"{_url(far_side)}/redirect")
+
+    probe["calls"] = calls
+    root = logging.getLogger()
+    handler, level = logging.StreamHandler(), root.level
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+    try:
+        async with _served() as base:
+            async with httpx.AsyncClient(base_url=base) as caller:
+                assert (await caller.post("/api/probe")).status_code == 200
+            seen = await _what_the_admin_sees(base, jwt_secret)
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(level)
+    console = _assert_no_secret(minted, seen, capsys)
+    assert "/landed?access_token=***" in console  # httpx's own line for the second hop, masked
+
+
+@pytest.mark.asyncio
+async def test_a_call_to_an_address_that_cannot_be_one_is_recorded_as_that(minted, jwt_secret, probe, capsys):
+    async def calls(client):
+        await client.get(f"http://svc {minted.new('a secret in a malformed address')}/items")
+
+    probe["calls"] = calls
+    async with _served() as base:
+        async with httpx.AsyncClient(base_url=base) as caller:
+            assert (await caller.post("/api/probe")).status_code == 500
+        seen = await _what_the_admin_sees(base, jwt_secret)
+    _assert_no_secret(minted, seen, capsys)
+    assert len(_outbound(seen)) == 1
+    entry = _outbound(seen)[0]
+    assert (entry["error"], entry["url"], entry["path"], entry["status"]) == ("InvalidAddress", "***", "***", None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["complete", "stream", "nothing is listening"])
+async def test_the_ollama_provider_s_calls_are_in_the_activity_log(how, far_side, monkeypatch):
+    there = _url(far_side)
+    if how == "nothing is listening":
+        closed = socket.socket()
+        closed.bind(("127.0.0.1", 0))
+        there = f"http://127.0.0.1:{closed.getsockname()[1]}"
+        closed.close()
+    monkeypatch.setattr(settings, "OLLAMA_BASE_URL", there)
+    provider = OllamaProvider()
+    with contextlib.suppress(Exception):  # the far side answers with no JSON; the call itself is what is tested
+        if how == "stream":
+            _ = [chunk async for chunk in provider.stream("system", "user")]
+        else:
+            await provider.complete("system", "user")
+    entries = log_store.query(event_type="outbound")
+    assert len(entries) == 1
+    entry = entries[0]
+    assert (entry["service"], entry["method"], entry["url"]) == ("ollama", "POST", f"{there}/api/generate")
+    assert (entry["status"], entry["error"]) == (
+        (None, "ConnectError") if how == "nothing is listening" else (200, None)
+    )
+
+
+def test_a_name_or_a_value_that_could_be_a_secret_is_not_kept():
+    s16, s13, s19 = secrets.token_hex(8), secrets.token_hex(8)[:13], secrets.token_hex(10)[:19]
+    padded = base64.b64encode(secrets.token_bytes(16)).decode()  # ends in ==
+    assert padded.endswith("==")
+    for raw, safe in [
+        # a secret where a name should be
+        (f"https://h/p?{padded}", "https://h/p?***"),
+        (f"https://h/p?{s16}=1", "https://h/p?***"),
+        (f"https://h/p?{_a_jwt()}=x&page=2", "https://h/p?***&page=2"),
+        (f"https://h/p?{_an_email()}=x", "https://h/p?***"),
+        # a plain short name is kept, its value is not
+        (
+            f"https://h/p?filter[status]={s16}&X-Amz-Signature={s16}",
+            "https://h/p?filter[status]=***&X-Amz-Signature=***",
+        ),
+        # a value under an allowed name must look like what that name carries
+        (f"https://h/p?sort=a;k={s13}", "https://h/p?sort=***"),
+        (f"https://h/p?version={s19}", "https://h/p?version=***"),
+        (f"https://h/p?sort={s19}", "https://h/p?sort=***"),
+        (f"https://h/p?page={s19}", "https://h/p?page=***"),
+        (f"https://h/p?format={s13}&lang={s13}&limit={s13}", "https://h/p?format=***&lang=***&limit=***"),
+        ("https://h/p?version=1234-5678-9012-3456", "https://h/p?version=***"),
+        (
+            "https://h/p?page=2&per_page=50&sort=-created_at,name&order=DESC&format=json&lang=en-US",
+            "https://h/p?page=2&per_page=50&sort=-created_at,name&order=DESC&format=json&lang=en-US",
+        ),
+        ("https://h/p?api-version=2024-06-01&version=1.2.3", "https://h/p?api-version=2024-06-01&version=1.2.3"),
+        (
+            "https://h/p?api-version=2024-06-01-preview&version=v2",
+            "https://h/p?api-version=2024-06-01-preview&version=v2",
+        ),
+    ]:
+        assert sanitize_url(raw) == safe
+
+
+def test_a_secret_shaped_path_segment_is_masked_and_plain_words_are_kept():
+    email = _an_email()
+    for raw, safe in [
+        (f"https://h/users/{email}/keys", "https://h/users/***/keys"),
+        (f"https://h/users/{email.replace('@', '%40')}/keys", "https://h/users/***/keys"),
+        (f"https://h/t/{_a_jwt()}", "https://h/t/***"),
+        ("https://h/.well-known/openid-configuration", "https://h/.well-known/openid-configuration"),
+        ("https://h/api/notification-preferences/7", "https://h/api/notification-preferences/7"),
+    ]:
+        assert sanitize_url(raw) == safe
+
+
+def test_any_address_inside_a_text_is_masked():
+    s = secrets.token_hex(16)
+    for raw, safe in [
+        (
+            f"could not connect to postgresql+asyncpg://app:{s}@db:5432/app",
+            "could not connect to postgresql+asyncpg://db:5432/app",
+        ),
+        (f"redis://:{s}@cache:6379/0 refused", "redis://cache:6379/0 refused"),
+        (
+            f"Client error for url '/v1/items?access_token={s}&page=2'",
+            "Client error for url '/v1/items?access_token=***&page=2'",
+        ),
+        (f"for url 'https://h/p?code={s}'", "for url 'https://h/p?code=***'"),
+        ('  File "/app/app/main.py", line 3, in probe', '  File "/app/app/main.py", line 3, in probe'),
+    ]:
+        assert sanitize_text(raw) == safe
