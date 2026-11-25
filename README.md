@@ -1007,6 +1007,26 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.31 -- the board shrinks: cards combine without losing their point, shipped means done, and quiet cards can close
+
+- **Cards combine.** `/backlog-it combine` proposes bundles of cards that change the same file,
+  share one cause, or serve one goal. Nothing combines without your pick. A bundle is one piece
+  of work; each card inside keeps its own check and closes only when that check passes.
+  Un-bundling puts every card back exactly as it was.
+- **A bundle never loses a gate.** It is held whenever any card inside it is high-stakes, waits
+  on a question, or waits on other work, worked out each time the board is read.
+- **Shipped means done.** The bug line is now Reported, Cause found, Fix ready, done. A card
+  closes when its pull request is merged, a release holds it, and that release's checks passed.
+  If the checks cannot be read, the card is left and the reason is said. `reopen` puts a card
+  back in line with your words kept, and the first screen counts reopened cards.
+- **Quiet cards can close after 30 days,** but only cards marked as safe to close, with the
+  reason written on them. Groom marks them after reading the whole card, or you pick them. Any
+  change to a card clears its mark. A bug, a high-stakes card, a rule the product must meet,
+  your own report, a bundled card and a card other work waits on never close this way.
+  `expire --dry-run` shows what would close and why.
+- **Not built yet:** the weekly sitting, the daily release, test beds as part of a fix, and
+  knowledge that saves itself are later tasks of the same card.
+
 ### v1.71.30 -- the activity log hides every secret; the seal is harder to fool; a report given to the board is never lost
 
 Three fixes in one release.
