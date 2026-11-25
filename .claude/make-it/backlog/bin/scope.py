@@ -24,6 +24,9 @@ Prints JSON for the plan's route call and its gate (check-plan.py --scope):
              blocked): not followed further, and the cards that need them are skipped
   loops      [[id, ...]] cards in scope that wait on each other: skip them, fix their dependsOn
   scope      in_filter + pulled_in ids: every id the plan must place in a wave, hold, or skip
+  bundles    [{id, title, ground, parts: [{id, title, status}]}] the bundles in scope. A bundle is ONE card
+             to plan (one lane, one pull request); its parts are never in scope on their own, and a card
+             that waits on a part waits on the bundle
   notes      plain warnings: a filter that matches nothing to plan, a link to an id not on this board
 Exit 2 when the filter names a card id that isn't on the board.
 """
@@ -42,7 +45,8 @@ def key(i): return [int(n) for n in re.findall(r'\d+', i)] or [0]  # E2-S10 afte
 
 def scope(board, flt='', with_deps=False):
     T = R.tree(R.load(board)); byid, kids, up = T
-    cand = lambda i: i not in kids and v(byid[i], 'status') in CANDIDATE
+    whole = lambda i: R.whole(i, T)  # a part of a bundle stands for its bundle: the one thing to plan
+    cand = lambda i: i not in kids and v(byid[i], 'status') in CANDIDATE and whole(i) == i
     leafs = [i for i in byid if i not in kids]
     f, notes = flt.strip(), []
     if not f: named = leafs
@@ -67,7 +71,7 @@ def scope(board, flt='', with_deps=False):
                 if d not in byid:
                     n = f"{c} depends on {d}{'' if a == c else f' (through {a})'}, which isn't on this board -- it doesn't block (it may live on another board)"
                     if n not in notes: notes.append(n)
-        for leaf, _, _ in R.needs(c, T):
+        for leaf in dict.fromkeys(l if whole(l) == c else whole(l) for l, _, _ in R.needs(c, T)):  # a bundle's own part, started alone, is named as itself
             edges.setdefault(c, []).append(leaf)
             if leaf in S: continue
             if not with_deps: outside.setdefault(leaf, set()).add(c); continue
@@ -100,6 +104,9 @@ def scope(board, flt='', with_deps=False):
         'waits': [{'id': i, 'status': v(byid[i], 'status'), 'for': serves(i)} for i in sorted(waits, key=key)],
         'loops': loops,
         'scope': in_filter + sorted(pulled, key=key),
+        'bundles': [{'id': i, 'title': v(byid[i], 'title').strip('"'), 'ground': v(byid[i], 'ground'),
+                     'parts': [{'id': m, 'title': v(byid[m], 'title').strip('"'), 'status': v(byid[m], 'status')} for m in R.parts(byid[i]) if m in byid]}
+                    for i in in_filter + sorted(pulled, key=key) if R.parts(byid[i])],
         'notes': notes,
     }
 
@@ -159,6 +166,14 @@ def self_test():
             s = scope(b, f); assert s['in_filter'] == [] and any('nothing to plan' in n for n in s['notes']), (f, s)
         s = scope(b, '', True)
         assert s['pulled_in'] == [] and 'E07-S1' in s['scope'] and any('adds nothing' in n for n in s['notes']), s
+        card(E(7), 'stories/S2.md', id='E07-S2', title='Part', status='backlog', parent='E07', bundledIn='E07-S4', dependsOn='[E01-S1]')
+        card(E(7), 'stories/S3.md', id='E07-S3', status='backlog', parent='E07', bundledIn='E07-S4')
+        card(E(7), 'stories/S4.md', id='E07-S4', status='backlog', parent='E07', bundles='[E07-S2, E07-S3]')
+        card(E(7), 'stories/S5.md', id='E07-S5', status='backlog', parent='E07', dependsOn='[E07-S3]')
+        s = scope(b, 'E07', True)  # a bundle is one card: its parts are out, it waits on what they wait on, and what waits on a part waits on it
+        assert s['in_filter'] == ['E07-S1', 'E07-S4', 'E07-S5'] and 'E01-S1' in s['scope'] and not {'E07-S2', 'E07-S3'} & set(s['scope']), s
+        assert s['bundles'] == [{'id': 'E07-S4', 'title': '', 'ground': '', 'parts': [{'id': 'E07-S2', 'title': 'Part', 'status': 'backlog'}, {'id': 'E07-S3', 'title': '', 'status': 'backlog'}]}], s['bundles']
+        assert scope(b, 'E07-S5', True)['scope'] == ['E07-S5', 'E01-S1', 'E07-S4'], scope(b, 'E07-S5', True)
         try: scope(b, 'E42'); raise AssertionError('an unknown id passed')
         except LookupError: pass
         r = subprocess.run([sys.executable, __file__, b, 'E42', '--with-deps'], capture_output=True, text=True, encoding='utf-8')

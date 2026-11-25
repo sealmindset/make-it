@@ -37,8 +37,31 @@ def cut(s, n):  # shorten at a word boundary, so a long title never ends mid-wor
 def name(d, n=60):  # how every helper names a card to a person: its title with its id, never a bare id
     t = v(d, 'title').strip('"')
     return f"{cut(t, n) if t else 'Untitled card'} ({v(d, 'id')})"
-def load(B):  # card path -> frontmatter, epics first
-    return {p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None}
+def load(B):  # card path -> frontmatter, epics first; a bundle already carries its parts' state (lift)
+    return lift({p: d for p in glob.glob(f'{B}/items/*/epic.md') + glob.glob(f'{B}/items/*/stories/*.md') if (d := fm(p)) is not None})
+def lift(cards):
+    """A bundle's state is its open parts', worked out from its parts every time the board is read and never stored on
+    the bundle card -- so a part that changes after bundling carries the bundle with it, for every helper (they all
+    read cards through load). The bundle is high-stakes if any part is; it waits on your answer if any part does
+    (`decisionFrom:` names that part: the question is listed once, on the part); it takes its parts' highest priority
+    (so it also drops when they are lowered) and the first pin among them; it conflicts with whatever any part conflicts with; `categories:` holds every part's
+    category, for the one-at-a-time rule. What the parts wait on, and a part somebody started alone, are in needs().
+    A part's own `pr:` is not lifted on purpose: one pull request does the bundle, and it is the bundle's."""
+    byid = {v(d, 'id').upper(): d for d in cards.values()}
+    for d in cards.values():
+        me = v(d, 'id').upper()
+        ps = [byid[i] for i in parts(d) if i in byid and v(byid[i], 'status') != 'done' and v(byid[i], 'bundledIn').upper() == me]
+        if not ps or v(d, 'status') == 'done': continue
+        both = [d] + ps
+        if any(warn(p) for p in ps): d['stakes'] = 'critical'
+        q = next((p for p in ps if waiting(p)), None)
+        if q and not waiting(d): d['decision'] = f'{name(q)}, a card in this bundle, waits on your answer'; d['decisionFrom'] = v(q, 'id')
+        if (pr := [v(x, 'priority') for x in ps if v(x, 'priority')]): d['priority'] = min(pr)  # its parts' highest, up or down: never what was written at bundle time
+        if (pins := [v(x, 'pin') for x in both if v(x, 'pin')]): d['pin'] = min(pins, key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else 0, x))
+        if (cw := sorted({i for x in both for i in ids(v(x, 'conflictsWith'))})): d['conflictsWith'] = '[' + ', '.join(cw) + ']'
+        d['categories'] = ', '.join(sorted({v(x, 'category') for x in both if v(x, 'category')}))
+    return cards
+def asks(d): return waiting(d) and not v(d, 'decisionFrom')  # a card whose own question waits on you (a bundle held by a part's question is not listed again)
 def waiting(d):  # open and blocked on the human's answer; `stage: Needs decision` is the older form
     return v(d, 'status') != 'done' and bool(v(d, 'decision') or v(d, 'stage') == 'Needs decision')
 def ask(d):
@@ -81,7 +104,7 @@ def leaves(d, T):  # what waiting on d means: d itself if it's an open leaf, els
         if c in kids: todo += kids[c]
         else: out.append(c)
     return sorted(out)
-def needs(i, T):
+def needs(i, T, _top=True):
     """What card i waits on: [(open leaf, the card whose dependsOn says so, the id it names)]. Its own
     dependsOn and every ancestor's (an epic's dependsOn holds for each card under it); an id with
     children stands for its open leaf cards. A card never waits on itself or its own ancestors."""
@@ -93,22 +116,26 @@ def needs(i, T):
         for d in ids(v(byid[a], 'dependsOn')):
             for leaf in [] if d in line else leaves(d, T):
                 if leaf not in got and leaf not in line: got.add(leaf); out.append((leaf, a, d))
+    mine = parts(byid.get(i.upper(), {})) if _top else []  # a bundle waits on whatever its parts wait on (a part is never a bundle)
+    for m in mine:
+        if m in byid and v(byid[m], 'status') in ('in-progress', 'blocked') and m not in got: got.add(m); out.append((m, i.upper(), m))  # a part somebody started alone: the bundle waits until it is settled
+        out += [x for x in (needs(m, T, False) if m in byid and v(byid[m], 'status') != 'done' else []) if x[0] not in got and x[0] not in line and x[0] not in mine and not got.add(x[0])]
     return out
-def blocked(s, T):  # can't start: high-stakes, waiting on you, or waiting on an unfinished card
-    return bool(warn(s)) or waiting(s) or bool(needs(v(s, 'id'), T))
-DATED = r'v?(\d{4})[.-](\d{2})[.-](\d{2})(?:[.-]\d+)?'
-def due(s, T=None):  # a Live card's check can be done now: no checkAfter, or its date (a date, or a release tag named for it) has come
-    # ponytail: a release tag counts as out on the date in its name (v2026.10.17); an undated tag waits -- use a date there
-    m = re.fullmatch(DATED, v(s, 'checkAfter'))
-    if not v(s, 'checkAfter'): return True
-    try: return bool(m) and datetime.date(*map(int, m.groups())) <= (T or datetime.date.today())
-    except ValueError: return False  # not a real date (2026-02-30): it waits, and status flags it -- never a crash
-def soon(w): return (not re.fullmatch(DATED, w), w.lstrip('vV').replace('-', '.'))  # waits in date order, undated last
+def parts(d): return ids(v(d, 'bundles'))  # a bundle card names the cards it does together (see Bundles in the reference)
+def bundle_of(d, T):
+    """The open bundle this card is a part of (its `bundledIn:`, and that bundle's `bundles:` names it back), or None.
+    A part is not started, planned or counted on its own: its bundle is the one thing to do."""
+    b = T[0].get(v(d, 'bundledIn').upper())
+    return b if b and v(b, 'status') != 'done' and v(d, 'status') != 'done' and v(d, 'id').upper() in parts(b) else None
+def whole(i, T): return v(bundle_of(T[0][i], T) or T[0][i], 'id').upper() if i in T[0] else i  # a part stands for its bundle: the one thing to plan
+def open_parts(d, T): return [T[0][i] for i in parts(d) if i in T[0] and v(T[0][i], 'status') != 'done']
+def blocked(s, T):  # can't start: high-stakes, waiting on you, waiting on an unfinished card, or a part of a bundle (the bundle starts, not the part)
+    return bool(warn(s)) or waiting(s) or bool(needs(v(s, 'id'), T)) or bool(bundle_of(s, T))
 def bucket(s):  # which bug-queue status line an open card sits on, if any
     if v(s, 'status') == 'done': return None
     if v(s, 'stage') in ('Reported', 'Cause found'): return 'Now fixing' if v(s, 'status') == 'in-progress' and not waiting(s) else None
-    if v(s, 'stage') == 'Live': return 'Live, to check' if due(s) else 'Live, waits'
-    return {'Fix ready': 'Shipping'}.get(v(s, 'stage'))
+    # shipped means done: nothing waits to be checked. A card still at the older Live or Checked stage is one whose release `reconcile --prs` has yet to read
+    return 'Shipping' if v(s, 'stage') in ('Fix ready', 'Live', 'Checked') else None
 def startable(s, T): return v(s, 'status') == 'backlog' and not blocked(s, T)  # Next up
 def next_up(stories, T):
     return next((v(s, 'id').split('-')[-1] for s in sorted(stories, key=lambda s: (v(s, 'priority') or 'P9', num(s)))
@@ -118,7 +145,7 @@ def render(B, proj):
     L = load(B); CARDS = list(L.values())
     TREE = tree(L)
     out = [f'# BACKLOG BOARD — {proj}', '']
-    wait = sorted(filter(waiting, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
+    wait = sorted(filter(asks, CARDS), key=lambda d: (v(d, 'priority') or 'P9', v(d, 'updated') or '9'))
     if wait:
         out += [f'## Waiting on you ({len(wait)})', '_each card · days since it last changed, then what waits and why, and the answers to pick from_', '']
         for d in wait:
@@ -130,21 +157,18 @@ def render(B, proj):
         e = L.get(ep, {})
         stories = [L[s] for s in glob.glob(os.path.join(os.path.dirname(ep), 'stories', '*.md')) if s in L]
         stories.sort(key=lambda s: (ORDER.index(v(s, 'status')) if v(s, 'status') in ORDER else 9, num(s)))
-        counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories)))
+        counts = ' · '.join(f'{st} {n}' for st in ORDER if (n := sum(v(s, 'status') == st for s in stories if not parts(s))))  # a bundle card wraps cards already counted
         out += [f"## {warn(e)}{v(e,'id')} · {v(e,'title')}  _[{v(e,'status')}]_{chips(e)}", f'_{counts}_', '']
         if any(v(s, 'type') == 'breakfix' for s in stories):
-            # The bug queue status line: Reported -> Cause found -> Fix ready -> Live -> Checked.
+            # The bug queue status line: Reported -> Cause found -> Fix ready -> done (released, tests pass).
             def ids(pred): return ', '.join(v(s, 'id').split('-')[-1] for s in stories if pred(s)) or '—'
             nxt = next_up(stories, TREE)
-            waits = sorted({v(s, 'checkAfter') for s in stories if bucket(s) == 'Live, waits'}, key=soon)
-            out += [f'**{k}:** ' + ids(lambda s: bucket(s) == k) for k in ('Now fixing', 'Shipping', 'Live, to check')] + [
-                    '**Live, waits:** ' + ' · '.join(f"{w} → {ids(lambda s: bucket(s) == 'Live, waits' and v(s, 'checkAfter') == w)}" for w in waits)] * bool(waits) + [
-                    '**Next up:** ' + nxt, '']
+            out += [f'**{k}:** ' + ids(lambda s: bucket(s) == k) for k in ('Now fixing', 'Shipping')] + ['**Next up:** ' + nxt, '']
         big = len(stories) > BIG
         for st in ORDER:
             group = [s for s in stories if v(s, 'status') == st]
             if not group: continue
-            out.append(f'### {st} ({len(group)})')
+            out.append(f'### {st} ({sum(not parts(s) for s in group)})')
             if big and st == 'done':
                 out += [f"_listed by `/backlog-it show {v(e,'id')}`_", '']; continue
             if big: group.sort(key=lambda s: (v(s, 'category') or '~', num(s)))
@@ -154,7 +178,9 @@ def render(B, proj):
                     cat = v(s, 'category'); out += ['', f"**{cat or 'uncategorized'}** ({sum(v(x, 'category') == cat for x in group)})"]
                 mark = warn(s) + ('⚡' if v(s, 'type') == 'breakfix' else ('🔬' if v(s, 'type') == 'spike' else ''))
                 stage = f" — **{v(s,'stage')}**" if v(s, 'stage') and st != 'done' else ''
-                out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_{chips(s)}")
+                both = f" [bundle of {len(parts(s))}]" * bool(parts(s)) + (f" (in bundle {v(b, 'id')})" if (b := bundle_of(s, TREE)) else '')
+                out.append(f"- {mark}{v(s,'id')} · {v(s,'title')}{stage}  _[{v(s,'category')}] {v(s,'priority')}_{chips(s)}{both}")
+                if st != 'done': out += [f"  - part: {name(TREE[0][i])} · {v(TREE[0][i], 'status')}" for i in parts(s) if i in TREE[0]]  # one thing to do, its parts still by title
             out.append('')
     return '\n'.join(out)
 
@@ -213,19 +239,23 @@ def main(args):
             assert big.index('**alpha** (15)') < big.index('- E02-S4 ·') < big.index('**zeta** (16)') < big.index('- E02-S3 ·'), big
             assert '\n\n**zeta** (16)\n- ' in big, 'a heading right after a list item renders glued to it'
             assert not re.search(r'^\*\*[^*:]+\*\* \(\d+\)$', b.split('## E02')[0], re.M), 'small epic grouped'
-            # Live splits by checkAfter: a date or a dated release tag that has come is due; later or undated waits
+            # shipped means done: no card is parked to be checked. An older Live or Checked card shows under Shipping until its release is read
             card('stories/S20.md', id='E01-S20', status='in-progress', type='breakfix', stage='Live', checkAfter='2099-01-01')
-            card('stories/S21.md', id='E01-S21', status='in-progress', type='breakfix', stage='Live', checkAfter='v2020.01.01')
-            card('stories/S22.md', id='E01-S22', status='in-progress', type='breakfix', stage='Live', checkAfter='v1.41.0')
-            card('stories/S23.md', id='E01-S23', status='in-progress', type='breakfix', stage='Live')
+            card('stories/S21.md', id='E01-S21', status='in-progress', type='breakfix', stage='Fix ready')
+            card('stories/S22.md', id='E01-S22', status='in-progress', type='breakfix', stage='Checked')
             b = board()
-            assert re.search(r'\*\*Live, to check:\*\* S21, S23\n', b) and '**Live, waits:** 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b
-            card('stories/S24.md', id='E01-S24', status='in-progress', type='breakfix', stage='Live', checkAfter=str(datetime.date.today()))  # due on the day
-            card('stories/S25.md', id='E01-S25', status='in-progress', type='breakfix', stage='Live', checkAfter='2026-02-30')  # not a date: waits, no crash
-            card('stories/S26.md', id='E01-S26', status='in-progress', type='breakfix', stage='Live', checkAfter='v2098.12.31')
+            assert '**Shipping:** S20, S21, S22\n' in b and 'Live, ' not in b, b
+            # a bundle is one thing to do: Next up is the bundle, never a part; the bundle lists its parts; it waits on what they wait on
+            card('stories/S30.md', id='E01-S30', title='Part one', status='backlog', type='breakfix', priority='P1', bundledIn='E01-S32')
+            card('stories/S31.md', id='E01-S31', title='Part two', status='backlog', type='breakfix', priority='P3', bundledIn='E01-S32')
+            card('stories/S32.md', id='E01-S32', title='Both', status='backlog', type='breakfix', priority='P1', bundles='[E01-S30, E01-S31]')
             b = board()
-            assert re.search(r'\*\*Live, to check:\*\* S21, S23, S24\n', b), b
-            assert '**Live, waits:** 2026-02-30 → S25 · v2098.12.31 → S26 · 2099-01-01 → S20 · v1.41.0 → S22\n' in b, b  # in date order
+            assert '**Next up:** S32\n' in b and '[bundle of 2]\n  - part: Part one (E01-S30) · backlog\n  - part: Part two (E01-S31) · backlog\n' in b and '(in bundle E01-S32)' in b, b
+            card('stories/S31.md', id='E01-S31', title='Part two', status='backlog', type='breakfix', priority='P3', bundledIn='E01-S32', dependsOn='[E01-S21]')
+            assert '**Next up:** S3\n' in board()  # a part waits on an open card, so the bundle does
+            card('stories/S32.md', id='E01-S32', title='Both', status='done', type='breakfix', priority='P1', bundles='[E01-S30, E01-S31]')
+            assert '**Next up:** S30\n' in board()  # the bundle is closed: its open parts are on their own again
+            for n in (30, 31, 32): os.remove(f'{t}/items/EPIC-01-bugs/stories/S{n}.md')
             # what a card waits on: an id with children means its open cards; an epic's dependsOn holds for every card under it
             os.makedirs(f'{t}/items/EPIC-03-later/stories')
             open(f'{t}/items/EPIC-03-later/epic.md', 'w', encoding='utf-8').write('---\nid: E03\nstatus: backlog\n---\n')

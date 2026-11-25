@@ -73,7 +73,10 @@ notifications are a silent no-op and the board works the same.
 - `~/.claude/make-it/backlog/bin/status.py <board> [--project NAME] [--needs-you]` -- prints the `status`
   report (read-only; shares `regen-board.py`'s rules); `--needs-you` prints only its Needs you section.
 - `~/.claude/make-it/backlog/bin/sync-prs.py <board> --repo <repo> [--dry-run]` -- `reconcile --prs`:
-  moves cards forward from their PRs' real state (needs `gh`; writes the cards, the caller syncs).
+  closes cards whose fix is merged, released and passing its checks (needs `gh`; writes the cards, the caller syncs).
+- `~/.claude/make-it/backlog/bin/shrink.py {combine [filter] | bundle <ids> | part-done <id> | unbundle <id> | reopen <id> | stamp <id> --by groom\|you | expire [--dry-run]}` --
+  what makes the pile shrink: candidate groups to combine, bundles, reopening a fix that did not hold, and closing
+  quiet cards (no AI call; see [`combine`](#combine-filter), [`reopen`](#reopen-id-what-was-seen), [`expire`](#expire---dry-run)).
 - `~/.claude/make-it/backlog/bin/card.py {append <id> <section> | set <id> k=v … | new <epic>}` -- the
   one way to write a card (see [Writing a card](#writing-a-card)).
 - `~/.claude/make-it/backlog/bin/scope.py <board> [<filter>] [--with-deps]` -- which cards a `plan` or
@@ -131,9 +134,15 @@ conflictsWith: [E07]      # optional -- not dispatched while these are in progre
 decision:  3 import rows failed twice; the rest went in. Retry them, or refile by hand?   # optional -- plain context, then the one question this card waits on (see Waiting on you)
 answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
-signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
+signal:    worker log shows 'filed: 2/2' for a new filing   # optional, one line: what a real run would show if the fix holds; the lane writes it with the PR. Nothing waits on it
 reviewed:  2026-11-24 ready 1a2b3c4   # optional: the pull request's last review -- `<date> ready <commit it read>` or `<date> not ready`; the lead writes it. The first screen says "reviewed" only from this
-checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
+files:     [src/export.py, src/csv.py]   # optional: the files this card would change, repo-relative -- the ONE place a card lists them (see combine)
+bundles:   [E07-S3, E07-S9]   # a bundle card only: the cards it does as one piece of work (see combine)
+bundledIn: E07-S12        # a part of a bundle: the bundle card that carries it; the part closes only on its own check
+ground:    same file | same root cause | same goal   # a bundle card only: why its parts go together
+closed_as: shipped-tests-pass | not-needed | expired | unbundled   # with status: done -- how it closed; absent = plain done
+expires:   ok             # a judge's mark that the card may close after 30 quiet days, with expires_why:, expires_by: and expires_of: (see expire). No mark, never
+reopened:  2026-11-25     # set by `reopen`: a fix that did not hold, or a card someone brought back; it never expires
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
 plan:      plans/E04-S2.md   # the card's `## Task N` plan, relative to the epic folder
@@ -263,6 +272,12 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
    Anything checkable (logs, data, the screen, the code) is checked, not asked. Answers go on the
    card under `## Answers` (the same write clears any `decision:` and `answers:`). Before a bug moves to Cause found, any remaining question that would
    change the fix is asked then.
+7. **Offer a bundle when the new card clearly belongs with an open one.** Run `shrink.py combine <the
+   new id>` (read-only). If it shows a same-file group, or triage named a likely duplicate, add one
+   more one-click question to step 6's ask: "Do this together with <title> (<id>)?" with the
+   ground and the evidence in a line -- `Together -- one piece of work, each card keeps its own
+   check` | `Apart -- they stay two cards`. Only on "Together" make the bundle
+   ([`combine`](#combine-filter)). No group, no question.
 
 ---
 
@@ -270,32 +285,30 @@ Plain text whose first word isn't a subcommand is `capture <text>`. The user jus
 
 Bugs are `type: breakfix` cards under a **Bugs** epic, each with a `stage:`:
 
-**Reported → Cause found → Fix ready → Live → Checked**
+**Reported → Cause found → Fix ready → done**
 
 | Stage | Means | Set by |
 |-------|-------|--------|
 | Reported | card exists, cause unknown | capture / `/debug-it` intake |
 | Cause found | root cause confirmed with evidence | `/debug-it` Phase 3 |
-| Fix ready | fix + test on a branch, PR open -- or merged and waiting for its `signal:` | the fixing lane, which records the PR in `pr:` and how the fix is proved live in `signal:` |
-| Live | merged (and deployed, where merge deploys) | ship, on merge, setting `checkAfter:` to the release that carries it -- or `reconcile --prs` once `gh` shows the card's PRs merged. **No `signal:`, no Live**: the card waits at Fix ready until it says how it will be checked |
-| Checked | verified on the live system **against the original report** | ship, after the live check |
+| Fix ready | fix + test on a branch, PR open -- or merged and waiting for its release | the fixing lane, which records the PR in `pr:` |
+| *(done)* | **released, tests pass**: the PR is merged, a release carries it, and every check on that release passed | `reconcile --prs`, from facts `gh` gives -- `status: done`, `closed_as: shipped-tests-pass` |
 
-A bug is not `done` until **Checked**; `reconcile --prs` closes a Checked card. **Jump the line** only for harm happening now: damaged
+**Shipped means done** (the owner's rule, 2026-11-24): "Assume it's fixed unless any and all tests
+prove otherwise. If during usage it was not, I'll file or you reopen the card." No card waits to be
+confirmed by a real run: there is no "live, to check" pile. The closed card says what proved it, that
+no real run confirmed it, and how to reopen it ([`reopen`](#reopen-id-what-was-seen)). A card left at
+the older `Live` or `Checked` stage shows under Shipping until `reconcile --prs` reads its release,
+and then closes by the same rule. **Jump the line** only for harm happening now: damaged
 data, a wrong outgoing message, anything in a `serial` category. Everything else takes its
 place. Improvements are not bugs -- they wait until the bug list is empty. One message to the
 reporter per finished card.
 
 **The status line** at the top of any epic with bug cards in `BOARD.md`:
 - **Now fixing** -- `in-progress` at Reported / Cause found, not waiting on you (one entry per lane)
-- **Shipping** -- Fix ready
-- **Live, to check** -- Live and due: no `checkAfter:`, or its date has come (a release tag counts as out on
-  the date in its name, `v2026.10.17`; an undated tag or a non-date waits, and `status` flags it as never
-  due). The live check first confirms that release is really out -- its tag, or the running version --
-  since a day's release can land hours into the day, or not at all
-- **Live, waits** -- Live with a `checkAfter:` still ahead, grouped by it (`v2026.10.17 → S85, S87`); only
-  shown when some card waits
+- **Shipping** -- Fix ready: the fix is in review, or merged and waiting for its release's checks
 - **Next up** -- the top `backlog` bug that can start (not high-stakes, nothing it waits on
-  unfinished, not waiting on you), by priority, then age
+  unfinished, not waiting on you, not a part of a bundle), by priority, then age
 
 **Waiting on you** -- one block at the top of `BOARD.md`: every open card, of any type, that
 waits on the human's answer, each readable cold (`approval-block.md`, A list of asks): `id · title
@@ -331,8 +344,9 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 - **Questions are batched.** Collect every lane's open questions into one message, each item
   readable cold (`approval-block.md`, A list of asks). A question that blocks a card also goes on it as `decision:` + `answers:`.
 - Each lane moves its own card through the stages, and records its PR as `pr:` when it opens one, with
-  how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr="[N]" signal="…"`);
-  the status line lists every lane.
+  how the fix is proved live as `signal:` (`card.py set <id> stage="Fix ready" pr="[N]" signal="…"`) and the files it
+  changed as `files:`; the status line lists every lane. A lane whose card is a bundle records each part's own
+  check as it passes (`shrink.py part-done <part id>`, what showed it on stdin).
 - **A lane that stops hands its card back** -- done, blocked, or out of turns: the next stage, a
   `decision:` with its `answers:`, or `status: backlog` with a note. Now fixing is read from the cards, so a card left
   behind looks like a running lane; `status` flags a Now fixing card idle 2+ days as "lane stopped?".
@@ -353,7 +367,11 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `status` (no id) | Where the board stands: in flight, up next, burn-down + forecast, needs you, drift, epics, cycle time (see [`status`](#status)) |
 | `move <id> <status>` · `status <id> <status>` · `stage <id> <stage>` | Change status / bug stage (a stage change also posts `slack-notify.sh raw`) |
 | `done <id>` | End summary, `status: done` |
-| `reconcile [<id>\|all]` | Check cards against the code, tests, and live system |
+| `combine [filter]` | Propose bundles: cards that go together as one piece of work, each keeping its own check. Nothing combines without your pick |
+| `unbundle <id>` | Put a bundle's cards back in line as they were (a bundle's id), or take one card out (that card's id) |
+| `reopen <id> <what was seen>` | Put a closed card back in line, with your words kept on it |
+| `expire [--dry-run]` | Close the quiet cards a judge marked safe to close (30 quiet days; no mark, never; never a safety one); `--dry-run` only lists them |
+| `reconcile [<id>\|all]` | Check cards against the code, tests, and live system; `--prs` closes cards whose fix is released with passing tests |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md`; `--with-deps` also plans the cards the filter waits on, across epics |
 | `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
@@ -516,7 +534,12 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
    `decision:`: what waits, and the question), the first three, or "nothing waits on you". Held
    high-stakes cards are a count, then the three to five that free the most other cards (the ones
    for the weekly sitting), never the whole list. Then one line counting the running list: its
-   open lines and how many areas they are in.
+   open lines and how many areas they are in. Then, only when there are any: **Reopened** -- how many
+   fixes did not hold, by title with id (the signal that matters most); and **Quiet cards** -- how many
+   marked cards will close by themselves in the next 7 days, with the command that lists them (or,
+   while the screen has room, that no card is marked yet). When the running list is shown too, the
+   two counts share its line, so the fullest screen keeps to 25 lines without hiding a question or
+   the held list.
 3. **SINCE YOU LAST LOOKED** -- three lines: what shipped (cards closed as not needed are counted
    apart), what was found, what got stuck. "Last looked" is the last time the skill showed this
    screen: `--seen` writes `<board>/.last-seen.json` (the time, and the ids that were open, done and
@@ -525,7 +548,9 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
    and never committed. With no such file, or one that cannot be read, the three lines cover the
    last 24 hours; when the look cannot be recorded (a read-only folder), the screen still prints and
    says so in one line. A card closed as done or as `shipped-tests-pass` counts as shipped; only
-   `closed_as: not-needed` counts as not needed; any other `closed_as` value is named as it is.
+   `closed_as: not-needed` counts as not needed; `closed_as: expired` is counted apart ("2 expired": how
+   many quiet cards closed by themselves since you last looked); any other `closed_as` value is
+   named as it is. A bundle is named once, with each card it does on its own line beneath (`part: …`).
 4. **TREND** -- one line: cards opened and closed this week, whether the pile grew or shrank, and the
    single biggest reason ("mostly new bugs (70 of 135)", "with 6 fixes shipped").
 
@@ -600,10 +625,12 @@ Bare `status` prints one report from `status.py`: read-only, no AI call, under a
 365-card board, and the same answer every run. It shares the card reader and the status-line,
 waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` never disagree.
 
-- **In flight** -- by stage, not status (most `in-progress` bugs are waiting at Live): the board's
-  Now fixing, Shipping and Live to check lines (the cards due now, each with its `signal:`), Live
-  waits (counted by what they wait on), then other in-progress work; each with its count and oldest
-  idle card.
+- **In flight** -- by stage, not status: the board's Now fixing and Shipping lines, then other
+  in-progress work; each with its count and oldest idle card.
+- **Bundles** -- only when there are any: each open bundle once, with its ground, how many of its
+  parts are still open, and every part by its title with its id and whether its own check has
+  passed. The first line of the report counts **things to do**: a bundle is one, however many cards
+  it does.
 - **Up next** -- the board's Next up bug, `PLAN.md`'s next unmerged wave ("covers N of M
   candidates; K new since (new bugs first, the rest after its waves)"), and the top stories / tasks / spikes that can
   start.
@@ -614,14 +641,14 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
 - **Needs you** -- Waiting on you (top 5), then **every** held P1, oldest first, with P2/P3 held
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
-  in-progress work (not bugs) idle 14+ days, Live cards idle 14+ days, Checked cards not closed, Live
-  cards with no `signal:` (write one), Live cards waiting on a `checkAfter:` that never comes due, a `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
+  in-progress work (not bugs) idle 14+ days, Shipping cards idle 14+ days (merged? run `reconcile --prs`),
+  reopened cards (a fix that did not hold), a `PLAN.md` whose waves are all merged or whose next wave is stuck on a held, waiting or blocked
   card (re-plan).
-- **Epics** -- done / total per epic, most open first. **Cycle time** -- median days Reported →
-  Live and Live → Checked, by priority.
+- **Epics** -- done / total per epic, most open first. **Cycle time** -- median days from Reported
+  to shipped, by priority.
 
-Dates come from the board's git history: the last commit that set a card `done`, the first that
-set `Live` / `Checked`, and the last that touched it; renames are followed, and the weeks start at
+Dates come from the board's git history: the last commit that set a card `done`, and the last
+that touched it; renames are followed, and the weeks start at
 the board's first card. A card that entered git already done (a seed or an import) is left out of
 the weekly opened / closed counts, and cycle time counts only transitions git saw. With no git,
 it falls back to `created:` / `updated:` and says so. Lists show the top 5. Runs on Python 3.9+.
@@ -631,6 +658,155 @@ it falls back to `created:` / `updated:` and says so. Lists show the top 5. Runs
 A brief, **non-blocking end summary** -- what actually changed (tests/build, where applied, the
 commit) and the suggested next item. Then `status: done`, drop any `pin:`, bump `updated:`,
 regenerate, sync, `slack-notify.sh done <id> "<title>"`.
+
+### `combine [filter]`
+
+The owner's words: look at the cards "to see where we can combine if their synergy supports without
+watering down what each card is meant to address". Three grounds, not only exact duplicates:
+
+- **Same file** -- cards that change the same file or skill are done in one sitting.
+- **Same root cause** -- symptoms of one fault become one piece of work for the cause.
+- **Same goal** -- several cards become tasks under one measured goal.
+
+`combine` runs on its own (`/backlog-it combine [filter]`), as a step of `groom`, and at capture when
+a new card clearly belongs with an open one. **It proposes. Nothing combines without the owner's pick.**
+
+1. **The facts come from a helper, not from an AI's mood.** `shrink.py combine [filter]` (read-only,
+   no AI call) prints candidate groups with the facts they share: cards that name the **same files**,
+   cards of the **same skill** (`category:`), and cards that already **wait on each other**. It only
+   considers open cards nobody has started that are in no bundle, never groups a high-stakes card
+   with one that is not, and says when a group is too big for one bundle. `<filter>` is `plan`'s; a
+   single card's id shows only the groups that card is in.
+2. **Where the files come from.** A card lists the files it would change in ONE place, the
+   frontmatter field `files: [src/export.py, src/csv.py]` (repo-relative). Three writers fill it:
+   `plan` writes it for each card it puts in a wave (the `files` its route call returns); a `groom`
+   grounder writes it from the code it cites as evidence; A lane writes the files it really changed
+   when it opens its pull request. Each uses `card.py set <id> files="[…]"`. A card with no `files:`
+   yet is grouped by the file names its text mentions, and the helper says which it was ("from its
+   `files:`" or "named in its text"). Release bookkeeping every change touches (the version file, the
+   changelog, the manifest) never counts.
+3. **The judgement is the AI's, and its reason is written down.** Same file is a fact. Whether a
+   group has the **same root cause** or the **same goal** is a judgement: the AI reads the groups and
+   the cards, proposes at most five bundles, and gives each one its ground and the evidence in one
+   line (the files, the fault, or the goal). A proposal it cannot give evidence for is dropped.
+4. **One click.** The proposals go to the owner as one multi-select ask (`approval-block.md`): one
+   option per proposed bundle, each saying which cards (title with id), on which ground, and the
+   evidence in a line; no "all of them"; a bundle not picked is not made, and a dismissed ask makes none.
+5. **Make each picked bundle** with `shrink.py bundle <id> <id> …`, the text on stdin:
+   ```
+   title: <the bundle's title, plain words>
+   ground: same file | same root cause | same goal
+   why: <the evidence, in a line>
+   <id>: <that card's own check: how we will know its point is met>     (one line per card)
+   ```
+
+**What a bundle is, so nothing is watered down.** One piece of work -- one lane, one pull request --
+with one card of its own (`bundles: [ids]`, `ground:`). That card LISTS each original card with ITS
+OWN check under `## Parts`. The original cards are not deleted and not merged: each stays whole and
+readable, is only marked `bundledIn: <the bundle's id>`, and **closes only when its own check
+passes** -- `shrink.py part-done <id>` with what showed it on stdin. A plain `status=done` on a part
+is refused, and so is closing the bundle while a part is open; `reconcile --prs` leaves a released
+bundle open, naming the parts, until every part has passed. A part whose check fails is taken out
+(`unbundle <its id>`) and goes back in line, so the rest can still ship.
+
+**A bundle's state is its parts' state, worked out from its parts every time the board is read and
+never stored** on the bundle card (`regen-board.py`'s `lift` and `needs`, which every helper reads
+through). So a part that changes after bundling carries the bundle with it: the bundle is
+high-stakes if any part is (held, never in a wave); it waits on your answer if any part does (the
+question is listed once, on the part); it waits on whatever any part waits on, and on a part
+somebody started alone; it conflicts with whatever any part conflicts with; it takes its parts' highest
+priority (and drops when they are lowered) and their pin; and it is one-at-a-time in every `serial` category a part is in.
+A part's own `pr:` is not lifted: one pull request does the bundle, and it is the bundle's.
+
+**A bundle counts as ONE thing to do**, and its parts are still shown by title with id: `BOARD.md`
+lists the bundle with a `part:` line per card, and Next up never offers a part; `status` counts
+"things to do" and lists every bundle with its parts; `scope.py` puts the bundle in a plan's or a
+groom's scope and never its parts (they come under `bundles`); `plan` gives the bundle one place in
+a wave and writes it as `<title> (<id>), a bundle of N`; the first screen names it once with its
+parts beneath. A bundle waits on whatever its parts wait on, and a card that waits on a part waits
+on the bundle.
+
+**The limits** (named constants in `shrink.py`, each with its reason):
+- `BUNDLE_MAX` = 5 cards, and `SITTING` = 8 points of size (XS 1, S 2, M 3, L 5, XL 8; no size
+  counts as M): a bundle is at most five cards **and** one sitting. Past that the helper refuses and
+  says to split.
+- **A high-stakes card is never bundled with a card that is not**: the gate must not be lost. A bundle
+  of high-stakes cards is held like any other, and so is a bundle one of whose parts becomes
+  high-stakes later.
+- Cards of different priority may bundle, and the bundle takes the highest. It is a bug if any of
+  its parts is one, so it keeps its place in the bug line.
+
+**`unbundle <id>`** -- one command, and it loses nothing. With a bundle's id, every open part goes
+back in line and its file is byte for byte what it was before; the bundle card is kept, closed as
+`unbundled`. With a part's id, only that card goes back (a bundle left with one card is un-bundled
+whole).
+
+### `reopen <id> <what was seen>`
+
+For a fix that did not hold, or a closed card someone wants back. `shrink.py reopen <id>`, the
+person's words on stdin, word for word. The card goes back in line: `status: backlog` (a bug at
+`stage: Reported`), `closed_as:` removed, `reopened: <date>` set, and the words quoted under
+`## Reopened (<date>)` with how it had been closed. Its old `pr:` moves into that note, so the
+merged pull request that closed it never closes it again; every earlier note stays. A card that is
+not closed is refused (add what was seen with `card.py append`). The first screen counts reopened
+cards, and a card a person brought back never expires.
+
+### `expire [--dry-run]`
+
+The owner's choice (2026-11-24): "Yes, after 30 days, never a safety one". A card that nobody asks
+for closes itself after **30 quiet days**, with a note saying why, who judged it safe, and how to
+bring it back (`status: done`, `closed_as: expired`; never deleted; `reopen` brings it back).
+
+**No mark, never.** Whether a card is safe to close, and whether anyone asked for it, cannot be read
+from its fields or headings: a security matter may use no security word, and "the owner asked" may
+sit in any sentence. So the rule is turned round, which is what "when it cannot be told, it does NOT
+expire" means. A card can expire ONLY if a judge who read the whole card marked it:
+
+```yaml
+expires: ok
+expires_why: a tidy-up of names; it cannot hurt anyone, and nobody asked for it   # one plain line
+expires_by: groom        # who judged: groom (its judge) or you (the owner's pick)
+expires_of: 3f9a1c0b7d2e # set by the helper: a print of the whole card that was judged
+```
+
+Two judges give the mark, and nobody else:
+- **`groom`'s judge** (step 2, Safe to close when quiet) reads the whole card and answers four
+  questions, each `yes`, `no` or `unsure`: can it lose data, leak a secret, send something wrong, or
+  tell the person something untrue (`"can_hurt"`)? Did a person ask for it, in any wording, anywhere
+  in the card (`"person_asked"`)? Is it a rule the product must meet, such as `maturity: mandate`
+  (`"must_meet"`)? Does anything else on the card say to keep it (`"keep"`)? On any `yes` or `unsure`
+  there is no mark. Only four `no`s give one, written with `shrink.py stamp <id> --by groom` (the
+  reason on stdin).
+- **The owner**, picking cards in a one-click list (a multi-select, one option per card with its
+  title and the reason in a line, no "all of them"): `shrink.py stamp <id> --by you`.
+
+**The helper stays no-AI.** `shrink.py expire` closes only marked cards, and **every hard rule still
+applies on top of the mark**, so a wrong mark alone cannot close a protected card. `shrink.py stamp`
+refuses a card a hard rule protects. **An edit clears the mark**: the print covers the whole card, every field and every section, so any
+change after the judgement -- a new note, a new section, a changed title or field -- means the mark
+does not count (the judgement was about the old card) until a judge marks it again. Only bookkeeping a
+helper itself writes is left out of the print, and so leaves the mark standing: `updated:`, the
+`expires…` fields, `mode:`, `plan:`, `files:` and `reconciled:` (the named constant `STAMP_SKIP`).
+
+**Never expires**, marked or not:
+- a bug (`type: breakfix`), or a card whose type is not recorded;
+- anything high-stakes (`stakes: critical`, or a `## High-stakes` section), and `maturity: mandate`;
+- a card the owner captured himself (`## Captured`): his own reports never expire;
+- a card with a question, an answer or an owner decision on it, or one that was reopened;
+- a pinned card; a card with a pull request; a card another open card waits on; a part of a bundle
+  that is still open, and the bundle itself; a card somebody has started;
+- a card whose title or category holds a safety word (the named constant `SAFETY`): a guard on top of
+  the judge, never the judgement;
+- a card with no date that can be read.
+
+**Quiet** means no change to the card and no change to any card that mentions its id; a date in the
+future counts as today. `expire --dry-run` lists what would close, what will close within 7 days,
+what could close later, and why every other card is kept, and writes nothing; `--dry-run --as-of
+YYYY-MM-DD` works the same out for a later day (dry run only: a real expire always uses today).
+`groom` runs it. The first screen counts the marked cards that will close in the next 7 days and
+says how many closed since the last look; with none marked, it and the dry run say "no card is
+marked as safe to close yet: groom marks them" (on the first screen only while it has room). The 30
+and the 7 are the named constants `EXPIRE_DAYS` and `EXPIRE_WARN`.
 
 ### `reconcile [<id> | all]`
 
@@ -686,12 +862,19 @@ Reconcile run -- YYYY-MM-DD -- N items checked
 Auto-applied: N actions  |  Flagged for human: N items
 ```
 
-Flags: `--prs` (no AI: `sync-prs.py` reads each open card's `pr:` with `gh pr view` and moves it
-forward on facts only -- every PR closed and one merged → Live (merged; the live check confirms the
-deploy), but only with a `signal:` (a merged card without one waits, named); Checked → done; never backward, never past Live. A card with no `pr:` is never guessed
+Flags: `--prs` (no AI: `sync-prs.py` closes cards by the shipped-means-done rule, on facts `gh` gives
+and nothing else. A card is done, `closed_as: shipped-tests-pass`, when every PR in its `pr:` is
+closed and one is merged, a release carries that merge (the repo's newest tag holds the merge
+commit; a repo with no tag at all releases by merging), and every check that ran on that release
+passed. The card gets a `## Shipped means done` block: the evidence, that no real run confirmed it,
+and how to reopen it. **When a fact cannot be read it says so and leaves the card**: checks that
+could not be read, are still running, did not run at all, or failed ("a test says otherwise"); a
+merge no release carries yet; a PR still open or closed without merging. A fix whose own PR was
+closed and carried by a release PR lists both in `pr:`. A bundle is left open, its parts named,
+until each has passed its own check. A card with no `pr:` is never guessed
 from its text: a Shipping card without one is listed to set by hand, as is a `repo#N` short form
-(use the PR's URL). Each card is re-read at write time, so another session's move wins. No `gh`
-→ the PR step is skipped and said so) · `--fast` (code rung only) · `--deep <id>` (run the project's unit and end-to-end tests
+(use the PR's URL). Each card is re-read at write time, so another session's move wins. Never
+backward. No `gh` → the PR step is skipped and said so) · `--fast` (code rung only) · `--deep <id>` (run the project's unit and end-to-end tests
 headlessly for one card) · `--dry-run` (print what would apply, write nothing) · `--dispatch`
 (run `dispatch` afterwards).
 
@@ -701,7 +884,7 @@ Autonomous "do the next thing" -- a hands-free way to call `start`. **It never b
 green gate or the harm gate** in the standing preamble.
 
 0. **Stages first, then the plan.** Run `reconcile --prs` (`--dry-run` under `dispatch
-   --dry-run`) so Shipping and Checked are true. **New bugs first:** fill free lanes with bugs the
+   --dry-run`) so Shipping is true and released fixes are closed. **New bugs first:** fill free lanes with bugs the
    plan doesn't list, by step 1's rules -- bugs before improvements holds even mid-plan. **Then the
    plan, which stays in force for the cards it lists**: cards changed since it was written keep
    their place, and other new cards go after its waves. **Re-plan** when every wave is merged, when
@@ -710,7 +893,7 @@ green gate or the harm gate** in the standing preamble.
    steps below. (A stricter "any change makes it stale" rule went stale within hours on a busy
    board, and the re-plan it demanded was skipped every time.) Take the first wave whose cards
    aren't all merged, and start it only when every card
-   in the waves before it is merged (`done`, Live, or Checked) and none of its own cards is in
+   in the waves before it is done and none of its own cards is in
    progress. Each card must still pass step 2's excludes; one that fails waits. A `dispatch-it`
    wave → its cards as `/dispatch-it` lanes, once they fit the free lanes (`lane_cap` minus the
    lanes running); a `solo`, `spike`, or `subagent-it` card → `start`
@@ -797,9 +980,8 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
    one's frontmatter and full text except the Captured and triage blocks, plus the repo files it
    cites, and the scope JSON itself (`pulled_in` with what each is for, `outside`, `waits`, `loops`,
    `notes`). **Context:** the
-   in-progress cards (id, stage, and the files they change -- their branch diff when there is
-   one, else the files they cite), the
-   **Live, to check** list, `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the
+   in-progress cards (id, stage, and the files they change -- their `files:`, their branch diff when there is
+   one, else the files they cite), `<repo>/handoff.md` if present (Next Steps, Failed Approaches -- the
    board wins where they disagree), `GROOM-PLAN.md` and `STRATEGY.md` if present, settings
    `lane_cap` and `serial`, and the High-stakes gate's signal list. A card with `mode_by: you`
    keeps its mode. **Release bookkeeping** that every change touches (version file, changelog,
@@ -838,7 +1020,7 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
    loop, and gives its evidence. Violations → re-run the call once with them appended; still
    failing → stop, print them, write nothing.
 4. **Write.** `PLAN.md` at the board root; `mode:` on each planned card (never over
-   `mode_by: you`); for each `subagent-it` card with no plan, a **draft** plan at
+   `mode_by: you`), and `files:` with the files the route call gave for it (`combine` reads them); for each `subagent-it` card with no plan, a **draft** plan at
    `items/<epic>/plans/<id>.md` (Plan format, `status: draft`) linked as `plan:`. Proposed spikes
    are filed only under `--apply` (a `type: spike` card, plus the target card's `dependsOn:` on
    it). **Suggested links**, too, are written only under `--apply` and before `PLAN.md`: for
@@ -867,7 +1049,6 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
 3. **spike** (2h) · <title> (E04-S9) (proposed) → de-risks <title> (E04-S3) -- <question>
 4. **subagent-it** · <title> (E04-S3) -- plan: items/EPIC-04-…/plans/E04-S3.md (draft) -- <reason>
 
-## Live, to check first   (verify against the original report before wave 1)
 ## ⚠️ Held -- needs the alignment brief and an explicit go
 ## Skipped -- waits on
 - <title> (E04-S6) -- waits on <title> (E02-S3) → <title> (E05-S1), which is held
@@ -878,6 +1059,8 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
 - link: <title> (E04-S2) waits on <title> (E07-S1) -- <why> · <evidence>
 ```
 
+A bundle (`scope.json`'s `bundles`) is one card to plan: it takes one place in a wave, written
+`<title> (<id>), a bundle of N`, and its parts are never planned on their own.
 Every card in `PLAN.md` is its title with its id, the id in brackets right after the title; a
 wave's cards come before its first ` -- `, and the reason after it may name other cards the same
 way. `status.py` reads both this form and the older one that led with bare ids.
@@ -930,9 +1113,13 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 `ground`; each grounder's brief ends: "Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id."), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
 ([Which model does what](#which-model-does-what)). Don't ask permission for it; the user doesn't need any extra keyword.
 
+0. **Close what is already settled, with no AI.** `reconcile --prs` (fixes released with passing
+   tests are done), then `shrink.py expire` (marked quiet cards close; `--dry-run` under
+   `groom --dry-run`). Say both counts in the report.
 1. **Ground in code (reuse `reconcile`).** Run the reconcile ladder for every card in scope --
    `--dry-run` by default; `--apply` lets reconcile auto-apply as usual. For `partial`, name why:
-   **unbuilt**, **untested**, or **unverified**.
+   **unbuilt**, **untested**, or **unverified**. Each grounder also writes the files the card would
+   change as `files:` (from the code it cites), so the next `combine` has facts.
 2. **Clean the board.** From the verdicts: **close** finished cards, **merge** duplicates,
    **restatus** drift, **split** epics too big for one pass into the smallest shippable slices
    (the "minimum lovable loop"), **carve out** deferred work into its own card (never hold a
@@ -962,6 +1149,22 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
    the board's way: `status: done`, `closed_as: not-needed`, and a `## Not needed (YYYY-MM-DD)`
    block with the reason and the evidence. It is never deleted, and `undo` brings it back. A
    not-needed card leaves the burn-down only once picked; until then it ranks last, marked.
+   **Safe to close when quiet.** For each card that `shrink.py expire --dry-run` keeps only because
+   it is "not marked", the judge reads the whole card and returns strict JSON:
+   ```json
+   { "id": "E09-S2", "can_hurt": "yes|no|unsure", "person_asked": "yes|no|unsure",
+     "must_meet": "yes|no|unsure", "keep": "yes|no|unsure", "why": "one plain line" }
+   ```
+   On any `yes` or `unsure` the card gets no mark. Only when all four are `no`, and under `--apply`,
+   the card is marked: `shrink.py stamp <id> --by groom`, the `why` on stdin (without `--apply` the
+   cards are listed under `## Safe to close when quiet` in `GROOM-PLAN.md`). The mark closes nothing
+   by itself: the card must then stay quiet for 30 days, and every hard rule of
+   [`expire`](#expire---dry-run) still applies. After the report the owner may mark more himself in
+   one multi-select ask (`--by you`).
+   **Combine.** Run [`combine`](#combine-filter) over the scope: the helper's groups, the judge's
+   proposals (at most five, each with its ground and evidence), listed under `## Combine` in
+   `GROOM-PLAN.md`, then the one multi-select ask after the report. A bundle is made only on the
+   owner's pick, under `--apply` too. A bundle already on the board is one line in the burn-down.
 3. **Sequence.** Pins first: a card with `pin: N` sits at rank N and everything else re-flows
    around it (two pins on one rank: smaller id first, flagged). Then the unpinned cards by:
    (a) **unblock value** -- what unblocks the most downstream work jumps the queue;
@@ -1003,6 +1206,9 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 ## Needed or not   (proposals -- nothing closes without your pick)
 - ✂️ <title> (<id>) · not needed: <already covered | overtaken | nobody is asking | nothing left> -- <evidence>
 - ❓ <title> (<id>) · can't tell: <the one fact that would settle it>
+
+## Combine   (proposals -- nothing combines without your pick)
+- 🧺 <title> (<id>) + <title> (<id>) · same file | same root cause | same goal -- <the evidence, in a line>
 
 ## Start now (top 3 -- never ⚠️)   ·   ## Drop / defer (3)
 ```
@@ -1165,7 +1371,9 @@ the person:
   which also commits any card file an earlier write saved but could not commit.
 - **any other non-zero exit** -- nothing was written; the message says why.
 
-`sync-prs.py` writes through the same function, under the same lock.
+`sync-prs.py` and `shrink.py` write through the same function, under the same lock; `shrink.py`'s
+lines end the same way, with the same exit codes. `card.py set <id> status=done` is refused for a
+part of an open bundle (it closes on its own check) and for a bundle whose parts are still open.
 
 ## Sync
 
@@ -1198,9 +1406,9 @@ settings file alone does not switch these on):
 
 | Skill | Hook |
 |-------|------|
-| `/resume-it` | Starts from the board: **Now fixing** lanes first, then **Next up** |
+| `/resume-it` | Starts from the board: **Now fixing** lanes first, then **Next up**; catches up first with `reconcile --prs` |
 | `/dispatch-it` | Takes its lanes from the board -- non-overlapping, up to `lane_cap` |
-| ship (`ship-it-guide.md`) | On merge: stage **Live**. After the live check: **Checked**, then `done`. `/resume-it` and `/wrap-it` catch up with `reconcile --prs` (the card's `pr:`, never a guess) |
+| ship (`ship-it-guide.md`) | Records the card's PR in `pr:`. Once the fix is released and its checks pass the card is done (shipped means done): `/resume-it` and `/wrap-it` catch up with `reconcile --prs` (the card's `pr:`, never a guess) |
 | `/wrap-it` | Updates each touched card and regenerates the status line alongside the handoff |
 | `/debug-it` / `/fix-it` | A new bug gets a card (`stage: Reported`) before any fix work |
 

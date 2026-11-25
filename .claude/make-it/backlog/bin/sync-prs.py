@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Move bug cards forward from facts: every PR in a card's `pr:` closed and one merged -> Live (only
-with a `signal:` -- else it waits, named);
-Checked -> done. Forward only -- never back, never past Live without the live check.
+"""Close cards from facts -- shipped means done. A card is done (`closed_as: shipped-tests-pass`) when every
+pull request in its `pr:` is closed and one is merged, a release carries that merge, and every check that ran on
+that release passed. Forward only, and never on a guess: when a fact cannot be read, the card is left and the
+reason is said.
 
 Usage: sync-prs.py [board_dir] --repo PATH [--project NAME] [--dry-run]
        sync-prs.py --self-test
   --repo  the code repo whose PRs bare numbers in `pr:` name (settings `repo`); `gh` reads its
           remote. A PR in another repo goes in `pr:` as its full URL. With no --repo, no `gh` or
-          no auth, the PR step is skipped and said so; Checked -> done still runs.
-  Merged is not deployed: Live here means merged, and the live check confirms the deploy.
-  Writes the cards and BOARD.md; the caller commits them (the board's sync step).
+          no auth, the PR step is skipped and said so.
+  The release that carries a merge is the repo's newest tag, when that tag holds the merge commit; a repo
+  with no tag at all releases by merging, and the merge commit's own checks decide. Nothing is confirmed by a
+  real run: the closed card says so, and how to reopen it. A bundle closes only when each of its parts has
+  passed its own check. A card left at the older Checked stage closes; one at the older Live stage follows
+  the rule above. Writes the cards and BOARD.md; the caller commits them (the board's sync step).
 """
 import datetime, importlib.util, json, os, re, subprocess, sys
 
@@ -20,8 +24,9 @@ R = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(R)
 _cspec = importlib.util.spec_from_file_location('card', os.path.join(_bin, 'card.py'))
 C = importlib.util.module_from_spec(_cspec); _cspec.loader.exec_module(C)  # the one card writer
 v = R.v
-BEFORE_LIVE = ('Reported', 'Cause found', 'Fix ready')
+BEFORE_DONE = ('Reported', 'Cause found', 'Fix ready', 'Live')  # Live: the older stage for "merged"; it follows the same rule now
 URL = r'https?://[^\s,\]]+/pull/\d+'
+GOOD, BAD = ('success', 'skipped', 'neutral'), ('failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure', 'stale')
 
 def prs(d):
     """pr: [1590, 1593] · 1590 · #1590 · full PR URLs (any repo). None for a repo#N short form."""
@@ -32,67 +37,118 @@ def prs(d):
 def name(n): return f'#{n}' if isinstance(n, int) else '{}#{}'.format(*re.search(r'([^/]+)/pull/(\d+)$', n).groups())
 
 def gh(repo):
-    """A cached PR lookup through `gh` (number or URL -> {state, mergedAt}), or None when gh can't run."""
+    """What `gh` knows, each answer cached: {'pr': number or URL -> {state, mergedAt, mergeCommit},
+    'release': (pr, merge commit) -> (how, tag), 'checks': (pr, tag or commit) -> (how, detail)}. None when gh can't run."""
     try:
         if subprocess.run(['gh', 'auth', 'status'], cwd=repo, capture_output=True, timeout=30).returncode: return None
     except (OSError, subprocess.TimeoutExpired): return None
     cache = {}
-    def look(n):
-        if n not in cache:
+    def ask(*a):  # (parsed JSON, None) or (None, why)
+        if a not in cache:
             try:
-                r = subprocess.run(['gh', 'pr', 'view', str(n), '--json', 'state,mergedAt'], cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=30)
-                cache[n] = json.loads(r.stdout) if r.returncode == 0 else {'state': 'UNKNOWN', 'why': (r.stderr.strip().splitlines() or ['?'])[-1][:70]}
-            except subprocess.TimeoutExpired: cache[n] = {'state': 'UNKNOWN', 'why': 'gh timed out'}
-        return cache[n]
-    return look
+                r = subprocess.run(['gh', *a], cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=30)
+                cache[a] = (json.loads(r.stdout), None) if r.returncode == 0 else (None, (r.stderr.strip().splitlines() or ['?'])[-1][:70])
+            except subprocess.TimeoutExpired: cache[a] = (None, 'gh timed out')
+            except ValueError: cache[a] = (None, 'gh gave no JSON')
+        return cache[a]
+    # the repo a pull request lives in: `{owner}/{repo}` (gh fills it in from --repo) or, for a URL, the one it names
+    api = lambda n, path: ask('api', 'repos/' + ('{owner}/{repo}' if isinstance(n, int) else '/'.join(n.split('/')[3:5])) + '/' + path)
+    def look(n):
+        j, why = ask('pr', 'view', str(n), '--json', 'state,mergedAt,mergeCommit')
+        return j if isinstance(j, dict) else {'state': 'UNKNOWN', 'why': why}
+    def release(n, sha):
+        """('in', tag) the newest tag holds the merge · ('not yet', tag) it does not · ('merge', '') the repo has
+        no tag: merging is releasing · ('unreadable', why)."""
+        tags, why = api(n, 'tags?per_page=1')
+        if not isinstance(tags, list): return 'unreadable', why or 'the tags could not be read'
+        if not tags: return 'merge', ''
+        # ponytail: GitHub lists the newest tag first in practice; where it does not, a merge reads as "not in a
+        # release yet" and the card is left open -- never closed wrongly
+        tag = tags[0].get('name', '')
+        cmp, why = api(n, f'compare/{sha}...{tag}')
+        if not isinstance(cmp, dict) or not isinstance(cmp.get('behind_by'), int): return 'unreadable', why or 'the release could not be compared'
+        return ('in' if cmp['behind_by'] == 0 else 'not yet'), tag
+    def checks(n, ref):
+        """('pass', count) · ('fail', (failed names, count)) · ('running', count) · ('none', 0) · ('partial', 'N of its M') · ('unreadable', why)."""
+        j, why = api(n, f'commits/{ref}/check-runs?per_page=100')
+        runs = j.get('check_runs') if isinstance(j, dict) else None
+        if not isinstance(runs, list): return 'unreadable', why or 'no answer'
+        # ponytail: one page of 100 is read. A release with more is never called passed on a part of its checks: the card is left and the count said; page here if that ever bites
+        if isinstance(j.get('total_count'), int) and j['total_count'] > len(runs): return 'partial', f"{len(runs)} of its {j['total_count']}"
+        bad = [c.get('name') or '?' for c in runs if c.get('conclusion') in BAD]
+        if bad: return 'fail', (bad, len(runs))
+        if any(c.get('status') != 'completed' or c.get('conclusion') not in GOOD for c in runs): return 'running', len(runs)
+        ran = sum(c.get('conclusion') == 'success' for c in runs)  # a skipped check proves nothing: only the ones that ran and passed are counted
+        return ('pass', ran) if ran else ('none', 0)
+    return {'pr': look, 'release': release, 'checks': checks}
 
 def eligible(d, closing):  # still movable right now: open, and at the stage the move starts from
-    return v(d, 'status') != 'done' and (v(d, 'stage') == 'Checked' if closing else v(d, 'stage') in BEFORE_LIVE)
+    return v(d, 'status') != 'done' and (v(d, 'stage') == 'Checked' if closing else v(d, 'stage') in BEFORE_DONE)
 
-def moves(B, look):
-    """([(path, changes, note)], [(path, why it waits)]) -- what would move, and what can't yet."""
+def moves(B, G):
+    """([(path, changes, note, the section and lines written on the card)], [(path, why it waits)])."""
     out, wait = [], []
-    for p, d in R.load(B).items():
+    cards = R.load(B); T = R.tree(cards)
+    for p, d in cards.items():
         if '/stories/' not in p: continue
-        if eligible(d, True): out.append((p, {'status': 'done'}, 'Checked → done (the live check passed)')); continue
+        if v(d, 'status') == 'done' or R.bundle_of(d, T): continue  # a part of a bundle closes on its own check (`part-done`), never here, whatever its stage
+        still = R.open_parts(d, T)  # a bundle: each card in it closes on its own check, and the bundle only after them
+        unchecked = (f"{len(still)} of its parts ha{'s' if len(still) == 1 else 've'} not passed {'its' if len(still) == 1 else 'their'} own check: "
+                     + ', '.join(R.name(m) for m in still) + ' -- record each with `part-done`, or take it out with `unbundle`')
+        if eligible(d, True):
+            if still: wait.append((p, f'at Checked, but {unchecked}'))
+            else: out.append((p, {'status': 'done'}, 'Checked → done (the live check passed)', None))
+            continue
         if not eligible(d, False): continue
         nums = prs(d)
         if nums is None: wait.append((p, 'pr: names another repo by short form -- use the PR URL')); continue
         if not nums:
-            if v(d, 'stage') == 'Fix ready': wait.append((p, 'no pr: -- set it to the fix PR'))
+            if v(d, 'stage') in ('Fix ready', 'Live'): wait.append((p, 'no pr: -- set it to the fix PR'))
             continue
-        if not look: wait.append((p, 'PR step skipped')); continue
-        got = {n: look(n) for n in nums}
+        if not G: wait.append((p, 'PR step skipped')); continue
+        got = {n: G['pr'](n) for n in nums}
         blocking = [f"{name(n)} {s['state'].lower()}" + (f" ({s['why']})" if s.get('why') else '') for n, s in got.items() if s['state'] in ('OPEN', 'UNKNOWN')]
-        if blocking or not any(s['state'] == 'MERGED' for s in got.values()):
+        merged = sorted((n for n, s in got.items() if s['state'] == 'MERGED'), key=lambda n: got[n].get('mergedAt') or '')
+        if blocking or not merged:
             wait.append((p, ', '.join(blocking) or ', '.join(f'{name(n)} closed without merging' for n in nums))); continue
-        if not v(d, 'signal'):  # the Live gate: how the fix is proved on the live system, written before it counts as shipped
-            wait.append((p, 'merged, but no signal: -- write how the fix is checked live (card.py set <id> signal=...)')); continue
-        note = f"{v(d, 'stage')} → Live · " + ', '.join(f"{name(n)} merged {s['mergedAt'][:10]}" for n, s in got.items() if s['state'] == 'MERGED')
-        note += ' (deploy not checked -- the live check confirms it)'
+        n = merged[-1]; sha = (got[n].get('mergeCommit') or {}).get('oid'); did = f"{name(n)} merged {(got[n].get('mergedAt') or '')[:10]}".rstrip()
+        if not sha: wait.append((p, f'{did}, but its merge commit could not be read -- left as it is')); continue
+        how, tag = G['release'](n, sha)
+        if how == 'unreadable': wait.append((p, f'{did}, but its release could not be read ({tag}) -- left as it is')); continue
+        if how == 'not yet': wait.append((p, f'{did}, not in a release yet (the newest is {tag})')); continue
+        rel, its = (f'released in {tag}', "that release's") if how == 'in' else ('the merge is the release (the repo has no release tag)', "the merge's")
+        res, x = G['checks'](n, tag if how == 'in' else sha)
+        if res != 'pass':
+            wait.append((p, f'{did}, {rel}, but ' + ({'unreadable': f'its checks could not be read ({x}) -- left as it is', 'partial': f'only {x} checks could be read -- left as it is', 'none': 'no checks ran on it, so nothing says the tests pass -- left as it is',
+                                                    'running': 'its checks are still running'}.get(res) or f"{len(x[0])} of its {x[1]} checks failed ({', '.join(x[0][:3])}) -- not done: a test says otherwise"))); continue
+        if still: wait.append((p, f'{did}, {rel}, but {unchecked}')); continue
+        proof = f"{did}; {rel}; all {x} of {its} checks passed"
+        note = f"{v(d, 'stage')} → done · {proof} · not confirmed by a real run: reopen it if use shows otherwise"
         if v(d, 'decision'): note += ' · it still has a decision: -- if that was answered, clear decision: and answers:'
-        out.append((p, {'stage': 'Live'}, note))
+        out.append((p, {'status': 'done', 'closed_as': 'shipped-tests-pass'}, note,
+                    ('Shipped means done', '- closed on the rule "shipped means done": a fix counts as fixed unless a test proves otherwise\n'
+                     f"- evidence: pull request {proof}\n- not confirmed by a real run. If use shows it is not fixed: `/backlog-it reopen {v(d, 'id')} <what you saw>`")))
     return out, wait
 
-def apply(p, changes, note, T):
+def apply(p, changes, note, body, T):
     """Write the move through card.py's writer. False if the card moved meanwhile."""
     # ponytail: re-read at write time -- another session may have moved the card while gh ran
-    if not eligible(R.fm(p), 'status' in changes): return False
-    C.write(p, changes, f'PR sync ({T})', f'- {note}', T)
+    if not eligible(R.fm(p), 'closed_as' not in changes): return False
+    C.write(p, changes, f'{body[0]} ({T})' if body else f'PR sync ({T})', body[1] if body else f'- {note}', T)
     return True
 
-def run(B, look, dry, proj=None, T=None):
+def run(B, G, dry, proj=None, T=None):
     T = T or datetime.date.today()
-    out, wait = moves(B, look)
+    out, wait = moves(B, G)
     cards = R.load(B)
     cid = lambda p: R.name(cards[p])  # a card by its title with its id, never a bare id
-    if not dry: C.lock(B); out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]  # card.py's writer lock
+    if not dry: C.lock(B); out = [m for m in out if apply(*m, T)]  # card.py's writer lock
     if out and not dry:
         subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
-    lines = [f"PR sync -- {R.arg(proj or os.path.basename(B))} · {T}" + (' · no --repo or gh: PR step skipped' if not look else '') + (' · dry run, nothing written' if dry else '')]
-    lines += [f'  {cid(p)} · {note}' for p, _, note in out] or ['  nothing to move']
+    lines = [f"PR sync -- {R.arg(proj or os.path.basename(B))} · {T}" + (' · no --repo or gh: PR step skipped' if not G else '') + (' · dry run, nothing written' if dry else '')]
+    lines += [f'  {cid(p)} · {note}' for p, _, note, _ in out] or ['  nothing to close']
     lines += ['Waiting:'] + [f'  {cid(p)} · {why}' for p, why in wait] if wait else []
-    lines.append(f"{'Would move' if dry else 'Moved'} {len(out)} · waiting {len(wait)}")
+    lines.append(f"{'Would close' if dry else 'Closed'} {len(out)} · waiting {len(wait)}")
     return '\n'.join(lines)
 
 def self_test():
@@ -104,45 +160,64 @@ def self_test():
             open(f'{S}/S{n}.md', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {x}\n' for k, x in {'id': f'E01-S{n}', 'type': 'breakfix', 'status': 'in-progress', **kv}.items()) + f'---\n{body}')
         open(f'{t}/items/EPIC-01-bugs/epic.md', 'w', encoding='utf-8').write('---\nid: E01\ntitle: Bugs\nstatus: in-progress\n---\n')
         url = 'https://github.com/org2/repo1/pull/109'
-        card(1, stage='Fix ready', pr='[101]', priority='P1', signal='log: ok')     # merged -> Live
-        card(17, stage='Fix ready', pr='[101]')                                     # merged, no signal -> waits (the Live gate)
+        card(1, stage='Fix ready', pr='[101]', priority='P1')                       # merged, released, checks pass -> done
+        card(17, stage='Live', pr='[101]')                                          # the older Live stage: the same rule -> done
         card(2, stage='Fix ready', pr='[102, 103]')                                 # one still open -> waits
         card(3, stage='Cause found', pr='104')                                      # closed unmerged -> waits
         card(4, stage='Checked')                                                    # -> done
-        card(5, stage='Live', pr='[105]')                                           # already Live: never past it
+        card(5, stage='Fix ready', pr='[105]')                                      # merged after the newest release -> waits
         card(6, '\nFixed in PR #106.\n', stage='Fix ready')                         # no pr: -> waits, never guessed
         card(8, stage='Fix ready', pr='[101]', status='done')                       # done: left alone
-        card(9, stage='Fix ready', pr=url, signal='page shows it')                  # another repo's PR, by URL
-        card(10, stage='Fix ready', pr='[110]', decision='Ratify #110?', signal='x') # moves, flags the decision
+        card(9, stage='Fix ready', pr=url)                                          # another repo's PR, by URL: its checks failed -> waits
+        card(10, stage='Fix ready', pr='[110]', decision='Ratify #110?')            # closes, flags the decision
         card(12, stage='Fix ready', pr='splashdown#71')                             # short form: ambiguous -> waits
         card(13, stage='Needs decision', pr='[101]')                                # older waiting form: left alone
+        card(18, stage='Fix ready', pr='[104, 101]')                                # its own PR closed, a release PR carried it -> done
+        card(19, stage='Fix ready', pr='[111]')                                     # checks unreadable -> waits, said
+        card(20, stage='Fix ready', pr='[101]', bundles='[E01-S21]'); card(21, stage='Fix ready', pr='[101]', bundledIn='E01-S20')  # a bundle with an open part -> waits; the part never closes on a PR
         open(f'{S}/S11.md', 'w', encoding='utf-8').write('---\nid: E01-S11\ntype: story\nstatus: in-progress\npr: [101]\n---\n')  # no stage: untouched
-        st = {101: 'MERGED', 102: 'MERGED', 103: 'OPEN', 104: 'CLOSED', 105: 'MERGED', 106: 'MERGED', 109: 'OPEN', url: 'MERGED', 110: 'MERGED', 71: 'MERGED'}
-        look = lambda n: {'state': st.get(n, 'UNKNOWN'), 'mergedAt': '2026-10-15T10:00:00Z'}
+        st = {101: 'MERGED', 102: 'MERGED', 103: 'OPEN', 104: 'CLOSED', 105: 'MERGED', 106: 'MERGED', 109: 'OPEN', url: 'MERGED', 110: 'MERGED', 111: 'MERGED', 71: 'MERGED'}
+        G = {'pr': lambda n: {'state': st.get(n, 'UNKNOWN'), 'mergedAt': '2026-10-15T10:00:00Z', 'mergeCommit': {'oid': f'c{n}'}},
+             'release': lambda n, sha: ('not yet', 'v1.2.0') if n == 105 else ('in', 'v1.2.0'),
+             'checks': lambda n, ref: ('fail', (['unit tests'], 3)) if n == url else ('unreadable', 'HTTP 502') if n == 111 else ('pass', 3)}
         before = {p: open(p, encoding='utf-8').read() for p in R.load(t)}
-        out = run(t, look, dry=True, proj='t', T=T)
-        assert {p: open(p, encoding='utf-8').read() for p in R.load(t)} == before and not os.path.exists(f'{t}/BOARD.md') and 'Would move 4' in out, out
-        out = run(t, look, dry=False, proj='t', T=T)
+        out = run(t, G, dry=True, proj='t', T=T)
+        assert {p: open(p, encoding='utf-8').read() for p in R.load(t)} == before and not os.path.exists(f'{t}/BOARD.md') and 'Would close 5' in out, out
+        out = run(t, G, dry=False, proj='t', T=T)
         c = {v(d, 'id'): d for d in R.load(t).values()}
-        assert [v(c[f'E01-S{n}'], 'stage') for n in (1, 2, 3, 5, 6, 9, 10, 12, 13)] == ['Live', 'Fix ready', 'Cause found', 'Live', 'Fix ready', 'Live', 'Live', 'Fix ready', 'Needs decision'], out
-        assert v(c['E01-S4'], 'status') == 'done' and v(c['E01-S8'], 'status') == 'done' and v(c['E01-S11'], 'stage') == '', out
+        done = lambda n: (v(c[f'E01-S{n}'], 'status'), v(c[f'E01-S{n}'], 'closed_as'))
+        assert all(done(n) == ('done', 'shipped-tests-pass') for n in (1, 17, 10, 18)) and done(4) == ('done', ''), out
+        assert [v(c[f'E01-S{n}'], 'stage') for n in (2, 3, 5, 6, 9, 12, 13, 19, 20)] == ['Fix ready', 'Cause found', 'Fix ready', 'Fix ready', 'Fix ready', 'Fix ready', 'Needs decision', 'Fix ready', 'Fix ready'], out
+        assert not any(v(c[f'E01-S{n}'], 'status') == 'done' for n in (2, 3, 5, 6, 9, 12, 13, 19, 20, 11)) and v(c['E01-S8'], 'closed_as') == '', out
         assert v(c['E01-S6'], 'pr') == '' and v(c['E01-S1'], 'updated') == str(T) and v(c['E01-S1'], 'priority') == 'P1', out
         assert '(E01-S2) · #103 open' in out and '(E01-S3) · #104 closed without merging' in out and '(E01-S6) · no pr:' in out, out
-        assert 'Untitled card (E01-S17) · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
-        assert '(E01-S9) · Fix ready → Live · repo1#109 merged' in out and '(E01-S12) · pr: names another repo by short form' in out, out
-        assert not any(f'(E01-S{n})' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
-        assert 'clear decision: and answers:' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md', encoding='utf-8').read(), out
-        assert '**Live, to check:** S1, S5, S9, S10' in open(f'{t}/BOARD.md', encoding='utf-8').read(), open(f'{t}/BOARD.md', encoding='utf-8').read()
+        assert '(E01-S5) · #105 merged 2026-10-15, not in a release yet (the newest is v1.2.0)' in out, out
+        assert '(E01-S9) · repo1#109 merged 2026-10-15, released in v1.2.0, but 1 of its 3 checks failed (unit tests)' in out and '(E01-S12) · pr: names another repo by short form' in out, out
+        assert '(E01-S19) · #111 merged 2026-10-15, released in v1.2.0, but its checks could not be read (HTTP 502) -- left as it is' in out, out
+        assert '(E01-S20) · #101 merged 2026-10-15, released in v1.2.0, but 1 of its parts has not passed its own check: Untitled card (E01-S21)' in out, out
+        assert not any(f'(E01-S{n})' in out.replace('(E01-S21)', '') for n in (8, 11, 13, 21)), out  # done, stage-less, the older waiting form, a part
+        one = open(f'{S}/S1.md', encoding='utf-8').read()
+        assert 'Untitled card (E01-S1) · Fix ready → done · #101 merged 2026-10-15; released in v1.2.0; all 3 of that release\'s checks passed · not confirmed by a real run' in out, out
+        assert f'## Shipped means done ({T})' in one and 'not confirmed by a real run' in one and '`/backlog-it reopen E01-S1 <what you saw>`' in one, one
+        assert 'clear decision: and answers:' in out and '**Shipping:** S2, S5, S6, S9, S12, S19, S20' in open(f'{t}/BOARD.md', encoding='utf-8').read(), open(f'{t}/BOARD.md', encoding='utf-8').read()
         assert not [f for f in os.listdir(S) if f.endswith('.tmp')], os.listdir(S)
-        out = run(t, look, dry=False, proj='t', T=T)  # nothing left to move: idempotent
-        assert 'nothing to move' in out and 'Moved 0' in out, out
+        out = run(t, G, dry=False, proj='t', T=T)  # nothing left to close: idempotent
+        assert 'nothing to close' in out and 'Closed 0' in out, out
+        assert v(R.fm(f'{S}/S21.md'), 'status') == 'in-progress'  # the part, merged PR and all, is still open
+        card(21, stage='Fix ready', status='done', bundledIn='E01-S20')  # the part passed its own check: now the bundle closes
+        assert '(E01-S20) · Fix ready → done' in run(t, G, dry=False, proj='t', T=T)
         card(14, stage='Checked'); card(15, stage='Fix ready', pr='[101]')
         out = run(t, None, dry=False, proj='t', T=T)  # no gh: Checked still closes, PR cards wait
         assert '(E01-S15) · PR step skipped' in out and v(R.fm(f'{S}/S14.md'), 'status') == 'done' and v(R.fm(f'{S}/S15.md'), 'stage') == 'Fix ready', out
-        card(16, stage='Fix ready', pr='[101]', signal='x')  # another session closes it while gh runs: the write is refused
-        late = lambda n: (card(16, stage='Checked', status='done'), look(n))[1]
+        card(16, stage='Fix ready', pr='[101]')  # another session closes it while gh runs: the write is refused
+        late = dict(G, pr=lambda n: (card(16, stage='Fix ready', status='done'), G['pr'](n))[1])
         out = run(t, late, dry=False, proj='t', T=T)
-        assert v(R.fm(f'{S}/S16.md'), 'stage') == 'Checked' and 'E01-S16' not in out, out
+        assert v(R.fm(f'{S}/S16.md'), 'closed_as') == '' and 'E01-S16' not in out, out
+        for how, says in ((('merge', ''), 'the merge is the release (the repo has no release tag); all 3 of the merge\'s checks passed'), (('unreadable', 'HTTP 500'), 'its release could not be read (HTTP 500)')):
+            card(22, stage='Fix ready', pr='[101]'); out = run(t, dict(G, release=lambda n, sha: how), dry=True, proj='t', T=T)
+            assert says in out, out
+        for res, says in ((('running', 2), 'its checks are still running'), (('none', 0), 'no checks ran on it')):
+            out = run(t, dict(G, checks=lambda n, ref: res), dry=True, proj='t', T=T); assert says in out and 'Would close 0' in out, out
     print('sync-prs self-test: OK')
 
 if __name__ == '__main__':

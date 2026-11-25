@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Stand-in for `gh` in the board's tests: it answers from a file and never touches the network.
 #   GH_STUB_PRS  the JSON file `gh pr list` prints (make-board.py writes one beside the board)
+d="$(dirname "${GH_STUB_PRS:?gh stand-in: set GH_STUB_PRS}")"
 case "${1:-} ${2:-}" in
   "auth status") exit 0 ;;
-  "pr view")  # --json files: the files that pull request changes, from files/<N>.json; anything else: its state
+  "pr view")  # --json files: the files that pull request changes, from files/<N>.json; anything else: its state, from prstate/<N>.json (open when there is none)
     case "$*" in
-      *files*) cat "$(dirname "${GH_STUB_PRS:?}")/files/$3.json" 2>/dev/null || { echo "gh stand-in: no files for $3" >&2; exit 1; } ;;
-      *) echo '{"state":"OPEN","mergedAt":null}' ;;
+      *files*) cat "$d/files/$3.json" 2>/dev/null || { echo "gh stand-in: no files for $3" >&2; exit 1; } ;;
+      *) cat "$d/prstate/$3.json" 2>/dev/null || echo '{"state":"OPEN","mergedAt":null,"mergeCommit":null}' ;;
     esac ;;
-  "api repos/{owner}/{repo}/compare/"*)  # how far a pull request's head is behind main, from behind/<head oid>
-    cat "$(dirname "${GH_STUB_PRS:?}")/behind/${2##*...}" 2>/dev/null || { echo "gh stand-in: cannot compare" >&2; exit 1; } ;;
-  "pr list") cat "${GH_STUB_PRS:?gh stand-in: set GH_STUB_PRS}" ;;
+  "api repos/{owner}/{repo}/compare/"*)  # how far the head is behind the base, from behind/<base>...<head>, else behind/<head>
+    cat "$d/behind/${2##*/compare/}" 2>/dev/null || cat "$d/behind/${2##*...}" 2>/dev/null || { echo "gh stand-in: cannot compare" >&2; exit 1; } ;;
+  "api repos/{owner}/{repo}/tags"*) cat "$d/tags.json" 2>/dev/null || { echo "gh stand-in: cannot list tags" >&2; exit 1; } ;;
+  "api repos/{owner}/{repo}/commits/"*"/check-runs"*)  # the checks that ran on a tag or commit, from checks/<ref>.json
+    ref="${2#*/commits/}"; cat "$d/checks/${ref%%/check-runs*}.json" 2>/dev/null || { echo "gh stand-in: cannot read the checks" >&2; exit 1; } ;;
+  "pr list") cat "$GH_STUB_PRS" ;;
   *) echo "gh stand-in: unexpected call: $*" >&2; exit 1 ;;
 esac

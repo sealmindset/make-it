@@ -24,10 +24,14 @@ and waiting to be checked, and what's next.
   in the right place automatically; any questions come after, all at once.
 - **Planning** new work: for an epic, story, or task it asks a few questions first, so the card
   says what you actually mean.
-- **Fixing bugs in order**, each one moving through five steps: *Reported → Cause found → Fix
-  ready → Live → Checked*. A bug isn't finished until it has been checked on the live app. When
-  a fix ships, its card says how the fix will be checked on the live app, and when that check
-  is due.
+- **Fixing bugs in order**, each one moving through three steps: *Reported → Cause found → Fix
+  ready*, and then it is done. A fix counts as fixed once it is released and its tests pass.
+  If using the app later shows it was not fixed, the card is reopened with what you saw.
+- **Keeping the pile small.** Cards that belong together are combined into one piece of work, and
+  each keeps its own check. A card closes by itself after 30 quiet days only if it was first judged
+  safe to close: the tidy-up (`groom`) reads the whole card, or you pick it yourself. A card nobody
+  judged never closes this way, nor does a bug or anything about safety. One command brings a
+  closed card back.
 - **Fixing several bugs at once**, when they don't touch the same parts of the app (three at a
   time by default).
 - **Picking a card back up** later: `/backlog-it start <id>` turns the card into an instruction
@@ -77,7 +81,10 @@ we?". With one, every session -- and every AI helper -- works from the same list
 /backlog-it                        # the first screen: what to do next, what needs you, what changed
 /backlog-it list                   # what's on the board
 /backlog-it status                 # where things stand: in flight, next, burn-down, what needs you
-/backlog-it reconcile --prs        # move bugs forward from their PRs on GitHub (merged → Live)
+/backlog-it reconcile --prs        # close the cards whose fix is released with its tests passing
+/backlog-it combine                # which cards belong together as one piece of work (you pick)
+/backlog-it reopen E02-S4 the date still shows yesterday   # a fix did not hold: back in line, your words kept
+/backlog-it expire --dry-run       # which quiet cards will close by themselves, and why the rest are kept
 /backlog-it the export button does nothing on the reports page   # capture a bug in plain words
 /backlog-it epic a monthly report for managers   # plan new work (asks first)
 /backlog-it start E02-S4           # pick a card back up
@@ -167,6 +174,6 @@ else from the board joins the plan.
   side-by-side steps.
 - [`/subagent-it`](15-subagent-it.md) runs a card's step-by-step plan, which `plan` drafts for
   you to approve first.
-- [`/ship-it`](06-ship-it.md) moves a card to *Live* when it ships and to *Checked* once it's verified.
+- [`/ship-it`](06-ship-it.md) records the fix on its card; once the fix is released and its tests pass, the card is done.
 - [`/wrap-it`](13-wrap-it.md) updates the cards when you finish for the day.
 - [`/debug-it`](10-debug-it.md) and [`/fix-it`](09-fix-it.md) write a card for a new bug before fixing it.

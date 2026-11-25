@@ -1,6 +1,6 @@
 ---
 name: backlog-it
-description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used from anywhere. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → Live → Checked) with up to N parallel non-overlapping fix lanes, recalls any card as an editable prompt with `start <id>`, and explains any card in plain terms with `info <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
+description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used from anywhere. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → done once released with passing tests) with up to N parallel non-overlapping fix lanes, combines cards that belong together into one piece of work without losing each card's own check, closes quiet cards nobody asks for, recalls any card as an editable prompt with `start <id>`, and explains any card in plain terms with `info <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
 allowed-tools:
   - Read
   - Write
@@ -71,11 +71,15 @@ user's go, and every other skill reads the same board.
 | `status` (no id) | Run `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT"` and print its output as-is, in a code block. Read-only |
 | `move`, `status <id> <status>`, `stage`, `done` | Update the card (`done` posts the end summary) |
 | `reconcile [<id>\|all] [--fast\|--deep <id>\|--dry-run\|--dispatch]` | Check cards against `REPO`: code, tests, live |
-| `reconcile --prs [--dry-run]` | No AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"`, print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
+| `reconcile --prs [--dry-run]` | Shipped means done, no AI: `python3 ~/.claude/make-it/backlog/bin/sync-prs.py "$BOARD" --repo "$REPO" --project "$PROJECT"` closes each card whose pull request is merged, released, and passing its release's checks (a fact it cannot read leaves the card, and it says so). Print its report, then sync (commit `reconcile: prs`). With `--dry-run`, pass it through and don't sync |
+| `combine [filter]` | Propose bundles (Step 3b): `shrink.py combine` gives the facts, you judge and ask, nothing combines without the pick |
+| `unbundle <id>` | `python3 ~/.claude/make-it/backlog/bin/shrink.py --board "$BOARD" --project "$PROJECT" unbundle <id>`: a bundle's id puts every card back in line as it was; a card's id takes that one out. Relay its line |
+| `reopen <id> <what was seen>` | Pipe the person's words, as typed, to `shrink.py --board "$BOARD" --project "$PROJECT" reopen <id>`: the card goes back in line with the words kept. Relay its line |
+| `expire [--dry-run]` | `shrink.py --board "$BOARD" --project "$PROJECT" expire [--dry-run]`, output as-is in a code block: closes the quiet cards a judge marked `expires: ok` (30 quiet days; no mark, never; every hard rule still applies); `--dry-run` only lists them. You never mark a card yourself outside groom's judge step: the owner's pick is `shrink.py … stamp <id> --by you` |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item (Step 4); always end with `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --needs-you` |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo / spike / `/subagent-it` / `/dispatch-it`, in waves → `PLAN.md` (Step 4b); `--with-deps` also plans what the filter waits on, across epics |
 | `mode <id> <mode\|auto>` | Choose a card's mode yourself; `plan` keeps it |
-| `groom [filter] [--with-deps] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md`, and say which epics, stories and tasks are no longer needed (proposals; one multi-select ask closes the ones you pick); `--with-deps` adds the chain behind the filter |
+| `groom [filter] [--with-deps] [--apply\|--dry-run\|--dispatch]` | Propose the burn-down → `GROOM-PLAN.md`, and say which epics, stories and tasks are no longer needed (proposals; one multi-select ask closes the ones you pick); `--with-deps` adds the chain behind the filter. A groom also closes released fixes and quiet cards first (`reconcile --prs`, `expire`) and proposes bundles (`combine`). Its judge marks a card safe to close when quiet only after reading the whole card and answering four questions as JSON (`can_hurt`, `person_asked`, `must_meet`, `keep`: each yes, no or unsure); any yes or unsure means no mark; four no's, under `--apply`: `shrink.py … stamp <id> --by groom`, the reason on stdin |
 | `groom move/pin <id> <pos>`, `groom unpin <id>` | Pin / release a rank |
 | `groom strategy [--apply\|--dry-run]` | Foundation vs polish → `STRATEGY.md` |
 | `undo` | Revert the last board commit (board in its own repo only) |
@@ -130,7 +134,28 @@ A dismissed ask starts nothing. Everything the old board printed is under `statu
   the fix or its order. Check what you can check yourself instead of asking. Answers go under
   `## Answers`. A question that blocks a card goes on it as `decision:` (plain context, then the
   question) and `answers:` (2-4 named options) -- the board's **Waiting on you** block; the write that
-  adds the answer removes both.
+  adds the answer removes both. After a capture, run `shrink.py … combine <the new id>`: when it
+  shows the new card in a same-file group (or triage named a likely duplicate), add one question to
+  the same ask -- "Do this together with <title> (<id>)?", the ground and the evidence in a line,
+  `Together` or `Apart` -- and bundle only on "Together" (Step 3b).
+
+## Step 3b -- Combine: cards that belong together become one piece of work
+
+Three grounds: the **same file**, the **same root cause**, the **same goal**. Never water a card down.
+
+1. Run `python3 ~/.claude/make-it/backlog/bin/shrink.py --board "$BOARD" --project "$PROJECT" combine [filter]`
+   (read-only, no AI) and read its groups: same files, same skill, cards that wait on each other.
+   **The facts are the helper's.** Same root cause and same goal are your judgement: read the cards
+   in a group before you claim either, and write the reason down.
+2. Propose at most five bundles, the strongest first. Ask once, a multi-select (`approval-block.md`):
+   one option per proposed bundle -- which cards (title with id), the ground, the evidence in a
+   line. No "all of them". A bundle not picked is not made; a dismissed ask makes none.
+3. For each pick, pipe to `shrink.py … bundle <id> <id> …`: `title:`, `ground:`, `why:`, and one
+   `<id>: <that card's own check>` line per card. It refuses more than five cards, more than one
+   sitting, a high-stakes card with one that is not, or a card with no check of its own -- relay
+   the refusal, don't work round it. Relay the line it prints.
+4. A bundle is ONE thing to do -- one lane, one pull request. Its cards stay readable and each
+   closes only on its own check: the lane pipes what showed it to `shrink.py … part-done <card id>`.
 
 ## Step 4 -- Lanes and dispatch
 
@@ -176,7 +201,8 @@ when every wave is merged, its next wave is stuck, a spike's finding lands, or w
 **Card writes go through `card.py`** -- never `printf`, `sed` or a glob:
 `python3 ~/.claude/make-it/backlog/bin/card.py --board "$BOARD" --project "$PROJECT"` then
 `append <id> <section>` (text on stdin) · `set <id> key=value …` (`key=` removes) · `new <epic>` (a card on
-stdin with `id: NEW`). It pulls first, writes the whole file, bumps `updated:`, regenerates and syncs --
+stdin with `id: NEW`). Bundles, reopening and expiry go through `shrink.py` beside it, which prints
+the same kind of line and exits the same way. It pulls first, writes the whole file, bumps `updated:`, regenerates and syncs --
 steps 1-3 in one call. Its line ends `committed + pushed` only when the shared board has the write;
 a line with `NOT sent` is relayed to the person as it is. Exit 3 = written here, the shared board
 did not get it (never write it again; the next write that can send carries it). Any other non-zero

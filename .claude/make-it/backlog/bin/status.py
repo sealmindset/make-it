@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print where the board stands: in flight, up next, burn-down + forecast, needs you, drift,
+"""Print where the board stands: in flight, bundles, up next, burn-down + forecast, needs you, drift,
 epics, and cycle time. Read-only, no AI call -- the same board gives the same answer.
 
 Usage: status.py [board_dir] [--project NAME] [--needs-you]
@@ -9,10 +9,12 @@ Usage: status.py [board_dir] [--project NAME] [--needs-you]
            needs you, what changed since you last looked, and one trend line. --repo is the code repo
            whose open pull requests `gh` lists (without it, or without gh, those steps are skipped and
            said so). --seen records this look in <board>/.last-seen.json (kept out of the board's git).
-  Dates come from the board's git history (when a card went done, Live or Checked, and when it
-  last changed). With no git history, from each card's created: and updated:.
+  Dates come from the board's git history (when a card went done, and when it last changed). With
+  no git history, from each card's created: and updated:.
+  This file also holds the rule for which quiet cards close by themselves (`expiry`); `shrink.py
+  expire` is what closes them.
 """
-import datetime, importlib.util, json, os, re, statistics, subprocess, sys
+import datetime, hashlib, importlib.util, json, os, re, statistics, subprocess, sys
 
 _spec = importlib.util.spec_from_file_location('regen_board', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'regen-board.py'))
 sys.dont_write_bytecode = True  # no __pycache__ beside the installed scripts
@@ -26,6 +28,11 @@ GROW_WEEKS = 2    # weeks running with more cards opened than closed before a gr
 GROOM_AGE = 14    # days after which the last groom is too old to trust, whatever the trend: its order was made for a board two weeks gone
 GROOM_REST = 7    # days a groom is left alone even while the pile grows, so the board never answers "groom" twice in the same week
 SIT = (3, 5)      # held cards brought to a weekly sitting: three when questions also wait, five at most, so the screen stays short enough to read
+# Expiry (owner's choice, 2026-11-24: "Yes, after 30 days, never a safety one"):
+EXPIRE_DAYS = 30  # quiet days after which a card marked safe to close closes itself: a month with no change, no pull request and no mention means nobody is asking
+EXPIRE_WARN = 7   # the first screen counts the cards that will close within this many days: a week's notice, so one look a week is enough to save one
+SAFETY = r'secur|secret|credential|password|token|\bkey\b|leak|vulnerab|\bCVE|auth|permission|privacy|personal|data loss|los\w* (?:\w+ )?data|delet|destroy|overwrit|corrupt|wrong|untrue|false|mislead|\blie[sd]?\b|\bpay|\bbill|money|\bgate|guard|\bscan|fail'  # words in a title or category that mark a card as one that can hurt someone (lose data, leak a secret, send something wrong, say something untrue) or as a gate or failed check: it never expires, marked or not. A guard on top of the judge's mark, never the judgement itself: a word list always misses the next one
+STAMP_SKIP = ('updated', 'expires', 'expires_why', 'expires_by', 'expires_of', 'mode', 'plan', 'files', 'reconciled')  # the fields a helper itself writes as bookkeeping (the date of the last write, the mark, plan's and groom's notes-to-self): changing one says nothing new about the card, so it does not clear a judge's mark; any other change does
 MARK = '.last-seen.json'  # when the owner last opened the first screen, and what the board held then
 
 def day(s):
@@ -33,7 +40,7 @@ def day(s):
     except ValueError: return None
 
 def history(B):
-    """({card path: {added, added_stage, added_done, done, live, checked, touched}}, first date, source)."""
+    """({card path: {added, added_done, done, touched}}, first date, source)."""
     git = lambda *a: subprocess.run(['git', '-C', B, *a], capture_output=True, text=True, encoding='utf-8', errors='replace')
     pre = git('rev-parse', '--show-prefix')
     if pre.returncode: return {}, None, 'card dates (no git history)'
@@ -54,9 +61,6 @@ def history(B):
         elif l.startswith('new file mode'):  # a new card, even at a path an older card once had
             new = True; cur = key[p] = f'{p}@{date}'; H[cur] = {'touched': date, 'added': date}
         elif re.match(r'\+status:\s*done\s*$', l): H[cur]['done'] = date; H[cur]['added_done'] = new
-        elif m := re.match(r'\+stage:\s*(.+?)\s*$', l):
-            if new: H[cur].setdefault('added_stage', m.group(1))
-            if m.group(1) in ('Live', 'Checked'): H[cur].setdefault(m.group(1).lower(), date)
     prefix = pre.stdout.strip()
     src = 'git history' if not prefix else f"git history of branch {git('rev-parse', '--abbrev-ref', 'HEAD').stdout.strip()}"
     hist = {p: H.get(key.get(prefix + os.path.relpath(p, B), ''), {}) for p in R.load(B)}
@@ -91,21 +95,23 @@ def facts(B, T=None):
     def done_on(p, d):  # the last commit that set it done; else (or if it entered git done) its own updated:
         x = h(p)
         return day(x['done']) if x.get('done') and not x.get('added_done') else day(v(d, 'updated')) or datetime.date.min
-    dn = {p: done_on(p, d) for p, d in leaf.items() if v(d, 'status') == 'done'}
-    seen = [p for p in leaf if not h(p).get('added_done')]  # a card that entered git already done (an import) was opened and closed before
+    wrap = lambda d: bool(R.parts(d))  # a bundle card wraps cards that are already counted: it is never opened or closed in the numbers
+    dn = {p: done_on(p, d) for p, d in leaf.items() if v(d, 'status') == 'done' and not wrap(d)}
+    seen = [p for p in leaf if not h(p).get('added_done') and not wrap(leaf[p])]  # a card that entered git already done (an import) was opened and closed before
     rows = []
     for w in range(WEEKS):
         end = T - D(days=7 * w); start = end - D(days=7)
         if first and end < first: break
         rows.append((end, sum(start < opened(p, leaf[p]) <= end for p in seen),
                      sum(start < dn[p] <= end for p in seen if p in dn),
-                     sum(opened(p, d) <= end and not (p in dn and dn[p] <= end) for p, d in leaf.items())))
+                     sum(opened(p, d) <= end and not (p in dn and dn[p] <= end) for p, d in leaf.items() if not wrap(d))))
     bug = lambda d: v(d, 'type') == 'breakfix'
     pick = lambda pred: sorted((p for p, d in op.items() if pred(d)), key=lambda p: -idle(p, op[p]))
-    flight = {k: pick(lambda d: R.bucket(d) == k) for k in ('Now fixing', 'Shipping', 'Live, to check', 'Live, waits')}  # the board's own lines
+    flight = {k: pick(lambda d: R.bucket(d) == k) for k in ('Now fixing', 'Shipping')}  # the board's own lines
     flight['Other work'] = pick(lambda d: not bug(d) and not R.bucket(d) and v(d, 'status') == 'in-progress')
     epics = {os.path.dirname(p): d for p, d in cards.items() if p.endswith('/epic.md')}
     kids = lambda e: [p for p in leaf if os.path.dirname(os.path.dirname(p)) == e]
+    real = lambda e: [p for p in kids(e) if not wrap(leaf[p])]  # an epic's cards, without the bundle cards that wrap some of them
     next_bugs = []  # the board's own Next up, per bug epic
     for e in sorted(epics):
         if any(bug(leaf[p]) for p in kids(e)):
@@ -118,7 +124,7 @@ def facts(B, T=None):
     plan, pf = None, os.path.join(B, 'PLAN.md')
     if os.path.exists(pf):
         txt = open(pf, encoding='utf-8').read(); pd = day((re.search(r'\d{4}-\d{2}-\d{2}', txt.split('\n', 1)[0]) or [''])[0])
-        cand = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready', 'designing') and v(d, 'id').upper() not in parents]
+        cand = [p for p, d in op.items() if v(d, 'status') in ('backlog', 'ready', 'designing') and v(d, 'id').upper() not in parents and not R.bundle_of(d, TREE)]
         def wave_ids(w):
             """The cards a wave or bullet line is about, not the ones its reason mentions. The older form leads
             with bare ids (`· E01-S8 · title -- why`, `- E01-S8 -- why`); the plain form names each card
@@ -143,29 +149,27 @@ def facts(B, T=None):
     try: gd = day((re.search(r'\d{4}-\d{2}-\d{2}', open(os.path.join(B, 'GROOM-PLAN.md'), encoding='utf-8').readline()) or [''])[0])
     except OSError: gd = None
     opn = {p: d for p, d in cards.items() if v(d, 'status') != 'done'}
-    cyc = lambda a, b: {pr: sorted((day(h(p)[b]) - (day(h(p)[a]) if a != 'created' else opened(p, d))).days
-                                   for p, d in leaf.items() if bug(d) and h(p).get(b) and (a == 'created' or h(p).get(a))
-                                   and h(p).get('added_stage') not in ('Live', 'Checked') and (pr == '' or v(d, 'priority') == pr))
-                        for pr in ('', 'P1', 'P2', 'P3')}
-    return dict(T=T, src=src, first=first, total=len(leaf), open=len(op), rows=rows,
+    # reported to shipped: bugs git saw close, as done or shipped-tests-pass (not a card closed as not needed, expired or un-bundled)
+    cyc = {pr: sorted((dn[p] - opened(p, leaf[p])).days for p in seen if p in dn and bug(leaf[p]) and h(p).get('done')
+                      and v(leaf[p], 'closed_as') in ('', 'shipped-tests-pass') and (pr == '' or v(leaf[p], 'priority') == pr)) for pr in ('', 'P1', 'P2', 'P3')}
+    free = [p for p, d in op.items() if not wrap(d)]
+    return dict(T=T, src=src, first=first, total=sum(not wrap(d) for d in leaf.values()), open=len(free), rows=rows,
+                things=sum(not R.bundle_of(d, TREE) for d in op.values()), bundles=sorted(p for p, d in op.items() if wrap(d)),
+                reopened=sorted((p for p, d in op.items() if v(d, 'reopened')), key=lambda p: v(op[p], 'reopened'), reverse=True), last=lambda p: last(p, cards[p]),
                 flight=flight, next_bugs=next_bugs, plan=plan, can=can,
-                waiting=sorted((p for p, d in opn.items() if R.waiting(d)), key=lambda p: rank(p, opn[p])),
-                held=sorted((p for p, d in opn.items() if R.warn(d) and not R.waiting(d)), key=lambda p: rank(p, opn[p])),  # waiting: listed there
+                waiting=sorted((p for p, d in opn.items() if R.asks(d)), key=lambda p: rank(p, opn[p])),  # a question is listed on the card it is on, not again on its bundle
+                held=sorted((p for p, d in opn.items() if R.warn(d) and not R.asks(d) and not R.bundle_of(d, TREE)), key=lambda p: rank(p, opn[p])),  # waiting: listed there; a part: its bundle is held for it
                 lane_idle=[p for p in flight['Now fixing'] if idle(p, op[p]) >= LANE],  # lanes work in hours: idle days = it stopped
                 stalled=[p for p in flight['Other work'] if idle(p, op[p]) >= STALL],
-                live_old=[p for p in flight['Live, to check'] if idle(p, op[p]) >= STALL],
-                no_signal=[p for p in flight['Live, to check'] + flight['Live, waits'] if not v(op[p], 'signal')],
-                never_due=[p for p in flight['Live, waits'] if not R.due(op[p], datetime.date.max)],  # undated tag or not a date
-                checked_open=[p for p, d in op.items() if v(d, 'stage') == 'Checked'],
-                epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in kids(e)), len(kids(e))) for e in epics if kids(e)),
+                epics=sorted(((e, sum(v(leaf[p], 'status') == 'done' for p in real(e)), len(real(e))) for e in epics if real(e)),
                              key=lambda x: (-(x[2] - x[1]), x[0])),
-                r2l=cyc('created', 'live'), l2c=cyc('live', 'checked'),
+                cycle=cyc,
                 cards=cards, idle=lambda p: idle(p, cards[p]), title=lambda p: title(cards[p]), epic_cards=epics,
                 B=B, leaf=leaf, tree=TREE, startable=startable, groom_age=max(0, (T - gd).days) if gd else None, opened=lambda p: opened(p, cards[p]), done_on=dn, seen=set(seen))
 
-def named(f, i):  # a card named from its id; an id this board doesn't hold is said so
+def named(f, i):  # a card named from its id; an id this board doesn't hold is said so; a bundle says how many cards it does
     d = f['tree'][0].get(i.upper())
-    return R.name(d) if d else f'a card not on this board ({i})'
+    return (R.name(d) + (f', a bundle of {len(R.parts(d))}' if R.parts(d) else '')) if d else f'a card not on this board ({i})'
 
 def wave(f):  # the plan's next wave in plain words: its number, its mode, the cards still to do
     nxt, todo = f['plan'][3], f['plan'][5]
@@ -178,14 +182,19 @@ def render(f, proj, needs_only=False):
     name = lambda p, n=60: R.name(c[p], n)  # every card by its title with its id, never a bare id
     names = lambda ps, extra=lambda p: '': [f'    {name(p)}{extra(p)}' for p in ps[:TOP]] + [f'    +{len(ps) - TOP} more'] * (len(ps) > TOP)
     since = f" since {f['first']}" if f['first'] else ''
+    nb, held_in = len(f['bundles']), f['open'] + len(f['bundles']) - f['things']  # a bundle is one thing to do, however many cards it does
+    one = f" · {f['things']} things to do ({nb} bundle{'s hold' if nb != 1 else ' holds'} {held_in} card{'s' * (held_in != 1)})" if nb else ''
     out = [f"BOARD STATUS — {proj} · {T}",
-           f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done · dates from {f['src']}{since}", '', 'IN FLIGHT']
+           f"{f['total']} cards: {f['open']} open, {f['total'] - f['open']} done{one} · dates from {f['src']}{since}", '', 'IN FLIGHT']
     for k, ps in f['flight'].items():
-        if k == 'Live, waits':  # grouped by what they wait on, soonest first
-            if ps: out.append(f"  {k:<15}{len(ps):>4}  " + ', '.join(f'{w} ×{n}' for w, n in sorted(__import__('collections').Counter(v(c[p], 'checkAfter') for p in ps).items(), key=lambda x: R.soon(x[0]))))
-            continue
         out.append(f"  {k:<15}{len(ps):>4}  " + (f"oldest idle {idle(ps[0])}d" if ps else '—'))
-        out += names(ps, lambda p: f" · {cut(v(c[p], 'signal'), 70)}" if k == 'Live, to check' and v(c[p], 'signal') else '')  # what proves each fix, oldest first
+        out += names(ps)
+    if nb:  # each bundle once, with every card it does by title and whether that card's own check has passed
+        out += ['', 'BUNDLES']
+        for p in f['bundles']:
+            ms = [f['tree'][0][i] for i in R.parts(c[p]) if i in f['tree'][0]]
+            out.append(f"  {name(p)} · {v(c[p], 'ground') or 'no ground given'} · {sum(v(m, 'status') != 'done' for m in ms)} of {len(ms)} parts open")
+            out += [f"      {R.name(m)} -- " + ('its own check passed' if v(m, 'status') == 'done' else 'open') for m in ms]
     out += ['', 'UP NEXT']
     out.append('  Next bug       ' + ('; '.join(name(p, 60) for p in f['next_bugs']) or '—'))
     if f['plan']:
@@ -213,9 +222,8 @@ def render(f, proj, needs_only=False):
     if needs_only: return '\n'.join(needs)
     out += [''] + needs
     drift = [(f'Now fixing, idle {LANE}d+', f['lane_idle'], '  lane stopped? it should hand the card back'),
-             (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Live, idle {STALL}d+', f['live_old'], ''), ('Checked, not closed', f['checked_open'], ''),
-             ('Live, no signal', f['no_signal'], '  write how the fix is checked: card.py set <id> signal="…"'),
-             ('Live, never due', f['never_due'], '  checkAfter is no date or dated tag: card.py set <id> checkAfter=YYYY-MM-DD')]
+             (f'Stalled (idle {STALL}d+)', f['stalled'], ''), (f'Shipping, idle {STALL}d+', [p for p in f['flight']['Shipping'] if idle(p) >= STALL], '  merged? run /backlog-it reconcile --prs'),
+             ('Reopened', f['reopened'], '  a fix that did not hold')]
     out += ['', 'DRIFT'] + [l for k, ps, hint in drift if ps for l in [f"  {k:<22}{len(ps):>3}{hint}"] + names(ps)]
     if f['plan'] and not f['plan'][3]: out.append('  PLAN.md ran out        every wave is merged -- run /backlog-it plan')
     if f['plan'] and f['plan'][4]: out.append(f"  PLAN.md stuck          wave {f['plan'][3].split('.')[0]} waits on {', '.join(named(f, i) for i in f['plan'][4])} -- answer it or re-plan")
@@ -225,10 +233,9 @@ def render(f, proj, needs_only=False):
         ep = f['epic_cards'][e]; n = round(20 * dn / tot)
         out.append(f"  {R.name(ep, 30):<38}{'█' * n}{'░' * (20 - n)} {dn}/{tot}")
     out += [f"  +{len(f['epics']) - TOP} more epics"] * (len(f['epics']) > TOP)
-    out += ['', 'CYCLE TIME  (median days, bugs, transitions seen in git)']
-    for k, m in (('Reported → Live', f['r2l']), ('Live → Checked', f['l2c'])):
-        med = lambda xs: f'{statistics.median(xs):g} (n={len(xs)})' if xs else '—'
-        out.append(f"  {k:<17}{med(m[''])} · " + ' · '.join(f'{pr} {med(m[pr])}' for pr in ('P1', 'P2', 'P3')))
+    out += ['', 'CYCLE TIME  (median days, bugs, closes seen in git)']
+    med = lambda xs: f'{statistics.median(xs):g} (n={len(xs)})' if xs else '—'
+    out.append(f"  {'Reported → shipped':<19}{med(f['cycle'][''])} · " + ' · '.join(f"{pr} {med(f['cycle'][pr])}" for pr in ('P1', 'P2', 'P3')))
     return '\n'.join(out)
 
 def open_prs(repo, f):
@@ -373,7 +380,7 @@ def next_thing(f, prs, lane_cap):
     if nxt_card and free:
         d = c[nxt_card[0]]
         out.append(('Start it', f"Start the next safe card ({v(d, 'priority') or 'no priority'}{', a bug' if v(d, 'type') == 'breakfix' else ''}): nothing it waits on is open.",
-                    [name(nxt_card[0])], 'brings the card back as a prompt you can change, and runs it on your go', 'a groom or a plan might pick a better card'))
+                    [name(nxt_card[0])] + [f'part: {R.name(m, 60)}' for m in R.open_parts(d, f['tree'])], 'brings the card back as a prompt you can change, and runs it on your go', 'a groom or a plan might pick a better card'))
     if not out:
         why = (f"wave {plan[3].split('.')[0]} of the plan is running" if busy else f'{len(running)} of {lane_cap} lanes are busy' if running else 'no card can start safely')
         out.append(('Wait', f'Nothing to start right now: {why}, so wait.',
@@ -431,6 +438,13 @@ def first(f, proj, prs, lane_cap, seen=False):
         out += [f"    {name(p)} -- " + (f"frees {n(p)} other card{'s' * (n(p) != 1)}" if n(p) else 'nothing else waits on it') for p in sit]
     items, areas = running_list(f)
     if items: out.append(f"  Running list: {items} small item{'s' * (items != 1)} across {areas} area{'s' * (areas != 1)}")
+    listed = len(out) - 1 if items else None
+    if ro := f['reopened']: out.append('  ' + fit(f"Reopened: {len(ro)} fix{'es' * (len(ro) != 1)} did not hold -- ", ro))  # the signal that matters
+    ex = expiry(f); due = len(ex['close']) + len(ex['soon'])
+    short = f" · {due} quiet card{'s' * (due != 1)} close{'s' * (due == 1)} within {EXPIRE_WARN} days (`expire --dry-run`)"
+    if due and listed is not None and len(out[listed]) + len(short) <= 110: out[listed] += short  # two small counts share a line, so the fullest screen keeps to its 25
+    elif due: out.append(f"  Quiet cards: {due} will close in the next {EXPIRE_WARN} days (`/backlog-it expire --dry-run` lists them)")
+    unmarked = len(out) if not due and not ex['later'] and f['open'] else None  # where "nothing is marked" goes, if the screen has room for it
     # what changed: against the mark the last --seen look left, else the last 24 hours (dates are whole days)
     stuck_prs_now = prs[1] if prs[0] is not None else []
     stuck_now = f['lane_idle'] + f['stalled'] + [p for p in f['leaf'] if f['plan'] and v(c[p], 'id').upper() in f['plan'][4]]
@@ -455,11 +469,11 @@ def first(f, proj, prs, lane_cap, seen=False):
         closed = [p for p, on in f['done_on'].items() if on >= since and p in f['seen']]
         found = [p for p in f['leaf'] if f['opened'](p) >= since and p in f['seen']]
         stuck, stuck_prs = list(dict.fromkeys(stuck_now)), [pr['name'] for pr, _ in stuck_prs_now]
-    # how a card was closed: done or shipped-tests-pass = shipped; not-needed = not needed; any other closed_as is named as it is
-    how = lambda p: {'': 'shipped', 'shipped-tests-pass': 'shipped', 'not-needed': 'not needed'}.get(v(c[p], 'closed_as'), f"\"{v(c[p], 'closed_as')}\"")
+    # how a card was closed: done or shipped-tests-pass = shipped; not-needed = not needed; expired = closed by the board after EXPIRE_DAYS quiet days; any other closed_as is named as it is
+    how = lambda p: {'': 'shipped', 'shipped-tests-pass': 'shipped', 'not-needed': 'not needed', 'expired': 'expired'}.get(v(c[p], 'closed_as'), f"\"{v(c[p], 'closed_as')}\"")
     def split(ps):
         shipped = [p for p in ps if how(p) == 'shipped']; rest = __import__('collections').Counter(how(p) for p in ps if how(p) != 'shipped')
-        return shipped, ''.join(f' · {k} closed as {h}' for h, k in sorted(rest.items(), key=lambda x: (x[0] != 'not needed', x[0])))
+        return shipped, ''.join(f' · {k} expired' if h == 'expired' else f' · {k} closed as {h}' for h, k in sorted(rest.items(), key=lambda x: (x[0] != 'not needed', x[0])))
     shipped, others = split(closed)
     line = lambda k, ps, tail='': f'  {k:<8} ' + (fit(f'{len(ps)} -- ', ps, tail) if ps else ('nothing' if not tail else '0' + tail))
     out += [line('Shipped:', shipped, others), line('Found:', found)]
@@ -474,13 +488,77 @@ def first(f, proj, prs, lane_cap, seen=False):
             cat, k = max(__import__('collections').Counter(v(c[p], 'category') or 'no category' for p in new).items(), key=lambda x: x[1], default=('', 0))
             trend = f'the pile grew by {o - cl}, ' + (f'mostly new bugs ({bugs(new)} of {o})' if 2 * bugs(new) >= o else f'mostly new cards about {cat} ({k} of {o})')
         elif cl > o:
-            done = split(shut)[0]; gone = sum(how(p) == 'not needed' for p in shut)
-            trend = f'the pile shrank by {cl - o}, with ' + (f'{gone} cards closed as not needed' if 2 * gone > cl else f'{len(done)} fixes shipped' if 2 * bugs(done) >= len(done) else f'{len(done)} cards finished')
+            done = split(shut)[0]; gone = sum(how(p) == 'not needed' for p in shut); old = sum(how(p) == 'expired' for p in shut)
+            trend = f'the pile shrank by {cl - o}, with ' + (f'{old} quiet cards expired' if 2 * old > cl else f'{gone} cards closed as not needed' if 2 * gone > cl else f'{len(done)} fixes shipped' if 2 * bugs(done) >= len(done) else f'{len(done)} cards finished')
         else: trend = 'the pile stayed level'
         out.append(f'TREND  This week: {o} opened, {cl} closed: {trend}.')
     else: out.append('TREND  No full week of history yet.')
+    # the least urgent line on the screen (nothing will close): said only while the screen stays within its 25 lines
+    if unmarked and len(out) < 25: out.insert(unmarked, '  Quiet cards: no card is marked as safe to close yet: groom marks them')
     if seen and not mark_seen(B, snap): out.append('  (this look was not recorded: the board folder could not be written)')
     return '\n'.join(out)
+
+def stamp_of(text):
+    """What a judge read when it marked a card safe to close: a short print of the WHOLE card -- every frontmatter
+    field and the whole body -- leaving out only the bookkeeping fields in STAMP_SKIP. The mark holds only while
+    this still matches the card: any other change (a new note, a new section, a changed field) clears it."""
+    m = re.match(r'---\n(.*?)\n---', text.replace('\r\n', '\n'), re.S)
+    head = [l for l in (m.group(1).split('\n') if m else []) if l.split(':', 1)[0].strip() not in STAMP_SKIP]
+    return hashlib.sha256(' '.join(('\n'.join(head) + text.replace('\r\n', '\n')[m.end() if m else 0:]).split()).encode()).hexdigest()[:12]
+
+def expiry(f):
+    """Which cards close by themselves, and why every other card never does: {'close': [(path, quiet days)],
+    'soon': [(path, quiet days, days left)], 'later': [(path, quiet days)] not quiet long enough yet, 'kept': {path: reason}}.
+    The written rule (the reference's `expire`). No mark, never: a card can close only if a judge who read the whole
+    card marked it `expires: ok` with `expires_why:` and `expires_by:` (groom, or you), and the card is still what
+    the judge read (`expires_of:`, a print of the whole card but its bookkeeping fields). Fields and headings cannot tell that a card is safe or that
+    nobody asked for it -- that is the judge's call, never this helper's. Every hard rule below is applied on top,
+    so a wrong mark alone cannot close a protected card. Quiet = days since the later of the card's own last
+    change and the last change of any card that mentions it; a date in the future counts as today."""
+    c, T, tree = f['cards'], f['T'], f['tree']
+    txt, said, waited = {}, {}, set()
+    for p, d in c.items():
+        try: txt[p] = open(p, encoding='utf-8-sig').read()
+        except (OSError, UnicodeDecodeError): txt[p] = None  # unreadable: nothing can be told, so it is kept
+        for i in set(re.findall(r'\bE\d+(?:-S\d+)?\b', (txt[p] or '').upper())) - {v(d, 'id').upper()}:
+            said[i] = max(said.get(i, datetime.date.min), f['last'](p))
+    for i, d in tree[0].items():
+        if v(d, 'status') != 'done': waited |= {leaf for leaf, _, _ in R.needs(i, tree)}
+    def keeps(p, d):
+        i, t = v(d, 'id').upper(), txt[p]
+        sec = lambda pat: re.search(rf'^## (?:{pat})', t, re.M | re.I)
+        if '/stories/' not in p or i in tree[1]: return 'an epic, or a card with cards under it'
+        if t is None: return 'the card could not be read'
+        if v(d, 'status') not in ('backlog', 'ready', 'designing'): return 'work on it has started (in progress, or blocked)'
+        if R.warn(d): return 'high-stakes'
+        if R.parts(d): return 'a bundle: it closes when its parts have'
+        if R.bundle_of(d, tree): return 'part of a bundle that is still open'
+        if v(d, 'pin'): return 'pinned'
+        if i in waited: return 'another open card waits on it'
+        if v(d, 'type') == 'breakfix': return 'a bug: a failed check, or a fault that can hurt someone'
+        if v(d, 'type') not in ('story', 'task', 'spike'): return 'its type is not recorded, so it cannot be told whether it can hurt someone'
+        if v(d, 'maturity') == 'mandate': return 'a rule the product must meet (`maturity: mandate`)'
+        if re.search(SAFETY, f"{v(d, 'title')} {v(d, 'category')}", re.I) or sec('High-stakes|Why high-stakes'): return 'its title or category names a safety matter (security, data, money, a gate, a failed check)'
+        if sec('Captured'): return 'you reported it yourself'
+        if v(d, 'reopened') or sec('Reopened'): return 'a person brought it back'
+        if v(d, 'decision') or v(d, 'mode_by') == 'you' or sec('Owner|Answers'): return 'a person is named on it (a question, an answer, or an owner decision)'
+        if v(d, 'pr'): return 'it has a pull request'
+        # the hard rules are passed; now the mark, without which nothing closes
+        if v(d, 'expires') != 'ok': return 'not marked as safe to close (`expires: ok`): groom marks it, or you do'
+        if not v(d, 'expires_why') or v(d, 'expires_by') not in ('groom', 'you'): return 'marked, but without who judged it (`groom` or `you`) and why: the mark does not count'
+        if v(d, 'expires_of') != stamp_of(t): return 'marked safe to close, but the card changed since: the mark no longer counts'
+        if f['last'](p) == datetime.date.min: return 'no date can be read on it'
+        return ''
+    out = dict(close=[], soon=[], later=[], kept={})
+    for p, d in sorted(c.items()):
+        if v(d, 'status') == 'done': continue
+        why = keeps(p, d)
+        if why: out['kept'][p] = why; continue
+        quiet = max(0, (T - max(f['last'](p), said.get(v(d, 'id').upper(), datetime.date.min))).days)
+        if quiet >= EXPIRE_DAYS: out['close'].append((p, quiet))
+        elif quiet >= EXPIRE_DAYS - EXPIRE_WARN: out['soon'].append((p, quiet, EXPIRE_DAYS - quiet))
+        else: out['later'].append((p, quiet))
+    return out
 
 def mark_seen(B, snap):
     """Record this look in <board>/.last-seen.json; False if it could not be written. It never reaches the
@@ -550,22 +628,21 @@ def self_test():
         # W0: opened S3 S4 S5 S7 S8 S10 S11 S15 S16 S17 S18 S19 S20 S21, closed S10 · W1: S2 / S1 (the move doesn't reset it), S12 · W2: S1 · W3: S6.
         # S9 and S14 entered git already done: neither opened nor closed here.
         assert rows == [(14, 1, 22), (1, 2, 9), (1, 0, 10), (1, 0, 9)], rows  # S30-S35, S24: open since before the window
-        assert set(ids(f['flight']['Live, to check'])) == {'E01-S2', 'E01-S16'} and ids(f['flight']['Other work']) == ['E01-S6'], f['flight']
+        # no card is parked to be checked: the older Live and Checked cards sit under Shipping until their release is read
+        assert set(ids(f['flight']['Shipping'])) == {'E01-S2', 'E01-S16', 'E01-S24', 'E01-S7'} and ids(f['flight']['Other work']) == ['E01-S6'] and set(f['flight']) == {'Now fixing', 'Shipping', 'Other work'}, f['flight']
         assert all(f['idle'](p) >= 0 for p in f['cards']), 'negative idle'
-        r = render(f, 't')  # Live splits: due now (with its signal) vs waits on a release; a Live card with no signal drifts
-        assert ids(f['flight']['Live, waits']) == ['E01-S24'] and 'v1.41.0 ×1' in r and 'Untitled card (E01-S2) · worker log: retry ok' in r, r
-        assert ids(f['never_due']) == ['E01-S24'] and 'Live, never due' in r, f['never_due']
-        assert set(ids(f['no_signal'])) == {'E01-S16', 'E01-S24'} and 'Live, no signal' in r, f['no_signal']
+        r = render(f, 't')
+        assert 'Live' not in r and 'Shipping, idle 14d+' in r and 'Untitled card (E01-S24)' in r.split('DRIFT')[1], r  # a merged card nobody closed is drift, not a pile
         b = R.render(t, 't')  # the report and BOARD.md agree on every status line
-        for k in ('Now fixing', 'Shipping', 'Live, to check'):
+        for k in ('Now fixing', 'Shipping'):
             assert set(re.search(rf'\*\*{k}:\*\* (.*)', b).group(1).split(', ')) - {'—'} == {i.split('-')[-1] for i in ids(f['flight'][k])}, k
         assert ids(f['next_bugs']) == ['E01-S5'], ids(f['next_bugs'])  # S4 held, S3 waiting
         assert ids(f['can']) == ['E01-S8'] and ids(f['waiting']) == ['E01-S21', 'E01-S3'] and ids(f['held'])[-1] == 'E01-S20' and len(f['held']) == 8
         assert ids(f['lane_idle']) == ['E01-S17'] and set(ids(f['flight']['Now fixing'])) == {'E01-S17', 'E01-S18', 'E01-S19'}, f['lane_idle']  # S19: newer updated: wins
-        assert ids(f['stalled']) == ['E01-S6'] and ids(f['checked_open']) == ['E01-S7'], (f['stalled'], f['checked_open'])
+        assert ids(f['stalled']) == ['E01-S6'], f['stalled']
         # the plan leads the cards it lists (S8, held S20 behind its ⚠️); 6 it doesn't (S3 S4 S5 S15 S21, S11 only in a reason)
         assert f['plan'][1:3] == (2, 6) and f['plan'][3].startswith('2.') and 'ran out' not in render(f, 't'), f['plan']
-        assert f['r2l'][''] == [3, 4] and f['r2l']['P1'] == [3] and f['l2c'][''] == [6], (f['r2l'], f['l2c'])  # S7 entered at Checked
+        assert f['cycle'][''] == [10, 33] and f['cycle']['P1'] == [] and 'Reported → shipped' in r, f['cycle']  # S1 and S12: closes git saw; S9 and S14 entered done
         n = render(f, 't', needs_only=True)  # dispatch's closing list: every held P1 shown, the rest counted, nothing twice
         assert n.startswith('NEEDS YOU') and 'BURN-DOWN' not in n and '(E01-S4) · P1' in n and n.count('\n    ⚠️ ') == 7 and 'P2/P3 held: 1' in n and n.count('E01-S21') == 1, n
         assert f'    Filings give up (E01-S3) · idle 2d\n      {Q}\n        Retry -- runs them again tonight\n        Refile -- you re-enter the 3 by hand\n' in n, n

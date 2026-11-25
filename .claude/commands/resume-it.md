@@ -176,9 +176,9 @@ same section.
 
 If `.claude/backlog-it.json` or `.claude/backlog/BOARD.md` exists, read the board's status line.
 Default the session's starting point to its **Now fixing** lanes, then **Next up** (after any
-handoff Next Steps). First catch up: `/backlog-it reconcile --prs` moves each card whose `pr:` merged to `Live` and
-closes Checked cards.
-Cards at **Live, to check** get their live check first. See
+handoff Next Steps). First catch up: `/backlog-it reconcile --prs` closes each card whose `pr:` is merged, released, and
+passing its release's checks (shipped means done; a fact it cannot read leaves the card, and it says so).
+A card under Reopened in `/backlog-it status` is a fix that did not hold: it is back in line. See
 `backlog-board.md`.
 
 **1. Look for the make-it state breadcrumb:**

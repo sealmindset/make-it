@@ -11,6 +11,8 @@ Every write pulls first (a board in its own repo), finds the card by its `id:` (
 the whole file and then swaps it in, bumps `updated:`, regenerates BOARD.md, and syncs: commit + push
 for a board in its own repo, stage only for a board inside a project, nothing with --no-sync.
 Text comes from stdin, so no shell quoting, `%` or glob ever touches it.
+A bundle (see shrink.py) keeps each card's own point: `set <id> status=done` is refused for a part of an open bundle
+(it closes on its own check, with `shrink.py part-done`) and for a bundle whose parts are still open.
 `capture` is how a report is never lost: it checks what the triage call gave back (the file; none = the call
 gave nothing). Bad output -> the report becomes a card under the Bugs epic, a bug at Reported, marked "not
 sorted yet -- triage failed: <reason>". Good output -> `triage ok`, nothing written: write the sorted card with `new`.
@@ -264,7 +266,12 @@ def main(args):
         fields = dict(a.split('=', 1) for a in rest[1:])
         if 'id' in fields: sys.exit('card: id is not settable')
         if any(not re.fullmatch(r'[A-Za-z_][\w-]*', k) or re.search(r'[\r\n]', x) for k, x in fields.items()): sys.exit('card: bad key or a newline in a value')
+        if 'status' in fields: fields['status'] = fields['status'].strip().lower()  # "Done", "done ": one spelling, so no check below is passed by a typo
         lock(B); pull(B, proj); p = find(B, rest[0])
+        if fields.get('status') == 'done':  # a bundle keeps each card's own point: a part closes only on its own check, the bundle only after its parts
+            d, T = R.fm(p), R.tree(R.load(B))
+            if (b := R.bundle_of(d, T)): sys.exit(f'card: nothing written -- {R.name(d)} is part of the bundle {R.name(b)} and closes only on its own check: pipe what showed it to `shrink.py part-done {v(d, "id")}` (or take it out with `shrink.py unbundle {v(d, "id")}`)')
+            if (still := R.open_parts(d, T)): sys.exit(f'card: nothing written -- {R.name(d)} is a bundle, and {len(still)} of its parts ha{'s' if len(still) == 1 else 've'} not passed {'its' if len(still) == 1 else 'their'} own check: ' + ', '.join(R.name(m) for m in still))
         if 'decision' in fields and v(R.fm(p), 'answers'): fields.setdefault('answers', '')  # answers belong to their question: a new or cleared one drops the old
         write(p, {k: (x or None) for k, x in fields.items()})
         change = ', '.join(f'{k}={x}' if x else f'-{k}' for k, x in fields.items())
