@@ -532,7 +532,7 @@ def run_git(exe, root, *args, stdin=None):
     objects, and the user's and the system's git settings left out. Bytes, or None on any failure:
     a failure must never read as an empty, harmless answer."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env.update(GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", GIT_PAGER="cat",
+    env.update(GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", GIT_PAGER="cat",
                GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_ASKPASS="true")
     cmd = [exe, "-C", root, "--no-pager", "--no-replace-objects",
            "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit",
