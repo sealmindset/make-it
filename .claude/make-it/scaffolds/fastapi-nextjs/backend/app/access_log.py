@@ -20,7 +20,15 @@ from app.services.log_service import mask_path, sanitize_text
 # uvicorn.access: one line per HTTP request. uvicorn.error: also carries the WebSocket lines.
 _LOGGERS = ("uvicorn.access", "uvicorn.error")
 # uvicorn.error: also prints the traceback of an unhandled error. httpx: one line per outgoing call, at INFO.
-_ADDRESS_LOGGERS = ("uvicorn.error", "httpx")
+# The app.lib.ai ones print a provider error's text, which holds the provider's address (OLLAMA_BASE_URL
+# can carry user:password@).
+_ADDRESS_LOGGERS = (
+    "uvicorn.error",
+    "httpx",
+    "app.lib.ai.errors",
+    "app.lib.ai.providers.failover",
+    "app.lib.ai.self_annealing",
+)
 # At DEBUG these print every response header of an outgoing call (a redirect's Location, Set-Cookie), so they
 # are held at INFO whatever level the app sets for everything else. An app that sets one of them by name undoes it.
 _HEADER_LOGGERS = ("httpcore", "hpack")
@@ -47,7 +55,8 @@ class MaskAddresses(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple):
             record.args = tuple(
-                sanitize_text(str(arg)) if isinstance(arg, str | httpx.URL) else arg for arg in record.args
+                sanitize_text(str(arg)) if isinstance(arg, str | httpx.URL | BaseException) else arg
+                for arg in record.args
             )
         if record.exc_info and record.exc_info[0] and not record.exc_text:
             # the formatter prints exc_text as it finds it
