@@ -358,9 +358,8 @@ def walk_files(base):
     for root, dirs, names in os.walk(base, followlinks=False):
         links = [d for d in dirs if os.path.islink(os.path.join(root, d))]
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d not in links]
-        for n in names + links:
-            if not n.startswith(".env"):
-                yield os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
+        for n in [n for n in names if not n.startswith(".env")] + links:  # a linked folder is listed whatever its name
+            yield os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
 
 
 def listed(app):
@@ -392,8 +391,11 @@ def listed(app):
 
 
 def folder_links(app):
-    """Links that lead to a folder, in the project or out of it. The files behind one would not count, so it is never sealed."""
-    return sorted(rel for rel in listed(app) if sealed_path(rel) and os.path.islink(os.path.join(app, rel))
+    """Links that lead to a folder, in the project or out of it. The files behind one would not count, so it is never sealed.
+
+    Decided by what the entry is, never by its name: a link named like a document, or one under .make-it, is still a link.
+    """
+    return sorted(rel for rel in listed(app) if os.path.islink(os.path.join(app, rel))
                   and os.path.isdir(os.path.join(app, rel)))
 
 
@@ -614,14 +616,14 @@ def seal_fails(app, rec):
         return ["The seal history was changed by hand: " + "; ".join(problems[:5]) + "."]
     if not entries:
         return [NEVER_SEALED]
+    dirs = folder_links(app)  # asked directly: the listing leaves documents out by name
+    if dirs:
+        return ["A link in the project points at a folder, so the files behind it are not sealed: "
+                + ", ".join(clean(rel, 200) for rel in dirs[:10]) + ". Put the folder itself there, or remove the link."]
     listing = code_listing(app)
     out = sorted(rel for rel, mark in listing_map(listing).items() if mark.startswith("link-out:"))
     if out:
         return ["A link in the project points outside it, so its content cannot be sealed: " + ", ".join(out[:10]) + "."]
-    dirs = sorted(rel for rel, mark in listing_map(listing).items() if mark.startswith("link-dir:"))
-    if dirs:
-        return ["A link in the project points at a folder, so the files behind it are not sealed: " + ", ".join(dirs[:10])
-                + ". Put the folder itself there, or remove the link."]
     fp = digest(listing)
     match = [e for e in heads_of(entries) if e["fingerprint"] == fp]  # an older seal is not the current one
     if not match:

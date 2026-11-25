@@ -35,8 +35,10 @@ entry before it. Code that no longer matches a seal was changed outside make-it.
 Docs can change freely. Code cannot change without breaking the seal. A file counts by its content
 and whether it is executable. A link to a file counts by what it points at, even a file the seal
 otherwise skips; a link that points outside the project fails the check and is never read. A link
-to a folder is never sealed, wherever it leads: the files behind it would not count, so `seal`
-refuses and names it, and the check fails on one added later. A submodule counts
+to a folder is never sealed, wherever it leads and whatever it is called (a link named `notes.md`
+or one under `.make-it/` is still a link): the files behind it would not count, so `seal` refuses
+and names it, and the check fails on one added later. A link to a single file that is named like
+a document is a document: like any Markdown file, it does not count and is not looked at. A submodule counts
 by the commit it points at, and a nested repository by its files. Commit everything before pushing:
 a new file that was sealed but not committed makes the next clean checkout fail.
 
