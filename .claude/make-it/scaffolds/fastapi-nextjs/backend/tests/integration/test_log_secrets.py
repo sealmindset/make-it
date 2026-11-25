@@ -95,6 +95,8 @@ class _FarSide(BaseHTTPRequestHandler):
             self.send_header("Location", self.server.redirect_to)  # type: ignore[attr-defined]
         elif path == "/refuse":
             self.send_response(401)
+        elif path.startswith("/broken"):
+            self.send_response(500)
         elif path == "/slow":
             time.sleep(1.5)
             self.send_response(200)
@@ -529,3 +531,46 @@ def test_any_address_inside_a_text_is_masked():
         ('  File "/app/app/main.py", line 3, in probe', '  File "/app/app/main.py", line 3, in probe'),
     ]:
         assert sanitize_text(raw) == safe
+
+
+@contextlib.contextmanager
+def _a_console_handler():
+    """What an app with logging set up prints: a handler on the root logger. Call inside the test, after capsys."""
+    root = logging.getLogger()
+    handler = logging.StreamHandler()
+    root.addHandler(handler)
+    try:
+        yield
+    finally:
+        root.removeHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_a_password_in_the_ollama_address_stays_out_of_the_console_when_ollama_answers_500(
+    far_side, monkeypatch, capsys
+):
+    password = secrets.token_hex(16)
+    there = _url(far_side)
+    monkeypatch.setattr(settings, "OLLAMA_BASE_URL", f"{there.replace('://', f'://svc:{password}@')}/broken")
+    with _a_console_handler(), pytest.raises(Exception, match="AI"):
+        await OllamaProvider().complete("system", "user")
+    out = capsys.readouterr()
+    console = out.out + out.err
+    assert "AI provider error [HTTPStatusError]" in console  # the error is still printed, with its traceback
+    assert f"'{there}/broken/api/generate'" in console
+    for part in (password, password[:8], password[-8:], base64.b64encode(f"svc:{password}".encode()).decode()):
+        assert part not in console
+    stored = repr(log_store.query(event_type="outbound"))
+    assert password not in stored and f"{there}/broken/api/generate" in stored
+
+
+@pytest.mark.parametrize("name", ["app.lib.ai.errors", "app.lib.ai.providers.failover", "app.lib.ai.self_annealing"])
+def test_the_ai_loggers_that_print_an_error_s_text_mask_any_address_in_it(name, capsys):
+    password = secrets.token_hex(16)
+    text = f"Server error for url 'http://svc:{password}@ollama:11434/api/generate?key={password}'"
+    with _a_console_handler():
+        logging.getLogger(name).warning("failed (%s): %s", RuntimeError(text), text)  # as an error and as its text
+    out = capsys.readouterr()
+    console = out.out + out.err
+    assert console.count("'http://ollama:11434/api/generate?key=***'") == 2
+    assert password not in console
