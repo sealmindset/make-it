@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.services.log_service import LogEvent, log_store
+from app.services.log_service import LogEvent, log_store, mask_path
 
 # Paths to exclude from logging
 _EXCLUDED_PREFIXES = ("/health", "/api/health", "/_next", "/favicon")
@@ -33,7 +33,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         event = LogEvent(
             event_type="inbound",
             method=request.method,
-            path=path,
+            path=mask_path(path),  # a token or an e-mail address in the path is not kept
             status=response.status_code,
             duration_ms=duration_ms,
             service="[APP_SLUG]-api",
