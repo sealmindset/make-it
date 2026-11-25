@@ -13,6 +13,7 @@ from app.config import settings
 from app.lib.ai.errors import sanitize_ai_error
 from app.lib.ai.model_tier import get_model
 from app.lib.ai.provider import AIProvider
+from app.services.log_service import attach_outbound_logging
 
 
 class OllamaProvider(AIProvider):
@@ -31,6 +32,7 @@ class OllamaProvider(AIProvider):
         prompt = f"{system_prompt}\n\n{user_prompt}"
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                attach_outbound_logging(client, "ollama")
                 response = await client.post(
                     f"{self._base_url}/api/generate",
                     json={
@@ -56,6 +58,7 @@ class OllamaProvider(AIProvider):
         prompt = f"{system_prompt}\n\n{user_prompt}"
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                attach_outbound_logging(client, "ollama")
                 async with client.stream(
                     "POST",
                     f"{self._base_url}/api/generate",

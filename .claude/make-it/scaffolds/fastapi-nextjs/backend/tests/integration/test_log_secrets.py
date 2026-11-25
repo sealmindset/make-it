@@ -374,7 +374,7 @@ def _a_jwt() -> str:
 
 
 def _an_email() -> str:
-    return f"{secrets.token_hex(4)}@{secrets.token_hex(3)}.example"
+    return f"{secrets.token_hex(3)}@{secrets.token_hex(2)}.io"  # short: only the @ gives it away
 
 
 @pytest.mark.asyncio

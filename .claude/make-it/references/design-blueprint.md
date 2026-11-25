@@ -2047,7 +2047,7 @@ interface LogEvent {
 - Attaches to every axios/httpx instance that calls an external service
 - Stamps request start time, calculates duration on response
 - Captures: service name, sanitized URL, method, status, duration, error message
-- URL sanitization is an allow-list, not a list of bad names: a query value is kept only under a name known to be safe (paging, sorting, format, language, version) and under 20 characters; every other value is `***`, `user:password@` and the fragment are dropped, and a path segment of 20+ characters that is not a UUID is `***`. The same masking applies to every address the server prints (build-standards L04)
+- URL sanitization is an allow-list, not a list of bad names: a query value is kept only under a name known to be safe (paging, sorting, format, language, version) and only when it has the shape that name carries (digits, lower-case field names, a short word, a version number); every other value is `***`. A name is written only if it reads as a name; `user:password@` and the fragment are dropped; a path segment that holds an e-mail address, or is 20+ characters and neither a UUID nor plain lower-case words, is `***`, in outgoing addresses and in the path of requests to the app. The same masking applies to every address the server prints (build-standards L04)
 - A call that got no response (refused, timed out, name not found) is logged too: no status, the error's type as the error, never its text
 - Error messages: truncated to 500 chars, extracts meaningful message from response body
 - Must be attached at every point where an HTTP client is created (constructor, reconnect, OAuth refresh)
@@ -3089,7 +3089,7 @@ Config files are scaffold defaults. They represent the minimum quality bar that 
 - [ ] Code quality: All quality scripts in `package.json` (lint, format, format:check, type-check)
 - [ ] Activity Log module exists with circular buffer, inbound middleware, outbound interceptors
 - [ ] Activity Log middleware skips health checks and static assets
-- [ ] Outbound logger attached to ALL HTTP client creation points (including reconnect/OAuth refresh)
+- [ ] Outbound logger attached wherever the app creates an HTTP client for an integration (including reconnect/OAuth refresh; the scaffold's own sign-in calls are the stated exception, L03)
 - [ ] URL sanitization is an allow-list: only query values known to be safe are kept, every other value is `***`; a call with no response leaves an entry (L04)
 - [ ] admin.logs RBAC resource with read and delete actions seeded in migration
 - [ ] Admin UI Activity Logs tab with stats cards, filters, event table, auto-refresh

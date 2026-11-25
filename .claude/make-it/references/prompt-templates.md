@@ -929,13 +929,20 @@ For httpx (Python):
 URL sanitization (MUST apply before logging):
 - Parse the full URL (resolve relative URLs against baseURL)
 - Allow-list, never a list of bad names: keep a query parameter's value only if its key is one known to
-  be safe (page, per_page, page_size, limit, offset, sort, sort_by, order, order_by, format, lang, locale,
-  version, api-version) and the value is under 20 characters; replace every other value with '***'
-  (access_token, client_secret, code, X-Amz-Signature and any name nobody listed); a value with no key is '***'
-- Drop user:password@ and the fragment; replace a path segment of 20+ characters that is not a UUID with '***'
+  be safe AND the value has the shape that key carries: digits for page, per_page, page_size, limit,
+  offset; lower-case field names or asc/desc for sort, sort_by, order, order_by; a short word for format,
+  lang, locale; a version number or a date for version, api-version. Replace every other value with '***'
+  (access_token, client_secret, code, X-Amz-Signature and any name nobody listed)
+- Write a key only if it reads as a name (name characters, under 20, at most two digits); anything else
+  where a key should be, and a value with no key, is '***'
+- Drop user:password@ and the fragment; replace a path segment with '***' when it holds an e-mail address,
+  or is 20+ characters and neither a UUID nor plain lower-case words. Do the same to the path of every
+  request the app logs or prints
+- A call to something that cannot be an address is recorded as an invalid address, with none of it kept
 - Return the sanitized URL string
-- Apply the same masking to every address in what the server prints (an unhandled error's traceback, the
-  HTTP client's own request log line) (build-standards L04)
+- Apply the same masking to every address (any scheme, or relative with a query string) in what the server
+  prints (an unhandled error's traceback, the HTTP client's own request log line), and keep the HTTP
+  library's header-printing debug loggers at INFO (build-standards L04)
 
 Error message extraction:
 - Try: response.data.errorMessages[0], response.data.message, error.message

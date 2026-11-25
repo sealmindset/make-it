@@ -228,9 +228,9 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 - LogService (or equivalent singleton) wraps LogStore, exposes logRequest(), logOutbound(), query(), stats(), clear()
 - Inbound request middleware captures: method, path, statusCode, durationMs, userEmail, userRole, ip, userAgent
 - Inbound middleware skips noise: health checks (/health), static assets (/_next, .js, .css, .ico, .png, .svg)
-- Outbound HTTP interceptor (attachOutboundLogger or equivalent) attached to ALL HTTP client instances
+- Outbound HTTP interceptor (attachOutboundLogger or equivalent) attached to every HTTP client the app creates for an integration (the scaffold's own sign-in calls are not recorded yet: L03)
 - Outbound interceptor captures: service name, sanitized URL, method, status, duration, error
-- URL sanitization is an allow-list: a query value is kept only under a name known to be safe (paging, sorting, format, language, version); every other value, `user:password@` and a long path segment are replaced with *** (L04)
+- URL sanitization is an allow-list: a query value is kept only under a name known to be safe (paging, sorting, format, language, version) and only in the shape that name carries; every other value, a name that does not read as a name, `user:password@` and a secret-shaped path segment (outgoing or in a request to the app) are replaced with *** (L04)
 - A call that got no response (refused, timed out) is logged too, with the error's type, never its text (L04)
 - Outbound logger attached at EVERY point where HTTP clients are created (constructor, reconnect, OAuth token refresh)
 - Log controller/router with GET /events (filtered, paginated), GET /stats, DELETE /events endpoints
@@ -250,7 +250,7 @@ Activate when `project_type == "web-app"`. These are the existing /make-it guard
 ### Activity Logs Build-Verify Checklist
 - [ ] LogStore/LogService exists with circular buffer and configurable max size
 - [ ] Inbound request middleware is registered and captures API requests (not health/static)
-- [ ] Outbound logger is attached to ALL HTTP client creation points (verify by reading service constructors)
+- [ ] Outbound logger is attached wherever the app creates an HTTP client for an integration (verify by reading service constructors; the scaffold's own sign-in calls are the stated exception, L03)
 - [ ] URL sanitization keeps only query values known to be safe and masks the rest before logging; a call with no response leaves an entry
 - [ ] GET /api/admin/logs/events returns events (may be empty initially, but endpoint responds 200 with auth)
 - [ ] GET /api/admin/logs/stats returns buffer stats with correct structure
