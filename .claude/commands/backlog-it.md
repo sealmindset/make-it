@@ -103,6 +103,7 @@ do what was picked, with every gate that step already has:
 | Sort them | `reconcile --prs`, then one plain line per pull request named: what it needs (bring up to date, fix its check, close with a note) |
 | Start the wave | `dispatch` |
 | Start the others | `dispatch`, for the wave's cards that share no file with an open pull request; the card named as sharing one waits |
+| Wait for it | Nothing starts: every card in the wave shares a file with an open pull request. Say which pull request, and that releasing or finishing it comes first |
 | Plan | `plan` |
 | Groom | `groom` |
 | Start it | `start <id>` for the card named |

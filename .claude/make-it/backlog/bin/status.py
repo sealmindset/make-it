@@ -252,7 +252,7 @@ def open_prs(repo, f):
     ready, stuck, every = [], [], []
     for x in sorted(rows, key=lambda x: x['number']):
         n = x['number']; d = card.get(n)
-        pr = dict(n=n, card=d, behind=0, title=x.get('title') or 'no title', name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(x.get('title') or 'no title', 50)}\" (#{n})")
+        pr = dict(n=n, card=d, behind=0, head=x.get('headRefOid') or '', title=x.get('title') or 'no title', name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(x.get('title') or 'no title', 50)}\" (#{n})")
         every.append(pr)
         state = [c.get('conclusion') or c.get('state') or c.get('status') or 'PENDING' for c in x.get('statusCheckRollup') or []]
         failing = any(c in ('FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE') for c in state)
@@ -298,24 +298,34 @@ def next_thing(f, prs, lane_cap):
                     top([name(p) for p in w]), 'I ask each one as a one-click choice', 'it takes your time now'))
     ready, stuck = (prs[0], prs[1]) if prs[0] is not None else ([], [])
     if ready:
-        pr = ready[0]; seen = v(pr['card'] or {}, 'reviewed')
-        facts = [pr['name'], ('Review: ' + (f'recorded on its card ({R.cut(seen, 30)}). ' if 'ready' in seen.lower() else 'none recorded, so confirm it first. ')
-                              + ('Could not tell whether it is up to date with main.' if pr['behind'] is None else 'Up to date with main.'))]
+        pr = ready[0]
+        # `reviewed: <date> ready <commit>` or `<date> not ready ...`: a review counts only when it said ready AND read the
+        # commit that is the pull request's head now; any other shape is no review at all
+        m = re.fullmatch(r'(\d{4}-\d{2}-\d{2}) (?:(ready) ([0-9a-f]{7,40})|(not ready)\b.*)', v(pr['card'] or {}, 'reviewed'))
+        current = bool(m and m.group(2) and pr['head'].startswith(m.group(3)))
+        review = (f'recorded on its card for this version ({m.group(1)}).' if current else 'recorded for an earlier version, so confirm it again.' if m and m.group(2)
+                  else 'its last review said not ready, so confirm it first.' if m else 'none recorded, so confirm it first.')
+        facts = [pr['name'], f'Review: {review} ' + ('Could not tell whether it is up to date with main.' if pr['behind'] is None else 'Up to date with main.')]
         out.append(('Release it', f"Release {n_of(ready, '1 pull request', '{} pull requests')}: no longer a draft, no conflict with main, checks pass.",
                     facts + [f'+{len(ready) - 1} more'] * (len(ready) > 1),
-                    ('I bring it up to date if needed, then release it' if 'ready' in seen.lower() else 'I confirm its review, bring it up to date if needed, then release it'),
+                    ('I bring it up to date if needed, then release it' if current else 'I confirm its review, bring it up to date if needed, then release it'),
                     'undoing a release takes another one'))
     if stuck:
         out.append(('Sort them', f"Sort {n_of(stuck, 'the pull request that is', 'the {} pull requests that are')} stuck or out of date:",
                     top([f"{pr['name']} ({why})" for pr, why in stuck]), 'I check each one and say what it needs: an update, a fix, or closing', 'it starts no new work'))
     running, other = f['flight']['Now fixing'], f['flight']['Other work']
     free = max(0, lane_cap - len(running))
-    lanes = 'No bug fix is running' if not running else f"{len(running)} bug fix{'es' * (len(running) != 1)} running, {free} of {lane_cap} lanes free"
-    if other:  # work that is not a bug fix is in progress too: say so, and name the first within the line's length
-        lanes += f"; {len(other)} other piece{'s' * (len(other) != 1)} of work {'is' if len(other) == 1 else 'are'} in progress: "
-        tail = f' +{len(other) - 1} more' if len(other) > 1 else ''
-        lanes += R.name(c[other[0]], max(12, 104 - len(lanes) - len(tail) - len(v(c[other[0]], 'id')) - 3)) + tail
-    lanes += '.'
+    lanes = ['No bug fix is running' if not running else f"{len(running)} bug fix{'es' * (len(running) != 1)} running, {free} of {lane_cap} lanes free"]
+    if other:  # work that is not a bug fix: what moved in the last LANE days is named, the rest is only counted -- never a quiet card as the example
+        moved = sorted((p for p in other if f['idle'](p) <= LANE), key=f['idle']); quiet = len(other) - len(moved)
+        some = lambda k, a, b: f"{k} {a if k == 1 else b}"
+        if moved:
+            head = f"{lanes[0]}; {some(len(moved), 'other piece', 'other pieces')} of work moved in the last {LANE} days: "
+            tail = f' +{len(moved) - 1} more' if len(moved) > 1 else ''
+            lanes = [head + R.name(c[moved[0]], max(12, 103 - len(head) - len(tail) - len(v(c[moved[0]], 'id')) - 3)) + tail]
+            if quiet: lanes.append(f"{some(quiet, 'more is', 'more are')} marked in progress but quiet")
+        else: lanes = [f"{lanes[0]}; {some(quiet, 'piece of work is', 'pieces of work are')} marked in progress but quiet"]
+    lanes = [l + '.' for l in lanes]
     status = lambda i: v(f['tree'][0].get(i, {}), 'status')
     in_force, busy, listed = False, [], set()
     if plan:
@@ -323,7 +333,7 @@ def next_thing(f, prs, lane_cap):
         busy = [i for i in todo if status(i) == 'in-progress']
         can = f['startable']; fresh = [p for p in can if v(c[p], 'id').upper() not in listed]
         if nxt and not held_up and free and not busy:
-            lines, clash = top([named(f, i) for i in todo]) + [lanes], {}
+            lines, clash = top([named(f, i) for i in todo]) + lanes, {}
             if prs[0] is not None and prs[2]:  # does an open pull request change a file a card in this wave names?
                 files = plan_files(f['B'], set(todo)); theirs = [(pr, look()) for pr, look in prs[2]]
                 if not files or any(not isinstance(x, dict) for _, x in theirs): lines.append('Could not check these cards against the open pull requests: ' + ('the plan names no files.' if not files else 'their files could not be read.'))
@@ -333,14 +343,19 @@ def next_thing(f, prs, lane_cap):
                         if both and i not in clash:  # short enough to keep the card, the pull request and the file all in view
                             path = both[0] if len(both[0]) <= 30 else os.path.basename(both[0])
                             who = f"pull request #{pr['n']}" if pr['card'] else f"\"{R.cut(pr['title'], 24)}\" (#{pr['n']})"
-                            clash[i] = R.cut(f"{R.name(f['tree'][0][i], 28)} and {who} both change {path}", 106)
-                lines += list(clash.values())[:2]
-            side = ', side by side' if len(todo) > 1 else ''
-            out.append(('Start the wave', f"Start wave {nxt.split('.')[0]} of the plan: {len(todo)} card{'s' * (len(todo) != 1)}{side}.", lines,
-                        'starts those cards, each in its own lane, with every gate in place', 'a new bug may need the lanes'))
-            if clash and len(clash) < len(todo):
-                rest = len(todo) - len(clash)
-                out.append(('Start the others', '', [], f"starts only the {rest} card{'s' * (rest != 1)} that share no file with an open pull request", ''))
+                            clash[i] = R.cut(f"{R.name(f['tree'][0][i], 28)} -- shares {path} with {who}", 106)
+                lines = [clash.get(i) or named(f, i) for i in todo[:3]] + lines[min(3, len(todo)):]  # said on the card's own line
+            side, k, rest = ', side by side' if len(todo) > 1 else '', nxt.split('.')[0], len(todo) - len(clash)
+            whole = ('Start the wave', f"Start wave {k} of the plan: {len(todo)} card{'s' * (len(todo) != 1)}{side}.", lines,
+                     'starts those cards, each in its own lane, with every gate in place', 'a new bug may need the lanes')
+            if not clash: out.append(whole)
+            elif rest:  # some cards share a file with an open pull request: starting the others is the recommendation
+                out.append(('Start the others', f"Start {rest} of the {len(todo)} cards in wave {k} of the plan: the other{'s share' if len(clash) > 1 else ' shares'} a file with an open pull request.", lines,
+                            f"starts only the {rest} card{' that shares' if rest == 1 else 's that share'} no file with an open pull request", 'the card left out waits for that pull request'))
+                out.append(('Start the wave', '', [], f'starts all {len(todo)}; the shared file may then conflict', ''))
+            else:
+                out.append(('Wait for it', f'Wave {k} of the plan should wait: every card in it shares a file with an open pull request.', lines,
+                            'nothing starts; release or finish that pull request first', 'the wave waits on someone else\'s work'))
         why, more = (('every wave in the plan is done', []) if not nxt else ('the next wave waits on a card that cannot start', [named(f, i) for i in held_up]) if held_up
                      else (f"{len(fresh)} of the {len(can)} cards that can start are not in the plan", []) if can and len(fresh) / len(can) > PLAN_STALE else ('', []))
         in_force = not why  # a plan in force keeps the order of the cards it lists
@@ -395,7 +410,7 @@ def first(f, proj, prs, lane_cap, seen=False):
     todo = next_thing(f, prs, lane_cap)
     lab, sent, lines, does, against = todo[0]
     out = [f'BOARD — {proj} · {T}', 'DO NEXT', f'  {sent}'] + [f'    {l}' for l in lines]
-    opts = [f'{lab} -- {does} (Recommended)'] + [f'{l} -- {d}' for l, _, _, d, _ in todo[1:3]] + ['Full status -- prints the whole report; nothing starts']
+    opts = [f'{lab} -- {does} (Recommended)'] + [f'{l} -- {d}' for l, _, _, d, _ in todo[1:3 if len(lines) <= 4 else 2]] + ['Full status -- prints the whole report; nothing starts']
     out += [f'  {i}. {o}' for i, o in enumerate(opts, 1)]
     out.insert(-len(opts) + 1, f'     against: {against}')  # the strongest argument against the recommendation, right under it
     if prs[0] is None: out.append(f'  (pull requests not checked: {prs[1]})')

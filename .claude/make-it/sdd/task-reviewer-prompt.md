@@ -80,6 +80,8 @@ Findings:
 ⚠️ Cannot verify from diff:
   - ...
 ```
-A clean review (spec ✅, quality Approved, safeguards ✅) of work that has a board card: say so in one
-line, so the lead records it on the card with `card.py set <id> reviewed="<date> ready"`. The
-board's first screen says a pull request is reviewed only from that line.
+Work that has a board card: end with one line naming the commit you read (the review package's
+HEAD) and whether it is ready, so the lead records it on the card -- a clean review (spec ✅, quality
+Approved, safeguards ✅) as `card.py set <id> reviewed="<date> ready <commit>"`, anything else as
+`reviewed="<date> not ready"`. The board's first screen says a pull request is reviewed only when
+that line says ready for the commit that is still its head.

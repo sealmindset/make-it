@@ -1,5 +1,5 @@
 46386f5a96d21858016eb02375b8fd0e69168e75f58e767b32e1f534b6df2686  commands/argo-it.md
-7014526de971f08bdf4862483ef86216f89f736009a3fe1893eea837a3dacbe8  commands/backlog-it.md
+05f8310c17c3a1b2174d11212f247c792addec6675b112c45311eb3df0b8e339  commands/backlog-it.md
 aa893b942a32ddba98e10ba1f084c07965465355587607f650d5b338942e9a2d  commands/clear-it.md
 8bbfcc7a44619318457104f4a0cf3d5eac55eb057e28868864adab123758d1db  commands/deadcode-it.md
 0e61b67e10154e9b9175a1d3dd1fb394d4fddb21fa4904a9d828dd1a9fe90721  commands/debug-it.md
@@ -22,7 +22,7 @@ acf0d91aa9db931d9d81a5cf422094950c53935671063c8654f2559169f5533d  make-it/backlo
 01f26636878e18778e5b265e4ce7ca84bf586c03df69823560018ba038294b98  make-it/backlog/bin/regen-board.py
 13f9dc6e3e73285593a69d14b7ca86fc1178a507a01cd980854fe96ffa7c909e  make-it/backlog/bin/scope.py
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
-3e321f63b4e7c748a3260d25f7c5a3e32ce5be8a7a8761625bc8d8749a65d834  make-it/backlog/bin/status.py
+a01f583c8a42354f2ff4e472b8d67fc1751b6f93b242281236a31f0df32c8ed6  make-it/backlog/bin/status.py
 3605915c1289af2fd82f7936257cc6ec82929b2436607abdaa6ad19f441281c6  make-it/backlog/bin/sync-prs.py
 5ec4d01f0a7aca1ece2cf46f5636a301362bfa45c92139b15da72a84088720ac  make-it/confluence-docs/00-make-it-framework-overview.md
 6b2080dd7d1f428c767e9b77dbf53b5ba6d679ca9f9936b3ef28ded6efe75a15  make-it/confluence-docs/01-make-it.md
@@ -48,7 +48,7 @@ f74d6a6d19c0c4da2447ee96c18f337a08c61ed0f2cfa63df849daab711bc184  make-it/hooks/
 47585ed64bca667adf5d35531b72e3fc78248af07bef9839ca6804b2e5f66355  make-it/references/adoption-scan.md
 c7fa88c7cb08dee9873a433840303d6915e9facee77473ed2850000f64c49889  make-it/references/ai-accounting.md
 ab632a863e5f9551da97af71b4051ce94e75155b8a78334cdc9d866350cbc41e  make-it/references/approval-block.md
-ac947c7df760c03be68e6cc09a676bbf67fffdad71983cab48c1710d6a86e057  make-it/references/backlog-board.md
+a0037489847da0ae319774c915d7f714588120a197044651b9a3a8e7021b1ba8  make-it/references/backlog-board.md
 1f4a08dd68cec5f531a8bd9405076d387a6b9bcb5de142bffdb6698aff13375e  make-it/references/build-standards.md
 617bc5d90d89ace6bb427b26d83ecafd4671243bc709b7eee02337a274a8363d  make-it/references/build-verify-security.md
 4a3475ca558f075cd6da4b986279cf355075e413a0cfdc98cde029675ccd77d4  make-it/references/deadcode.md
@@ -331,7 +331,7 @@ fac82e1ed6e32a81c6c5ae347af824a29bf7c568ea9549a1afeff62b1905aced  make-it/sdd/im
 4fbb500aa29dfbc431813626cddaa1e6baddd41745d5cf62f30c15a0d365c077  make-it/sdd/scripts/review-package
 32d16045c590d386462bbf7e2938c5eccc444934ed6a226a70ffeac7925b9427  make-it/sdd/scripts/sdd-gate
 de49651b1463535939c1afb5b6dea79cba296f5ebb7aa70a6d26f28b78075613  make-it/sdd/scripts/task-brief
-af72e3c5e6afd5b2befb3c03b84114bbce4a57be931df85d2e670972022f0ba6  make-it/sdd/task-reviewer-prompt.md
+a8ebc0d012b22171b7f7ac7743ef2a74e70ef7e2428ffc4e9597edcd57e9dc2f  make-it/sdd/task-reviewer-prompt.md
 61b41986284b0d188b31fd8bd1f24b5697d66372e0bbdceff88d119c08dac928  make-it/sdd/test-writer-prompt.md
 7335a95c43554eadefcf03ece639291bb0e038c398a179299e3887ffe06bd2ef  make-it/security-audit/AI-AND-LLM.md
 3ee4f00c6e8c9dcf6dd02dd5ac2a4ceb322e2085f3e9fbe79cf0c6330bc7ef83  make-it/security-audit/ATTACK-CLASSES.md

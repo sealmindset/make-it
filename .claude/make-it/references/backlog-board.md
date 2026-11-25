@@ -132,7 +132,7 @@ decision:  3 import rows failed twice; the rest went in. Retry them, or refile b
 answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
-reviewed:  2026-11-24 ready   # optional: the pull request passed its review, and when; the lead writes it. The first screen says "reviewed" only from this
+reviewed:  2026-11-24 ready 1a2b3c4   # optional: the pull request's last review -- `<date> ready <commit it read>` or `<date> not ready`; the lead writes it. The first screen says "reviewed" only from this
 checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
@@ -545,12 +545,18 @@ out by comparing the pull request's head with main (`gh api …/compare`), becau
 branch rule never reports it; a pull request that is behind goes to step 3 with how far, and when
 the comparison cannot be read the screen says "could not tell whether it is up to date". GitHub
 holds no review in a repo where the owner's own agents review, so the screen never says a pull request is reviewed unless its card says so:
-when a pull request passes its review the lead records it with
-`card.py set <id> reviewed="<date> ready"`, and the screen then reads "Review: recorded on its
-card". Otherwise it reads "none recorded, so confirm it first". Step 4 says what is running in plain
-words ("No bug fix is running; 1 other piece of work is in progress: …"), and checks the files each
+after each review the lead records it with `card.py set <id> reviewed="<date> ready <commit>"`
+(the commit the review read) or `reviewed="<date> not ready"`. The screen reads "Review: recorded
+on its card for this version" only when the value says ready and that commit is the pull request's head
+now. A ready review of an older commit reads "recorded for an earlier version, so confirm it
+again"; a not-ready one reads "its last review said not ready"; a value in any other shape counts
+as no review. In all three the choice keeps "I confirm its review". Step 4 says what is running in plain
+words: work that moved in the last 2 days is named, work marked in progress but quiet is only
+counted, and a quiet card is never the example. It checks the files each
 wave card names in `PLAN.md` against the files of every open pull request (`gh pr view --json
-files`); when either cannot be read it says so.
+files`); when either cannot be read it says so. When some of the wave's cards share a file with
+an open pull request, starting the others is the recommendation; when every card does, the
+recommendation is to wait for that pull request, or release it, first.
 
 ### Plain words on the board
 

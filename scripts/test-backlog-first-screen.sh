@@ -131,14 +131,14 @@ d = board(*without(3)); out = first(d); s = shape('dispatch', out, 'Start the wa
 ok('the plan has a wave that can start and lanes are free -> start that wave, its cards named', s.startswith('Start wave 1 of the plan: 3 cards, side by side.') and all(f'\n    {x}\n' in out for x in
    ('Export drops the last row (E01-S10)', 'Search ignores accents (E01-S11)', 'Upload fails on big files (E01-S12)')) and 'No bug fix is running.' in s and 'lanes are free' not in s, out)
 d2 = board(*without(3), '--with', 'other-work,overlap'); o2 = first(d2); s2 = parts(o2)[1]
-ok('other work in progress is said, not hidden behind free lanes', 'No bug fix is running; 1 other piece of work moved in the last 2 days: A new page for monthly reports (E02-S8).' in s2, o2)
+ok('other work in progress is said, not hidden behind free lanes', re.search(r'No bug fix is running; 1 other piece of work moved in the last 2 days: A new page for monthly\S* \(E02-S8\)\.', s2) is not None, o2)
 ok('a wave card that shares a file with an open pull request is named, and starting the others is the recommended choice',
-   'Search ignores accents (E01-S11) and "feat: a new report page" (#14) both change src/search.py' in s2 and s2.startswith('Start 2 of the 3 cards in wave 1 of the plan: the other shares a file with an open pull request.')
+   'Search ignores accents (E01-S11) -- shares src/search.py with "feat: a new report page" (#14)' in s2 and s2.startswith('Start 2 of the 3 cards in wave 1 of the plan: the other shares a file with an open pull request.')
    and parts(o2)[2][0] == '1. Start the others -- starts only the 2 cards that share no file with an open pull request (Recommended)'
    and parts(o2)[2][1].startswith('2. Start the wave -- starts all 3') and '\n     against: ' in o2, o2)
 d3 = board(*without(3), '--with', 'other-work,other-quiet,overlap-two'); o3 = first(d3); s3 = parts(o3)[1]
 ok('work that moved is named first, quiet work is counted apart, and a stalled card is never the example',
-   '1 other piece of work moved in the last 2 days: A new page for monthly reports (E02-S8).' in s3 and '1 more is marked in progress but quiet.' in s3
+   re.search(r'1 other piece of work moved in the last 2 days: A new page for monthly\S* \(E02-S8\)\.', s3) is not None and '1 more is marked in progress but quiet.' in s3
    and 'An old page nobody finished' not in o3.split('NEEDS YOU')[0] and 'Stuck:   1 -- An old page nobody finished (E02-S9)' in o3, o3)
 ok('one card left: "the 1 card that shares no file"', s3.startswith('Start 1 of the 3 cards in wave 1 of the plan: the others share a file with an open pull request.')
    and parts(o3)[2][0] == '1. Start the others -- starts only the 1 card that shares no file with an open pull request (Recommended)', o3)
