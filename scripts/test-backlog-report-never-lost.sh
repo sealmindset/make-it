@@ -205,6 +205,68 @@ ok('six reports from two clones in one burst: every line true (sent, or not sent
    all((rc == 0 and 'committed + pushed' in o) or (rc == 3 and NOT in o) for o, rc in outs) and last[0] == 0 and len(ids) == len(set(ids))
    and all(on_shared(S, f'Burst report {i}.') for i in range(6)), f'{outs}\n{last}\n{sorted(ids)}')
 
+# ---- 3b. review round: nothing saved here is left behind, and nothing is renumbered silently -------------------
+NEWC = lambda title, body='x': f'---\nid: NEW\ntitle: "{title}"\ntype: story\nstatus: backlog\n---\n\n## Goal\n{body}\n'
+refuse = lambda S: (open(f'{S}/hooks/pre-receive', 'w', encoding='utf-8').write('#!/bin/sh\necho "refused today" >&2\nexit 1\n'), os.chmod(f'{S}/hooks/pre-receive', 0o755))
+def board_true(S):  # the shared BOARD.md lists no card the shared board does not hold
+    ids = set(re.findall(r'^id: (\S+)', '\n'.join(git(S, 'show', f'HEAD:{f}') for f in git(S, 'ls-tree', '-r', '--name-only', 'HEAD').split('\n') if f.startswith('items/')), re.M))
+    return all(i in ids for i in re.findall(r'\bE\d+-S\d+\b', git(S, 'show', 'HEAD:BOARD.md')))
+
+B, S = shared(); git(B, 'checkout', '-q', '--detach')
+r1 = card(B, 'capture', stdin='Report while detached.')
+git(B, 'checkout', '-q', '-')
+open(f'{B}/items/EPIC-01-bugs/stories/notes.txt', 'w', encoding='utf-8').write('my own notes\n')      # not a card: never taken along
+open(f'{B}/items/EPIC-01-bugs/stories/draft.md', 'w', encoding='utf-8').write('a draft with no frontmatter\n')
+r2 = card(B, 'set', 'E01-S2', 'size=M')
+left = git(B, 'ls-files', '--others', '--exclude-standard', '--', 'items').split('\n')
+ok('a card written while the repo was not on a branch goes with the next write, and only card files are taken along',
+   r1[0] == 3 and r2[0] == 0 and 'committed + pushed' in r2[1] and on_shared(S, 'Report while detached.') and board_true(S)
+   and sorted(os.path.basename(f) for f in left) == ['draft.md', 'notes.txt'], f'{r1}\n{r2}\n{left}')
+
+B, S = shared(); hook = f'{B}/.git/hooks/pre-commit'
+open(hook, 'w', encoding='utf-8').write('#!/bin/sh\necho "no commits today" >&2\nexit 1\n'); os.chmod(hook, 0o755)
+r1 = card(B, 'capture', stdin='Report while commits fail.')
+os.remove(hook); r2 = card(B, 'set', 'E01-S2', 'size=M')
+ok('a card whose commit failed goes with the next write',
+   r1[0] == 3 and 'NOT committed' in r1[1] and r2[0] == 0 and 'committed + pushed' in r2[1] and on_shared(S, 'Report while commits fail.') and board_true(S)
+   and not git(B, 'status', '--porcelain', '--', 'items'), f'{r1}\n{r2}')
+ok('a write that was not sent says the card is saved and must not be written again', 'saved here; do NOT run this write again; it is sent with the next card write' in r1[1], r1[1])
+
+B, S = shared(); O = clone(S); refuse(S)
+r1 = card(B, 'new', 'E02', stdin=NEWC('mine first')); os.remove(f'{S}/hooks/pre-receive')
+r2 = card(O, 'new', 'E02', stdin=NEWC('theirs meanwhile'))
+r3 = card(B, 'set', 'E01-S2', 'size=M')
+old = new_id(r1[1]); mine = [(i, x) for i, v in cards(B).items() for x in v if 'mine first' in x[1]]
+now = mine[0][0] if len(mine) == 1 else None
+ok('a renumbered card is said on the line, with both titles and ids, and the card keeps a line saying what it was',
+   r1[0] == 3 and r2[0] == 0 and old and old == new_id(r2[1]) and r3[0] == 0 and now and now != old
+   and f'Your card "mine first" is now {now}: {old} was taken by "theirs meanwhile" on the shared board' in r3[1]
+   and re.search(rf'^- this card was {old} until ', mine[0][1][1], re.M) and on_shared(S, f'this card was {old} until'), f'{r1}\n{r2}\n{r3}\n{mine}')
+
+B, S = shared(); O = clone(S); refuse(S)
+r1 = card(B, 'new', 'E02', stdin=NEWC('one two three four five six and ours', 'ours body')); os.remove(f'{S}/hooks/pre-receive')
+r2 = card(O, 'new', 'E02', stdin=NEWC('one two three four five six and theirs', 'theirs body'))
+r3 = card(B, 'set', 'E01-S2', 'size=M'); ids = [i for i, v in cards(B).items() for _ in v]
+ok('two clones file cards with the same first six title words: two files, two ids, both on the shared board',
+   r1[0] == 3 and r2[0] == 0 and r3[0] == 0 and 'committed + pushed' in r3[1] and on_shared(S, 'ours body') and on_shared(S, 'theirs body') and len(ids) == len(set(ids)), f'{r1}\n{r2}\n{r3}')
+
+B, S = shared(); O = clone(S); refuse(S)  # both clones write the same lines of one card: this one needs a hand
+r1 = card(B, 'append', 'E01-S2', 'Notes', stdin='- ours\n'); os.remove(f'{S}/hooks/pre-receive')
+r2 = card(O, 'append', 'E01-S2', 'Notes', stdin='- theirs\n')
+r3 = card(B, 'set', 'E01-S3', 'size=M')
+ok('stuck (both changed the same lines): nothing written, the reason in plain words and the exact command, no git hint text',
+   r1[0] == 3 and r2[0] == 0 and r3[0] == 1 and 'nothing written' in r3[2] and 'both changed' in r3[2] and f'git -C {B} pull --rebase' in r3[2]
+   and 'hint:' not in r3[2] and 'Diverging' not in r3[2] and not git(B, 'status', '--porcelain', '--', 'items'), f'{r1}\n{r2}\n{r3}')
+
+B, S = shared(); open(f'{tmp}/deep', 'w', encoding='utf-8').write('[' * 100000); before = set(cards(B))
+rc, out, err = card(B, 'capture', f'{tmp}/deep', stdin='Report with a triage output nested too deep.')
+ok('triage output nested 100,000 deep: no crash, the report is a card', rc == 0 and len(set(cards(B)) - before) == 1 and 'triage failed: ' in out and 'Traceback' not in err
+   and on_shared(S, 'nested too deep.'), f'{rc} {out[:300]} {err[-300:]}')
+open(f'{tmp}/good', 'w', encoding='utf-8').write(json.dumps(GOOD))
+ok('`triage ok` says when to fall back: if the write says nothing was written', 'if it says nothing was written' in card(B, 'capture', f'{tmp}/good', stdin='x')[1])
+for f in ('.claude/commands/dispatch-it.md', '.claude/make-it/sdd/task-reviewer-prompt.md'):
+    ok(f'{f} tells a lane what exit 3 means', 'exit 3 means saved here but not sent: do not repeat the write' in re.sub(r'\s+', ' ', open(f'{root}/{f}', encoding='utf-8').read()))
+
 # ---- 4. the skill and its reference --------------------------------------------------------------------------
 ref = open(f'{root}/.claude/make-it/references/backlog-board.md', encoding='utf-8').read()
 skill = open(f'{root}/.claude/commands/backlog-it.md', encoding='utf-8').read()
