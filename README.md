@@ -1007,6 +1007,29 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.29 -- the board's first screen says what to do next, speaks plainly, and reviews stop flooding it
+
+- **A first screen that tells you what to do.** `/backlog-it` now opens with one recommendation
+  and one-click choices, worked out by a written rule: answer what waits on you; release what is
+  ready; sort out stuck pull requests; start the plan's next wave; re-plan; groom; or wait. It
+  then shows only what needs you, what changed since you last looked, and one line on whether
+  the pile is growing.
+- **It says only what it can see.** A pull request is called reviewed only when its card records
+  a review that said ready for that exact version. It notices when a card would change the same
+  file as an open pull request, and recommends starting the others.
+- **Held cards come as a short list.** The first screen names the three to five held cards that
+  would free the most other work, for a weekly sitting, and counts the rest.
+- **Plain words everywhere.** Every card and pull request is named by its title with its
+  number. Messages are a few short lines: what happened, what it means for you, what you need
+  to do. One update a day unless you are needed. Every question is one click.
+- **Reviews sort what they find.** Important findings are fixed before a fix ships. At most
+  five quick minor ones are fixed in the same work; the rest are dropped. A fault that was
+  already there becomes a card only if it can hurt someone; otherwise it goes on a short
+  running list for that area. Lanes no longer file follow-up cards by default. A fault that
+  repeats for three review rounds goes to the owner as a choice.
+- **Not built yet:** combining cards, the weekly sitting itself, the 30-day expiry and the
+  daily release are later tasks of the same card.
+
 ### v1.71.28 -- checks that say they test the running app now do; /fix-it reports what really happened
 
 Two changes in one release.
