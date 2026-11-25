@@ -120,7 +120,10 @@ A dismissed ask starts nothing. Everything the old board printed is under `statu
   substantial epic; never block on it.
 - **Capture** (`capture` / `bug` / plain text): the card before any question. Snapshot the board,
   triage with a headless `claude -p` (strict JSON: type, size, placement, dedup, open questions),
-  then write the card; a bug always goes under the Bugs epic as `type: breakfix`, `status:
+  save what it gave back to a file (no file when it failed or timed out) and pipe the raw text to
+  `card.py capture <file>`. Bad triage output never loses the report: `card.py` files it word for
+  word under Bugs, marked "not sorted yet -- triage failed: <reason>" -- say that in the reply.
+  On `triage ok`, write the card; a bug always goes under the Bugs epic as `type: breakfix`, `status:
   backlog`, `stage: Reported`. Regenerate and sync, then in the same reply: one line with the id
   and its place in line ("✓ Filed "Export drops the last row" (E07-S3), a bug, size S, under Bugs -- #2 in line"), and **every**
   open question batched in one AskUserQuestion -- only questions whose answer changes
@@ -174,7 +177,10 @@ when every wave is merged, its next wave is stuck, a spike's finding lands, or w
 `python3 ~/.claude/make-it/backlog/bin/card.py --board "$BOARD" --project "$PROJECT"` then
 `append <id> <section>` (text on stdin) · `set <id> key=value …` (`key=` removes) · `new <epic>` (a card on
 stdin with `id: NEW`). It pulls first, writes the whole file, bumps `updated:`, regenerates and syncs --
-steps 1-3 in one call. A non-zero exit means the write did not sync: read its message. For other
+steps 1-3 in one call. Its line ends `committed + pushed` only when the shared board has the write;
+a line with `NOT sent` is relayed to the person as it is. Exit 3 = written here, the shared board
+did not get it (never write it again; the next write that can send carries it). Any other non-zero
+exit = nothing written. For other
 board files (`PLAN.md`, design docs):
 
 1. Bump `updated:` on each touched card.
