@@ -160,7 +160,7 @@ silent drop.
 
 | Record | Where | Contains |
 |---|---|---|
-| **Card** | The project's backlog (`/backlog-it`), Bugs epic | Findings per phase, PRs, live proof, stage moved to Checked only on the outcome; a card for each manual unblock, and for an already-there fault only when it can hurt someone. |
+| **Card** | The project's backlog (`/backlog-it`), Bugs epic | Findings per phase, PRs, live proof; the board closes the card once the fix is released with passing tests, and it is reopened with what was seen if the outcome did not follow; a card for each manual unblock, and for an already-there fault only when it can hurt someone. |
 | **Incident report** | `docs/incidents/<YYYY-MM-DD>-<slug>.md` in the project | The format in §12. |
 | **Memory and doctrine** | The project's memory; its doctrine file (`CLAUDE.md` or the file it names) | Lessons as memory entries; any rule the owner stated, verbatim and dated, in the doctrine. |
 | **Pattern library** | Shipped seeds in `~/.claude/make-it/resolve-it/patterns/`; the owner's learned patterns in `~/.claude/resolve-it/patterns/` (user-level, shared across projects, never overwritten by an install) | Each root cause made generic (§10). |

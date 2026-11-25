@@ -165,13 +165,13 @@ uncommitted-changes status, whether the app/tests currently run.>
 - ...
 
 ## 6. Next Steps
-_Board `<path>`: Now fixing <ids> · Shipping <ids> · Live, to check <count> · Next up <id>_
+_Board `<path>`: Now fixing <ids> · Shipping <ids> · Next up <id>_
 1. **<card id>** -- <the step that was in progress -- with enough detail to resume mid-thought>
 2. **<card id>** -- <subsequent steps in order>
 ```
 
 With no board, drop the `_Board_` line and the card ids. With a board, the line is copied from
-`BOARD.md` as it stands after the `board` step, with **Live, to check** shortened to a count
+`BOARD.md` as it stands after the `board` step
 (a board with no bug cards has no status line -- give just the path);
 the order of the steps is this session's, the status of each card is the board's.
 

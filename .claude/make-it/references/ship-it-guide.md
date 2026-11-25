@@ -155,11 +155,11 @@ lands stale or conflicting:
   → close + delete; conflicting or stale-CI → rebase + fresh CI + verify; clean + green + wanted
   → merge. Anything touching live/irreversible paths → verify on rehearsal/staging first.
 - **Squash-merge + delete the branch.** In shared/multi-session repos, only delete branches you own.
-- **Project board (`/backlog-it`, see `backlog-board.md`):** record each card's PR in `pr:` and how the
-  fix is proved live in `signal:` when it opens; on merge, move each shipped card to `stage: Live` and set
-  `checkAfter:` to the release that carries it -- a dated tag (`v2026.10.17`) or the date it goes out, never an
-  undated tag (`status` flags those as never due) -- (`/backlog-it reconcile --prs` does the move from `pr:`, never
-  without a `signal:`); after the live check passes against the original report, to `Checked` and `done`.
+- **Project board (`/backlog-it`, see `backlog-board.md`):** record each card's PR in `pr:` when it opens
+  (a fix carried by a release PR lists both). Shipped means done: once the PR is merged, a release carries it
+  and that release's checks pass, `/backlog-it reconcile --prs` closes the card (`closed_as: shipped-tests-pass`)
+  from what `gh` shows, never a guess. No card waits to be checked by a real run; if use shows a fix did not
+  hold, `/backlog-it reopen <id> <what was seen>` puts it back in line.
 
 ### Safety steps /ship-it doesn't run yet
 

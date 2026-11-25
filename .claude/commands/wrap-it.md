@@ -184,9 +184,9 @@ If work was done this session that isn't already in CHANGELOG.md:
 **4b. Update the board (if the project has one -- `/backlog-it`):**
 
 Bump each card touched this session (status, `stage:`, `pr:` for any PR opened, a one-line
-note; then `/backlog-it reconcile --prs` moves cards whose PR merged to `Live`), then regenerate
+note; then `/backlog-it reconcile --prs` closes cards whose PR is merged, released and passing its checks), then regenerate
 `BOARD.md` and have `.make-it-state.md`'s next steps cite the same cards as its status line
-(Now fixing / Shipping / Live, to check / Next up) -- the board wins over an older
+(Now fixing / Shipping / Next up) -- the board wins over an older
 `handoff.md`. Sync per `backlog-board.md`.
 
 **5. Update .make-it-state.md:**

@@ -104,7 +104,8 @@ def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
             if mode not in MODES: errs.append(f'{i}: unknown mode {mode!r}')
             if cards[i].get('stakes') == 'critical': errs.append(f'{i}: high-stakes -- hold it, never put it in a wave')
             for d, src, named in R.needs(i, T):
-                if not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
+                d = R.whole(d, T)  # waiting on a part of a bundle is waiting on the bundle
+                if d != i and not (isinstance(wave_of.get(d), int) and wave_of[d] < n):
                     via = '' if (src, named) == (i, d) else f' (via {src}: dependsOn {named})'
                     errs.append(f'{i}: depends on {d}{via}, which is not planned in an earlier wave')
             if mode == 'spike' and not ((it.get('spike') or {}).get('question') and (it.get('spike') or {}).get('timebox')):
@@ -120,7 +121,7 @@ def check(board, plan, lane_cap=3, serial=(), partial=False, scope=None):
     if S is not None or not partial:
         parents = T[1]  # done children still make a container
         for i in sorted(cards):
-            if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen and (S is None or i in S):
+            if cards[i].get('status') in CANDIDATE and i not in parents and i not in seen and (S is None or i in S) and not R.bundle_of(cards[i], T):  # a part is planned as its bundle
                 errs.append(f'{i}: candidate card not planned, held, or skipped')
 
     def upstream(i):  # every open card i waits on, down the chain
@@ -235,6 +236,14 @@ def self_test():
             e = check(b, dict(good, links=[link]), scope=SC); assert any(err in x for x in e), (link, e)
         assert any('only a --with-deps plan' in x for x in check(b, ok, scope=dict(SC, with_deps=False)))
         assert any('only a --with-deps plan' in x for x in check(b, ok, partial=True))
+    with tempfile.TemporaryDirectory() as b:  # a bundle is one card to plan: its parts are not owed a place, and waiting on a part is waiting on the bundle
+        os.makedirs(f'{b}/items/EPIC-01-x/stories')
+        def card(n, **kv): open(f'{b}/items/EPIC-01-x/stories/S{n}.md', 'w', encoding='utf-8').write('---\n' + ''.join(f'{k}: {v}\n' for k, v in {'id': f'E01-S{n}', 'status': 'backlog', **kv}.items()) + '---\n')
+        open(f'{b}/items/EPIC-01-x/epic.md', 'w', encoding='utf-8').write('---\nid: E01\nstatus: in-progress\n---\n')
+        card(1, bundledIn='E01-S3'); card(2, bundledIn='E01-S3'); card(3, bundles='[E01-S1, E01-S2]'); card(4, dependsOn='[E01-S2]')
+        plan = {'waves': [{'items': [{'id': 'E01-S3', 'mode': 'solo'}]}, {'items': [{'id': 'E01-S4', 'mode': 'solo'}]}]}
+        assert check(b, plan) == [], check(b, plan)
+        plan['waves'].reverse(); assert any('E01-S4: depends on E01-S3' in e for e in check(b, plan)), check(b, plan)
     print('check-plan self-test: OK')
 
 
