@@ -661,6 +661,60 @@ class Seal(Base):
         self.assertIn("points at a folder", r.stdout)
         self.assertIn("frontend/lib/plugins", r.stdout)
 
+    # a link to a folder is judged by what it is, never by its name
+    SKIPPED_LOOKING = ["frontend/lib/notes.md", ".make-it/plug", ".env.d", "backend/README.MD"]
+
+    def link_named(self, name):
+        os.makedirs(self.p(".make-it/plugins"), exist_ok=True)
+        with open(self.p(".make-it/plugins/x.ts"), "w") as f:
+            f.write("export const x = 1\n")
+        os.symlink(os.path.relpath(self.p(".make-it/plugins"), os.path.dirname(self.p(name))), self.p(name))
+
+    def test_a_link_to_a_folder_is_refused_whatever_its_name(self):
+        for with_git in (True, False):
+            for name in self.SKIPPED_LOOKING:
+                with self.subTest(name, git=with_git):
+                    self.tearDown()
+                    self.setUp()
+                    if not with_git:
+                        shutil.rmtree(self.p(".git"))
+                    self.link_named(name)
+                    before = self.tree()
+                    r = run("seal", "--app", self.app, "--skill", "make-it")
+                    self.assertNotEqual(r.returncode, 0, r.stdout)
+                    self.assertIn(name, r.stderr)
+                    self.assertEqual(before, self.tree())
+
+    def test_a_link_to_a_folder_added_after_the_seal_fails_whatever_its_name(self):
+        for with_git in (True, False):
+            for name in self.SKIPPED_LOOKING:
+                with self.subTest(name, git=with_git):
+                    self.tearDown()
+                    self.setUp()
+                    if not with_git:
+                        shutil.rmtree(self.p(".git"))
+                    self.write()
+                    self.assertEqual(self.verify(reseal=False).returncode, 0)
+                    self.link_named(name)
+                    r = self.verify(reseal=False)
+                    self.assertEqual(r.returncode, 1, r.stdout)
+                    self.assertIn("points at a folder", r.stdout)
+                    self.assertIn(name, r.stdout)
+
+    def test_sealed_is_said_only_after_the_last_file_is_written(self):
+        # a copy of the script whose last write fails: it must not have said "sealed" by then
+        with open(SCRIPT) as f:
+            src = f.read()
+        last = "write_inside(app, READABLE, readable(entries, rec))"
+        self.assertEqual(src.count(last), 1)
+        copy = os.path.join(self.tmp, "last-write-fails.py")
+        with open(copy, "w") as f:
+            f.write(src.replace(last, "False"))
+        r = subprocess.run([sys.executable, "-I", copy, "seal", "--framework", FW, "--app", self.app, "--skill", "make-it"],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("sealed", r.stdout)
+
     def test_a_backslash_in_a_name_is_not_mistaken_for_a_newline(self):
         with open(self.p("a\\nb.ts"), "w") as f:  # a backslash and an n
             f.write("x\n")
