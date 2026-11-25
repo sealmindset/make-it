@@ -33,15 +33,30 @@ entry before it. Code that no longer matches a seal was changed outside make-it.
 
 **What counts.** Every file git tracks or would add, except Markdown, `.make-it/` and the stamp.
 Docs can change freely. Code cannot change without breaking the seal. A file counts by its content
-and whether it is executable. A link counts by what it points at, even a file the seal otherwise
-skips; a link that points outside the project fails the check and is never read. A submodule counts
+and whether it is executable. A link to a file counts by what it points at, even a file the seal
+otherwise skips; a link that points outside the project fails the check and is never read. A link
+to a folder is never sealed, wherever it leads and whatever it is called (a link named `notes.md`
+or one under `.make-it/` is still a link): the files behind it would not count, so `seal` refuses
+and names it, and the check fails on one added later. A link to a single file that is named like
+a document is a document: like any Markdown file, it does not count and is not looked at. A submodule counts
 by the commit it points at, and a nested repository by its files. Commit everything before pushing:
 a new file that was sealed but not committed makes the next clean checkout fail.
 
 **What it sets up.** The first seal adds four lines to the project's `.gitattributes`: `* -text`,
 so git never rewrites line endings (that would change every fingerprint on some machines), and
 `merge=union` for the three files the seal regenerates, so two sealed branches merge without a
-conflict in them.
+conflict in them. What the file already holds is kept byte for byte. A `.gitattributes` that cannot
+be read, or that is or would become over 1 MB, is left as it is and the seal is refused.
+
+**A refused seal writes nothing.** Every reason `seal` can refuse is checked before its first write:
+a place it writes to that is a link, a folder where a file belongs or a folder it cannot write to,
+a damaged history, a `.gitattributes` it cannot keep, a link to a folder. A refusal leaves the
+project exactly as it was, and "sealed" is printed only after everything is written.
+
+**Git only reads.** `seal` and `verify` ask git which files exist and nothing more. A project's own
+git settings cannot make them fetch a missing object or run a command (a missing object is simply
+missing), git settings in the caller's environment (`GIT_DIR` and the like) are not passed on, and
+a file a hand-made git index names outside the project is never opened.
 
 **Who seals.** Every make-it skill that changes a project, at its end, after its own checks:
 /make-it, /retrofit-it, /resume-it, /fix-it, /deadcode-it, /argo-it, and /try-it when its fix

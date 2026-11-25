@@ -458,6 +458,293 @@ class Seal(Base):
         self.assertNotEqual(run("seal", "--app", self.app).returncode, 0)
         self.assertNotEqual(run("seal", "--app", self.app, "--skill", "x; rm -rf").returncode, 0)
 
+    # ---- second review (E05-S19)
+
+    NO_LAZY_FETCH = 'GIT_NO_LAZY_FETCH="1", '
+    NO_PROTOCOL = 'GIT_ALLOW_PROTOCOL="", '
+
+    def without(self, *guards):
+        """A copy of the script with these guards cut out."""
+        with open(SCRIPT) as f:
+            src = f.read()
+        for guard in guards:
+            self.assertEqual(src.count(guard), 1, f"the guard {guard!r} is not in watermark.py")
+            src = src.replace(guard, "")
+        path = os.path.join(self.tmp, "without.py")
+        with open(path, "w") as f:
+            f.write(src)
+        return path
+
+    def test_a_missing_object_never_makes_git_fetch(self):
+        # A repository set up to fetch missing objects on demand runs its own "upload" command to do
+        # it. Here git must read a folder's listing that is gone, and the project's own settings
+        # allow every way of fetching. Neither seal nor verify may run the command.
+        self.write()
+        self.commit()
+        git(self.app, "sparse-checkout", "init", "--cone", "--sparse-index")
+        git(self.app, "sparse-checkout", "set", "backend")
+        tree = git(self.app, "rev-parse", "HEAD:frontend").stdout.strip()
+        os.remove(self.p(f".git/objects/{tree[:2]}/{tree[2:]}"))
+        marker = os.path.join(self.tmp, "fetched")
+        for key, value in (("extensions.partialClone", "origin"), ("remote.origin.promisor", "true"),
+                           ("remote.origin.url", self.app), ("remote.origin.uploadpack", f"touch {marker};"),
+                           ("protocol.file.allow", "always"), ("protocol.allow", "always")):
+            git(self.app, "config", key, value)
+
+        def fetched(script):
+            out = []
+            for cmd in (["seal", "--skill", "resume-it"], ["verify"]):
+                subprocess.run([sys.executable, "-I", script, cmd[0], "--framework", FW, "--app", self.app, *cmd[1:]],
+                               capture_output=True)
+                out.append(os.path.exists(marker))
+                if out[-1]:
+                    os.remove(marker)
+            return out
+
+        self.assertEqual(fetched(SCRIPT), [False, False], "seal or verify made git fetch a missing object")
+        # two guards, and each holds alone (an older git does not know the first one)
+        self.assertEqual(fetched(self.without(self.NO_LAZY_FETCH)), [False, False],
+                         "the project's own git settings switched fetching back on")
+        self.assertEqual(fetched(self.without(self.NO_PROTOCOL)), [False, False],
+                         "this git ignores GIT_NO_LAZY_FETCH")
+        # with neither, the command runs: the repository above really is the attack
+        self.assertEqual(fetched(self.without(self.NO_LAZY_FETCH, self.NO_PROTOCOL)), [True, True])
+
+    def test_a_link_out_cannot_be_hidden_by_an_odd_file_name(self):
+        outside = os.path.join(self.tmp, "outside.ts")
+        with open(outside, "w") as f:
+            f.write("x\n")
+        os.symlink(outside, self.p("frontend/lib/leak.ts"))
+        os.makedirs(self.p("zz\rfoo  frontend/lib"))
+        with open(self.p("zz\rfoo  frontend/lib/leak.ts"), "w") as f:  # read line by line, it re-states the link
+            f.write("x\n")
+        self.write()
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("points outside", r.stdout)
+
+    def test_an_existing_gitattributes_is_kept_byte_for_byte(self):
+        mine = b"# caf\xe9 (not UTF-8)\n*.png binary\n"
+        with open(self.p(".gitattributes"), "wb") as f:
+            f.write(mine)
+        self.write()
+        after = open(self.p(".gitattributes"), "rb").read()
+        self.assertTrue(after.startswith(mine), after[:60])
+        self.assertIn(b"\n* -text\n", after)
+
+    def test_a_gitattributes_too_big_to_read_is_left_alone_and_nothing_is_sealed(self):
+        mine = b"*.png binary\n" + b"# pad\n" * 200000
+        with open(self.p(".gitattributes"), "wb") as f:
+            f.write(mine)
+        r = run("seal", "--app", self.app, "--skill", "make-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn(".gitattributes", r.stderr)
+        self.assertEqual(open(self.p(".gitattributes"), "rb").read(), mine)
+        self.assertFalse(os.path.exists(self.p(".make-it/ledger")))
+
+    def test_a_refused_seal_leaves_nothing_behind(self):
+        os.makedirs(self.p("MAKE-IT.md"))
+        r = run("seal", "--app", self.app, "--skill", "make-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("sealed", r.stdout)
+        for rel in (".make-it/ledger", ".make-it/manifest.json", ".make-it/sealed-files.txt"):
+            self.assertFalse(os.path.exists(self.p(rel)), rel)
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_a_hand_made_index_entry_outside_the_project_is_never_read(self):
+        secret = os.path.join(self.tmp, "outside.txt")
+        with open(secret, "w") as f:
+            f.write("hunter2\n")
+        inside, moved = "!/aaaaaa/outside.txt", ".././././outside.txt"  # same length; both sort first in the index
+        os.makedirs(self.p("!/aaaaaa"))
+        with open(self.p(inside), "w") as f:
+            f.write("inside\n")
+        self.commit()
+        raw = open(self.p(".git/index"), "rb").read()[:-20]
+        self.assertEqual(raw.count(inside.encode()), 1)
+        raw = raw.replace(inside.encode(), moved.encode())
+        with open(self.p(".git/index"), "wb") as f:
+            f.write(raw + hashlib.sha1(raw).digest())
+        self.assertIn("../", subprocess.run(["git", "-C", self.app, "ls-files"], capture_output=True, text=True).stdout)
+        self.write()
+        self.assertFalse(hashlib.sha256(b"hunter2\n").hexdigest() in open(self.p(".make-it/sealed-files.txt")).read(),
+                         "the seal hashed a file outside the project")
+
+    # ---- review of the second review (PR #157)
+
+    def tree(self):
+        """Every file, folder and link in the project outside .git, with its bytes or its target."""
+        out = {}
+        for root, dirs, names in os.walk(self.app):
+            if root == self.app and ".git" in dirs:
+                dirs.remove(".git")
+            for n in dirs + names:
+                path = os.path.join(root, n)
+                rel = os.path.relpath(path, self.app)
+                if os.path.islink(path):
+                    out[rel] = "-> " + os.readlink(path)
+                elif os.path.isdir(path):
+                    out[rel] = "folder"
+                else:
+                    with open(path, "rb") as f:
+                        out[rel] = hashlib.sha256(f.read()).hexdigest()
+        return out
+
+    def damage_history(self):
+        self.write()
+        entry = self.p(".make-it/ledger/" + self.ledger()[0])
+        with open(entry, "a") as f:
+            f.write(" ")
+        os.remove(self.p(".make-it/manifest.json"))  # so a refused seal that rewrote them would show
+        os.remove(self.p(".gitattributes"))
+
+    def big_gitattributes(self, size):
+        with open(self.p(".gitattributes"), "wb") as f:
+            f.write(b"#" * (size - 1) + b"\n")
+
+    def folder_link(self):
+        os.makedirs(self.p(".make-it/plugins"))
+        with open(self.p(".make-it/plugins/x.ts"), "w") as f:
+            f.write("export const x = 1\n")
+        os.symlink("../../.make-it/plugins", self.p("frontend/lib/plugins"))
+
+    def read_only(self):
+        self.write()
+        self.edit(self.OTHER)
+        os.chmod(self.app, 0o555)
+
+    def a_file_where_the_history_folder_goes(self):
+        with open(self.p(".make-it/ledger"), "w") as f:
+            f.write("x")
+
+    REFUSALS = [
+        ("MAKE-IT.md is a folder", lambda self: os.makedirs(self.p("MAKE-IT.md")), ()),
+        ("the history folder is a file", a_file_where_the_history_folder_goes, ()),
+        ("the history is damaged", damage_history, ()),
+        ("a .gitattributes over 1 MB", lambda self: self.big_gitattributes((1 << 20) + 10), ()),
+        ("a .gitattributes the seal's lines would take over 1 MB", lambda self: self.big_gitattributes((1 << 20) - 10), ()),
+        ("a link to a folder", folder_link, ()),
+        ("a project folder that cannot be written", read_only, ()),
+        ("no skill name", lambda self: None, ("--skill", "")),
+        ("a results file that is not JSON", lambda self: None, ("--results", os.devnull)),
+    ]
+
+    def test_every_refused_seal_leaves_the_project_as_it_was(self):
+        for name, prepare, extra in self.REFUSALS:
+            if "cannot be written" in name and os.geteuid() == 0:
+                continue  # root writes anywhere
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                prepare(self)
+                before = self.tree()
+                r = run("seal", "--app", self.app, "--skill", "resume-it", *extra)
+                after = self.tree()
+                os.chmod(self.app, 0o755)
+                self.assertNotEqual(r.returncode, 0, r.stdout)
+                self.assertNotIn("sealed", r.stdout)
+                self.assertNotIn("Traceback", r.stderr)
+                self.assertEqual({k for k in set(before) | set(after) if before.get(k) != after.get(k)}, set())
+
+    def test_a_link_to_a_folder_is_refused_and_named(self):
+        self.folder_link()
+        r = run("seal", "--app", self.app, "--skill", "make-it")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("frontend/lib/plugins", r.stderr)
+        self.assertIn("Nothing was sealed", r.stderr)
+
+    def test_a_link_to_a_folder_added_after_the_seal_fails_and_says_why(self):
+        self.write()
+        self.folder_link()
+        r = self.verify(reseal=False)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("points at a folder", r.stdout)
+        self.assertIn("frontend/lib/plugins", r.stdout)
+
+    # a link to a folder is judged by what it is, never by its name
+    SKIPPED_LOOKING = ["frontend/lib/notes.md", ".make-it/plug", ".env.d", "backend/README.MD"]
+
+    def link_named(self, name):
+        os.makedirs(self.p(".make-it/plugins"), exist_ok=True)
+        with open(self.p(".make-it/plugins/x.ts"), "w") as f:
+            f.write("export const x = 1\n")
+        os.symlink(os.path.relpath(self.p(".make-it/plugins"), os.path.dirname(self.p(name))), self.p(name))
+
+    def test_a_link_to_a_folder_is_refused_whatever_its_name(self):
+        for with_git in (True, False):
+            for name in self.SKIPPED_LOOKING:
+                with self.subTest(name, git=with_git):
+                    self.tearDown()
+                    self.setUp()
+                    if not with_git:
+                        shutil.rmtree(self.p(".git"))
+                    self.link_named(name)
+                    before = self.tree()
+                    r = run("seal", "--app", self.app, "--skill", "make-it")
+                    self.assertNotEqual(r.returncode, 0, r.stdout)
+                    self.assertIn(name, r.stderr)
+                    self.assertEqual(before, self.tree())
+
+    def test_a_link_to_a_folder_added_after_the_seal_fails_whatever_its_name(self):
+        for with_git in (True, False):
+            for name in self.SKIPPED_LOOKING:
+                with self.subTest(name, git=with_git):
+                    self.tearDown()
+                    self.setUp()
+                    if not with_git:
+                        shutil.rmtree(self.p(".git"))
+                    self.write()
+                    self.assertEqual(self.verify(reseal=False).returncode, 0)
+                    self.link_named(name)
+                    r = self.verify(reseal=False)
+                    self.assertEqual(r.returncode, 1, r.stdout)
+                    self.assertIn("points at a folder", r.stdout)
+                    self.assertIn(name, r.stdout)
+
+    def test_sealed_is_said_only_after_the_last_file_is_written(self):
+        # a copy of the script whose last write fails: it must not have said "sealed" by then
+        with open(SCRIPT) as f:
+            src = f.read()
+        last = "write_inside(app, READABLE, readable(entries, rec))"
+        self.assertEqual(src.count(last), 1)
+        copy = os.path.join(self.tmp, "last-write-fails.py")
+        with open(copy, "w") as f:
+            f.write(src.replace(last, "False"))
+        r = subprocess.run([sys.executable, "-I", copy, "seal", "--framework", FW, "--app", self.app, "--skill", "make-it"],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("sealed", r.stdout)
+
+    def test_a_backslash_in_a_name_is_not_mistaken_for_a_newline(self):
+        with open(self.p("a\\nb.ts"), "w") as f:  # a backslash and an n
+            f.write("x\n")
+        self.write()
+        os.rename(self.p("a\\nb.ts"), self.p("a\nb.ts"))  # a real newline
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
+    def test_git_settings_in_the_callers_environment_do_not_point_the_seal_elsewhere(self):
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(other)
+        git(other, "init", "-q", "-b", "main")
+        env = dict(os.environ, GIT_DIR=os.path.join(other, ".git"), GIT_WORK_TREE=other)
+
+        def run_there(*args):
+            return subprocess.run([sys.executable, "-I", SCRIPT, *args, "--app", self.app], capture_output=True, text=True, env=env)
+
+        r = run_there("seal", "--skill", "make-it")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn(" 0 files", r.stdout)
+        self.assertEqual(run_there("verify").returncode, 0)
+        self.edit(self.OTHER)
+        self.assertEqual(run_there("verify").returncode, 1)
+
+    def test_a_newline_in_a_name_is_not_mistaken_for_another_name(self):
+        with open(self.p("a\nb.ts"), "w") as f:
+            f.write("x\n")
+        self.write()
+        os.rename(self.p("a\nb.ts"), self.p("a?b.ts"))
+        self.assertEqual(self.verify(reseal=False).returncode, 1)
+
 
 class Hook(Base):
     def hook(self, cwd):

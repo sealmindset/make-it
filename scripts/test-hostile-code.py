@@ -891,6 +891,41 @@ class StaleCopies(Case):
         self.assertNotIn("tests/test_scan_runner.py",
                          [f["file"] for f in out["notes"] if "old copy" in f.get("reason", "")])
 
+    def test_each_guard_against_fetching_holds_alone(self):
+        # the same repository, checked by copies of the script with one guard cut out, then all of them
+        self.the_case()
+        marker = os.path.join(self.tmp.name, "fetched")
+        blob = self.g("rev-parse", "main:tests/test_scan_runner.py")
+        os.remove(os.path.join(self.dir, ".git", "objects", blob[:2], blob[2:]))
+        for key, value in (("extensions.partialClone", "origin"), ("remote.origin.promisor", "true"),
+                           ("remote.origin.url", self.dir), ("remote.origin.uploadpack", f"touch {marker};"),
+                           ("protocol.file.allow", "always"), ("protocol.allow", "always")):
+            self.g("config", key, value)
+        self.tool("--mine", folder=self.wt)
+        with open(SCRIPT) as f:
+            src = f.read()
+
+        def fetched(*guards):
+            text = src
+            for guard in guards:
+                self.assertEqual(text.count(guard), 1, f"the guard {guard!r} is not in hostile-code-check.py")
+                text = text.replace(guard, "")
+            copy = os.path.join(self.tmp.name, "copy.py")
+            with open(copy, "w") as f:
+                f.write(text)
+            subprocess.run([sys.executable, "-I", copy, self.wt, "--json", "--cleared-file", self.cleared,
+                            "--projects-file", self.projects], capture_output=True, cwd=self.tmp.name)
+            ran = os.path.exists(marker)
+            if ran:
+                os.remove(marker)
+            return ran
+
+        lazy, protocol, config = 'GIT_NO_LAZY_FETCH="1", ', 'GIT_ALLOW_PROTOCOL="", ', '"-c", "protocol.allow=never", '
+        self.assertFalse(fetched())
+        self.assertFalse(fetched(lazy), "the project's own git settings switched fetching back on")
+        self.assertFalse(fetched(protocol, config), "this git ignores GIT_NO_LAZY_FETCH")
+        self.assertTrue(fetched(lazy, protocol, config), "the repository above is not the attack it should be")
+
     def test_git_is_never_run_in_a_project_that_is_not_marked_mine(self):
         self.the_case()
         fake = os.path.join(self.tmp.name, "bin")

@@ -176,16 +176,27 @@ def build_record(app, fw, results=None):
     }
 
 
-def write_inside(app, rel, text):
-    """Write one file inside the project and nowhere else. False: refused (a link on the way, or not a plain file)."""
-    path, d = os.path.join(app, rel), app
+def can_write_inside(app, rel):
+    """May this file be written inside the project? False: a link on the way, something there that is not a plain
+    file, or a folder that cannot be written to."""
+    path, d, folder = os.path.join(app, rel), app, app
     for part in os.path.dirname(rel).split(os.sep):
         if part:
             d = os.path.join(d, part)
             if os.path.islink(d) or (os.path.lexists(d) and not os.path.isdir(d)):
                 return False
+            if os.path.isdir(d):
+                folder = d  # the deepest folder that exists: the file, or the folders still to make, go in it
     if os.path.islink(path) or (os.path.lexists(path) and not os.path.isfile(path)):
         return False
+    return os.access(folder, os.W_OK | os.X_OK)
+
+
+def write_inside(app, rel, text):
+    """Write one file inside the project and nowhere else. False: refused (see can_write_inside)."""
+    if not can_write_inside(app, rel):
+        return False
+    path = os.path.join(app, rel)
     folder = os.path.dirname(path) or app
     os.makedirs(folder, exist_ok=True)
     data = text.encode("utf-8", "surrogateescape")
@@ -284,10 +295,16 @@ def git_dir_ok(app):
 
 
 def git(app, *args):
-    """Run git reading only. A project's own git settings must not make it fetch, prompt or run a helper."""
-    env = dict(os.environ, GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
+    """Run git reading only. A project's own git settings must not make it fetch, prompt or run a helper.
+
+    Two guards against fetching a missing object on demand, each enough alone: GIT_NO_LAZY_FETCH (an older git
+    does not know it) and GIT_ALLOW_PROTOCOL, set to no protocol at all. It is the environment, not
+    `-c protocol.allow=never`, because the project's own `protocol.<name>.allow = always` overrides that.
+    """
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}  # a caller's GIT_DIR names another repository
+    env.update(GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
     return subprocess.run(["git", "--no-replace-objects", "-c", "safe.bareRepository=explicit",
-                           "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-C", app, *args],
+                           "-c", "core.fsmonitor=false", "-C", app, *args],
                           capture_output=True, env=env)
 
 
@@ -308,6 +325,8 @@ def stream_hash(path):
 def file_mark(app, rel):
     """A short, stable description of one file's content. Never blocks, and never reads outside the project."""
     path, d = os.path.join(app, rel), app
+    if os.path.isabs(rel) or ".." in rel.split("/"):
+        return "outside"  # a hand-made git index can name a file outside the project: never opened
     for part in rel.split("/")[:-1]:
         d = os.path.join(d, part)
         if os.path.islink(d):
@@ -321,6 +340,8 @@ def file_mark(app, rel):
                 return "link-out:" + text  # never hashed: it is somebody else's file
             if os.path.isfile(real):
                 return f"link:{text}:{stream_hash(real)}"  # what it points at counts, even a file the seal skips
+            if os.path.isdir(real):
+                return "link-dir:" + text  # what is behind it would not count: seal refuses it, verify fails
             return "link:" + text
         if not stat.S_ISREG(st.st_mode):
             return "special"
@@ -337,13 +358,12 @@ def walk_files(base):
     for root, dirs, names in os.walk(base, followlinks=False):
         links = [d for d in dirs if os.path.islink(os.path.join(root, d))]
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d not in links]
-        for n in names + links:
-            if not n.startswith(".env"):
-                yield os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
+        for n in [n for n in names if not n.startswith(".env")] + links:  # a linked folder is listed whatever its name
+            yield os.path.relpath(os.path.join(root, n), base).replace(os.sep, "/")
 
 
-def code_listing(app):
-    """`mark  path` for every file that counts, sorted: what a seal fingerprints.
+def listed(app):
+    """{path: None, or a submodule's mark} for every path the seal looks at.
 
     With git: every tracked file plus new ones git would add. A submodule counts by the commit it points at,
     and a nested repository by its files.
@@ -367,10 +387,26 @@ def code_listing(app):
                     marks[rel] = None
     if marks is None:
         marks = {rel: None for rel in walk_files(app)}
+    return marks
+
+
+def folder_links(app):
+    """Links that lead to a folder, in the project or out of it. The files behind one would not count, so it is never sealed.
+
+    Decided by what the entry is, never by its name: a link named like a document, or one under .make-it, is still a link.
+    """
+    return sorted(rel for rel in listed(app) if os.path.islink(os.path.join(app, rel))
+                  and os.path.isdir(os.path.join(app, rel)))
+
+
+def code_listing(app):
+    """`mark  path` for every file that counts, sorted: what a seal fingerprints."""
+    marks = listed(app)
     lines = []
     for rel in sorted(marks):
         if sealed_path(rel) and (marks[rel] or os.path.lexists(os.path.join(app, rel))):
-            lines.append(f"{marks[rel] or file_mark(app, rel)}  {rel}".replace("\n", "?") + "\n")
+            name = rel.replace("\\", "\\\\").replace("\n", "\\n")  # one line per file, and no two names alike
+            lines.append(f"{marks[rel] or file_mark(app, rel)}  {name}\n")
     return "".join(lines)
 
 
@@ -381,15 +417,24 @@ def digest(text):
 ATTRS = ["* -text", "MAKE-IT.md merge=union", ".make-it/sealed-files.txt merge=union", "backend/make-it-stamp.json merge=union"]
 
 
-def keep_git_steady(app):
-    """Lines the seal needs in .gitattributes: no line-ending rewriting (it would change every fingerprint), and
-    generated files that merge without a conflict (the next seal rewrites them)."""
-    have = (read_plain(os.path.join(app, ".gitattributes")) or b"").decode("utf-8", "replace")
+def git_steady_text(app):
+    """What .gitattributes must hold for the seal: no line-ending rewriting (it would change every fingerprint), and
+    generated files that merge without a conflict (the next seal rewrites them).
+
+    The whole new text; "" when nothing is missing; None when the file cannot be read, or would pass 1 MB and
+    so could not be read by the next seal. Nothing is written here.
+    """
+    path = os.path.join(app, ".gitattributes")
+    raw = read_plain(path)
+    if raw is None and os.path.lexists(path):
+        return None  # over 1 MB or unreadable: never replaced by a file holding only the seal's lines
+    have = (raw or b"").decode("utf-8", "surrogateescape")  # written back byte for byte
     missing = [a for a in ATTRS if a not in have.splitlines()]
     if not missing:
-        return True
+        return ""
     head = "" if not have or have.endswith("\n") else "\n"
-    return write_inside(app, ".gitattributes", have + head + "# make-it seal\n" + "\n".join(missing) + "\n")
+    text = have + head + "# make-it seal\n" + "\n".join(missing) + "\n"
+    return text if len(text.encode("utf-8", "surrogateescape")) <= CAP else None
 
 
 def load_ledger(app):
@@ -487,22 +532,41 @@ def cmd_seal(app, fw, opts):
         results = load_json(opts["--results"])
         if results is None:
             sys.exit(f"watermark: {opts['--results']} is not a plain file holding a JSON object")
-    refused = "watermark: refused: a folder or file the seal writes to is a link or not a plain file"
+    refused = ("watermark: refused: a folder or file the seal writes to is a link, is not a plain file, "
+               "or cannot be written. Nothing was sealed.")
     rec = build_record(app, fw, results if results is not None else {})  # never what an older record claimed
-    if not save_record(app, rec) or (git_dir_ok(app) and not keep_git_steady(app)):
+    backend = {e["path"][len("backend/"):]: e["expected"] for e in rec["security_files"]
+               if e["path"].startswith("backend/") and e.get("expected")}
+    backend_dir = os.path.join(app, "backend")
+    stamped = bool(backend) and os.path.isdir(backend_dir) and not os.path.islink(backend_dir)
+    in_git = git_dir_ok(app)
+    targets = [RECORD, os.path.join(LEDGER, "entry"), SEALED, READABLE] + [STAMP] * stamped + [".gitattributes"] * in_git
+    # Every refusal comes before the first write: a refused seal leaves the project as it was.
+    if not all(can_write_inside(app, rel) for rel in targets):
         sys.exit(refused)
+    attrs = git_steady_text(app) if in_git else ""
+    if attrs is None:
+        sys.exit("watermark: refused: .gitattributes cannot be read, or is (or would become) over 1 MB, "
+                 "so it was left as it is. Nothing was sealed.")
     entries, problems = load_ledger(app)
     restart = clean(opts["--restart"], 120) if opts.get("--restart") else None
     if problems and not restart:
         sys.exit("watermark: the seal history is damaged (" + "; ".join(problems[:3]) + "). "
                  "Nothing was sealed. Only the owner can go on: seal again with --restart \"<why>\".")
+    links = folder_links(app)
+    if links:
+        sys.exit("watermark: refused: a link to a folder cannot be sealed, because the files behind it would not count: "
+                 + ", ".join(clean(rel, 200) for rel in links[:10]) + ". Put the folder itself there, or remove the link. "
+                 "Nothing was sealed.")
+    if (attrs and not write_inside(app, ".gitattributes", attrs)) or not save_record(app, rec):
+        sys.exit(refused)
     listing = code_listing(app)
     fp = digest(listing)
     same = [e for e in heads_of(entries)
             if e["fingerprint"] == fp and e["make_it"].get("content_manifest_sha256") == fw.digest]
     if same and not restart:
         entry = max(same, key=lambda e: e["n"])
-        print(f"already sealed: nothing changed since /{clean(entry.get('skill'), 30)} sealed it")
+        said = f"already sealed: nothing changed since /{clean(entry.get('skill'), 30)} sealed it"
     else:
         heads = [] if restart else heads_of(entries)
         entry = {
@@ -524,23 +588,21 @@ def cmd_seal(app, fw, opts):
         if not write_inside(app, os.path.join(LEDGER, f"{entry['n']:04d}-{entry['_hash'][:12]}.json"), text):
             sys.exit(refused)
         entries[entry["_hash"]] = entry
-        print(f"sealed: run {entry['n']} by /{skill}, {entry['files']} files")
-    backend = {e["path"][len("backend/"):]: e["expected"] for e in rec["security_files"]
-               if e["path"].startswith("backend/") and e.get("expected")}
+        said = f"sealed: run {entry['n']} by /{skill}, {entry['files']} files"
     # only what the release fixes: two branches at the same release write the same stamp, so merges don't clash
     stamp = {"schema": 1, "make_it_version": fw.version, "scaffold": rec["project"]["scaffold"], "security_files": backend}
     ok = write_inside(app, SEALED, listing) and write_inside(app, READABLE, readable(entries, rec))
-    backend_dir = os.path.join(app, "backend")
-    if backend and os.path.isdir(backend_dir) and not os.path.islink(backend_dir):
+    if stamped:
         ok = ok and write_inside(app, STAMP, json.dumps(stamp, indent=2, sort_keys=True) + "\n")
     if not ok:
         sys.exit(refused)
+    print(said)  # only once everything is written
     return 0
 
 
 def listing_map(text):
     out = {}
-    for line in text.splitlines():
+    for line in text.split("\n"):  # never splitlines(): a name may hold a carriage return, and would read as a second line
         mark, sep, rel = line.partition("  ")
         if sep:
             out[rel] = mark
@@ -554,6 +616,10 @@ def seal_fails(app, rec):
         return ["The seal history was changed by hand: " + "; ".join(problems[:5]) + "."]
     if not entries:
         return [NEVER_SEALED]
+    dirs = folder_links(app)  # asked directly: the listing leaves documents out by name
+    if dirs:
+        return ["A link in the project points at a folder, so the files behind it are not sealed: "
+                + ", ".join(clean(rel, 200) for rel in dirs[:10]) + ". Put the folder itself there, or remove the link."]
     listing = code_listing(app)
     out = sorted(rel for rel, mark in listing_map(listing).items() if mark.startswith("link-out:"))
     if out:

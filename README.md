@@ -1007,6 +1007,43 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.30 -- the activity log hides every secret; the seal is harder to fool; a report given to the board is never lost
+
+Three fixes in one release.
+
+**The starter app's activity log**
+- **It shows only what is known to be safe.** Before, it hid seven named kinds of secret and
+  let everything else through. Now a value is shown only under a name known to be safe and in
+  a safe shape; everything else reads `***`. That covers names, values, incoming and outgoing
+  addresses, and error text.
+- **The console is covered too,** including an AI provider address with a password in it.
+- **A failed outgoing call is recorded,** with the kind of failure and none of its text.
+- **What it cannot hide,** stated in the rulebook: a secret that looks like an ordinary short
+  word or number, and logs already written.
+- **Not yet recorded:** three of the app's own sign-in calls. They sit in protected files and
+  are on the board to be done together.
+- **Apps already built** are offered the new masking at their next /resume-it.
+
+**The seal**
+- **A project can no longer make the seal run a command,** on any version of git.
+- **A link to a folder is refused,** whatever it is called. Before, a changed file behind such a
+  link could pass the check.
+- **A refused seal writes nothing,** and never says "sealed".
+- **An odd file name can no longer hide a change,** and an existing `.gitattributes` file is
+  kept exactly as it is or the seal is refused.
+- **The hostile-code check** got the same second guard.
+- **Apps already sealed:** nothing new for most. An app with a link to a folder must replace the
+  link before it can be sealed again. A file name holding a backslash or a line break needs one
+  reseal.
+
+**The board**
+- **A report always becomes a card.** If the step that sorts a new report fails, the report is
+  still filed with the person's exact words, marked "not sorted yet".
+- **A card write says truly where it went:** sent to the shared board, or "written here, NOT
+  sent", with the reason. A card saved here goes with the next write.
+- **Two sessions filing at once no longer take the same number,** and a card that is given a new
+  number says so in plain words.
+
 ### v1.71.29 -- the board's first screen says what to do next, speaks plainly, and reviews stop flooding it
 
 - **A first screen that tells you what to do.** `/backlog-it` now opens with one recommendation
