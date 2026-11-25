@@ -104,8 +104,14 @@ ok('a pull request is ready -> release it, named by its card', s.startswith('Rel
 ok('release says only what is known: no review is recorded, so confirm it; up to date was worked out', 'Review: none recorded, so confirm it first. Up to date with main.' in s and 'reviewed' not in out
    and parts(out)[2][0].startswith('1. Release it -- I confirm its review, bring it up to date if needed, then release it'), out)
 d2 = board(*without(1), '--with', 'reviewed'); o2 = first(d2)
-ok('a review recorded on the card is the only thing that makes the screen say reviewed', re.search(r'Review: recorded on its card \(\d{4}-\d\d-\d\d ready\)\. Up to date with main\.', o2) is not None
+ok('a review of the pull request\'s current commit, that said ready, is the only thing that makes the screen say reviewed',
+   re.search(r'Review: recorded on its card for this version \(\d{4}-\d\d-\d\d\)\. Up to date with main\.', o2) is not None
    and parts(o2)[2][0].startswith('1. Release it -- I bring it up to date if needed, then release it'), o2)
+for kind, says in (('reviewed-old', 'Review: recorded for an earlier version, so confirm it again.'), ('reviewed-not-ready', 'Review: its last review said not ready, so confirm it first.'),
+                   ('reviewed-malformed', 'Review: none recorded, so confirm it first.')):
+    d2 = board(*without(1), '--with', kind); o2 = first(d2)
+    ok(f'{kind}: the screen says "{says}" and keeps "I confirm its review" in the choice', says in o2 and 'recorded on its card' not in o2
+       and parts(o2)[2][0].startswith('1. Release it -- I confirm its review, bring it up to date if needed, then release it'), o2)
 d2 = board(*without(1), '--with', 'cannot-compare'); o2 = first(d2)
 ok('when gh cannot compare with main the screen says it could not tell', 'Could not tell whether it is up to date with main.' in o2 and 'Up to date' not in o2, o2)
 d2 = board(*without(1), '--with', 'behind'); o2 = first(d2); s2 = parts(o2)[1]
@@ -125,9 +131,24 @@ d = board(*without(3)); out = first(d); s = shape('dispatch', out, 'Start the wa
 ok('the plan has a wave that can start and lanes are free -> start that wave, its cards named', s.startswith('Start wave 1 of the plan: 3 cards, side by side.') and all(f'\n    {x}\n' in out for x in
    ('Export drops the last row (E01-S10)', 'Search ignores accents (E01-S11)', 'Upload fails on big files (E01-S12)')) and 'No bug fix is running.' in s and 'lanes are free' not in s, out)
 d2 = board(*without(3), '--with', 'other-work,overlap'); o2 = first(d2); s2 = parts(o2)[1]
-ok('other work in progress is said, not hidden behind free lanes', 'No bug fix is running; 1 other piece of work is in progress: A new page for monthly reports (E02-S8)' in s2, o2)
-ok('a wave card that shares a file with an open pull request is named, and starting the others is a choice',
-   'Search ignores accents (E01-S11) and "feat: a new report page" (#14) both change src/search.py' in s2 and parts(o2)[2][1].startswith('2. Start the others -- starts only the 2 cards that share no file'), o2)
+ok('other work in progress is said, not hidden behind free lanes', 'No bug fix is running; 1 other piece of work moved in the last 2 days: A new page for monthly reports (E02-S8).' in s2, o2)
+ok('a wave card that shares a file with an open pull request is named, and starting the others is the recommended choice',
+   'Search ignores accents (E01-S11) and "feat: a new report page" (#14) both change src/search.py' in s2 and s2.startswith('Start 2 of the 3 cards in wave 1 of the plan: the other shares a file with an open pull request.')
+   and parts(o2)[2][0] == '1. Start the others -- starts only the 2 cards that share no file with an open pull request (Recommended)'
+   and parts(o2)[2][1].startswith('2. Start the wave -- starts all 3') and '\n     against: ' in o2, o2)
+d3 = board(*without(3), '--with', 'other-work,other-quiet,overlap-two'); o3 = first(d3); s3 = parts(o3)[1]
+ok('work that moved is named first, quiet work is counted apart, and a stalled card is never the example',
+   '1 other piece of work moved in the last 2 days: A new page for monthly reports (E02-S8).' in s3 and '1 more is marked in progress but quiet.' in s3
+   and 'An old page nobody finished' not in o3.split('NEEDS YOU')[0] and 'Stuck:   1 -- An old page nobody finished (E02-S9)' in o3, o3)
+ok('one card left: "the 1 card that shares no file"', s3.startswith('Start 1 of the 3 cards in wave 1 of the plan: the others share a file with an open pull request.')
+   and parts(o3)[2][0] == '1. Start the others -- starts only the 1 card that shares no file with an open pull request (Recommended)', o3)
+ok('overlap-two: at most 25 lines, none over 110, no bare id', len(o3.splitlines()) <= 25 and max(map(len, o3.splitlines())) <= 110 and not bare(o3, titles(d3)), o3)
+d3 = board(*without(3), '--with', 'other-quiet'); o3 = first(d3)
+ok('only quiet work: said as quiet, with no card named as running', 'No bug fix is running; 1 piece of work is marked in progress but quiet.' in parts(o3)[1], o3)
+d3 = board(*without(3), '--with', 'overlap-all'); o3 = first(d3); s3 = parts(o3)[1]
+ok('every card in the wave shares a file: the screen says so, recommends waiting for that pull request, and offers no "others"',
+   s3.startswith('Wave 1 of the plan should wait: every card in it shares a file with an open pull request.') and parts(o3)[2][0].startswith('1. Wait for it -- nothing starts; release or finish that pull request first (Recommended)')
+   and 'Start the others' not in o3 and len(o3.splitlines()) <= 25 and max(map(len, o3.splitlines())) <= 110, o3)
 ok('overlap: lines stay short and name no bare id', max(map(len, o2.splitlines())) <= 110 and not bare(o2, titles(d2)), o2)
 d2 = board(*without(3), '--with', 'no-files'); o2 = first(d2)
 ok('when the files cannot be read the screen says so', 'Could not check these cards against the open pull requests' in o2, o2)
@@ -241,7 +262,8 @@ ok('the skill: the old compact board stays under `list`, and `status` is unchang
 ok('the reference: the first screen and its rule are written down, in order', '### The first screen' in ref and all(x in ref for x in
    ('**The next-thing rule**', 'answer it', 'release it', 'sort them', 'start that wave', 'plan', 'groom', 'the next safe card', '.last-seen.json', '.git/info/exclude')), '')
 ok('the reference says what "ready" can and cannot know, and where a review is recorded', 'no longer a draft, no conflict with main, every check finished and passed, and not behind main' in ref
-   and 'never says a pull request is reviewed unless its card says so' in ref and 'card.py set <id> reviewed="<date> ready"' in ref and 'reviewed: 2026-11-24 ready # optional: the pull request passed its review' in ref, '')
+   and 'never says a pull request is reviewed unless its card says so' in ref and 'card.py set <id> reviewed="<date> ready <commit>"' in ref and 'reviewed: 2026-11-24 ready 1a2b3c4 # optional: the pull request\'s last review' in ref
+   and 'only when the value says ready and that commit is the pull request\'s head' in ref and '| Wait for it |' in cmd, '')
 ok('the skill: starting the others is a pick', '| Start the others |' in cmd, '')
 for h in ('status.py', 'regen-board.py', 'sync-prs.py'):
     r = subprocess.run([sys.executable, f'{BIN}/{h}', '--self-test'], capture_output=True, text=True, encoding='utf-8')

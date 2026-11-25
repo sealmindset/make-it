@@ -99,7 +99,8 @@ ok('every brief in the shipped files is one this test checks (a new brief must c
 ok('(control) the search for briefs finds the ones known today', {TEMPLATES[0], TEMPLATES[4], '.claude/make-it/resolve-it/writer-prompt.md', '.claude/make-it/threats-it/references/fact-check.md'} <= set(found), found)
 ok('a lane\'s brief tells it to read its area\'s running list, fix what is in its files, and mark it fixed',
    all('Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).' in flat(raw(p)) for p in (TEMPLATES[2], PD)))
-ok('the review brief says where a clean review is recorded', 'card.py set <id> reviewed="<date> ready"' in flat(raw(TEMPLATES[0])))
+ok('the review brief says how a review is recorded: the verdict and the commit it read, ready or not',
+   'card.py set <id> reviewed="<date> ready <commit>"' in flat(raw(TEMPLATES[0])) and 'reviewed="<date> not ready"' in flat(raw(TEMPLATES[0])))
 
 # --- the lead's own summary step says: rewrite, never forward ---
 for p in (PD, SDD, '.claude/commands/dispatch-it.md', '.claude/commands/subagent-it.md', '.claude/commands/resolve-it.md', '.claude/commands/backlog-it.md'):

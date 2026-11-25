@@ -19,10 +19,13 @@ Usage: make-board.py DIR [--without a,b,...] [--with x,y,...] [--plan wave|ran-o
   Off unless asked for with --with:
     closed-kinds  five cards closed today: one plain done, two closed as shipped-tests-pass, one as
                   not-needed, one as duplicate
-    reviewed      the ready pull request's card records its review (`reviewed:`)
+    reviewed      the ready pull request's card records a review of its current commit (`reviewed: <date> ready <commit>`);
+                  reviewed-old = of an earlier commit; reviewed-not-ready = the review said not ready;
+                  reviewed-malformed = the field has no commit
     behind        the ready pull request is 2 commits behind main; cannot-compare = gh cannot say
-    other-work    a story in progress that is not a bug
-    overlap       the moving pull request changes a file a card in the plan's first wave also names
+    other-work    a story in progress that is not a bug, changed today; other-quiet = one more, untouched for 20 days
+    overlap       the moving pull request changes a file a card in the plan's first wave also names;
+                  overlap-two = files of two of its cards; overlap-all = of all three
     no-files      gh cannot say which files the open pull requests change
     running-list  the Bugs epic holds a running list: two areas, three lines, one of them fixed
   --groom-days (default 20): GROOM-PLAN.md dated that many days ago; none = no GROOM-PLAN.md.
@@ -54,7 +57,9 @@ def main(args):
     card(30, 'E02-S6', 'The roles screen reads the new provider', dependsOn='[E02-S1]')
     card(30, 'E02-S7', 'Invoices read the new billing tables', dependsOn='[E02-S2]')
     card(20, 'E01-S2', 'Totals are wrong after a refund', status='in-progress', stage='Fix ready', pr='[11]', updated=d(0),
-         **({'reviewed': f'{d(0)} ready'} if 'reviewed' in extra else {}))
+         **({'reviewed': f'{d(0)} ready {11:040x}'[:len(d(0)) + 15]} if 'reviewed' in extra else {'reviewed': f'{d(40)} ready 0ddba11'} if 'reviewed-old' in extra
+            else {'reviewed': f'{d(0)} not ready, two findings'} if 'reviewed-not-ready' in extra else {'reviewed': f'{d(0)} ready'} if 'reviewed-malformed' in extra else {}))
+    if 'other-quiet' in extra: card(20, 'E02-S9', 'An old page nobody finished', status='in-progress')
     if 'other-work' in extra: card(20, 'E02-S8', 'A new page for monthly reports', status='in-progress', updated=d(0))
     if 'closed-kinds' in extra:
         for n, kind in ((41, None), (42, 'shipped-tests-pass'), (43, 'shipped-tests-pass'), (44, 'not-needed'), (45, 'duplicate')):
@@ -106,7 +111,7 @@ def main(args):
         open(f'{B}/GROOM-PLAN.md', 'w', encoding='utf-8').write(f'# Groom Plan -- {d(int(groom))}  (scope: all)\n')
     git('add', '-A', when=d(0)); git('commit', '-qm', 'plans', '--allow-empty', when=d(0))
     ok = [{'__typename': 'CheckRun', 'status': 'COMPLETED', 'conclusion': 'SUCCESS'}]
-    pr = lambda n, title, ago=0, **kv: {'number': n, 'title': title, 'isDraft': False, 'reviewDecision': '', 'mergeStateStatus': 'CLEAN', 'baseRefName': 'main', 'headRefOid': f'head{n}',
+    pr = lambda n, title, ago=0, **kv: {'number': n, 'title': title, 'isDraft': False, 'reviewDecision': '', 'mergeStateStatus': 'CLEAN', 'baseRefName': 'main', 'headRefOid': f'{n:040x}',
                                         'statusCheckRollup': ok, 'updatedAt': f'{d(ago)}T09:00:00Z', **kv}
     prs = [pr(14, 'feat: a new report page', isDraft=True, mergeStateStatus='BLOCKED', statusCheckRollup=[{'__typename': 'CheckRun', 'status': 'IN_PROGRESS', 'conclusion': ''}])]
     if on('ready-pr'): prs.append(pr(11, 'fix: refund totals'))
@@ -117,10 +122,11 @@ def main(args):
     os.makedirs(f'{out}/behind'); os.makedirs(f'{out}/files')
     for p in prs:  # what the gh stand-in answers about each pull request: how far behind main, and its files
         if 'cannot-compare' not in extra:
-            open(f"{out}/behind/head{p['number']}", 'w', encoding='utf-8').write(json.dumps({'behind_by': 2 if 'behind' in extra and p['number'] == 11 else 0}))
+            open(f"{out}/behind/{p['number']:040x}", 'w', encoding='utf-8').write(json.dumps({'behind_by': 2 if 'behind' in extra and p['number'] == 11 else 0}))
         if 'no-files' not in extra:
-            path = 'src/search.py' if 'overlap' in extra and p['number'] == 14 else f"src/pr{p['number']}.py"
-            open(f"{out}/files/{p['number']}.json", 'w', encoding='utf-8').write(json.dumps({'files': [{'path': path}]}))
+            hit = ['src/search.py'] * bool(extra & {'overlap', 'overlap-two', 'overlap-all'}) + ['src/export.py'] * bool(extra & {'overlap-two', 'overlap-all'}) + ['src/upload.py'] * ('overlap-all' in extra)
+            paths = hit if hit and p['number'] == 14 else [f"src/pr{p['number']}.py"]
+            open(f"{out}/files/{p['number']}.json", 'w', encoding='utf-8').write(json.dumps({'files': [{'path': x} for x in paths]}))
 
 if __name__ == '__main__':
     if len(sys.argv) < 2 or sys.argv[1].startswith('-'): sys.exit(__doc__)
