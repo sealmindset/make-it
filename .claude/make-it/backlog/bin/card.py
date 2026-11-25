@@ -80,8 +80,11 @@ class NotSent(Exception): pass  # written here, but the shared board did not get
 _moved = {}  # a card renumber() moved: old path -> new path
 def renumber(B, proj):
     """Two clones gave two new cards one id: ours, not on the shared board yet, takes the next free id (its own
-    commit). Never silently: a line on stdout with both titles and ids, and a line on the card saying what it was."""
+    commit). Never silently: a line on stdout with both titles and ids, and a line on the card saying what it was.
+    Our other new cards not sent yet that depend on it follow (`dependsOn:`); a card on the shared board is never
+    edited for this -- any card of ours that still mentions the old id is named on the line instead."""
     said = []
+    unsent = lambda *f: {os.path.join(B, r) for r in git(B, 'diff', '--name-only', *f, '@{u}..HEAD', '--', 'items').stdout.split('\n') if r}
     for rel in git(B, 'diff', '--name-only', '--diff-filter=A', '@{u}..HEAD', '--', 'items').stdout.split('\n'):
         p, cards = os.path.join(B, rel), R.load(B)
         cid = v(cards.get(p) or {}, 'id'); epic = cid.rsplit('-S', 1)[0]
@@ -94,7 +97,13 @@ def renumber(B, proj):
         txt = open(q, encoding='utf-8', newline='').read()
         with open(q, 'w', encoding='utf-8', newline='') as f: f.write(re.sub(r'^id:.*$', f'id: {epic}-S{n}', txt, count=1, flags=re.M))
         write(q, section='Renumbered', text=f'- this card was {cid} until {datetime.date.today()}: "{theirs}" took that id on the shared board first')
-        print(f'Your card "{title(cards[p])}" is now {epic}-S{n}: {cid} was taken by "{theirs}" on the shared board', flush=True)
+        word = re.compile(rf'(?<![\w-]){re.escape(cid)}(?!\d)', re.I)
+        for x in sorted(unsent('--diff-filter=A') - {p, q}):  # new cards of ours the shared board has never seen
+            if os.path.exists(x) and cid.upper() in R.ids(v(R.fm(x) or {}, 'dependsOn')):
+                write(x, {'dependsOn': word.sub(f'{epic}-S{n}', v(R.fm(x), 'dependsOn'))}); git(B, 'add', '--', x)
+        still = [R.name(R.fm(x)) for x in sorted(unsent() - {p, q}) if x in cards and os.path.exists(x) and word.search(open(x, encoding='utf-8').read())]
+        print(f'Your card "{title(cards[p])}" is now {epic}-S{n}: {cid} was taken by "{theirs}" on the shared board'
+              + (f' -- these cards still mention {cid}: {", ".join(still)}: check them' if still else ''), flush=True)
         git(B, 'add', '--', q); _moved[p] = q; _moved.update({k: q for k, x in _moved.items() if x == p}); said.append(f'{cid} is now {epic}-S{n}')
     if said: regen(B, proj); git(B, 'add', 'BOARD.md'); git(B, 'commit', '-q', '-F', '-', input=f'card: {", ".join(said)}: the shared board took that id meanwhile'[:120])
 
@@ -136,10 +145,12 @@ def pull(B, proj=None, soft=False):
 
 def left_behind(B):
     """Card files saved here that git does not hold yet (an earlier write could not commit): untracked or staged
-    as new, under items/, and loading as a card with an `id:` -- the same files the board shows. Nothing else is touched."""
+    as new, under items/, and loading as a card with an `id:` -- the same files the board shows. Nothing else is
+    touched, and never a link (nor a file reached through one): what it points at is not the board's."""
     cards = R.load(B)
     names = git(B, 'ls-files', '--others', '--exclude-standard', '--', 'items').stdout.split('\n') + git(B, 'diff', '--cached', '--name-only', '--diff-filter=A', '--', 'items').stdout.split('\n')
-    return [n for n in names if n and v(cards.get(os.path.join(B, n)) or {}, 'id')]
+    real = os.path.realpath(B)
+    return [n for n in names if n and os.path.realpath(os.path.join(B, n)) == os.path.join(real, n) and v(cards.get(os.path.join(B, n)) or {}, 'id')]
 
 def sync(B, paths, msg, proj):
     """Regenerate, commit, send. Returns what happened when that is all the board is set up for; raises NotSent

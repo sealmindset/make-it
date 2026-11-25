@@ -1149,7 +1149,9 @@ pushed first, it rebases onto theirs, regenerating `BOARD.md` when that is the o
 never leaves the board mid-rebase; if both clones gave a new card the same id (or file name)
 meanwhile, ours takes the next free one before it is sent, and that is never silent: it prints
 `Your card "<title>" is now <new id>: <old id> was taken by "<their title>" on the shared board` --
-relay it -- and the card keeps a line under `## Renumbered` saying what it was.
+relay it -- and the card keeps a line under `## Renumbered` saying what it was. Our own new cards
+not sent yet that depend on it follow; the line names any card that still mentions the old id
+("these cards still mention <old id>: …: check them").
 
 **The line it prints is true, and so is its exit.** It ends `committed + pushed` only when the shared
 board has the write. Otherwise it ends `… NOT sent to …: <reason>`, and you **relay that line** to
