@@ -1146,8 +1146,10 @@ its own repo; a failed pull, a detached HEAD or a half-done rebase writes nothin
 by its `id:` (exactly one match), writes the whole file then swaps it in, bumps `updated:`,
 regenerates `BOARD.md`, and syncs as below (`--no-sync` leaves the commit to you). If another session
 pushed first, it rebases onto theirs, regenerating `BOARD.md` when that is the only conflict, and
-never leaves the board mid-rebase; if both clones gave a new card the same id meanwhile, ours takes
-the next free id before it is sent.
+never leaves the board mid-rebase; if both clones gave a new card the same id (or file name)
+meanwhile, ours takes the next free one before it is sent, and that is never silent: it prints
+`Your card "<title>" is now <new id>: <old id> was taken by "<their title>" on the shared board` --
+relay it -- and the card keeps a line under `## Renumbered` saying what it was.
 
 **The line it prints is true, and so is its exit.** It ends `committed + pushed` only when the shared
 board has the write. Otherwise it ends `… NOT sent to …: <reason>`, and you **relay that line** to
@@ -1157,7 +1159,8 @@ the person:
   or `--no-sync`.
 - **exit 3**, `NOT sent to the shared board` -- written here, but the shared board did not get it:
   the send was refused, the board could not catch up, the branch follows nothing, or the commit
-  failed. The card exists: do not write it again. The next card write that can send carries it across.
+  failed. The card is saved here: do NOT run the write again. It is sent with the next card write,
+  which also commits any card file an earlier write saved but could not commit.
 - **any other non-zero exit** -- nothing was written; the message says why.
 
 `sync-prs.py` writes through the same function, under the same lock.

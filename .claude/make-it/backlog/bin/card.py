@@ -17,7 +17,7 @@ sorted yet -- triage failed: <reason>". Good output -> `triage ok`, nothing writ
 The line printed ends with what happened, and it is true: `committed + pushed` only when the shared board has
 it; otherwise `... NOT sent to ...: <reason>`. Exit 0 = sent, or the board has no shared copy to send to (no
 remote, inside a project, not in git, --no-sync). Exit 3 = written here, but the shared board did not get it.
-Any other non-zero exit = nothing written.
+Any other non-zero exit = nothing written. Exit 3 means saved here but not sent: do not repeat the write.
 """
 import datetime, importlib.util, json, os, re, subprocess, sys
 
@@ -79,7 +79,8 @@ class NotSent(Exception): pass  # written here, but the shared board did not get
 
 _moved = {}  # a card renumber() moved: old path -> new path
 def renumber(B, proj):
-    """Two clones gave two new cards one id: ours, not on the shared board yet, takes the next free id (its own commit)."""
+    """Two clones gave two new cards one id: ours, not on the shared board yet, takes the next free id (its own
+    commit). Never silently: a line on stdout with both titles and ids, and a line on the card saying what it was."""
     said = []
     for rel in git(B, 'diff', '--name-only', '--diff-filter=A', '@{u}..HEAD', '--', 'items').stdout.split('\n'):
         p, cards = os.path.join(B, rel), R.load(B)
@@ -87,23 +88,39 @@ def renumber(B, proj):
         if not rel or '-S' not in cid or sum(v(d, 'id').upper() == cid.upper() for d in cards.values()) < 2: continue
         n = 1 + max(int(m.group(1)) for d in cards.values() if (m := re.match(rf'{re.escape(epic)}-S(\d+)$', v(d, 'id'), re.I)))
         q = os.path.join(os.path.dirname(p), re.sub(r'^S\d+', f'S{n}', os.path.basename(p)))
-        if os.path.exists(q) or git(B, 'mv', p, q).returncode: continue
+        if q != p and (os.path.exists(q) or git(B, 'mv', p, q).returncode): continue
+        title = lambda d: v(d, 'title').strip('"') or 'Untitled card'
+        theirs = next(title(d) for x, d in cards.items() if x != p and v(d, 'id').upper() == cid.upper())
         txt = open(q, encoding='utf-8', newline='').read()
         with open(q, 'w', encoding='utf-8', newline='') as f: f.write(re.sub(r'^id:.*$', f'id: {epic}-S{n}', txt, count=1, flags=re.M))
+        write(q, section='Renumbered', text=f'- this card was {cid} until {datetime.date.today()}: "{theirs}" took that id on the shared board first')
+        print(f'Your card "{title(cards[p])}" is now {epic}-S{n}: {cid} was taken by "{theirs}" on the shared board', flush=True)
         git(B, 'add', '--', q); _moved[p] = q; _moved.update({k: q for k, x in _moved.items() if x == p}); said.append(f'{cid} is now {epic}-S{n}')
     if said: regen(B, proj); git(B, 'add', 'BOARD.md'); git(B, 'commit', '-q', '-F', '-', input=f'card: {", ".join(said)}: the shared board took that id meanwhile'[:120])
 
 def catch_up(B, proj):
     """Put our commits the shared board lacks on top of its newer ones. None, or why not (never left mid-rebase).
-    ponytail: only a clash in BOARD.md is settled here (it is regenerated); two clones writing one card's file at once need a hand."""
+    ponytail: settled here: a clash in BOARD.md (regenerated) and two new card files of one name (ours moves). Two clones
+    changing the same lines of one card need a hand, and so does a later unsent change of ours to a card that had to move."""
     r = git(B, 'pull', '-q', '--rebase')
-    for _ in range(50 if r.returncode else 0):  # one stop per commit of ours whose BOARD.md clashes
-        if git(B, 'diff', '--name-only', '--diff-filter=U').stdout.split() != ['BOARD.md']: break
-        regen(B, proj); git(B, 'add', 'BOARD.md')
+    for _ in range(50 if r.returncode else 0):  # one stop per commit of ours that clashes in a way settled here
+        un = git(B, 'diff', '--name-only', '--diff-filter=U').stdout.split('\n')[:-1]
+        both = [l[3:] for l in git(B, 'status', '--porcelain').stdout.split('\n') if l.startswith('AA items/') and re.match(r'S\d+', os.path.basename(l))]
+        if not un or set(un) - {'BOARD.md'} - set(both): break
+        for rel in both:  # both clones made a new card file of this name: theirs keeps it, ours moves to a free name (renumber() gives it its id)
+            show = lambda stage: subprocess.run(['git', '-C', B, 'show', f':{stage}:{rel}'], capture_output=True, check=True).stdout
+            m = re.match(r'S(\d+)(.*)', os.path.basename(rel)); n = int(m.group(1)) + 1
+            while os.path.exists(q := os.path.join(B, os.path.dirname(rel), f'S{n}{m.group(2)}')): n += 1
+            with open(q, 'wb') as f: f.write(show(3))  # stage 3 is our commit being replayed, stage 2 the shared board's
+            with open(os.path.join(B, rel), 'wb') as f: f.write(show(2))
+            git(B, 'add', '--', rel, q); _moved[os.path.join(B, rel)] = q
+        if 'BOARD.md' in un: regen(B, proj); git(B, 'add', 'BOARD.md')
         if not subprocess.run(['git', '-C', B, '-c', 'core.editor=true', 'rebase', '--continue'], capture_output=True).returncode: r = None; break
     if r is not None and r.returncode:
+        clash = git(B, 'diff', '--name-only', '--diff-filter=U').stdout.split()
         git(B, 'rebase', '--abort')
-        return ' '.join((r.stderr.strip() or 'conflict').split())[:120]
+        if clash: return f'this board and the shared board both changed the same lines of {", ".join(clash)[:120]}'
+        return ' '.join(' '.join(l for l in r.stderr.splitlines() if not l.startswith('hint:')).split())[:120] or 'git gave no reason'
     renumber(B, proj)
 
 def pull(B, proj=None, soft=False):
@@ -114,7 +131,15 @@ def pull(B, proj=None, soft=False):
         return 'the board repo is not on a branch (detached or mid-rebase)' if soft else sys.exit('card: board repo is not on a branch (detached or mid-rebase) -- fix it first, nothing written')
     if not git(B, 'rev-parse', '--abbrev-ref', '@{u}').returncode:
         r = git(B, 'pull', '-q', '--ff-only')
-        if r.returncode and catch_up(B, proj) and not soft: sys.exit(f'card: pull failed, nothing written -- {r.stderr.strip()[:200]}')
+        if r.returncode and (why := catch_up(B, proj)) and not soft:
+            sys.exit(f'card: nothing written -- could not catch up with the shared board: {why}. Run `git -C {B} pull --rebase`, settle what it names, then `git -C {B} push`')
+
+def left_behind(B):
+    """Card files saved here that git does not hold yet (an earlier write could not commit): untracked or staged
+    as new, under items/, and loading as a card with an `id:` -- the same files the board shows. Nothing else is touched."""
+    cards = R.load(B)
+    names = git(B, 'ls-files', '--others', '--exclude-standard', '--', 'items').stdout.split('\n') + git(B, 'diff', '--cached', '--name-only', '--diff-filter=A', '--', 'items').stdout.split('\n')
+    return [n for n in names if n and v(cards.get(os.path.join(B, n)) or {}, 'id')]
 
 def sync(B, paths, msg, proj):
     """Regenerate, commit, send. Returns what happened when that is all the board is set up for; raises NotSent
@@ -125,6 +150,7 @@ def sync(B, paths, msg, proj):
     paths = [os.path.relpath(p, B) for p in paths] + ['BOARD.md']
     git(B, 'add', '--', *paths)
     if not own: return "written here and staged, NOT sent to a shared board: the board lives inside a project and goes with that project's next commit"
+    paths += [n for n in left_behind(B) if n not in paths]; git(B, 'add', '--', *paths)  # a card BOARD.md lists is a card the commit holds
     c = git(B, 'commit', '-q', '-F', '-', '--', *paths, input=msg)  # on stdin, as UTF-8: an ASCII locale can't put it in argv
     if c.returncode and git(B, 'status', '--porcelain', '--', *paths).stdout.strip():
         raise NotSent(f'written here, NOT committed and {NS}: the commit failed ({" ".join(c.stderr.split())[:120]})')
@@ -135,10 +161,9 @@ def sync(B, paths, msg, proj):
         br = git(B, 'symbolic-ref', '--short', 'HEAD').stdout.strip()
         raise NotSent(f'{here}, {NS}: branch "{br}" follows no branch there -- run once: git -C {B} push -u {remotes[0]} {br}')
     if c.returncode and git(B, 'rev-list', '--count', '@{u}..HEAD').stdout.strip() == '0': return 'nothing to commit'
-    again = f'the next card write tries again, or run `git pull --rebase` then `git push` in {B}'
     if git(B, 'push', '-q').returncode:  # someone pushed meanwhile: replay ours on top, once
-        if (why := catch_up(B, proj)): raise NotSent(f'{here}, {NS}: could not catch up with it ({why}) -- {again}')
-        if (r := git(B, 'push', '-q')).returncode: raise NotSent(f'{here}, {NS}: the push failed ({" ".join(r.stderr.split())[:120]}) -- {again}')
+        if (why := catch_up(B, proj)): raise NotSent(f'{here}, {NS}: could not catch up with it ({why})')
+        if (r := git(B, 'push', '-q')).returncode: raise NotSent(f'{here}, {NS}: the push failed ({" ".join(r.stderr.split())[:120]})')
     return 'nothing to commit, earlier commits pushed' if c.returncode else 'committed + pushed'
 
 def find(B, cid):
@@ -242,15 +267,16 @@ def main(args):
         try: raw = open(rest[0], 'rb').read().decode('utf-8', 'replace') if rest else None
         except OSError: raw = None
         lock(B); late = pull(B, proj, soft=True)
-        why = triage_fault(B, raw)
-        if not why: return print('triage ok: nothing written yet -- write the sorted card with `card.py new <epic>`; if that write fails, run `card.py capture` again with no triage file')
+        try: why = triage_fault(B, raw)
+        except Exception as e: why = f'the triage output could not be read ({type(e).__name__})'  # nested too deep, or anything else
+        if not why: return print('triage ok: nothing written yet -- write the sorted card with `card.py new <epic>`; if it says nothing was written, run `card.py capture` again with no triage file')
         epic, made = bugs_epic(B); extra = [made] if made else []
         cid, p = new(B, epic, unsorted(t, why)); what = f'new {cid}: {v(R.fm(p), "title")}'; lead, tail = 'new: ', f' · not sorted yet -- triage failed: {why}'
     else: sys.exit(__doc__)
     try:
         if late: regen(B, proj); raise NotSent(f'written here, NOT committed and {NS}: {late}')
         sent = 'written here, NOT sent to the shared board: --no-sync leaves the commit and the push to you' if nosync else sync(B, [p] + extra, f'card: {what}'[:72], proj)
-    except NotSent as e: sent = e
+    except NotSent as e: sent = NotSent(f'{e} -- the card is saved here; do NOT run this write again; it is sent with the next card write')
     p = _moved.get(p, p)
     # the card by its title with its id is what the person reads; `what` stays the commit subject, unchanged
     print(f'{lead}{R.name(R.fm(p))}{tail} · {sent}')
