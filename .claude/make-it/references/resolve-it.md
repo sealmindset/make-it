@@ -112,7 +112,11 @@ app can post to, mail that is sent rather than only recorded); one that reaches 
 the silence and gets its card. Then, for every cause: what would have told someone sooner? A failure
 that was silent gets detection (an alert to the owner, or a message to the sender when the sender can act);
 a failure a person could cause gets a refusal with plain words at the moment they cause it; a
-manual unblock from the run gets its card (§3.6). File follow-ups for anything deferred.
+manual unblock from the run gets its card (§3.6). Nothing else is deferred to a card by default:
+what the run and its reviews turn up is sorted by `approval-block.md`, A review sorts its findings
+-- important findings fixed before the fix ships, at most five quick minor ones fixed in the same
+work, and a fault that was already there filed only if it can lose data, leak a secret, send
+something wrong or tell the person something untrue, else put on the running list.
 
 **Phase 10 -- Record.** Write all four records (§9). Then report to the owner (§11).
 
@@ -156,7 +160,7 @@ silent drop.
 
 | Record | Where | Contains |
 |---|---|---|
-| **Card** | The project's backlog (`/backlog-it`), Bugs epic | Findings per phase, PRs, live proof, stage moved to Checked only on the outcome; follow-up cards for deferred items and manual unblocks. |
+| **Card** | The project's backlog (`/backlog-it`), Bugs epic | Findings per phase, PRs, live proof, stage moved to Checked only on the outcome; a card for each manual unblock, and for an already-there fault only when it can hurt someone. |
 | **Incident report** | `docs/incidents/<YYYY-MM-DD>-<slug>.md` in the project | The format in §12. |
 | **Memory and doctrine** | The project's memory; its doctrine file (`CLAUDE.md` or the file it names) | Lessons as memory entries; any rule the owner stated, verbatim and dated, in the doctrine. |
 | **Pattern library** | Shipped seeds in `~/.claude/make-it/resolve-it/patterns/`; the owner's learned patterns in `~/.claude/resolve-it/patterns/` (user-level, shared across projects, never overwritten by an install) | Each root cause made generic (§10). |
@@ -190,7 +194,8 @@ user-level folder; a learned pattern worth shipping is proposed to the framework
 
 Short and in plain words. The outcome (true or not, with the proof); the causes in order, each one
 sentence; what is live and what is pending; what was done by hand and its card; safeguards touched
-and their undo; follow-up cards; the draft message for the affected person. If asked whose fault it
+and their undo; any card filed and why it could not be fixed in this work; the draft message for the affected person. It follows
+`approval-block.md`, A message to the owner. If asked whose fault it
 was: count the causes, say which were code and which a person did, and whether the system invited
 the person's step. Never blame the affected person.
 

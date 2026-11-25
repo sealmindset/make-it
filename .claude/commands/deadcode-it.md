@@ -144,7 +144,7 @@ No tool could run → skip to `report` and say "I couldn't check your code: <rea
 
 deadcode.md §3 then §4. Apply the keep-list first. For more than ~30 candidates, dispatch
 Explore subagents in parallel (their brief says: read only -- no edits, no git commands that
-change anything), one per kind (imports/locals, exports, files,
+change anything; and: "Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id."), one per kind (imports/locals, exports, files,
 dependencies, test helpers), each handed deadcode.md §3 and its slice of the list, each
 returning per item: the searches run, what they found, and a proposed grade with the reason.
 Grade conservatively: torn → the higher grade.

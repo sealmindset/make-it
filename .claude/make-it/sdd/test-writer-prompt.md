@@ -42,6 +42,17 @@ and how the project runs its tests. Omit if none.]
    and make the run fail on any output to stderr.
 
 ## Report
+Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+title with its id, never a bare id.
+A fault you notice on the way that is not this task's:
+Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+list. File no follow-up cards: leftovers are fixed inside the work.
 Write your FULL report to `[REPORT_PATH]` (each test and the requirement it covers, the test
 command, the failing output, the SAFEGUARDS line). In your reply to me, return ONLY:
 - **STATUS:** one of TESTS_READY / NOT_TESTABLE / NEEDS_CONTEXT / BLOCKED

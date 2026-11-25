@@ -48,12 +48,25 @@ attention: practice items are made only by the coordinator's practice script, in
 - **Minor** -- the requirement is met in substance, but a detail the brief states loosely differs
   (e.g. an equal value of another type).
 
+Critical and Important are both IMPORTANT in the rule below; report at most five Minor, the quickest
+to fix. A break in code this diff did not touch goes on its own `[Already there]` line.
+Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+list. File no follow-up cards: leftovers are fixed inside the work.
+Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+title with its id, never a bare id.
+
 ## Output
 ```
 VERDICT: CLEAN | COUNTEREXAMPLES
 SAFEGUARDS: ok | undisclosed: <the diff lines, one per weakening>
 TRIED: <the inputs and edges you ran, one line each -- required even when CLEAN>
-1. [Critical|Important|Minor] requirement: <the brief's words>
+1. [Critical|Important|Minor|Already there] requirement: <the brief's words>
    input: <exact input / steps>
    brief requires: <expected>
    code does: <actual, from your run>

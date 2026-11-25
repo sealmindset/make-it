@@ -36,6 +36,14 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
 3. Build only what the brief requires — no extra flags, options, or scope (YAGNI).
 4. Run the tests; iterate until they pass.
 5. Self-review your own diff for spec gaps, dead code, and quality before reporting.
+   Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).
+   Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+   not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+   something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+   five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+   filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+   send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+   list. File no follow-up cards: leftovers are fixed inside the work.
 6. Commit your work (clear message). Stay on the current branch — never commit to main/master.
 7. Never weaken a safeguard to get to green: no `--no-verify`, and no skipping, deleting, or
    loosening any other test (this task's tests you may not touch at all — see Tests). A change
@@ -47,6 +55,9 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
    or capture the text first, and make the run fail on any output to stderr.
 
 ## Report
+Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+title with its id, never a bare id.
 Write your FULL report to `[REPORT_PATH]` (what you built, decisions, test command + output,
 self-review notes, and the SAFEGUARDS line below). In your reply to me, return ONLY:
 - **STATUS:** one of DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED

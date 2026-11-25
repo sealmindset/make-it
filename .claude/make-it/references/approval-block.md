@@ -2,7 +2,9 @@
 
 The working form of "Keep the human able to notice" (`human-in-the-loop.md`, rules 1, 2, 3 and
 5) for every skill with an approval point and every agent a skill dispatches. A skill links this
-file from its `<execution_context>`; agent prompts carry the disclosure line themselves.
+file from its `<execution_context>`; agent prompts carry the disclosure line themselves. It also
+holds the two rules every brief carries: how a message to the owner reads, and how a review sorts
+what it finds.
 
 ## Pick the tier before you ask
 
@@ -73,6 +75,62 @@ takes the item up.
 
 An item you can't explain in two plain sentences isn't ready to ask. On a backlog board the item
 is the card's `decision:` and `answers:` (`backlog-board.md`, Waiting on you).
+
+## A message to the owner
+
+The owner is the person the work is for. Whatever a skill, a lead, a lane or a reviewer writes for
+them to read -- an update, a summary, a closing report, a question -- follows one rule:
+
+- **A few plain lines**: what happened, what it means for them, what they must do (often nothing).
+- **Plain simple English**: no jargon where a plain word exists, short sentences, no shorthand of
+  your own.
+- **Names with ids**: a card or a pull request is its title with its id, never a bare id or number.
+- **One update a day**, unless they are needed sooner: a decision, a blocker, or something that
+  went wrong.
+- **Every question is one click**: a select, each answer saying what it does (Every ask is a
+  select, above).
+
+**The lead rewrites.** A style setting does not reach helper agents, so the rule sits in the lead's
+own summary step: when you pass on a lane's or a reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
+
+**Every brief carries it.** Each lane and reviewer brief template holds these lines, so a report
+comes back plain in the first place:
+
+> Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+> they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+> title with its id, never a bare id.
+
+## A review sorts its findings
+
+Every review -- a task review, an adversarial review, a lane's check of its own work, the lead's
+check before it integrates -- sorts each finding into one of three, and says which:
+
+- **IMPORTANT** -- the change does not do what it says; it tells the person something untrue; or it
+  can lose data, leak a secret, or send something wrong. Fixed before the fix ships.
+- **MINOR** -- anything else wrong with the change. At most five are listed, the quickest to fix;
+  they are fixed in the same work if quick. The rest are dropped, not filed.
+- **ALREADY THERE** -- a fault older than the change. It becomes a card only if it can lose data,
+  leak a secret, send something wrong, or tell the person something untrue; otherwise it is one line
+  on that skill's running list (`backlog-board.md`, The running list), which a later lane working in
+  the same place clears.
+
+**No follow-up cards by default**: a lane or a reviewer files none, and leftovers are fixed inside
+the work. A fault that comes back for three review rounds goes to the owner as a design choice, one
+click, not a fourth patch. What the owner reports is different: `/backlog-it capture` and `bug`
+always become cards.
+
+Where a template grades findings Critical / Important / Minor, Critical and Important are both
+IMPORTANT here, and the cap of five is on its Minor findings.
+
+**Every brief carries it.** Each reviewer and lane brief template holds these lines:
+
+> Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+> not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+> something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+> five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+> filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+> send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+> list. File no follow-up cards: leftovers are fixed inside the work.
 
 ## Agents disclose every safeguard they bypassed or weakened
 

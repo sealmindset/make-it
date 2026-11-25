@@ -54,7 +54,7 @@ user's go, and every other skill reads the same board.
    served -> `route`, said in one line).
 2. Export `BACKLOG_DIR=$BOARD` for the helpers.
 3. **No board yet?** Say in one line that you'll set one up, then create `$BOARD/items/`, a
-   `$BOARD/.gitignore` containing `.slack-webhook`, and render an empty `BOARD.md`. Write
+   `$BOARD/.gitignore` containing `.slack-webhook` and `.last-seen.json`, and render an empty `BOARD.md`. Write
    `.claude/backlog-it.json` only if the user chose a non-default setting. Don't ask about
    Slack -- it's optional and off until a webhook exists.
 
@@ -62,8 +62,8 @@ user's go, and every other skill reads the same board.
 
 | Argument | Action (see the reference) |
 |----------|----------------------------|
-| *(none)*, `board` | Print the board compactly |
-| `list` / `show` | Filter / show a card |
+| *(none)*, `board` | The first screen (Step 2b): the one thing to do next with its choices, only what needs you, what changed since last time, the trend |
+| `list` / `show` | The compact board, all of it or filtered / show a card |
 | `info [<id>\|<title words>] [<focus>]` | The card in plain terms -- the problem, the impact if it isn't fixed, why it's fixed this way. Read-only; a background subagent reads, so running work isn't disturbed; bare `info` = this session's card |
 | `epic`, `story <epic>`, `task <parent>` + idea, `add` | Add planned work -- clarify first (Step 3) |
 | `capture <text>`, `bug <text>`, or text whose first word isn't a subcommand | Capture -- card first (Step 3) |
@@ -86,6 +86,32 @@ Ids are case-insensitive (`e02` → `E02`). Next id = highest existing + 1. `gro
 model the reference's "Which model does what" names (settings `models`; default Opus for routing and
 grounding, Fable 5.2 then 5.1 for judgment, Opus when neither is served).
 
+## Step 2b -- The first screen
+
+Run `python3 ~/.claude/make-it/backlog/bin/status.py "$BOARD" --project "$PROJECT" --repo "$REPO" --lane-cap "$LANE_CAP" --first --seen`
+and print its output as-is, in a code block. **The helper decides; you present and ask**: the
+recommendation under DO NEXT comes from its written rule (the reference's "The first screen"), never
+from your own reading of the board. Then ask its choices with AskUserQuestion, exactly as printed:
+one question ("What next?"), one option per numbered choice, the label before ` -- ` and what
+happens after it, the Recommended one first with the `against:` line under it as its counter-argument. Add no option and drop none. Then
+do what was picked, with every gate that step already has:
+
+| Pick | What runs |
+|------|-----------|
+| Answer now | Each waiting card's `decision:` as its own AskUserQuestion with its `answers:`, most urgent first; the answer goes on the card, which clears `decision:` and `answers:` |
+| Release it | First what the screen could not know: confirm the pull request's review (unless the screen says it is recorded on its card) and bring it up to date with main if it is behind. Then the project's own release steps for the pull request named, with their gates; the pick names the pull request, so it is the go for that one only |
+| Sort them | `reconcile --prs`, then one plain line per pull request named: what it needs (bring up to date, fix its check, close with a note) |
+| Start the wave | `dispatch` |
+| Start the others | `dispatch`, for the wave's cards that share no file with an open pull request; the card named as sharing one waits |
+| Wait for it | Nothing starts: every card in the wave shares a file with an open pull request. Say which pull request, and that releasing or finishing it comes first |
+| Plan | `plan` |
+| Groom | `groom` |
+| Start it | `start <id>` for the card named |
+| Wait | Nothing; say in one line what would change the answer |
+| Full status | `status` |
+
+A dismissed ask starts nothing. Everything the old board printed is under `status` and `list`.
+
 ## Step 3 -- Adding work
 
 - **Planned work** (`epic` / `story` / `task` / `add`): ask first -- 1–2 questions for a task, 2–3
@@ -96,7 +122,7 @@ grounding, Fable 5.2 then 5.1 for judgment, Opus when neither is served).
   triage with a headless `claude -p` (strict JSON: type, size, placement, dedup, open questions),
   then write the card; a bug always goes under the Bugs epic as `type: breakfix`, `status:
   backlog`, `stage: Reported`. Regenerate and sync, then in the same reply: one line with the id
-  and its place in line ("✓ Filed E07-S3 (breakfix, S) under Bugs -- #2 in line"), and **every**
+  and its place in line ("✓ Filed "Export drops the last row" (E07-S3), a bug, size S, under Bugs -- #2 in line"), and **every**
   open question batched in one AskUserQuestion -- only questions whose answer changes
   the fix or its order. Check what you can check yourself instead of asking. Answers go under
   `## Answers`. A question that blocks a card goes on it as `decision:` (plain context, then the
@@ -112,8 +138,15 @@ agent per card, each in its own worktree, each running the `/debug-it` method an
 as `pr:` and how the fix is proved live as `signal:`. Dispatch starts with `reconcile --prs`. With no bug
 waiting, start **one** item: reconcile verdict `not-built`/`partial`, nothing it waits on unfinished (its own `dependsOn` or its epic's; an epic id = its open cards),
 no open `decision:`, no `conflictsWith` in progress, no file overlap; P1 first, then never-reconciled, then oldest.
-Announce each pick before it starts. Gather every lane's questions into one message, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks). Shipping
+Announce each pick before it starts, by its title with its id. Gather every lane's questions into one message, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks). Shipping
 stays serial: one PR through CI and deploy at a time.
+
+**Plain words, and no flood** (`approval-block.md`, A message to the owner, and A review sorts its
+findings). Every lane and reviewer brief carries both rules' lines. When you pass on a lane's or a
+reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a
+lane's shorthand. A lane files no follow-up card by default: leftovers are fixed inside the work, and a
+fault that was already there goes on the running list (the reference's "The running list") unless it
+can hurt someone. `capture` and `bug` are unchanged: the owner's own reports always become cards.
 
 ## Step 4b -- Plan: how, and in what order
 

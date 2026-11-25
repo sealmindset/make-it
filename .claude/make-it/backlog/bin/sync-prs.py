@@ -85,7 +85,7 @@ def run(B, look, dry, proj=None, T=None):
     T = T or datetime.date.today()
     out, wait = moves(B, look)
     cards = R.load(B)
-    cid = lambda p: v(cards[p], 'id')
+    cid = lambda p: R.name(cards[p])  # a card by its title with its id, never a bare id
     if not dry: C.lock(B); out = [(p, ch, note) for p, ch, note in out if apply(p, ch, note, T)]  # card.py's writer lock
     if out and not dry:
         subprocess.run([sys.executable, os.path.join(_bin, 'regen-board.py'), B] + (['--project', proj] if proj else []), check=True)
@@ -127,10 +127,10 @@ def self_test():
         assert [v(c[f'E01-S{n}'], 'stage') for n in (1, 2, 3, 5, 6, 9, 10, 12, 13)] == ['Live', 'Fix ready', 'Cause found', 'Live', 'Fix ready', 'Live', 'Live', 'Fix ready', 'Needs decision'], out
         assert v(c['E01-S4'], 'status') == 'done' and v(c['E01-S8'], 'status') == 'done' and v(c['E01-S11'], 'stage') == '', out
         assert v(c['E01-S6'], 'pr') == '' and v(c['E01-S1'], 'updated') == str(T) and v(c['E01-S1'], 'priority') == 'P1', out
-        assert 'E01-S2 · #103 open' in out and 'E01-S3 · #104 closed without merging' in out and 'E01-S6 · no pr:' in out, out
-        assert 'E01-S17 · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
-        assert 'E01-S9 · Fix ready → Live · repo1#109 merged' in out and 'E01-S12 · pr: names another repo by short form' in out, out
-        assert not any(f'E01-S{n} ' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
+        assert '(E01-S2) · #103 open' in out and '(E01-S3) · #104 closed without merging' in out and '(E01-S6) · no pr:' in out, out
+        assert 'Untitled card (E01-S17) · merged, but no signal:' in out and v(R.fm(f'{S}/S17.md'), 'stage') == 'Fix ready', out
+        assert '(E01-S9) · Fix ready → Live · repo1#109 merged' in out and '(E01-S12) · pr: names another repo by short form' in out, out
+        assert not any(f'(E01-S{n})' in out for n in (5, 8, 11, 13)), out  # Live, done, stage-less, older waiting form
         assert 'clear decision: and answers:' in out and 'deploy not checked' in out and '## PR sync' in open(f'{S}/S1.md', encoding='utf-8').read(), out
         assert '**Live, to check:** S1, S5, S9, S10' in open(f'{t}/BOARD.md', encoding='utf-8').read(), open(f'{t}/BOARD.md', encoding='utf-8').read()
         assert not [f for f in os.listdir(S) if f.endswith('.tmp')], os.listdir(S)
@@ -138,7 +138,7 @@ def self_test():
         assert 'nothing to move' in out and 'Moved 0' in out, out
         card(14, stage='Checked'); card(15, stage='Fix ready', pr='[101]')
         out = run(t, None, dry=False, proj='t', T=T)  # no gh: Checked still closes, PR cards wait
-        assert 'E01-S15 · PR step skipped' in out and v(R.fm(f'{S}/S14.md'), 'status') == 'done' and v(R.fm(f'{S}/S15.md'), 'stage') == 'Fix ready', out
+        assert '(E01-S15) · PR step skipped' in out and v(R.fm(f'{S}/S14.md'), 'status') == 'done' and v(R.fm(f'{S}/S15.md'), 'stage') == 'Fix ready', out
         card(16, stage='Fix ready', pr='[101]', signal='x')  # another session closes it while gh runs: the write is refused
         late = lambda n: (card(16, stage='Checked', status='done'), look(n))[1]
         out = run(t, late, dry=False, proj='t', T=T)

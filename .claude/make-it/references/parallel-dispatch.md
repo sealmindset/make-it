@@ -79,7 +79,10 @@ other or the working tree:
 4. **Review & integrate** — read each summary, check for conflicts (did two agents touch the
    same file?), run the FULL test suite, and spot-check (agents make systematic errors). What the
    lanes leave for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks) -- never a lane's ids or shorthand
-   passed on as-is.
+   passed on as-is. When you pass on a lane's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand
+   (`approval-block.md`, A message to the owner). Sort what the lanes found by `approval-block.md`,
+   A review sorts its findings: important ones are fixed before the fix ships, at most five quick
+   minors are fixed in the same work, and no lane's leftovers become follow-up cards.
 
 ---
 
@@ -115,10 +118,23 @@ evaluator edited) — what, where, why.
 Never plant a deliberate flaw in code, tests, a review, a report or a commit, not even to check
 attention: practice items are made only by the coordinator's practice script, in chat
 (human-in-the-loop rule 4).
+Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).
+Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
+they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
+title with its id, never a bare id.
+Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
+not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
+something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
+five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not
+filed. ALREADY THERE -- a fault older than the change: a card only if it can lose data, leak a secret,
+send something wrong, or tell the person something untrue; otherwise one line for that skill's running
+list. File no follow-up cards: leftovers are fixed inside the work.
 ```
 
 Every agent prompt ends with that **SAFEGUARDS** line (`approval-block.md`): disclosed is not
 approved, but undisclosed is a rejected lane. It also carries the never-plant line under it.
+Every agent prompt also carries the two blocks from `approval-block.md` that end the example: how to
+report (A message to the owner) and how to sort what it finds (A review sorts its findings).
 
 ---
 

@@ -92,7 +92,8 @@ live as `signal:` -- when it opens one: `card.py set <id> stage="Fix ready" pr="
 Each prompt must be: **focused** (one domain), **self-contained** (paste the error text,
 failing test names, file paths — the agent sees none of your chat), and **specific about
 output** (return a structured summary of root cause + exact changes + the SAFEGUARDS line from
-`approval-block.md`). Tell it how to attack and
+`approval-block.md`, and the two blocks every brief carries: how to report and how to sort what it
+finds). Tell it how to attack and
 what NOT to touch. Have each agent follow the `/debug-it` method on its domain.
 
 ## Step 5 -- Dispatch in parallel
@@ -107,6 +108,10 @@ Read each summary → check for conflicts (same file touched twice?) → run the
 spot-check (agents make systematic errors) → match every weakened safeguard in each lane's diff to
 its SAFEGUARDS line (Verification step 5 in the reference). Then integrate. What the lanes leave
 for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
+When you pass on a lane's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand (`approval-block.md`, A message to the
+owner). Sort what the lanes found by `approval-block.md`, A review sorts its findings: important
+ones fixed before the fix ships, at most five quick minors fixed in the same work, a fault that was
+already there on the running list unless it can hurt someone, and no follow-up cards by default.
 
 ---
 

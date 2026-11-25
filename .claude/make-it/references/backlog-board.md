@@ -97,7 +97,8 @@ notifications are a silent no-op and the board works the same.
 ├── STRATEGY.md                  # written by `groom strategy`
 ├── .project                     # optional: project name
 ├── .slack-webhook               # optional, gitignored
-├── .gitignore                   # contains .slack-webhook
+├── .last-seen.json              # when the first screen was last opened, and what the board held then; never committed
+├── .gitignore                   # contains .slack-webhook and .last-seen.json
 ├── archive/                     # optional: retired cards, not rendered
 └── items/
     └── EPIC-NN-slug/
@@ -131,6 +132,7 @@ decision:  3 import rows failed twice; the rest went in. Retry them, or refile b
 answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   # with decision: -- 2-4 named answers, split by |
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 signal:    worker log shows 'filed: 2/2' for a new filing   # one line: how the fix is proved live (read-only); the lane writes it with the PR
+reviewed:  2026-11-24 ready 1a2b3c4   # optional: the pull request's last review -- `<date> ready <commit it read>` or `<date> not ready`; the lead writes it. The first screen says "reviewed" only from this
 checkAfter: v2026.10.17   # when that check can first run: a release tag (due on the date in its name) or a date; set at ship
 mode:      solo | spike | subagent-it | dispatch-it   # set by `plan` (see the mode rubric)
 mode_by:   you            # set by `mode <id>` -- `plan` never overwrites a mode you chose
@@ -333,8 +335,8 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 
 | Command | What it does |
 |---------|--------------|
-| *(none)* / `board` | Print the board compactly: by status (in-progress → ready → blocked → designing → backlog → done), epics with children nested, `id · title · [category] P#` |
-| `list <filter>` | The same, filtered by status, category, priority, or epic id |
+| *(none)* / `board` | The first screen: the one thing to do next with its choices, only what needs you, what changed since last time, and the trend (see [The first screen](#the-first-screen)) |
+| `list [<filter>]` | The board compactly: by status (in-progress → ready → blocked → designing → backlog → done), epics with children nested, `title (id) · [category] P#`; with a filter, only that status, category, priority, or epic id |
 | `show <id>` | The card; for an epic, its children (id · status · title) and design docs |
 | `info [<card>] [<focus>]` | The card in plain terms: the problem, the impact if it isn't fixed, and why it's fixed this way. Read-only |
 | `epic` / `story <epic>` / `task <parent>` `<idea>` · `add` | Add planned work (clarify first) |
@@ -490,6 +492,100 @@ Plain bullets of one or two sentences: no sub-bullets, no bold inside them. No j
 gloss, another card by its title rather than a bare id, dates as dates. For an epic, the problem is
 its goal, and the last part is how it's split into cards and in what order.
 
+### The first screen
+
+Bare `/backlog-it` (and `board`) prints one screen of at most about 25 short lines, from
+`status.py --first`: read-only facts and a written rule, no AI call, so the same board gives the same
+answer. The skill prints it as-is and asks the choices as one select; it never picks for itself.
+
+1. **DO NEXT** -- one plain sentence: what the board recommends now, and why, with the count in the
+   sentence and each card or pull request it means on its own short line beneath, by title with id.
+   Then the choices, 2-4, each `Name -- what happens`: the recommendation first, marked
+   Recommended, with the strongest argument against it on the line under it (`against: …`); then
+   the next steps of the rule that also hold; `Full status` last. No line is longer than about 110
+   characters.
+2. **NEEDS YOU** -- each question waiting on you as one line (the card's title with its id, then its
+   `decision:`: what waits, and the question), the first three, or "nothing waits on you". Held
+   high-stakes cards are a count, then the three to five that free the most other cards (the ones
+   for the weekly sitting), never the whole list. Then one line counting the running list: its
+   open lines and how many areas they are in.
+3. **SINCE YOU LAST LOOKED** -- three lines: what shipped (cards closed as not needed are counted
+   apart), what was found, what got stuck. "Last looked" is the last time the skill showed this
+   screen: `--seen` writes `<board>/.last-seen.json` (the time, and the ids that were open, done and
+   stuck). The file never reaches the board's git: a new board's `.gitignore` names it, and for an
+   older board the helper adds the one line to the repo's own `.git/info/exclude`, which is local
+   and never committed. With no such file, or one that cannot be read, the three lines cover the
+   last 24 hours; when the look cannot be recorded (a read-only folder), the screen still prints and
+   says so in one line. A card closed as done or as `shipped-tests-pass` counts as shipped; only
+   `closed_as: not-needed` counts as not needed; any other `closed_as` value is named as it is.
+4. **TREND** -- one line: cards opened and closed this week, whether the pile grew or shrank, and the
+   single biggest reason ("mostly new bugs (70 of 135)", "with 6 fixes shipped").
+
+**The next-thing rule** -- the first step that holds is the recommendation:
+
+| # | When | The board says |
+|---|------|----------------|
+| 1 | A card has a question for you (`decision:`) | answer it |
+| 2 | An open pull request is ready as far as GitHub shows: no longer a draft, no conflict with main, every check finished and passed, and not behind main | release it: confirm its review, bring it up to date if needed, then release |
+| 3 | Open pull requests are stuck or out of date: behind or in conflict with main, or a draft, a failing check or a running check with no change for 2 days | sort them |
+| 4 | `PLAN.md`'s next wave can start (no card in it held, waiting, blocked or already running) and a lane is free | start that wave; if an open pull request changes a file one of its cards names, say so and offer to start the others |
+| 5 | The plan is stale: every wave is done, or its next wave is stuck, or more than half the cards that can start are not in it | plan |
+| 6 | More cards were opened than closed two weeks running (and the last groom is at least 7 days old), or the last groom is over 14 days old | groom |
+| 7 | A card can start and a lane is free. While a plan is in force only a card it does not list: the plan keeps the order of the ones it does | start the next safe card |
+| 8 | None of the above | wait, and why (a wave is running, the lanes are busy, or nothing can start safely) |
+
+The numbers are named constants at the top of `status.py`, each with its reason (`PR_STALL`,
+`PLAN_STALE`, `GROW_WEEKS`, `GROOM_AGE`, `GROOM_REST`, `SIT`). Pull requests come from `gh pr list`
+in `repo`; a pull request named in a card's `pr:` is called by that card's title. With no `repo` or
+no `gh`, steps 2 and 3 are skipped and the screen says so. A pull request that is simply moving (a
+fresh draft, checks running) is not mentioned.
+
+**What "ready" can and cannot know.** The screen says only what it can read. "Behind main" is worked
+out by comparing the pull request's head with main (`gh api …/compare`), because a repo with no
+branch rule never reports it; a pull request that is behind goes to step 3 with how far, and when
+the comparison cannot be read the screen says "could not tell whether it is up to date". GitHub
+holds no review in a repo where the owner's own agents review, so the screen never says a pull request is reviewed unless its card says so:
+after each review the lead records it with `card.py set <id> reviewed="<date> ready <commit>"`
+(the commit the review read) or `reviewed="<date> not ready"`. The screen reads "Review: recorded
+on its card for this version" only when the value says ready and that commit is the pull request's head
+now. A ready review of an older commit reads "recorded for an earlier version, so confirm it
+again"; a not-ready one reads "its last review said not ready"; a value in any other shape counts
+as no review. In all three the choice keeps "I confirm its review". Step 4 says what is running in plain
+words: work that moved in the last 2 days is named, work marked in progress but quiet is only
+counted, and a quiet card is never the example. It checks the files each
+wave card names in `PLAN.md` against the files of every open pull request (`gh pr view --json
+files`); when either cannot be read it says so. When some of the wave's cards share a file with
+an open pull request, starting the others is the recommendation; when every card does, the
+recommendation is to wait for that pull request, or release it, first.
+
+### Plain words on the board
+
+Every line the board prints or writes names a card by its **title with its id** --
+"Export drops the last row (E07-S3)" -- never a bare id; a long title is shortened at a word
+boundary. A pull request is named by its card when a card's `pr:` lists it, else by its own title
+with its number. This holds for `status.py`, the first screen, `PLAN.md`, `GROOM-PLAN.md`, the
+dispatch announcements and every "waiting on you" list. (`BOARD.md`'s status lines keep their short
+form: other skills read them.) A message to the owner follows `approval-block.md`, A message to the
+owner: a few plain lines, one update a day unless the owner is needed, every question one click.
+
+### The running list
+
+A review finds faults that were there before the change (`approval-block.md`, A review sorts its
+findings). One that can lose data, leak a secret, send something wrong, or tell the person
+something untrue becomes a card. Any other goes on the **running list**: one `## Running list: <skill or area>` section per skill or area, on the epic card the work's card sits under
+(the area is the card's `category:`), one line each, written with
+`card.py append <epic id> "Running list: <skill or area>"`:
+
+`- <the fault, in plain words> (<file>) · found <date> in "<the work's title> (<its id>)"`
+
+A lane starts by reading the running list for the area it is working in. It fixes the lines that
+sit in files it is changing anyway, inside its own work, and clears each one by appending a line
+under the same section: `- fixed <date>: "<the first words of the line>" · <the pull request or
+commit>`. A line is open until a `fixed` line quotes it. The first screen counts the open lines
+and their areas. The list is never turned into cards in bulk; `groom` reads
+it as evidence. With no board, the line goes in the lane's report under "Already there" and stops
+there.
+
 ### `status`
 
 Bare `status` prints one report from `status.py`: read-only, no AI call, under a second on a
@@ -506,6 +602,7 @@ waiting and can-start rules with `regen-board.py`, so the report and `BOARD.md` 
 - **Burn-down** -- per week for 4 weeks: opened, closed, net, open at week's end; then a forecast
   ("clear in ~N wks", or "growing, no finish at this rate" plus how long the open cards would
   take with no new ones).
+- Every card is named by its title with its id.
 - **Needs you** -- Waiting on you (top 5), then **every** held P1, oldest first, with P2/P3 held
   as a count. A card already under Waiting on you isn't repeated. `dispatch` ends with this section.
 - **Drift** -- Now fixing cards idle 2+ days (lanes work in hours: the lane probably stopped), other
@@ -622,7 +719,7 @@ green gate or the harm gate** in the standing preamble.
      open `decision:` (waiting on you); a `conflictsWith` card in progress; file
      overlap with any in-progress card's reconcile evidence.
    - Sort: P1 → P3, then never-reconciled first, then oldest `updated:` first. Pick the top.
-3. **Announce** each pick -- `Dispatching <id> -- <title> [category] P# · <verdict> · confidence
+3. **Announce** each pick -- `Dispatching <title> (<id>) [category] P# · <verdict> · confidence
    <c>` -- so the human can interrupt, then run `start <id>` with every gate in place.
 4. Append to each card, then sync (commit `dispatch: started <id>`):
    ```markdown
@@ -755,23 +852,27 @@ call also **suggests links** (step 2); `--apply` writes them and plans what they
 > /backlog-it plan · handoff.md + N open cards · finish soonest, every gate held · start/dispatch run it
 
 ## Waves
-1. **solo** · E02-S1 · <title> -- <reason>
-   (a pulled-in card: `1. **solo** · E07-S4 · <title> -- pulled in for E04-S2 -- <reason>`)
-2. **dispatch-it** ×3 · E05-S1 · E05-S2 · E05-S3 -- <why they're independent>
-   - E05-S1 -- <reason> · files: src/a.ts
-3. **spike** (2h) · E04-S9 (proposed) → de-risks E04-S3 -- <question>
-4. **subagent-it** · E04-S3 · <title> -- plan: items/EPIC-04-…/plans/E04-S3.md (draft) -- <reason>
+1. **solo** · <title> (E02-S1) -- <reason>
+   (a pulled-in card: `1. **solo** · <title> (E07-S4) -- pulled in for <title> (E04-S2) -- <reason>`)
+2. **dispatch-it** ×3 · <title> (E05-S1) · <title> (E05-S2) · <title> (E05-S3) -- <why they're independent>
+   - <title> (E05-S1) -- <reason> · files: src/a.ts
+3. **spike** (2h) · <title> (E04-S9) (proposed) → de-risks <title> (E04-S3) -- <question>
+4. **subagent-it** · <title> (E04-S3) -- plan: items/EPIC-04-…/plans/E04-S3.md (draft) -- <reason>
 
 ## Live, to check first   (verify against the original report before wave 1)
 ## ⚠️ Held -- needs the alignment brief and an explicit go
 ## Skipped -- waits on
-- E04-S6 -- waits on E02-S3 → E05-S1 (held)
+- <title> (E04-S6) -- waits on <title> (E02-S3) → <title> (E05-S1), which is held
 ## Pulled in -- the chain behind the filter   (--with-deps)
-- E07-S4 · <title> -- for E04-S2 (needed by E04-S2)
+- <title> (E07-S4) -- needed by <title> (E04-S2)
 ## Proposed (filed with `plan --apply`)
-- spike E04-S9 -- <question> (2h)
-- link E04-S2 → E07-S1 -- <why> · <evidence>
+- spike: <title> (E04-S9) -- <question> (2h)
+- link: <title> (E04-S2) waits on <title> (E07-S1) -- <why> · <evidence>
 ```
+
+Every card in `PLAN.md` is its title with its id, the id in brackets right after the title; a
+wave's cards come before its first ` -- `, and the reason after it may name other cards the same
+way. `status.py` reads both this form and the older one that led with bare ids.
 
 **`mode <id> <mode|auto>`** -- the human override: sets `mode:` and `mode_by: you`; `auto` removes
 both so the next `plan` decides. Regenerate, sync.
@@ -818,7 +919,7 @@ only under `--apply` and not re-grounded this run (the next `plan --with-deps` p
 
 **AI-powered by default.** Running `groom` (or `groom strategy`) is itself the opt-in to
 multi-agent, high-effort reasoning: fan out one grounder per card with the **Workflow** tool (model
-`ground`), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
+`ground`; each grounder's brief ends: "Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id."), then hand every verdict to one agent on model `judge` for steps 2-5, at high effort
 ([Which model does what](#which-model-does-what)). Don't ask permission for it; the user doesn't need any extra keyword.
 
 1. **Ground in code (reuse `reconcile`).** Run the reconcile ladder for every card in scope --
@@ -880,20 +981,20 @@ multi-agent, high-effort reasoning: fan out one grounder per card with the **Wor
 > /backlog-it groom · grounded via reconcile (code+tests+live) · advisory (start/dispatch are the only ways work starts)
 
 ## Board deltas   (✅ applied · 📋 proposed)
-- ✅ E14-S18 → done            -- built: code+tests+live
-- 📋 split E04 → E04-S19..S21  -- too big to finish in one pass
-- 📋 defer E05-S5              -- blocked until <condition>
+- ✅ <title> (E14-S18) → done                       -- built: code+tests+live
+- 📋 split <title> (E04) → three cards (E04-S19..S21)  -- too big to finish in one pass
+- 📋 defer <title> (E05-S5)                         -- blocked until <condition>
 
 ## Burn-down   (top-down = most throughput · 📌 = pinned · ⚠️ = high-stakes, out of auto-run)
-1. 📌 <id> · <title> · [safe|gated] · <mode> · pinned · blocks:<ids> / blocked-by:<ids> · est <size>
-2. <id> · <title> · [safe|gated] · <mode> · <one-line reason> · blocks:<ids> / blocked-by:<ids> · est <size>
+1. 📌 <title> (<id>) · [safe|gated] · <mode> · pinned · frees: <titles (ids)> / waits on: <titles (ids)> · est <size>
+2. <title> (<id>) · [safe|gated] · <mode> · <one-line reason> · frees: <titles (ids)> / waits on: <titles (ids)> · est <size>
 
 ## ⚠️ Requires alignment before touching   (high-stakes -- not auto-runnable)
-- ⚠️ <id> · <title> · why high-stakes · needs the alignment brief + an explicit go before `start`
+- ⚠️ <title> (<id>) · why high-stakes · needs the alignment brief + an explicit go before `start`
 
 ## Needed or not   (proposals -- nothing closes without your pick)
-- ✂️ <id> · <title> · not needed: <already covered | overtaken | nobody is asking | nothing left> -- <evidence>
-- ❓ <id> · <title> · can't tell: <the one fact that would settle it>
+- ✂️ <title> (<id>) · not needed: <already covered | overtaken | nobody is asking | nothing left> -- <evidence>
+- ❓ <title> (<id>) · can't tell: <the one fact that would settle it>
 
 ## Start now (top 3 -- never ⚠️)   ·   ## Drop / defer (3)
 ```
