@@ -181,7 +181,10 @@ If work was done this session that isn't already in CHANGELOG.md:
 - Use plain language, not commit hashes
 - Group by type (Added, Changed, Fixed)
 
-**4b. Update the board (if the project has one -- `/backlog-it`):**
+**4b. Update the board (if the project has one -- `/backlog-it`):** find it by the one rule
+(`backlog-board.md`, Settings): `python3 ~/.claude/make-it/backlog/bin/regen-board.py --where`. Only
+the project's own board counts (its `settings` is not `~/.claude/backlog-it.json`), never one that
+belongs to another project; none → skip this step.
 
 Bump each card touched this session (status, `stage:`, `pr:` for any PR opened, a one-line
 note; then `/backlog-it reconcile --prs` closes cards whose PR is merged, released and passing its checks), then regenerate

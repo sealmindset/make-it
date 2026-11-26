@@ -85,10 +85,11 @@ user ONE question: "What should the handoff say you were working toward and what
 Do not fabricate content for sections you have no evidence for -- write "None this session"
 instead.
 
-**5. This project's board, if it has one (`/backlog-it`):** the project's
-`.claude/backlog-it.json`, else its `.claude/backlog/`, else the personal board in
-`~/.claude/backlog-it.json` -- but the personal board only when this folder is inside that
-file's `repo`. A board that belongs to another project never feeds this handoff. No board →
+**5. This project's board, if it has one (`/backlog-it`):** find it by the one rule
+(`backlog-board.md`, Settings): `python3 ~/.claude/make-it/backlog/bin/regen-board.py --where`,
+its `board`. That is the project's own board from its root or any folder below it, else the
+personal board in `~/.claude/backlog-it.json` only inside that file's `repo`. A board that belongs
+to another project never feeds this handoff. No board (`board` empty, or no `items/` in it) →
 skip this and the `board` step. Otherwise pull it first if it's its own repo
 (`git -C <board> pull --ff-only` -- other sessions move cards too), then read the status line
 in `BOARD.md`.

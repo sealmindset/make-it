@@ -1,6 +1,6 @@
 ---
 name: backlog-it
-description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used from anywhere. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → done once released with passing tests) with up to N parallel non-overlapping fix lanes, combines cards that belong together into one piece of work without losing each card's own check, closes quiet cards nobody asks for, recalls any card as an editable prompt with `start <id>`, and explains any card in plain terms with `info <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
+description: A file-based Epic→Story→Task backlog board -- markdown cards with frontmatter and a rendered BOARD.md, per project or one personal board used inside its own repo folder. Adds planned work (clarify first), captures ideas and bugs (card first, AI triage, then batched questions), runs a bug queue (Reported → Cause found → Fix ready → done once released with passing tests) with up to N parallel non-overlapping fix lanes, combines cards that belong together into one piece of work without losing each card's own check, closes quiet cards nobody asks for, recalls any card as an editable prompt with `start <id>`, and explains any card in plain terms with `info <id>`. Also reconcile against the code, groom, groom strategy, and dispatch. Use when the user types /backlog-it, or asks to track, list, start, or close a work item, epic, story, task, bug, or design doc.
 allowed-tools:
   - Read
   - Write
@@ -44,16 +44,22 @@ user's go, and every other skill reads the same board.
 
 ## Step 1 -- Load settings
 
-1. Find the settings, first match wins as a whole: the project's `.claude/backlog-it.json`; else
-   the project's `.claude/backlog/` with defaults; else `~/.claude/backlog-it.json`; else
-   defaults. Resolve: `BOARD` = `$BACKLOG_DIR`, else `board`, else `.claude/backlog` (expand `~`;
-   relative paths from the project root); `PROJECT` = `project`, else `<board>/.project`, else the
-   project folder's name; `REPO` = `repo`, else the project root; `LANE_CAP` = `lane_cap`, else 3;
+1. Find the board by the one rule (Settings in the reference): run
+   `python3 ~/.claude/make-it/backlog/bin/regen-board.py --where`. It prints `board` (empty: this
+   folder has none), `settings` (the file the keys below come from; empty: defaults), `root` (the
+   project root: the nearest folder at or above this one with its own board, never the home
+   folder), `new` and `note`. A project's own board wins from its root and any folder below it;
+   the personal board in `~/.claude/backlog-it.json` is used only from its `repo` folder or below
+   it; `$BACKLOG_DIR`, when set, always wins. Never pick a board any other way. When `note` is not
+   empty, say its `note` in one line (it names a board not used and why, or a `$BACKLOG_DIR` that is
+   not this folder's board). Resolve: `BOARD` = `board`, else `new` (Step 3 sets it up);
+   `PROJECT` = `project`, else `<board>/.project`, else the project folder's name; `REPO` = `repo`,
+   else `root`; `LANE_CAP` = `lane_cap`, else 3;
    `SERIAL` = `serial`, else `[]`;
    `MODELS` = `models` over the defaults `{"route": "opus", "ground": "opus", "judge": ["claude-fable-5-2", "claude-fable-5-1"]}` (a list = first one the deployment serves; no `judge`
    served -> `route`, said in one line).
 2. Export `BACKLOG_DIR=$BOARD` for the helpers.
-3. **No board yet?** Say in one line that you'll set one up, then create `$BOARD/items/`, a
+3. **No board yet?** (`board` empty, or no `items/` in it.) Say in one line that you'll set one up, then create `$BOARD/items/`, a
    `$BOARD/.gitignore` containing `.slack-webhook` and `.last-seen.json`, and render an empty `BOARD.md`. Write
    `.claude/backlog-it.json` only if the user chose a non-default setting. Don't ask about
    Slack -- it's optional and off until a webhook exists.

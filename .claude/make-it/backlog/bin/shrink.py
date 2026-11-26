@@ -10,7 +10,7 @@ Usage: shrink.py [--board PATH] [--project NAME] [--no-sync] combine [filter]   
        shrink.py [--board PATH] [--project NAME] [--no-sync] stamp <id> --by groom|you  (stdin: why it is safe to close, one plain line)
        shrink.py [--board PATH] [--project NAME] [--no-sync] expire [--dry-run [--as-of YYYY-MM-DD]]
        shrink.py --self-test
-  --board defaults to $BACKLOG_DIR, then ./.claude/backlog.
+  --board defaults to the board this folder uses ($BACKLOG_DIR first; regen-board.py --where shows it).
 
 combine  lists candidate groups with the facts they share: the same files (a card's `files:`, else file names in
          its text), the same skill (`category:`), cards that already wait on each other. It proposes nothing more
@@ -316,7 +316,7 @@ def main(args):
     nosync, dry = flag('--no-sync'), flag('--dry-run')
     asof = S.day(opts['--as-of']) if '--as-of' in opts else None
     if '--as-of' in opts and (not dry or not asof): sys.exit('shrink: nothing written -- --as-of takes a date (YYYY-MM-DD) and is for `expire --dry-run` only: a real expire always uses today')
-    B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(opts.get('--board') or R.default_board('shrink')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'shrink: no items/ folder in {B}')
     proj = opts.get('--project')
     home = os.path.dirname(B); home = os.path.dirname(home) if os.path.basename(home) == '.claude' else home  # <repo>/.claude/backlog -> the repo's name, as regen-board says it

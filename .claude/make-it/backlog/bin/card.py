@@ -6,7 +6,7 @@ Usage: card.py [--board PATH] [--project NAME] [--no-sync] append <id> <section>
        card.py [--board PATH] [--project NAME] [--no-sync] new <epic-id>            (a whole card on stdin, `id: NEW`)
        card.py [--board PATH] [--project NAME] [--no-sync] capture [triage-file]    (the report on stdin, word for word)
        card.py --self-test
-  --board defaults to $BACKLOG_DIR, then ./.claude/backlog.
+  --board defaults to the board this folder uses ($BACKLOG_DIR first; regen-board.py --where shows it).
 Every write pulls first (a board in its own repo), finds the card by its `id:` (exactly one), writes
 the whole file and then swaps it in, bumps `updated:`, regenerates BOARD.md, and syncs: commit + push
 for a board in its own repo, stage only for a board inside a project, nothing with --no-sync.
@@ -249,7 +249,7 @@ def main(args):
             if i + 1 >= len(args) or args[i + 1].startswith('--'): sys.exit(f'card: {k} needs a value')
             opts[k] = args[i + 1]; del args[i:i + 2]
     nosync = '--no-sync' in args; args = [a for a in args if a != '--no-sync']
-    B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(opts.get('--board') or R.default_board('card')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'card: no items/ folder in {B}')
     verb, rest = (args[0], args[1:]) if args else ('', [])
     try: rest = [R.arg(a, 'strict') for a in rest]  # ids, a section, key=value: text, as UTF-8

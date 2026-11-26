@@ -2,11 +2,12 @@
 """Render <board>/BOARD.md from card frontmatter (items/ only; archive/ is not shown).
 
 Usage: regen-board.py [board_dir] [--project NAME]
+       regen-board.py --where      (which board this folder uses, as JSON: the rule below)
        regen-board.py --self-test
-  board_dir  defaults to $BACKLOG_DIR, then ./.claude/backlog
+  board_dir  defaults to the board this folder uses (find_board; every helper's default)
   --project  defaults to <board>/.project, then the project folder's name
 """
-import datetime, glob, os, re, sys
+import datetime, glob, json, os, re, sys
 
 # UTF-8 whatever the locale. Every backlog helper loads this module first, so this runs once for all of them.
 # Output never crashes on an odd character (one UTF-8 can't encode shows as a \u.. escape); input never silently changes: stdin that
@@ -184,7 +185,57 @@ def render(B, proj):
             out.append('')
     return '\n'.join(out)
 
+def find_board(cwd=None):
+    """Which board a folder uses -- the one rule (backlog-board.md, Settings); every reader calls this.
+    Returns board (None: this folder has none), settings (the file the other keys come from, or None),
+    root (where a relative `board` and a new board start), new (where a new board would go), note (one plain line, or '')."""
+    home, cwd = os.path.expanduser('~'), os.path.abspath(cwd or os.getcwd())
+    def same(a, b):
+        try: return os.path.samefile(a, b)
+        except OSError: return False
+    def ups(p):  # this folder, then each folder above it
+        while True:
+            yield p
+            if os.path.dirname(p) == p: return
+            p = os.path.dirname(p)
+    def keys(f):
+        try: d = json.load(open(f, encoding='utf-8')); return d if isinstance(d, dict) else None
+        except (OSError, ValueError): return None
+    def at(root, b): return os.path.abspath(os.path.join(root, os.path.expanduser(b if isinstance(b, str) and b else '.claude/backlog')))
+    root = next((p for p in ups(cwd) if not (same(p, home) and not same(cwd, home)) and os.path.exists(f'{p}/.git')), cwd)
+    found = dict(board=None, settings=None, root=root, new=at(root, None), note='')
+    for p in ups(cwd):  # the project root: the nearest folder at or above this one with a board of its own; never the home folder
+        if same(p, home): break
+        f = f'{p}/.claude/backlog-it.json'
+        if os.path.isfile(f):
+            d = keys(f)
+            if d is None: found.update(root=p, note=f'No board used: {f} could not be read as settings. Fix it, then try again.'); break
+            found.update(board=at(p, d.get('board')), settings=f, root=p); break
+        if os.path.isdir(f'{p}/.claude/backlog'): found.update(board=f'{p}/.claude/backlog', root=p); break
+    personal = f'{home}/.claude/backlog-it.json'
+    if not found['board'] and not found['note'] and os.path.isfile(personal):
+        d = keys(personal) or {}
+        repo = os.path.expanduser(d['repo']) if isinstance(d.get('repo'), str) else ''
+        repo = os.path.abspath(repo) if os.path.isabs(repo) else None  # a relative repo would mean wherever you stand: not a home
+        b = at(repo or home, d.get('board'))
+        if repo and any(same(q, repo) for q in ups(cwd)): found.update(board=b, settings=personal, root=repo)
+        elif repo: found['note'] = f'Not using the personal board in {b}: it belongs to {repo}, and this folder is outside it.'
+        else: found['note'] = f'Not using the personal board in {b}: {personal} has no "repo" folder (a full path, or one starting with ~), so no folder is its home. Add "repo" to use it there.'
+    env = os.environ.get('BACKLOG_DIR')
+    if env:
+        b = os.path.abspath(os.path.expanduser(env))
+        if not (found['board'] and same(b, found['board'])):
+            found['note'] = f"Using the board in $BACKLOG_DIR ({b}), set by hand: it is not this folder's board ({found['board'] or 'this folder has none'})."
+        found['board'] = b
+    return found
+
+def default_board(who):  # a helper given no board path: the same rule, and nothing read or written when this folder has none
+    f = find_board()
+    if not f['board']: sys.exit(f"{who}: this folder has no board, so nothing was read or written. {f['note']}".strip())
+    return f['board']
+
 def main(args):
+    if args == ['--where']: print(json.dumps(find_board(), indent=1)); return
     if args == ['--self-test']:
         import subprocess, tempfile
         with tempfile.TemporaryDirectory() as t:
@@ -288,7 +339,7 @@ def main(args):
         i = args.index('--project')
         if i + 1 >= len(args): sys.exit('regen-board: --project needs a name')
         proj = args[i + 1]; del args[i:i + 2]
-    B = os.path.abspath(os.path.expanduser(args[0] if args else os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(args[0] if args else default_board('regen-board')))
     if not os.path.isdir(f'{B}/items'):
         sys.exit(f'regen-board: no items/ folder in {B}')
     if not proj:

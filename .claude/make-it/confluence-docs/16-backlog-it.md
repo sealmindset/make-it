@@ -101,9 +101,11 @@ The first run sets up the board inside your project. Settings (optional) go in
 once, and which kinds of work must always be done one at a time (for example anything that
 sends email or takes payments). Slack updates are optional and off until you add a webhook.
 
-**One personal board for everything?** Put the same settings in `~/.claude/backlog-it.json`
-instead, for example `{"board": "~/.claude/backlog", "repo": "~/code/my-app"}`, and
-`/backlog-it` uses that board from any folder that doesn't have its own.
+**A personal board kept outside the project?** Put the same settings in `~/.claude/backlog-it.json`
+instead, for example `{"board": "~/.claude/backlog", "repo": "~/code/my-app"}`. `/backlog-it` uses
+that board only in `~/code/my-app` and the folders inside it. In any other folder it says it is
+not using that board, and why, so one project's cards never show up in another. Without `repo`
+it is used nowhere.
 
 ---
 

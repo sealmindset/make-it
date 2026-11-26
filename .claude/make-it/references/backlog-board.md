@@ -13,13 +13,30 @@ before. Invisible to the vibe-coder unless they ask for it.
 
 ## Settings
 
-Every key is optional. The first file found wins **as a whole** (keys are not mixed across files):
+Every key is optional. The first file found wins **as a whole** (keys are not mixed across files).
+This is the one rule for which board a folder uses. It lives in code, `find_board` in
+`regen-board.py`; `regen-board.py --where` prints its answer as JSON (`board`, `settings`, `root`,
+`new`, `note`), and every skill and helper finds the board through it:
 
 1. **Project:** `.claude/backlog-it.json` in the project root (committed).
 2. **Project board, no settings file:** `.claude/backlog/` exists → use it with defaults.
-3. **User:** `~/.claude/backlog-it.json` -- one personal board used from any folder that has
-   neither of the above (e.g. a board in its own repo at `~/.claude/backlog`).
-4. **Defaults** -- a new board at `.claude/backlog` in the project.
+
+   The **project root** is the nearest folder at or above the current one that has either of
+   these, never the home folder (whose `.claude/` holds the user file below). So a project's board
+   is used from its root and from any folder below it.
+3. **User:** `~/.claude/backlog-it.json` -- one personal board, used only from its `repo` folder or
+   a folder below it (e.g. a board in its own repo at `~/.claude/backlog`, `repo` = the code it
+   tracks). From any other folder it is not used, and one plain line says so: `Not using the
+   personal board in <board>: it belongs to <repo>, and this folder is outside it.` A user file with
+   no `repo` (or a relative one, which would mean wherever you stand) is used nowhere until a full
+   `repo` path is set, and the line says that instead -- a board tied to
+   no folder would show up in every folder.
+4. **Defaults** -- no board yet. A new board goes at `.claude/backlog` in the git root of this
+   folder (the nearest folder above with `.git`), else in this folder.
+
+`$BACKLOG_DIR`, when it is set, is an explicit choice and always wins. When it is not the board the
+rule above picks, one line says so: `Using the board in $BACKLOG_DIR (<path>), set by hand: it is
+not this folder's board (<board, or "this folder has none">).`
 
 ```json
 {
@@ -35,7 +52,7 @@ Every key is optional. The first file found wins **as a whole** (keys are not mi
 |-----|---------|---------|
 | `board` | `.claude/backlog` | Where the board lives. Relative to the project root, or an absolute / `~` path for a board shared across projects or kept in its own repo. `$BACKLOG_DIR` overrides it. |
 | `project` | `<board>/.project`, else the project folder's name | The name in the `BOARD.md` title. |
-| `repo` | the project root | The code that `reconcile`, `groom`, and `groom strategy` check cards against. Set it in the user file when the board is used from anywhere. |
+| `repo` | the project root | The code that `reconcile`, `groom`, and `groom strategy` check cards against. In the user file it is also the only folder (and those below it) the personal board is used from. |
 | `lane_cap` | `3` | The most bugs fixed at once (see [Parallel lanes](#parallel-lanes)). |
 | `serial` | `[]` | Card `category:` values that always run **one at a time** -- work whose mistakes reach people or systems outside the team (payments, outgoing email, anything filed with an outside party). |
 | `models` | `{"route": "opus", "ground": "opus", "judge": ["claude-fable-5-2", "claude-fable-5-1"]}` | Which model does which AI step (see [Which model does what](#which-model-does-what)). Each value is a model or a list tried in order. Any key left out keeps its default. |
@@ -1392,7 +1409,9 @@ Optional, see [Settings](#settings). Post **after** sync and never block on it:
 
 ## Sharing one board
 
-Point several projects -- or a personal board in the user settings -- at the same `board` path.
+Point several projects at the same `board` path, each in its own `.claude/backlog-it.json`. The
+personal board in the user settings is not a way to share: it is used only inside its own `repo`
+(see [Settings](#settings)), so a project that shares it sets that `board` in its own settings file.
 The format is the only contract: the same folders, the same frontmatter, the same `BOARD.md`
 renderer. Whoever writes last regenerates `BOARD.md` from the cards, so nothing is lost. A
 project that wants its own board instead sets its own `board`.
@@ -1401,8 +1420,9 @@ project that wants its own board instead sets its own `board`.
 
 ## Wiring into the other -it skills
 
-When the **project** has `.claude/backlog-it.json` or `.claude/backlog/BOARD.md` (the user-level
-settings file alone does not switch these on):
+When the **project** has `.claude/backlog-it.json` or `.claude/backlog/BOARD.md`, found by the one
+rule in [Settings](#settings) from its root or any folder below it (the user-level settings file
+alone does not switch these on):
 
 | Skill | Hook |
 |-------|------|

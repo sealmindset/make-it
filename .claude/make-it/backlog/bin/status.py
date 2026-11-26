@@ -675,7 +675,7 @@ if __name__ == '__main__':
     if not opt.get('--lane-cap', '3').isdigit(): sys.exit('status: --lane-cap needs a number')
     flag = lambda k: k in args and not args.remove(k)
     needs, first_screen, seen = flag('--needs-you'), flag('--first'), flag('--seen')  # --needs-you: dispatch's closing list
-    B = os.path.abspath(os.path.expanduser(args[0] if args else os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(args[0] if args else R.default_board('status')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'status: no items/ folder in {B}')
     if not proj:
         parent = os.path.dirname(B)
