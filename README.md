@@ -1007,6 +1007,22 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.32 -- /backlog-it never shows another project's board
+
+- **A folder with no board of its own shows no board.** Before, `/backlog-it` fell back to your
+  personal board from any such folder, so a session started in the wrong folder listed another
+  project's cards, and a capture there would have written to that board.
+- **One rule, in one place, used by every helper and skill that finds a board:** a project's
+  own board wins from its top folder and any folder below it (the search stops at a git
+  repository's top folder); the personal board is used only inside its own `repo` folder;
+  `$BACKLOG_DIR` still wins, with a line saying so when it isn't this folder's board.
+- **A new board is never set up where it would clash:** not in the home folder, not inside
+  `~/.claude`, not on an existing board, and not in a folder that holds the personal board's
+  `repo`. Each time, one line says why.
+- **A board made in such a folder before this release** no longer takes over the personal board
+  inside its own repo; one line names it so you can move or remove it.
+- **A personal settings file with no `repo`** is used nowhere until `repo` is set, and says so.
+
 ### v1.71.31 -- the board shrinks: cards combine without losing their point, shipped means done, and quiet cards can close
 
 - **Cards combine.** `/backlog-it combine` proposes bundles of cards that change the same file,

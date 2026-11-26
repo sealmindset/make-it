@@ -231,6 +231,6 @@ if __name__ == '__main__':
             opts[k] = args[i + 1]; del args[i:i + 2]
     dry = '--dry-run' in args; args = [a for a in args if a != '--dry-run']
     if len(args) > 1 or any(a.startswith('--') for a in args): sys.exit(f'sync-prs: unexpected {args}')
-    B = os.path.abspath(os.path.expanduser(args[0] if args else os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(args[0] if args else R.default_board('sync-prs')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'sync-prs: no items/ folder in {B}')
     print(run(B, gh(os.path.expanduser(opts['--repo'])) if '--repo' in opts else None, dry, opts.get('--project')))
