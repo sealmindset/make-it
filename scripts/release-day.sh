@@ -35,8 +35,8 @@
 #     PR ...      the pull requests to release; none = every one that is READY. One that is not
 #                 READY is refused, with the reason.
 #     --repo      the code repo (default: the repo this is run from)
-#     --board     the backlog board that holds the cards (default: $BACKLOG_DIR, else
-#                 <repo>/.claude/backlog)
+#     --board     the backlog board that holds the cards (default: the board the repo's folder
+#                 uses, by the one rule: regen-board.py --where)
 #     --notes     the release note: its first line is the headline, the rest goes under it in the
 #                 README's Version History (default: one line per pull request)
 #     --tests     the tests to run instead of the quick ones, space-separated, or `none`
@@ -51,7 +51,7 @@ BIN="$here/../.claude/make-it/backlog/bin"
 say() { printf '%s\n' "$*"; }
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
-repo="" board="${BACKLOG_DIR:-}" dry="" go="" version="" notes="" tests="" base="main" prs=""
+repo="" board="" dry="" go="" version="" notes="" tests="" base="main" prs=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo|--board|--version|--notes|--tests|--base)
@@ -67,7 +67,9 @@ while [ $# -gt 0 ]; do
 done
 
 repo="$(git -C "${repo:-.}" rev-parse --show-toplevel 2>/dev/null)" || { echo "release-day: not inside a git repo (use --repo)" >&2; exit 2; }
-board="${board:-$repo/.claude/backlog}"
+if [ -z "$board" ]; then  # the one rule every helper uses (regen-board.py find_board); it says why when this folder has none
+  board="$(cd "$repo" && python3 -B -c 'import importlib.util as u, sys; s = u.spec_from_file_location("r", sys.argv[1]); m = u.module_from_spec(s); s.loader.exec_module(m); print(m.default_board("release-day"))' "$BIN/regen-board.py")" || exit 2
+fi
 [ -d "$board/items" ] || { echo "release-day: no board at $board (use --board): the board is where each review is recorded, so nothing can be called ready without it" >&2; exit 2; }
 [ -z "$go" ] || [ -n "$version" ] || { echo "release-day: --go needs --version X.Y.Z: the number is yours to pick" >&2; exit 2; }
 if [ -n "$version" ]; then
@@ -245,8 +247,8 @@ elif [ -n "$dry" ]; then
   say "To make it real (this dry run kept nothing and pushed nothing):"
   say "    scripts/release-day.sh --version $v --go$(cut -f1 "$tmp/merged.txt" | sed 's/^/ /' | tr -d '\n')"
   say "  which builds this again, makes the version commit, and runs:"
-  say "    git push -u origin $branch"
-  say "    gh pr create --base $base --head $branch --title \"$subject\""
+  say "    git push -u origin release/v$v"   # the real run names its branch by the version
+  say "    gh pr create --base $base --head release/v$v --title \"$subject\""
   say "Then, when its checks are green and it has its independent review:"
 else
   keep=1

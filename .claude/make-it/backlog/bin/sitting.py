@@ -7,7 +7,7 @@ Usage: sitting.py [--board PATH] [--project NAME] pick [--as-of YYYY-MM-DD]   (r
        sitting.py [--board PATH] [--project NAME] due [--as-of YYYY-MM-DD]    (read-only, one line)
        sitting.py [--board PATH] [--project NAME] [--no-sync] answer <id> <answer name>   (stdin: what that answer does)
        sitting.py [--board PATH] [--project NAME] [--no-sync] not-now <id>
-  --board defaults to $BACKLOG_DIR, then ./.claude/backlog.
+  --board defaults to the board this folder uses (regen-board.py find_board, the one rule).
 
 pick     the cards for this sitting, by the written rule in status.py (`sitting`): held high-stakes cards with
          no question already waiting; the one that frees the most other cards first, then the higher priority,
@@ -81,7 +81,7 @@ def main(args):
             if i + 1 >= len(args) or args[i + 1].startswith('--'): sys.exit(f'sitting: {k} needs a value')
             opts[k] = args[i + 1]; del args[i:i + 2]
     nosync = '--no-sync' in args; args = [a for a in args if a != '--no-sync']
-    B = os.path.abspath(os.path.expanduser(opts.get('--board') or os.environ.get('BACKLOG_DIR', '.claude/backlog')))
+    B = os.path.abspath(os.path.expanduser(opts.get('--board') or R.default_board('sitting')))
     if not os.path.isdir(f'{B}/items'): sys.exit(f'sitting: no items/ folder in {B}')
     proj = opts.get('--project')
     home = os.path.dirname(B); home = os.path.dirname(home) if os.path.basename(home) == '.claude' else home

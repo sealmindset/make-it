@@ -21,7 +21,7 @@ efee6e9adbd5883bf3c10e4201a905785b33f419cf272e6b50f18ee153354f92  make-it/README
 9b667d2bab34adea2f71b312a48cb0b06285e854e05b8ee3030e867cfa943026  make-it/backlog/bin/regen-board.py
 2f26473647413cc6bf6768e27ef9e6d50596a12bd880d5e63ea77d3560cf196e  make-it/backlog/bin/scope.py
 ca19711507238f4d7dc62f1b5af5aa624dd6668f8331e02441d7f755c6bef398  make-it/backlog/bin/shrink.py
-3b5e44a47547f5d78cda8917e14560e32cc074abc088df28f791e99f39465a30  make-it/backlog/bin/sitting.py
+67e56c4a71c1ca5dc0b1c92c5415271b32364764a33a4f11c124ea801a713f2f  make-it/backlog/bin/sitting.py
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
 7ace36f612e25d64d4dda34631e2e578f58a2c84eb63b3a3c93411d777a87820  make-it/backlog/bin/status.py
 bd5e40f8268ccaa96cbaae7845039b6842baac180f2efadf83262a7ee5baf72b  make-it/backlog/bin/sync-prs.py
