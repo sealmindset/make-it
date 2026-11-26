@@ -52,14 +52,17 @@ user's go, and every other skill reads the same board.
    the personal board in `~/.claude/backlog-it.json` is used only from its `repo` folder or below
    it; `$BACKLOG_DIR`, when set, always wins. Never pick a board any other way. When `note` is not
    empty, say its `note` in one line (it names a board not used and why, or a `$BACKLOG_DIR` that is
-   not this folder's board). Resolve: `BOARD` = `board`, else `new` (Step 3 sets it up);
+   not this folder's board). Resolve: `BOARD` = `board` and nothing else (empty: Step 3);
    `PROJECT` = `project`, else `<board>/.project`, else the project folder's name; `REPO` = `repo`,
    else `root`; `LANE_CAP` = `lane_cap`, else 3;
    `SERIAL` = `serial`, else `[]`;
    `MODELS` = `models` over the defaults `{"route": "opus", "ground": "opus", "judge": ["claude-fable-5-2", "claude-fable-5-1"]}` (a list = first one the deployment serves; no `judge`
    served -> `route`, said in one line).
 2. Export `BACKLOG_DIR=$BOARD` for the helpers.
-3. **No board yet?** (`board` empty, or no `items/` in it.) Say in one line that you'll set one up, then create `$BOARD/items/`, a
+3. **No board yet?** (`board` empty, or no `items/` in it.) With `board` empty, `new` is the only
+   place a board may be set up: `new` empty too means nowhere here is safe (the home folder, inside
+   `~/.claude`, or a folder holding the personal board's `repo`) -- say `note` and stop, nothing
+   made. Otherwise `BOARD` = `board`, else `new`; say in one line that you'll set one up, then create `$BOARD/items/`, a
    `$BOARD/.gitignore` containing `.slack-webhook` and `.last-seen.json`, and render an empty `BOARD.md`. Write
    `.claude/backlog-it.json` only if the user chose a non-default setting. Don't ask about
    Slack -- it's optional and off until a webhook exists.

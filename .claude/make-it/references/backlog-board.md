@@ -22,8 +22,11 @@ This is the one rule for which board a folder uses. It lives in code, `find_boar
 2. **Project board, no settings file:** `.claude/backlog/` exists → use it with defaults.
 
    The **project root** is the nearest folder at or above the current one that has either of
-   these, never the home folder (whose `.claude/` holds the user file below). So a project's board
-   is used from its root and from any folder below it.
+   these. The search never reaches the home folder (whose `.claude/` holds the user file below)
+   and never goes above a git repository's top folder, so a repository cloned inside another
+   project does not take that project's board. A project's board is used from its root and from
+   any folder below it -- except that a board in a folder *above* the personal board's `repo`
+   never takes over that repo: inside it the personal board wins, and one line names the other.
 3. **User:** `~/.claude/backlog-it.json` -- one personal board, used only from its `repo` folder or
    a folder below it (e.g. a board in its own repo at `~/.claude/backlog`, `repo` = the code it
    tracks). From any other folder it is not used, and one plain line says so: `Not using the
@@ -31,8 +34,12 @@ This is the one rule for which board a folder uses. It lives in code, `find_boar
    no `repo` (or a relative one, which would mean wherever you stand) is used nowhere until a full
    `repo` path is set, and the line says that instead -- a board tied to
    no folder would show up in every folder.
-4. **Defaults** -- no board yet. A new board goes at `.claude/backlog` in the git root of this
-   folder (the nearest folder above with `.git`), else in this folder.
+4. **Defaults** -- no board yet. `new` is where one may be set up: `.claude/backlog` in the git
+   root of this folder (the nearest folder above with `.git`), else in this folder. Never in the
+   home folder, inside `~/.claude`, on a board that already exists, or in a folder that holds the
+   personal board's `repo` (a board there would take the repo over): then `new` is empty, one line
+   says why, and nothing is set up. `/backlog-it` shows only `board`; `new` is used only to set up
+   a new board.
 
 `$BACKLOG_DIR`, when it is set, is an explicit choice and always wins. When it is not the board the
 rule above picks, one line says so: `Using the board in $BACKLOG_DIR (<path>), set by hand: it is

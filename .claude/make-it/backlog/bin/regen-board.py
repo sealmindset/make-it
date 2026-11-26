@@ -188,9 +188,10 @@ def render(B, proj):
 def find_board(cwd=None):
     """Which board a folder uses -- the one rule (backlog-board.md, Settings); every reader calls this.
     Returns board (None: this folder has none), settings (the file the other keys come from, or None),
-    root (where a relative `board` and a new board start), new (where a new board would go), note (one plain line, or '')."""
+    root (where a relative `board` starts), new (where a new board may go; None: nowhere safe here), note (plain lines, or '')."""
     home, cwd = os.path.expanduser('~'), os.path.abspath(cwd or os.getcwd())
     def same(a, b):
+        if os.path.abspath(a) == os.path.abspath(b): return True
         try: return os.path.samefile(a, b)
         except OSError: return False
     def ups(p):  # this folder, then each folder above it
@@ -198,35 +199,54 @@ def find_board(cwd=None):
             yield p
             if os.path.dirname(p) == p: return
             p = os.path.dirname(p)
+    def inside(a, b): return any(same(q, b) for q in ups(a))  # a is b or a folder below it
     def keys(f):
         try: d = json.load(open(f, encoding='utf-8')); return d if isinstance(d, dict) else None
         except (OSError, ValueError): return None
     def at(root, b): return os.path.abspath(os.path.join(root, os.path.expanduser(b if isinstance(b, str) and b else '.claude/backlog')))
-    root = next((p for p in ups(cwd) if not (same(p, home) and not same(cwd, home)) and os.path.exists(f'{p}/.git')), cwd)
-    found = dict(board=None, settings=None, root=root, new=at(root, None), note='')
-    for p in ups(cwd):  # the project root: the nearest folder at or above this one with a board of its own; never the home folder
+    found, notes, stop = dict(board=None, settings=None, root=cwd, new=None, note=''), [], False
+    personal, mine, repo, pb = f'{home}/.claude/backlog-it.json', None, None, None
+    if os.path.isfile(personal):
+        mine = keys(personal)
+        r = os.path.expanduser(mine['repo']) if mine and isinstance(mine.get('repo'), str) else ''
+        repo = os.path.abspath(r) if os.path.isabs(r) else None  # a relative repo would mean wherever you stand: not a home
+        pb = at(repo or home, mine.get('board')) if mine is not None else None
+    in_repo = bool(repo) and inside(cwd, repo)
+    for p in ups(cwd):  # the project root: the nearest folder at or above this one with a board of its own -- never the home folder, never above a git repository's top folder
         if same(p, home): break
         f = f'{p}/.claude/backlog-it.json'
         if os.path.isfile(f):
             d = keys(f)
-            if d is None: found.update(root=p, note=f'No board used: {f} could not be read as settings. Fix it, then try again.'); break
+            if d is None: found['root'], stop = p, True; notes.append(f'No board used: {f} could not be read as settings. Fix it, then try again.'); break
             found.update(board=at(p, d.get('board')), settings=f, root=p); break
         if os.path.isdir(f'{p}/.claude/backlog'): found.update(board=f'{p}/.claude/backlog', root=p); break
-    personal = f'{home}/.claude/backlog-it.json'
-    if not found['board'] and not found['note'] and os.path.isfile(personal):
-        d = keys(personal) or {}
-        repo = os.path.expanduser(d['repo']) if isinstance(d.get('repo'), str) else ''
-        repo = os.path.abspath(repo) if os.path.isabs(repo) else None  # a relative repo would mean wherever you stand: not a home
-        b = at(repo or home, d.get('board'))
-        if repo and any(same(q, repo) for q in ups(cwd)): found.update(board=b, settings=personal, root=repo)
-        elif repo: found['note'] = f'Not using the personal board in {b}: it belongs to {repo}, and this folder is outside it.'
-        else: found['note'] = f'Not using the personal board in {b}: {personal} has no "repo" folder (a full path, or one starting with ~), so no folder is its home. Add "repo" to use it there.'
+        if os.path.exists(f'{p}/.git'): break
+    if (found['board'] or stop) and in_repo and not same(found['root'], repo) and inside(repo, found['root']):  # a board above the personal repo (made before this rule) never takes it over
+        notes = [f"Not using the board in {found['board'] or found['root']}: it sits above {repo}, the personal board's own folder, so the personal board is used here."]
+        found.update(board=None, settings=None, root=cwd); stop = False
+    if not found['board'] and not stop and os.path.isfile(personal):
+        if mine is None: notes.append(f'Not using the personal board: {personal} could not be read as settings. Fix it to use that board.')
+        elif in_repo: found.update(board=pb, settings=personal, root=repo)
+        elif repo: notes.append(f'Not using the personal board in {pb}: it belongs to {repo}, and this folder is outside it.')
+        else: notes.append(f'Not using the personal board in {pb}: {personal} has no "repo" folder (a full path, or one starting with ~), so no folder is its home. Add "repo" to use it there.')
+    if not found['board'] and not stop:  # where a new board may go: this folder's git top folder, else this folder -- only when that is safe
+        root = cwd
+        for p in ups(cwd):  # never at or above the home folder
+            if same(p, home): break
+            if os.path.exists(f'{p}/.git'): root = p; break
+        cand = at(root, None)
+        if same(root, home): notes.append('No new board here: this is your home folder. Start one from a project folder.')
+        elif inside(root, f'{home}/.claude'): notes.append(f'No new board here: {root} is inside {home}/.claude, where settings and boards are kept. Start one from a project folder.')
+        elif (pb and same(cand, pb)) or os.path.isdir(f'{cand}/items'): notes.append(f'No new board here: {cand} is already a board.')
+        elif repo and inside(repo, root): notes.append(f"No new board here: {root} holds {repo}, the personal board's own folder, and a board here would take it over. Start one from a project folder.")
+        else: found.update(root=root, new=cand)
     env = os.environ.get('BACKLOG_DIR')
     if env:
         b = os.path.abspath(os.path.expanduser(env))
         if not (found['board'] and same(b, found['board'])):
-            found['note'] = f"Using the board in $BACKLOG_DIR ({b}), set by hand: it is not this folder's board ({found['board'] or 'this folder has none'})."
+            notes = [f"Using the board in $BACKLOG_DIR ({b}), set by hand: it is not this folder's board ({found['board'] or 'this folder has none'})."]
         found['board'] = b
+    found['note'] = ' '.join(notes)
     return found
 
 def default_board(who):  # a helper given no board path: the same rule, and nothing read or written when this folder has none
