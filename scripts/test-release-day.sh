@@ -114,7 +114,7 @@ ok('dry run: the quick tests are the ones that name a changed file; the rest are
 ok('dry run: it prints the version commit it would make and never picks the number', 'The version commit it would make (the number is yours to pick; VERSION is 1.0.0 now):' in out
    and '    release: 2 fixes in one release (vX.Y.Z)' in out and '    scripts/release-day.sh --version X.Y.Z --go 11 12' in out, out)
 ok('dry run: it prints the commands that open the pull request, merge it and tag it -- printed, never run', all(x in out for x in
-   ('    git push -u origin release/day-' + TODAY, '    gh pr create --base main --head release/day-' + TODAY, '    gh pr merge ', '    git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z')), out)
+   ('    git push -u origin release/vX.Y.Z', '    gh pr create --base main --head release/vX.Y.Z', '    gh pr merge ', '    git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z')), out)
 ok('dry run: the close-with-a-note line for each original pull request, and the cards to close',
    all(f'    gh pr close {k} --comment "Released in vX.Y.Z by release pull request' in out for k in (11, 12)) and 'the branch is kept' in out
    and '    The first page says the wrong word (E01-S11): card.py set E01-S11 pr="[11, ' in out and '/backlog-it reconcile --prs' in out, out)
