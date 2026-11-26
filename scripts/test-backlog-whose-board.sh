@@ -53,7 +53,31 @@ check "outside: status says this folder has none"   has "$OUT" "status: this fol
 OUT="$(cd "$H/code/plain" && printf 'a report\n' | env -u BACKLOG_DIR HOME="$H" python3 "$BIN/card.py" --no-sync capture 2>&1 || true)"
 check "outside: a capture is refused"               has "$OUT" "card: this folder has no board, so nothing was read or written."
 check "outside: the personal board is unchanged"    [ "$(snap)" = "$BEFORE" ]
-check "home folder: no board is picked"             [ -z "$(field "$(where "$H")" board)" ]
+# Every helper's default board: refused from outside, nothing written (one mutant per helper default)
+for h in status regen-board sync-prs shrink; do
+  a=(); [ "$h" = shrink ] && a=(combine)
+  OUT="$(run "$H/code/plain" python3 "$BIN/$h.py" ${a[@]+"${a[@]}"})"
+  check "outside: $h refuses, nothing read"         has "$OUT" "$h: this folder has no board, so nothing was read or written."
+done
+check "outside: the personal board still unchanged" [ "$(snap)" = "$BEFORE" ]
+
+# Where a new board may go: never home, never ~/.claude, never a folder holding the personal repo
+W="$(where "$H")"
+check "home folder: no board is picked"             [ -z "$(field "$W" board)" ]
+check "home folder: no new board is offered"        [ -z "$(field "$W" new)" ]
+check "home folder: the line says why"              has "$(field "$W" note)" "No new board here: this is your home folder."
+NEW="$(field "$W" board)"; [ -n "$NEW" ] || NEW="$(field "$W" new)"
+check "home folder: nothing to show from board or new" [ -z "$NEW" ]
+mkdir -p "$H/.claude/x"
+check "inside ~/.claude: no new board is offered"   [ -z "$(field "$(where "$H/.claude/x")" new)" ]
+W="$(where "$H/work")"
+check "above the repo: no new board is offered"     [ -z "$(field "$W" new)" ]
+check "above the repo: the line says why"           has "$(field "$W" note)" "No new board here: $H/work holds $H/work/docai, the personal board's own folder, and a board here would take it over."
+mkdir -p "$H/work/.claude/backlog/items"   # a stray board made above the repo before this rule
+W="$(where "$H/work/docai/sub")"
+check "old stray board above the repo: personal wins" [ "$(field "$W" board)" = "$H/pboard" ]
+check "old stray board above the repo: said"        has "$(field "$W" note)" "Not using the board in $H/work/.claude/backlog: it sits above $H/work/docai"
+rm -rf "$H/work/.claude"
 
 # Inside the personal repo, and below it: as before
 check "repo root: the personal board"               is_board "$H/work/docai" "$H/pboard"
@@ -65,6 +89,8 @@ check "project root: its own board"                 is_board "$H/code/proj" "$H/
 check "project subfolder: its own board"            is_board "$H/code/proj/src/x" "$H/code/proj/.claude/backlog"
 check "project subfolder: status lists its card"    has "$(run "$H/code/proj/src/x" python3 "$BIN/status.py")" "PROJECT-CARD"
 check "settings file: board relative to its root"   is_board "$H/code/shared/src" "$H/code/shared/boards/b"
+mkdir -p "$H/code/proj/vendor/lib/.git" "$H/code/proj/vendor/lib/src"
+check "a repository inside a project: not its board" [ -z "$(field "$(where "$H/code/proj/vendor/lib/src")" board)" ]
 check "a new board goes at the git root"            [ "$(field "$(where "$H/code/g/sub")" new)" = "$H/code/g/.claude/backlog" ]
 
 # $BACKLOG_DIR set by hand: honoured, and said when it is not this folder's board
@@ -81,6 +107,10 @@ check "no repo: the personal board is not used"     [ -z "$(field "$W" board)" ]
 check "no repo: the line says why"                  has "$(field "$W" note)" "has no \"repo\" folder (a full path, or one starting with ~), so no folder is its home. Add \"repo\" to use it there."
 printf '{"board": "~/pboard", "repo": "."}\n' > "$H/.claude/backlog-it.json"
 check "relative repo: the personal board is not used" [ -z "$(field "$(where "$H/code/plain")" board)" ]
+printf '{"board": \n' > "$H/.claude/backlog-it.json"
+W="$(where "$H/work/docai")"
+check "unreadable personal file: not used"          [ -z "$(field "$W" board)" ]
+check "unreadable personal file: said as unreadable" has "$(field "$W" note)" "Not using the personal board: $H/.claude/backlog-it.json could not be read as settings."
 printf '%s\n' "$PERSONAL" > "$H/.claude/backlog-it.json"
 
 # Every reader points at the one rule
@@ -93,6 +123,8 @@ for f in "$CMD" .claude/commands/clear-it.md .claude/commands/resume-it.md .clau
   check "$(basename "$f") finds the board by the one rule" has "$(flat "$f")" "regen-board.py --where"
 done
 check "Step 1 says the line, then offers a board"      has "$(flat "$CMD")" "say its \`note\` in one line"
+check "Step 1 shows only board, new only for a new one" has "$(flat "$CMD")" "\`BOARD\` = \`board\` and nothing else"
+check "Step 1 no longer falls back to new"             bash -c '! grep -q "else \`new\` (Step 3 sets it up)" "$1"' _ "$CMD"
 
 # controls: the checks above must catch the old rule
 has "used from any folder that has neither" "only from its \`repo\` folder or a folder below it" && bad "control: old wording passed" || ok "control: old wording fails"
