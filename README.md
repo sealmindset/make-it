@@ -1007,6 +1007,13 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.34 -- make-it points at /threats-it as a private repository
+
+- **/threats-it's repository is now private.** make-it no longer offers a one-line download
+  that fails for everyone. Its update message and its pages say: ask the owner for access,
+  then clone it with `gh repo clone sealmindset/threats-it` and run its installer
+  (`install.sh`, or `install.ps1` on Windows).
+
 ### v1.71.33 -- /threats-it moves to its own repository
 
 - **/threats-it now lives on its own** at https://github.com/sealmindset/threats-it, with its
