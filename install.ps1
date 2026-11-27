@@ -877,32 +877,38 @@ function Test-WasInstalled($file, $rel, $manifest) {
 function Plan-ThreatsItRetirement($newDir) {
     $old = Join-Path $MAKEIT_DIR "CONTENT_MANIFEST"
     $cmd = Join-Path $COMMANDS_DIR "threats-it.md"
-    $kept = @(); $found = $false; $separate = $false; $dropCmd = $false
+    $kept = @(); $removed = $false; $dropCmd = $false
+    $sepRec = Join-Path (Join-Path $CLAUDE_DIR "threats-it-support") "INSTALLED"
+    $separate = Test-Path -LiteralPath $sepRec -PathType Leaf
     if (Test-Path -LiteralPath $cmd) {
-        if (Test-WasInstalled $cmd "commands/threats-it.md" (Join-Path (Join-Path $CLAUDE_DIR "threats-it-support") "INSTALLED")) { $separate = $true }
-        else {
-            $found = $true
-            if (Test-WasInstalled $cmd "commands/threats-it.md" $old) { $dropCmd = $true } else { $kept += $cmd }
-        }
+        if (Test-WasInstalled $cmd "commands/threats-it.md" $sepRec) { }   # the separate install's
+        elseif (Test-WasInstalled $cmd "commands/threats-it.md" $old) { $dropCmd = $true; $removed = $true }
+        else { $kept += $cmd }
     }
     $oldSup = Join-Path $MAKEIT_DIR "threats-it"
     if ((Test-Path -LiteralPath $oldSup -PathType Container) -and -not (Get-Item -LiteralPath $MAKEIT_DIR -Force).LinkType) {
-        $found = $true
         foreach ($f in Get-ChildItem -LiteralPath $oldSup -Recurse -File -Force | Sort-Object FullName) {
             $rel = $f.FullName.Substring($MAKEIT_DIR.Length + 1).Replace('\', '/')
             if ($rel -match '/__pycache__/') { continue }   # written by Python when the scripts ran, not by anyone
-            if (Test-WasInstalled $f.FullName "make-it/$rel" $old) { continue }
+            if (Test-WasInstalled $f.FullName "make-it/$rel" $old) { $removed = $true; continue }
             $dest = Join-Path $newDir $rel
             New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
             Copy-Item -LiteralPath $f.FullName -Destination $dest -Force -ErrorAction Stop
             $kept += $f.FullName
         }
     }
+    # say what happened this run: nothing once the separate install is there, or once nothing is left to do
+    # (one case speaks beside it: a make-it update from before the move had put make-it's command back over the
+    # separate install's, and that command is gone now, so the separate installer must be run again)
     $note = ""
-    if ($found) {
-        if ($separate) { $note = "/threats-it has moved to its own repository, and you already have it from there; make-it removed its old copy." }
-        else { $note = "/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL" }
-        if ($kept.Count -gt 0) { $note += " (kept, because they were changed: $($kept -join ', '))" }
+    if ($separate -and $dropCmd) { $note = "make-it removed its old copy of the /threats-it command, which had replaced yours; put yours back with: $THREATS_INSTALL" }
+    if (-not $separate) {
+        if ($removed) {
+            $note = "/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+            if ($kept.Count -gt 0) { $note += " (kept, because they were changed or added: $($kept -join ', '))" }
+        } elseif ($kept.Count -gt 0) {
+            $note = "/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: $($kept -join ', '). To keep using it, install it with: $THREATS_INSTALL"
+        }
     }
     return @{ DropCmd = $dropCmd; Note = $note }
 }

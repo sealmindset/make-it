@@ -185,31 +185,36 @@ sha256() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '
 was_installed() { [ -f "$3" ] && [ -f "$1" ] && [ ! -L "$1" ] && [ "$(awk -v p="$2" -v h="$(sha256 "$1")" '$2 == p && $1 == h' "$3" | grep -c .)" -gt 0 ]; }
 # Call after the new make-it folder is built in $1 and before it is swapped in: kept files are copied into it.
 plan_threats_it_retirement() {
-  local new="$1" old="$MAKEIT_DIR/CONTENT_MANIFEST" cmd="$COMMANDS_DIR/threats-it.md" f rel found=0 separate=0
+  local new="$1" old="$MAKEIT_DIR/CONTENT_MANIFEST" cmd="$COMMANDS_DIR/threats-it.md" f rel removed=0 separate=0
+  [ -f "$CLAUDE_DIR/threats-it-support/INSTALLED" ] && separate=1
   if [ -e "$cmd" ] || [ -L "$cmd" ]; then
-    if was_installed "$cmd" "commands/threats-it.md" "$CLAUDE_DIR/threats-it-support/INSTALLED"; then separate=1
-    else found=1
-      if was_installed "$cmd" "commands/threats-it.md" "$old"; then THREATS_DROP_CMD=1; else THREATS_KEPT+=("$cmd"); fi
-    fi
+    if was_installed "$cmd" "commands/threats-it.md" "$CLAUDE_DIR/threats-it-support/INSTALLED"; then :   # the separate install's
+    elif was_installed "$cmd" "commands/threats-it.md" "$old"; then THREATS_DROP_CMD=1; removed=1
+    else THREATS_KEPT+=("$cmd"); fi
   fi
   if [ -d "$MAKEIT_DIR/threats-it" ] && [ ! -L "$MAKEIT_DIR" ]; then
-    found=1
     while IFS= read -r f; do
       rel="${f#"$MAKEIT_DIR"/}"
       case "$rel" in */__pycache__/*) continue ;; esac   # written by Python when the scripts ran, not by anyone
-      was_installed "$f" "make-it/$rel" "$old" && continue
+      if was_installed "$f" "make-it/$rel" "$old"; then removed=1; continue; fi
       mkdir -p "$new/$(dirname "$rel")" && cp -pP "$f" "$new/$rel" \
         || fail "Could not keep your changed file $f. Nothing was changed."
       THREATS_KEPT+=("$f")
     done < <(find "$MAKEIT_DIR/threats-it" \( -type f -o -type l \) | LC_ALL=C sort)
   fi
-  [ "$found" = 1 ] || return 0
+  # say what happened this run: nothing once the separate install is there, or once nothing is left to do
+  # (one case speaks beside it: a make-it update from before the move had put make-it's command back over the
+  # separate install's, and that command is gone now, so the separate installer must be run again)
   if [ "$separate" = 1 ]; then
-    THREATS_NOTE="/threats-it has moved to its own repository, and you already have it from there; make-it removed its old copy."
-  else
-    THREATS_NOTE="/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+    [ "$THREATS_DROP_CMD" = 1 ] && THREATS_NOTE="make-it removed its old copy of the /threats-it command, which had replaced yours; put yours back with: $THREATS_INSTALL"
+    return 0
   fi
-  [ "${#THREATS_KEPT[@]}" -eq 0 ] || THREATS_NOTE="$THREATS_NOTE (kept, because they were changed: ${THREATS_KEPT[*]})"
+  if [ "$removed" = 1 ]; then
+    THREATS_NOTE="/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+    [ "${#THREATS_KEPT[@]}" -eq 0 ] || THREATS_NOTE="$THREATS_NOTE (kept, because they were changed or added: ${THREATS_KEPT[*]})"
+  elif [ "${#THREATS_KEPT[@]}" -gt 0 ]; then
+    THREATS_NOTE="/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: ${THREATS_KEPT[*]}. To keep using it, install it with: $THREATS_INSTALL"
+  fi
 }
 
 # ---------------------------------------------------------------------------

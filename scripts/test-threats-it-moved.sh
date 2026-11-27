@@ -60,6 +60,13 @@ line="$(printf '%s\n' "$out" | grep -F "$MOVED")"
 printf '%s' "$line" | grep -qF "$H/.claude/commands/threats-it.md" && printf '%s' "$line" | grep -qF "references/vex.md" \
   && ok "the moved line names each kept file" || bad "kept files not named: $line"
 profile_same "$H" "$P" && ok "the profile is byte-identical when files are kept" || bad "the profile changed"
+out="$(inst "$H")"; line="$(printf '%s\n' "$out" | grep -F "$MOVED")"
+! printf '%s' "$line" | grep -qF "removed" && printf '%s' "$line" | grep -qF "kept these files" && printf '%s' "$line" | grep -qF "references/vex.md" \
+  && printf '%s' "$line" | grep -qF "sealmindset/threats-it/main/install.sh" \
+  && ok "the next update, with nothing removed, names the kept files and the install line, and claims no removal" || bad "second run line: $line"
+mkdir -p "$H/.claude/threats-it-support"; : > "$H/.claude/threats-it-support/INSTALLED"
+out="$(inst "$H")"; ! printf '%s' "$out" | grep -qF "$MOVED" && [ -f "$H/.claude/make-it/threats-it/references/vex.md" ] \
+  && ok "once the separate install is there, it says nothing about the move, and the kept file stays" || bad "separate after kept: $out"
 
 H="$T/nomanifest"; old_install "$H"; rm "$H/.claude/make-it/CONTENT_MANIFEST"
 out="$(inst "$H")"; [ -f "$H/.claude/commands/threats-it.md" ] && [ -f "$H/.claude/make-it/threats-it/scripts/hunt.py" ] \
@@ -72,7 +79,12 @@ new_h="$(sha "$H/.claude/commands/threats-it.md")"
 out="$(inst "$H")"
 [ "$(sha "$H/.claude/commands/threats-it.md")" = "$new_h" ] && [ -f "$H/.claude/threats-it-support/INSTALLED" ] && [ ! -e "$H/.claude/make-it/threats-it" ] \
   && ok "the separate install's command and folder are left alone; make-it's old folder goes" || bad "separate install touched"
-printf '%s' "$out" | grep -qF "you already have it from there" && ok "and the line says they already have it" || bad "separate line: $out"
+! printf '%s' "$out" | grep -qF "$MOVED" && ok "and it says nothing about the move" || bad "separate line: $out"
+H="$T/putback"; old_install "$H"; mkdir -p "$H/.claude/threats-it-support"; : > "$H/.claude/threats-it-support/INSTALLED"
+out="$(inst "$H")"
+[ ! -e "$H/.claude/commands/threats-it.md" ] && [ "$(printf '%s\n' "$out" | grep -cF "which had replaced yours; put yours back with:")" -eq 1 ] \
+  && ok "make-it's command put back over the separate install is removed, and one line says to run the separate installer again" || bad "put-back case: $out"
+out="$(inst "$H")"; ! printf '%s' "$out" | grep -qE "threats-it has|which had replaced" && ok "and the next update is silent" || bad "put-back repeated: $out"
 profile_same "$H" "$P" && ok "the profile is byte-identical beside a separate install" || bad "the profile changed"
 
 H="$T/fresh"; mkdir -p "$H"
@@ -92,12 +104,22 @@ $THREATS_INSTALL = "irm https://raw.githubusercontent.com/sealmindset/threats-it
 $r = Plan-ThreatsItRetirement (Join-Path $args[1] "new")
 "drop=$($r.DropCmd)"; "note=$($r.Note)"
 PS
-  for kind in unchanged changed; do
+  for kind in unchanged changed kept-only separate; do
     H="$T/ps-$kind"; old_install "$H"
     [ "$kind" = changed ] && echo "my note" >> "$H/.claude/make-it/threats-it/references/vex.md"
+    if [ "$kind" = kept-only ]; then   # what is left after an earlier update: only the changed file
+      rm "$H/.claude/commands/threats-it.md" "$H/.claude/make-it/threats-it/scripts/hunt.py"; echo "my note" >> "$H/.claude/make-it/threats-it/references/vex.md"
+    fi
+    [ "$kind" = separate ] && { mkdir -p "$H/.claude/threats-it-support"; : > "$H/.claude/threats-it-support/INSTALLED"; }
     mkdir -p "$H/new"
     got="$(pwsh -NoProfile -File "$T/plan.ps1" "$root/install.ps1" "$H" 2>&1)"
-    if [ "$kind" = unchanged ]; then
+    if [ "$kind" = kept-only ]; then
+      printf '%s' "$got" | grep -qx 'drop=False' && printf '%s' "$got" | grep -qF "kept these files" && ! printf '%s' "$got" | grep -qF "removed" \
+        && printf '%s' "$got" | grep -qF "install.ps1 | iex" && ok "install.ps1: with only kept files left, it names them and the install line, and claims no removal" || bad "install.ps1 kept-only: $got"
+    elif [ "$kind" = separate ]; then
+      printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "which had replaced yours; put yours back with:" \
+        && ok "install.ps1: make-it's command put back over the separate install is removed, and it says to run the separate installer again" || bad "install.ps1 separate: $got"
+    elif [ "$kind" = unchanged ]; then
       printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "note=$MOVED" && printf '%s' "$got" | grep -qF "install.ps1 | iex" \
         && [ -z "$(find "$H/new" -type f)" ] && ok "install.ps1: an unchanged old copy is dropped, with the moved line" || bad "install.ps1 unchanged: $got"
     else
