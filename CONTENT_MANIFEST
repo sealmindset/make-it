@@ -15,7 +15,7 @@ b6a465c77091393a5bf19f34017b158c6506565d82e53fb9656620ce1afe7cf0  commands/retro
 7aef0880cae1d33844d6edb18f37c3fa7b15e000cfbe48f9b600675f6b77970b  commands/subagent-it.md
 afea5b344aea95ede8d24734a34c88b79fbc6dd87c721c30abba42df763061ac  commands/try-it.md
 f060f4ba58ee0a5124f57a0da94c113057a0eb4e45837209eec602a8691a4bbf  commands/wrap-it.md
-42561bd80a2bcc9450d6f991d4f628c5f30ee3a9e42fb5ec7bebd8b53ac2ba69  make-it/README.md
+efee6e9adbd5883bf3c10e4201a905785b33f419cf272e6b50f18ee153354f92  make-it/README.md
 064ce013f58febcb6340ecf205d44617e8502edb1f2faba6c5f5f20614215060  make-it/backlog/bin/card.py
 5671dac1e5c043fdb7d6d850b2aad3b827c9acbbc4fb27359e592f42705b943e  make-it/backlog/bin/check-plan.py
 9b667d2bab34adea2f71b312a48cb0b06285e854e05b8ee3030e867cfa943026  make-it/backlog/bin/regen-board.py
@@ -24,7 +24,7 @@ ca19711507238f4d7dc62f1b5af5aa624dd6668f8331e02441d7f755c6bef398  make-it/backlo
 400775842d72eabd8fda6987e79ca20be802541fe456c2b259a52e2d9bf56287  make-it/backlog/bin/slack-notify.sh
 15a34f17d69fb15bdd60dc5ac5c1ee435edd9bb40184970bf0a732066a9aa751  make-it/backlog/bin/status.py
 931fa34f108c5df5a9b1a628235ef3f51f892a7da5e24ae587a54b09c544574c  make-it/backlog/bin/sync-prs.py
-c5bc1b0af8df85c68c864214d9f61bd7527e05f5d9fef7ddb95937a6bbbc1e88  make-it/confluence-docs/00-make-it-framework-overview.md
+ff53dedb4483a361da788222852c8742b8cde0414a1ba9fc833b9effd531ee40  make-it/confluence-docs/00-make-it-framework-overview.md
 6b2080dd7d1f428c767e9b77dbf53b5ba6d679ca9f9936b3ef28ded6efe75a15  make-it/confluence-docs/01-make-it.md
 8ebc5420911886856a97b2460f8c1b5fc86a842fcd700ae3c22cf1928120d411  make-it/confluence-docs/02-resume-it.md
 293c79b32d0d9c76b6fd32473b909d5e884871fff78a982f6cdcc57ceb3150c5  make-it/confluence-docs/03-retrofit-it.md
@@ -58,7 +58,7 @@ f434b03a34e4ae391b758825c346b0b3e7ad1b84a37d9d93b318dc351821b642  make-it/refere
 ace641c3d11f9fb41edc1674f82fe784f89b9c5aedd86fccc5a4318783779528  make-it/references/fix-strategies.md
 679b7e407586ac00787c64afc2ea46489a7dd941b996be20d3679dd96f793c04  make-it/references/git-operations.md
 cea3942b19d981d7cbece86ea6e3f3a51e12146a8a4fe145d59cbe4f31ab025e  make-it/references/guardrails.md
-f970f4771f920a776c10c3e7ed4742651ab6ccdcac24d0e6c02567f77a082f03  make-it/references/hostile-code.md
+262fc66d7eda76604fa8046a432bbc3f8f505f95b3835b72f18a3bdad9d0000e  make-it/references/hostile-code.md
 db4bd696b7615cb1ccb2588a470294edbdea01dd2927251c7e8d09936dc72429  make-it/references/human-in-the-loop.md
 932bdaadf01e94fe6069ee0f4eaf0fe566b19ab6504cda54f227e6324ddab1f0  make-it/references/learnings.md
 599879d2172afa37189871d6ffdd09d23335b28490541b1fcd256649e96845f4  make-it/references/left-out-record.md

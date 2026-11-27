@@ -30,7 +30,7 @@ The user never sees code during Q&A, never picks frameworks, and never configure
 | `/backlog-it` | Project board: Epic → Story → Task cards, bug queue, parallel fix lanes (see `references/backlog-board.md`) |
 | `/resolve-it` | From a person's report to their outcome on the live system: read-only investigator, pattern library, `/debug-it` per cause, variations table, adversarial review, ship and verify, loop on stacked causes, prevention, four records (see `references/resolve-it.md`) |
 | `/deadcode-it` | Remove dead code: tools + AI search prove it unused, SAFE/CAUTION/DANGER grading, verified batches with rollback, `docs/DELETION_LOG.md` (see `references/deadcode.md`) |
-| `/threats-it` | Now its own skill, installed on its own: https://github.com/sealmindset/threats-it |
+| `/threats-it` | Now its own skill, in its own private repository: github.com/sealmindset/threats-it (ask for access) |
 
 ## Directory Structure
 
