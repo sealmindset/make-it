@@ -147,6 +147,10 @@ for f in README.md .claude/make-it/README.md .claude/make-it/confluence-docs/00-
 done
 grep -qF 'private repository' CLAUDE.md && grep -qF 'gh repo clone sealmindset/threats-it' CLAUDE.md \
   && ok "CLAUDE.md says the repository is private and how to clone it" || bad "CLAUDE.md has no private-repository pointer"
+grep -qF "run its installer (install.sh)'" install.sh && ok "install.sh names install.sh" || bad "install.sh names the wrong installer"
+grep -qF "run its installer (install.ps1)'" install.ps1 && ok "install.ps1 names install.ps1" || bad "install.ps1 names the wrong installer"
+pub="$(git grep -n -i 'public repository' -- README.md CLAUDE.md .claude/make-it/README.md .claude/make-it/confluence-docs/00-make-it-framework-overview.md .claude/make-it/references/hostile-code.md install.sh install.ps1 | grep -i 'threats-it' | grep -v '^README.md:[0-9]*:- \*\*/threats-it now lives on its own')"
+[ -z "$pub" ] && ok "no pointer calls /threats-it's repository public" || bad "a pointer still says public: $pub"
 raw='githubusercontent.com/sealmindset/''threats-it'
 left="$(git grep -nF -e "$raw" -e 'threats-it/main/install' -- . ':!scripts/test-threats-it-moved.sh')"
 [ -z "$left" ] && ok "no make-it text offers the unauthenticated download any more" || bad "unauthenticated install still offered: $left"
