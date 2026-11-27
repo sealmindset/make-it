@@ -313,6 +313,35 @@ install_force_push_guard() {
 }
 
 # ---------------------------------------------------------------------------
+# The check that stops a helper from finishing with a background command running (a Claude Code hook)
+# ---------------------------------------------------------------------------
+
+# Adds ~/.claude/make-it/hooks/no-leftover-commands.py to ~/.claude/settings.json as a SubagentStop
+# hook. Same merge as the guard above: everything else stays, a copy is kept before the
+# first change, a second install adds nothing. The hook is a tripwire: it refuses once and lets the
+# helper finish on any doubt, so a failure here never stops the install.
+LEFTOVER_NOTE=""
+install_leftover_check() {
+  local hook="$MAKEIT_DIR/hooks/no-leftover-commands.py" out
+  [ -f "$hook" ] || fail "The check that stops a helper from leaving a background command running is missing from this download ($hook)."
+  if ! python_works; then
+    LEFTOVER_NOTE="1 step not done: the check that stops a helper from finishing with a background command still running was not added, because Python 3 isn't working on this computer. Install Python 3 (on a Mac: xcode-select --install), then run this installer again."
+    warn "$LEFTOVER_NOTE"
+    return 0
+  fi
+  # The helper writes the command: it runs the hook only while its file is there (removing make-it turns it off).
+  if out="$(python3 -I "$MAKEIT_DIR/scripts/add-subagent-stop-hook.py" "$CLAUDE_DIR/settings.json" "$hook" python3)"; then
+    ok "$out"
+    case "$out" in Added*|Updated*)
+      info "When a helper (a lane or a reviewer) tries to finish with a background command it started still running, it is told once to stop it first." ;;
+    esac
+  else
+    LEFTOVER_NOTE="1 step not done: the check that stops a helper from finishing with a background command still running was not added (see the line above)."
+    warn "$LEFTOVER_NOTE"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Report results
 # ---------------------------------------------------------------------------
 
@@ -361,6 +390,10 @@ report() {
   if [ -n "$GUARD_NOTE" ]; then
     echo ""
     echo "  $GUARD_NOTE"
+  fi
+  if [ -n "$LEFTOVER_NOTE" ]; then
+    echo ""
+    echo "  $LEFTOVER_NOTE"
   fi
   echo ""
   echo "  IMPORTANT: Restart Claude Code for changes to take effect."
@@ -467,6 +500,7 @@ main() {
   # Install
   install_skills
   install_force_push_guard
+  install_leftover_check
 
   # Report
   report

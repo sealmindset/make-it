@@ -36,6 +36,9 @@ SORT = ('Sort every finding (`approval-block.md`, A review sorts its findings): 
         'change: list at most five, the quickest to fix; they are fixed in the same work if quick, and the rest are dropped, not filed. ALREADY THERE -- a '
         'fault older than the change: a card only if it can lose data, leak a secret, send something wrong, or tell the person something untrue; otherwise '
         'one line for that skill\'s running list. File no follow-up cards: leftovers are fixed inside the work.')
+WAIT = ('Wait for CI or long tests with a foreground command that has a time limit, not a background one. '
+        'Never give your final report while a background command you started is still running: stop each one with TaskStop first.')
+STOP = "When a helper's final report arrives, stop it (TaskStop) so nothing it started is left running"
 LEAD = "rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand"
 
 def section(p, head):
@@ -64,7 +67,7 @@ for name, s in (('IMPORTANT, and when it is fixed', '**IMPORTANT** -- the change
     ok(f'review rule: {name}', s in rev, rev[:300])
 ok('each rule is written once: its heading appears once in the shipped files',
    all(sum(raw(os.path.relpath(os.path.join(dp, f), root)).count(h) for dp, _, fs in os.walk(f'{root}/.claude') for f in fs if f.endswith('.md')) == 1
-       for h in ('## A message to the owner', '## A review sorts its findings')))
+       for h in ('## A message to the owner', '## A review sorts its findings', '## Leave nothing running')))
 
 # --- every brief template carries both blocks, and so does a brief built from it ---
 def build(p):  # fill the template as a coordinator does: drop the leading comment, replace every [BRACKET]
@@ -74,10 +77,13 @@ for p in TEMPLATES:
     b, n = flat(build(p)), os.path.basename(p)
     ok(f'{n}: a brief built from it tells the agent to report plainly', PLAIN in b, n)
     ok(f'{n}: a brief built from it carries the sorting rule', SORT in b, n)
+    ok(f'{n}: a brief built from it says wait in the foreground and stop every background command first (E04-S17)', WAIT in b, n)
     ok(f'{n}: the built brief has no placeholder left', not re.search(r'\[[A-Z][A-Z_]{3,}', b), re.findall(r'\[[A-Z][A-Z_]{3,}[^\]]*', b)[:3])
 prompt = flat(re.search(r'^## Agent prompt structure\n(.*?)^## ', raw(PD), re.M | re.S).group(1))
 ok('parallel-dispatch.md: the lane prompt example carries both blocks', PLAIN in prompt and SORT in prompt, prompt[-400:])
-ok('parallel-dispatch.md: every agent prompt carries them, said as a rule', 'Every agent prompt also carries the two blocks from `approval-block.md`' in prompt)
+ok('parallel-dispatch.md: every agent prompt carries them, said as a rule', 'Every agent prompt also carries the three blocks from `approval-block.md`' in prompt)
+ok('parallel-dispatch.md: the lane prompt example carries the waiting block (E04-S17)', WAIT in prompt, prompt[-400:])
+ok('(control) a brief whose waiting block lost its TaskStop sentence fails', WAIT not in flat(build(TEMPLATES[0])).replace('stop each one with TaskStop first', 'report'))
 ok('(control) a brief whose block lost a sentence fails', SORT not in flat(build(TEMPLATES[0])).replace('and the rest are dropped, not filed', 'and the rest are filed'))
 
 # --- the smaller briefs carry a pointer line, and no brief can be added without the rules ---
@@ -101,6 +107,18 @@ ok('a lane\'s brief tells it to read its area\'s running list, fix what is in it
    all('Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).' in flat(raw(p)) for p in (TEMPLATES[2], PD)))
 ok('the review brief says how a review is recorded: the verdict and the commit it read, ready or not',
    'card.py set <id> reviewed="<date> ready <commit>"' in flat(raw(TEMPLATES[0])) and 'reviewed="<date> not ready"' in flat(raw(TEMPLATES[0])))
+
+# --- leave nothing running (E04-S17): written once, the lead stops each helper ---
+left = section(AB, '## Leave nothing running')
+ok('the waiting rule is a section of approval-block.md and holds the brief lines', WAIT in left, left[:300])
+ok('approval-block.md: the lead stops each helper when its report arrives', STOP in left)
+ok('approval-block.md: names the hook, what it says, and that it lets the helper go the second time',
+   'hooks/no-leftover-commands.py' in left and 'You still have a background command running: <ids>. Stop each with TaskStop, then give your report.' in left and 'a tripwire, never a trap' in left)
+step4 = flat(re.search(r'^4\. \*\*Review & integrate\*\*.*?(?=^---)', raw(PD), re.M | re.S).group(0))
+ok('parallel-dispatch.md Review & integrate: the lead stops each helper', STOP.lower() in step4.lower(), step4[:200])
+for p in (SDD, '.claude/commands/dispatch-it.md', '.claude/commands/subagent-it.md', '.claude/commands/resolve-it.md', '.claude/commands/backlog-it.md'):
+    f = flat(raw(p))
+    ok(f'{os.path.basename(p)}: the lead stops each helper when its report arrives', STOP.lower() in f.lower() and 'Leave nothing running' in f)
 
 # --- the lead's own summary step says: rewrite, never forward ---
 for p in (PD, SDD, '.claude/commands/dispatch-it.md', '.claude/commands/subagent-it.md', '.claude/commands/resolve-it.md', '.claude/commands/backlog-it.md'):

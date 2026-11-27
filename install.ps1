@@ -1071,6 +1071,36 @@ function Install-MakeItSkills($state) {
         Info "To add it back: `$env:MAKEIT_FORCE_PUSH_GUARD = `"add`"; irm $GITHUB_RAW/install.ps1 | iex"
     }
 
+    # The check that stops a helper from finishing with a background command still running: a
+    # SubagentStop hook, merged into settings.json by the same Python helper install.sh
+    # runs. The hook is Python, so with no working Python it is left out and the install says so.
+    # It is a tripwire (refuses once, lets the helper finish on any doubt), so nothing here stops the install.
+    $py = $null
+    foreach ($name in @("python3", "python")) {
+        $exe = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $exe) { continue }
+        # the Microsoft Store stand-in exits non-zero; under "Stop", its stderr would otherwise throw
+        try { & $exe.Source -c "import sys" 2>$null | Out-Null; $works = $LASTEXITCODE -eq 0 } catch { $works = $false }
+        if ($works) { $py = $exe; break }
+    }
+    $leftover = (Join-Path (Join-Path $MAKEIT_DIR "hooks") "no-leftover-commands.py") -replace '\\', '/'
+    if (-not $py) {
+        Warn "1 step not done: the check that stops a helper from finishing with a background command still running was not added, because Python isn't working on this computer. Install Python 3, then run this installer again."
+    } else {
+        try {
+            $leftoverOut = & $py.Source -I (Join-Path (Join-Path $MAKEIT_DIR "scripts") "add-subagent-stop-hook.py") (Join-Path $CLAUDE_DIR "settings.json") $leftover $name ($bashExe -replace '\\', '/')
+            $leftoverRc = $LASTEXITCODE
+        } catch { Warn "$_"; $leftoverRc = 1 }
+        if ($leftoverRc -eq 0) {
+            Ok "$leftoverOut"
+            if ("$leftoverOut" -match '^(Added|Updated)') {
+                Info "When a helper (a lane or a reviewer) tries to finish with a background command it started still running, it is told once to stop it first."
+            }
+        } else {
+            Warn "1 step not done: the check that stops a helper from finishing with a background command still running was not added (see the line above)."
+        }
+    }
+
     # Clean up temp directory
     if ($tmpDir -and (Test-Path $tmpDir)) {
         Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue

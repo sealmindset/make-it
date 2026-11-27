@@ -179,7 +179,9 @@ Announce each pick before it starts, by its title with its id. Gather every lane
 stays serial: one PR through CI and deploy at a time.
 
 **Plain words, and no flood** (`approval-block.md`, A message to the owner, and A review sorts its
-findings). Every lane and reviewer brief carries both rules' lines. When you pass on a lane's or a
+findings). Every lane and reviewer brief carries both rules' lines, and the one on waiting (`approval-block.md`,
+Leave nothing running). When a helper's final report arrives, stop it (TaskStop) so nothing it started is left running.
+When you pass on a lane's or a
 reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a
 lane's shorthand. A lane files no follow-up card by default: leftovers are fixed inside the work, and a
 fault that was already there goes on the running list (the reference's "The running list") unless it

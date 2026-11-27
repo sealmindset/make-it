@@ -58,6 +58,9 @@ wrong, stop and return NEEDS_CONTEXT naming the test and why; don't work around 
 Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
 they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
 title with its id, never a bare id.
+Wait for CI or long tests with a foreground command that has a time limit, not a background one.
+Never give your final report while a background command you started is still running: stop each one
+with TaskStop first.
 Write your FULL report to `[REPORT_PATH]` (what you built, decisions, test command + output,
 self-review notes, and the SAFEGUARDS line below). In your reply to me, return ONLY:
 - **STATUS:** one of DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED
