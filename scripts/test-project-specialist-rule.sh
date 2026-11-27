@@ -173,8 +173,7 @@ Using a specialist and recording one are two separate jobs.
 - **No app code, no project specialist.** Skills that do not work on an app's code get no project
   specialist. `/demo-it`, `/wrap-it`, `/clear-it`, `/git-it` and `/backlog-it` get no specialist at
   all: `/demo-it` manages demo accounts and their sample data for a product, and does not change or
-  judge an app's code. `/threats-it` is standalone, not tied to an app: it works as a fixed threat
-  intelligence analyst and reads no project specialist record.
+  judge an app's code.
 
 ### Always a named specialist
 

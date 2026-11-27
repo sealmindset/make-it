@@ -168,6 +168,51 @@ download_repo() {
 }
 
 # ---------------------------------------------------------------------------
+# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it)
+# ---------------------------------------------------------------------------
+
+# An update removes make-it's old copy -- ~/.claude/commands/threats-it.md and ~/.claude/make-it/threats-it/ --
+# but only the files that are still exactly what make-it installed (the CONTENT_MANIFEST of that install says
+# so). A file someone changed is kept where it is and named. A command the separate /threats-it installer wrote
+# (its ~/.claude/threats-it-support/INSTALLED records it) is not make-it's and is left alone. The organisation
+# profile in ~/.claude/threats-it/ is never read, moved or removed.
+THREATS_NOTE=""
+THREATS_KEPT=()
+THREATS_DROP_CMD=0
+THREATS_INSTALL="curl -fsSL https://raw.githubusercontent.com/sealmindset/threats-it/main/install.sh | bash"
+sha256() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
+# was_installed FILE PATH-IN-MANIFEST MANIFEST: 0 when the manifest records exactly this file's content
+was_installed() { [ -f "$3" ] && [ -f "$1" ] && [ ! -L "$1" ] && [ "$(awk -v p="$2" -v h="$(sha256 "$1")" '$2 == p && $1 == h' "$3" | grep -c .)" -gt 0 ]; }
+# Call after the new make-it folder is built in $1 and before it is swapped in: kept files are copied into it.
+plan_threats_it_retirement() {
+  local new="$1" old="$MAKEIT_DIR/CONTENT_MANIFEST" cmd="$COMMANDS_DIR/threats-it.md" f rel found=0 separate=0
+  if [ -e "$cmd" ] || [ -L "$cmd" ]; then
+    if was_installed "$cmd" "commands/threats-it.md" "$CLAUDE_DIR/threats-it-support/INSTALLED"; then separate=1
+    else found=1
+      if was_installed "$cmd" "commands/threats-it.md" "$old"; then THREATS_DROP_CMD=1; else THREATS_KEPT+=("$cmd"); fi
+    fi
+  fi
+  if [ -d "$MAKEIT_DIR/threats-it" ] && [ ! -L "$MAKEIT_DIR" ]; then
+    found=1
+    while IFS= read -r f; do
+      rel="${f#"$MAKEIT_DIR"/}"
+      case "$rel" in */__pycache__/*) continue ;; esac   # written by Python when the scripts ran, not by anyone
+      was_installed "$f" "make-it/$rel" "$old" && continue
+      mkdir -p "$new/$(dirname "$rel")" && cp -pP "$f" "$new/$rel" \
+        || fail "Could not keep your changed file $f. Nothing was changed."
+      THREATS_KEPT+=("$f")
+    done < <(find "$MAKEIT_DIR/threats-it" \( -type f -o -type l \) | LC_ALL=C sort)
+  fi
+  [ "$found" = 1 ] || return 0
+  if [ "$separate" = 1 ]; then
+    THREATS_NOTE="/threats-it has moved to its own repository, and you already have it from there; make-it removed its old copy."
+  else
+    THREATS_NOTE="/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+  fi
+  [ "${#THREATS_KEPT[@]}" -eq 0 ] || THREATS_NOTE="$THREATS_NOTE (kept, because they were changed: ${THREATS_KEPT[*]})"
+}
+
+# ---------------------------------------------------------------------------
 # Install skills
 # ---------------------------------------------------------------------------
 
@@ -225,9 +270,11 @@ install_skills() {
       cp -p "$kept" "$NEW_DIR"/ || { rm -rf "$NEW_DIR"; fail "Could not keep $(basename "$kept"). Nothing was changed."; }
     fi
   done
+  plan_threats_it_retirement "$NEW_DIR"
   [ -L "$MAKEIT_DIR" ] && rm "$MAKEIT_DIR"
   [ -d "$MAKEIT_DIR" ] && rm -rf "$MAKEIT_DIR"
   mv "$NEW_DIR" "$MAKEIT_DIR"
+  [ "$THREATS_DROP_CMD" = 1 ] && rm -f "$COMMANDS_DIR/threats-it.md"
 
   # Verify
   [ -d "$MAKEIT_DIR/references" ] || fail "Copy failed -- references directory missing."
@@ -347,7 +394,7 @@ report() {
         demo-it)     desc="Demo tenant lifecycle for prospect onboarding" ;;
         backlog-it)  desc="Project board: work items, bug queue, parallel fixes" ;;
         deadcode-it) desc="Find and safely remove code your app no longer uses" ;;
-        threats-it)  desc="Threat feed -> verified IOC hunt, attack chains, VEX, report pair" ;;
+        threats-it)  desc="Installed on its own (github.com/sealmindset/threats-it)" ;;
         *)           desc="Custom skill" ;;
       esac
       printf "    /%-14s -- %s\n" "$cmd_name" "$desc"
@@ -361,6 +408,10 @@ report() {
   if [ -n "$GUARD_NOTE" ]; then
     echo ""
     echo "  $GUARD_NOTE"
+  fi
+  if [ -n "$THREATS_NOTE" ]; then
+    echo ""
+    echo "  $THREATS_NOTE"
   fi
   echo ""
   echo "  IMPORTANT: Restart Claude Code for changes to take effect."

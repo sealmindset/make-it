@@ -4,7 +4,7 @@ Some code is built to attack **the computer that runs it**, not to be a flaw in 
 project can look useful and start a password stealer the moment one of its files is loaded. So
 this check runs **before the first install, test, build or start** in a project, and a match is
 not a security finding to fix: it is a stop. (The pattern comes from the Hermes / PyMapper
-research, October 2026. Its addresses and file hashes go through `/threats-it`, never here: they
+research, October 2026. Its addresses and file hashes go through `/threats-it` (https://github.com/sealmindset/threats-it), never here: they
 go stale, and they would only catch that one campaign.)
 
 ## Run it

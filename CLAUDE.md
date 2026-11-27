@@ -108,31 +108,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 ## /threats-it
 
-`/threats-it` turns any threat feed (advisory URL, article, CVE list, IOC list) into a verified, organisation-specific assessment. Standalone -- not tied to an app. Support files in `.claude/make-it/threats-it/`.
-
-0. **Scaffold** -- Local git project under `~/threat-briefs/<date>-<slug>/` (never pushed and never in a cloud-synced folder: it holds tenant evidence)
-1. **Intake** -- Archive every source raw with hashes; refused pages via API or two matching extractions
-2. **Extract** -- CVEs, products, IOCs, attack narratives into `facts.json`, quotes matched by regex
-3. **Verify** -- CISA KEV, MSRC, CVE record, vendor advisories, Microsoft Learn; corrections table
-4. **Attack chains** -- Flow diagram + ATT&CK-verified stage table per attack, plus who can run each chain now: a person alone against a person with AI help
-5. **Organisation assessment** -- Read-only Graph / Log Analytics / Resource Graph: IOC + behaviour hunts, exposure, Sentinel rule coverage; then finding chains: low and informational findings joined into attack paths, each with its cheapest break and a test plan (`/threats-it chains` runs this alone, with no feed)
-6. **VEX** -- One statement per product x item, OpenVEX v0.2.0
-7. **Reports** -- Leadership briefing + technical companion + generated appendix, Markdown and PDF, figure check
-8. **Fact-check** -- Independent agent; every finding fixed
-9. **Deliver** -- Local commit, verdict, time-sensitive items, organisation profile updated
-
-### Key Principles
-
-- Read-only in the tenant; a real indicator stops the run and goes to the user, evidence preserved, nothing remediated
-- Prove it or don't report it -- WebFetch is discovery only, never the source of a figure
-- Behaviour first: the briefing leads with what attackers do and the VEX table, not product articles
-- The organisation's own security testing (AuditGitHub and its scanners) is never reported as an attacker; it is excluded by recorded identifier and counted, and its findings are leads to confirm
-- The organisation's own AI systems are a target: each is inventoried as an identity (what it runs as, what it can reach, what it reads that outsiders can write, what it does unapproved); the skill never prompts one
-- Findings come from what the run collects plus Secure Score, Defender for Cloud, Defender XDR, AuditGitHub and dropped reports; a source that could not be read is reported, never counted as "no findings"
-- A path built from small findings is "not exercised" until a person's test record says otherwise; the skill never runs one, and the test plan carries no exploit code
-- AI is treated as the attacker too, not only a helper: each chain is rated for an AI agent acting on its own, with how fast it could finish against how fast the organisation would notice
-- AI is treated as part of the attacker: "needs a skilled attacker" is never a reason to call a chain unlikely. Ratings are assessments; a claim that AI was used needs a source
-- The organisation profile (`~/.claude/threats-it/environment.md`) is local only -- never committed
+`/threats-it` (threat feed to a verified, organisation-specific assessment) now lives in its own repository: https://github.com/sealmindset/threats-it. make-it no longer ships it.
 
 ## /wrap-it
 
@@ -213,7 +189,6 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
     retrofit-it.md                # Retrofit skill -- upgrade existing app with production foundations
     deadcode-it.md                # Dead-code skill -- prove unused, delete in verified batches, deletion log
     resolve-it.md                 # Incident skill -- report to verified outcome, stacked causes, prevention, four records
-    threats-it.md                 # Threat skill -- threat feed to verified IOC hunt, attack chains, VEX, report pair
   make-it/
     references/
       prerequisites.md             # Preflight checks (from Vibe Code Quick Start)
@@ -239,10 +214,6 @@ Asked what a board card is about -- `/backlog-it info <card>`, or a `/btw` side 
       patterns/                   # shipped seed root-cause patterns (generic)
     watermark/                    # Security file list per scaffold, for the build record's check (watermark.md)
     security-audit/               # Vendored cloudflare/security-audit-skill (MIT, pinned commit, unmodified): /nemo-it's deep code audit; /fix-it reads its findings
-    threats-it/
-      scripts/                    # stdlib Python + Azure CLI: fetch, KEV, MSRC, ATT&CK, tenant access, hunt, exposure, Sentinel coverage, OpenVEX, pair check
-      references/                 # report standard, attack-chain format, VEX, sources, tenant assessment, pitfalls, fact-check, profile template
-      templates/                  # per-project build.sh (OpenVEX -> pair check -> PDFs) and pdf.css
     templates/
       app-context.md              # Template for tracking user answers -> technical decisions
     variants/

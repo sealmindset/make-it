@@ -854,6 +854,59 @@ try {
 # Step 5: Install /make-it skills
 # ===========================================================================
 
+# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it). An update removes
+# make-it's old copy -- ~\.claude\commands\threats-it.md and ~\.claude\make-it\threats-it\ -- but only the files
+# that are still exactly what make-it installed (the CONTENT_MANIFEST of that install says so). A file someone
+# changed is kept where it is and named. A command the separate /threats-it installer wrote (its
+# ~\.claude\threats-it-support\INSTALLED records it) is left alone. The organisation profile in
+# ~\.claude\threats-it\ is never read, moved or removed.
+$THREATS_INSTALL = "irm https://raw.githubusercontent.com/sealmindset/threats-it/main/install.ps1 | iex"
+function Test-WasInstalled($file, $rel, $manifest) {
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
+    if ((Get-Item -LiteralPath $file -Force).LinkType) { return $false }
+    $h = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+    foreach ($line in Get-Content -LiteralPath $manifest) {
+        $f = $line -split '  ', 2
+        if ($f.Count -eq 2 -and $f[1] -eq $rel -and $f[0] -eq $h) { return $true }
+    }
+    return $false
+}
+# Call after the new make-it folder is built in $newDir and before it is swapped in: kept files are copied into it.
+# Returns @{ DropCmd = <remove the old command after the swap>; Note = <the one line to print, or empty> }.
+function Plan-ThreatsItRetirement($newDir) {
+    $old = Join-Path $MAKEIT_DIR "CONTENT_MANIFEST"
+    $cmd = Join-Path $COMMANDS_DIR "threats-it.md"
+    $kept = @(); $found = $false; $separate = $false; $dropCmd = $false
+    if (Test-Path -LiteralPath $cmd) {
+        if (Test-WasInstalled $cmd "commands/threats-it.md" (Join-Path (Join-Path $CLAUDE_DIR "threats-it-support") "INSTALLED")) { $separate = $true }
+        else {
+            $found = $true
+            if (Test-WasInstalled $cmd "commands/threats-it.md" $old) { $dropCmd = $true } else { $kept += $cmd }
+        }
+    }
+    $oldSup = Join-Path $MAKEIT_DIR "threats-it"
+    if ((Test-Path -LiteralPath $oldSup -PathType Container) -and -not (Get-Item -LiteralPath $MAKEIT_DIR -Force).LinkType) {
+        $found = $true
+        foreach ($f in Get-ChildItem -LiteralPath $oldSup -Recurse -File -Force | Sort-Object FullName) {
+            $rel = $f.FullName.Substring($MAKEIT_DIR.Length + 1).Replace('\', '/')
+            if ($rel -match '/__pycache__/') { continue }   # written by Python when the scripts ran, not by anyone
+            if (Test-WasInstalled $f.FullName "make-it/$rel" $old) { continue }
+            $dest = Join-Path $newDir $rel
+            New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
+            Copy-Item -LiteralPath $f.FullName -Destination $dest -Force -ErrorAction Stop
+            $kept += $f.FullName
+        }
+    }
+    $note = ""
+    if ($found) {
+        if ($separate) { $note = "/threats-it has moved to its own repository, and you already have it from there; make-it removed its old copy." }
+        else { $note = "/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL" }
+        if ($kept.Count -gt 0) { $note += " (kept, because they were changed: $($kept -join ', '))" }
+    }
+    return @{ DropCmd = $dropCmd; Note = $note }
+}
+
 function Install-MakeItSkills($state) {
     if (Is-StepDone $state "skills") {
         Ok "/make-it skills -- already done"
@@ -991,6 +1044,7 @@ function Install-MakeItSkills($state) {
     $newDir = "$MAKEIT_DIR.new.$PID"
     if (Test-Path $newDir) { Remove-Item -Path $newDir -Recurse -Force }
     Copy-Item -Path (Join-Path (Join-Path $repoDir ".claude") "make-it") -Destination $newDir -Recurse -Force
+    $threats = Plan-ThreatsItRetirement $newDir
     if (Test-Path $MAKEIT_DIR) {
         # an ordinary file only: a link is not followed, and its answers are asked again
         # (and whether the user removed the force-push guard: force-push-guard.state)
@@ -1001,6 +1055,8 @@ function Install-MakeItSkills($state) {
         Remove-Item -Path $MAKEIT_DIR -Recurse -Force
     }
     Move-Item -Path $newDir -Destination $MAKEIT_DIR
+    if ($threats.DropCmd) { Remove-Item -LiteralPath (Join-Path $COMMANDS_DIR "threats-it.md") -Force }
+    if ($threats.Note) { Info $threats.Note }
 
     # Verify
     $refsDir = Join-Path $MAKEIT_DIR "references"
@@ -1190,7 +1246,7 @@ function Verify-Setup($state) {
                 "fix-it"      { "Auto-fix security findings from /nemo-it" }
                 "backlog-it"  { "Project board: work items, bug queue, parallel fixes" }
                 "deadcode-it" { "Find and safely remove code your app no longer uses" }
-                "threats-it"  { "Threat feed -> verified IOC hunt, attack chains, VEX, report pair" }
+                "threats-it"  { "Installed on its own (github.com/sealmindset/threats-it)" }
                 default       { "Custom skill" }
             }
             Info ("    /{0,-14} -- {1}" -f $cmdName, $desc)

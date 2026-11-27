@@ -3,7 +3,7 @@
 # Contract these checks pin:
 #   - skill-triggers.md holds one "Section -- copy exactly" block, headed "## Which make-it skill, when".
 #   - The block names every command make-it ships (a new skill can't be left out), and names no skill that doesn't exist
-#     (/ship-it is the one outside name: it is installed separately).
+#     (/ship-it and /threats-it are the outside names: each is installed separately).
 #   - The skills that deploy, send or reach outside the computer (/ship-it, /argo-it, /demo-it, /threats-it) sit only in
 #     the "Never start these on your own" paragraph, and that paragraph keeps "only when the person asks" and the skill's
 #     own asks.
@@ -37,8 +37,8 @@ CMDS="$(ls .claude/commands/*.md | sed -E 's#.*/##; s#\.md$##' | sort)"
 NAMED="$(printf "%s\n" "$BLOCK" | grep -oE '/[a-z]+-it\b' | sed 's#^/##' | sort -u)"
 check "the block names every command make-it ships" \
   'M="$(comm -23 <(printf "%s\n" "$CMDS") <(printf "%s\n" "$NAMED"))"; [ -z "$M" ] || { echo "  not named: $(echo $M)"; false; }'
-check "the block names no skill that doesn't exist (but /ship-it, installed separately)" \
-  'X="$(comm -13 <(printf "%s\n" "$CMDS") <(printf "%s\n" "$NAMED") | grep -vx ship-it || true)"; [ -z "$X" ] || { echo "  unknown: $(echo $X)"; false; }'
+check "the block names no skill that doesn't exist (but /ship-it and /threats-it, installed separately)" \
+  'X="$(comm -13 <(printf "%s\n" "$CMDS") <(printf "%s\n" "$NAMED") | grep -vx -e ship-it -e threats-it || true)"; [ -z "$X" ] || { echo "  unknown: $(echo $X)"; false; }'
 
 # the never paragraph: from its bold lead to the next blank line
 NPARA="$(printf "%s\n" "$BLOCK" | awk '/^\*\*Never start these on your own\.\*\*/{on=1} on && !NF{exit} on' | tr '\n' ' ')"
@@ -83,8 +83,8 @@ TRIG='Use (when|for|to|mid-session)\b|Only when the user asks'
 no_trigger() { local f; for f in .claude/commands/*.md; do desc "$f" | gq -E "$TRIG" || echo "$(basename "$f" .md)"; done; }
 check "every command's description says when to use it" \
   'X="$(no_trigger)"; [ -z "$X" ] || { echo "  no trigger: $(echo $X)"; false; }'
-never_desc() { local s; for s in argo-it demo-it threats-it; do desc ".claude/commands/$s.md" | gq -F "Only when the user asks" && desc ".claude/commands/$s.md" | gq -F "never start it on your own" && ! desc ".claude/commands/$s.md" | gq -iE "\bor use when\b|Use (when|for|to)\b" || { echo "  $s"; return 1; }; done; }
-check "/argo-it, /demo-it and /threats-it say \"Only when the user asks\" and \"never start it on your own\", with no second trigger" 'never_desc'
+never_desc() { local s; for s in argo-it demo-it; do desc ".claude/commands/$s.md" | gq -F "Only when the user asks" && desc ".claude/commands/$s.md" | gq -F "never start it on your own" && ! desc ".claude/commands/$s.md" | gq -iE "\bor use when\b|Use (when|for|to)\b" || { echo "  $s"; return 1; }; done; }
+check "/argo-it and /demo-it say \"Only when the user asks\" and \"never start it on your own\", with no second trigger" 'never_desc'
 check "S14 and its neighbours: S14 runs last in the one CLAUDE.md change, and is named plainly in the catch-up list" \
   'printf "%s" "$S14" | gq -F "anywhere else" && printf "%s" "$S14" | gq -F "instructions that help me pick the right tool" && grep -E "^\*\*S13\*\* " "$BS" | gq -F "S14 last" && gq -F "S14 last" .claude/commands/resume-it.md'
 
