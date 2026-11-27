@@ -1072,7 +1072,7 @@ function Install-MakeItSkills($state) {
     }
 
     # The check that stops a helper from finishing with a background command still running: a
-    # SubagentStop hook (E04-S17), merged into settings.json by the same Python helper install.sh
+    # SubagentStop hook, merged into settings.json by the same Python helper install.sh
     # runs. The hook is Python, so with no working Python it is left out and the install says so.
     # It is a tripwire (refuses once, lets the helper finish on any doubt), so nothing here stops the install.
     $py = $null

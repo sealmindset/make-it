@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Add make-it's no-leftover-commands hook to a Claude Code settings.json as a SubagentStop hook,
-keeping everything else (E04-S17).
+keeping everything else.
 
 Usage: add-subagent-stop-hook.py <settings.json> <hook file> <python> [<bash>]
   The entry's command, built here: <bash> -c '[ -f "$0" ] || exit 0; exec <python> -I "$0"' <hook file>

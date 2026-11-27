@@ -317,7 +317,7 @@ install_force_push_guard() {
 # ---------------------------------------------------------------------------
 
 # Adds ~/.claude/make-it/hooks/no-leftover-commands.py to ~/.claude/settings.json as a SubagentStop
-# hook (E04-S17). Same merge as the guard above: everything else stays, a copy is kept before the
+# hook. Same merge as the guard above: everything else stays, a copy is kept before the
 # first change, a second install adds nothing. The hook is a tripwire: it refuses once and lets the
 # helper finish on any doubt, so a failure here never stops the install.
 LEFTOVER_NOTE=""

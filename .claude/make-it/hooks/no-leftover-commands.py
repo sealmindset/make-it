@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """SubagentStop hook: a helper may not give its final report while a background command it started is
-still running (E04-S17).
+still running.
 
 A background command a background helper starts keeps running after the helper finishes; in a
 session someone works in there is no time limit, so a finished helper can hold one for days. When a

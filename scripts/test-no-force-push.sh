@@ -407,8 +407,9 @@ if HOME="$H" bash install.sh >"$T/i1" 2>&1; then
   case $hc in *"$H/.claude/make-it/hooks/no-force-push.sh"*) ok "install.sh: settings point at the installed hook" ;; *) bad "install.sh: settings don't point at the installed hook" ;; esac
   printf '%s' "$(payload 'git push --force')" | sh -c "$hc" 2>/dev/null; [ $? = 2 ] && ok "install.sh: the command written to settings runs the hook and refuses a force push" || bad "install.sh: the written command doesn't refuse a force push"
   grep -q 'in every project on this computer' "$T/i1" && grep -qF -- '--remove-force-push-guard' "$T/i1" && ok "install.sh: says it applies to every project and how to remove it" || bad "install.sh: didn't say where it applies or how to remove it"
-  HOME="$H" bash install.sh >"$T/i2" 2>&1
-  [ "$(baks "$H/.claude")" = 1 ] && grep -q 'already' "$T/i2" && ok "install.sh: a second install adds nothing" || bad "install.sh: a second install changed settings again"
+  # the first install keeps a copy before each of its changes (this guard, then the SubagentStop check); a second adds none
+  n1=$(baks "$H/.claude"); HOME="$H" bash install.sh >"$T/i2" 2>&1
+  [ "$n1" -ge 1 ] && [ "$(baks "$H/.claude")" = "$n1" ] && grep -q 'already' "$T/i2" && ok "install.sh: a second install adds nothing" || bad "install.sh: a second install changed settings again"
   HOME="$H" bash install.sh --remove-force-push-guard >"$T/i3" 2>&1
   [ "$(ours "$H/.claude/settings.json")" = "[]" ] && HOME="$H" bash install.sh >"$T/i4" 2>&1 && [ "$(ours "$H/.claude/settings.json")" = "[]" ] && grep -q 'stays off' "$T/i4" \
     && ok "install.sh: removed with --remove-force-push-guard, and an update (folder replaced) keeps it removed" || bad "install.sh: a removed guard came back on update"
