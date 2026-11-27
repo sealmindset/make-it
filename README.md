@@ -1007,6 +1007,16 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.33 -- /threats-it moves to its own repository
+
+- **/threats-it now lives on its own** at https://github.com/sealmindset/threats-it, with its
+  own installer, version and tests. It works without make-it.
+- **make-it no longer ships it.** When you update make-it, it removes only the old copy it
+  installed itself, and only files that are unchanged. A file you changed or added is kept and
+  named. Your organisation profile in `~/.claude/threats-it/` is never touched.
+- **To keep using it,** install it from its repository; the update tells you how, once.
+- **The board's /threats-it cards** moved to the new repository's own board.
+
 ### v1.71.32 -- /backlog-it never shows another project's board
 
 - **A folder with no board of its own shows no board.** Before, `/backlog-it` fell back to your
