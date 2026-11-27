@@ -82,12 +82,10 @@ ok('(control) a brief whose block lost a sentence fails', SORT not in flat(build
 
 # --- the smaller briefs carry a pointer line, and no brief can be added without the rules ---
 P_MSG = 'Report plainly (`approval-block.md`, A message to the owner): a few short lines in plain words, each card or pull request by its title with its id.'
-P_REV = 'Sort what you find (`approval-block.md`, A review sorts its findings): important, at most five minor, already there; file no follow-up cards.'
-POINTERS = {'.claude/make-it/threats-it/references/fact-check.md': (P_MSG, P_REV), '.claude/commands/deadcode-it.md': (P_MSG,),
+POINTERS = {'.claude/commands/deadcode-it.md': (P_MSG,),
             '.claude/make-it/references/backlog-board.md': (P_MSG,), '.claude/make-it/resolve-it/writer-prompt.md': (P_MSG,)}
 for p, want in POINTERS.items():
     ok(f'{os.path.basename(p)}: its brief points at the message rule' + (' and the review rule' if len(want) > 1 else ''), all(w in flat(raw(p)) for w in want))
-ok('the fact-check pointer sits inside the prompt it hands over', P_MSG in flat((re.search(r'^## Prompt template\n(.*?)(?=^## |\Z)', raw('.claude/make-it/threats-it/references/fact-check.md'), re.M | re.S) or [0, ''])[1]))
 ok('groom\'s grounders get the plain-report line, in the groom section', P_MSG in flat(re.search(r'^### `groom \[filter\].*?(?=^### )', raw(BB), re.M | re.S).group(0)))
 known = set(TEMPLATES) | set(POINTERS) | {PD}
 found = []
@@ -96,7 +94,7 @@ for dp, _, fs in os.walk(f'{root}/.claude'):
         rel = os.path.relpath(os.path.join(dp, f), root)
         if f.endswith('.md') and '/scaffolds/' not in rel and (f.endswith('-prompt.md') or re.search(r'^## Prompt template|Never plant a deliberate flaw', raw(rel), re.M)): found.append(rel)
 ok('every brief in the shipped files is one this test checks (a new brief must carry the rules and be listed here)', found and set(found) <= known, sorted(set(found) - known))
-ok('(control) the search for briefs finds the ones known today', {TEMPLATES[0], TEMPLATES[4], '.claude/make-it/resolve-it/writer-prompt.md', '.claude/make-it/threats-it/references/fact-check.md'} <= set(found), found)
+ok('(control) the search for briefs finds the ones known today', {TEMPLATES[0], TEMPLATES[4], '.claude/make-it/resolve-it/writer-prompt.md'} <= set(found), found)
 ok('a lane\'s brief tells it to read its area\'s running list, fix what is in its files, and mark it fixed',
    all('Read the running list for the area you are working in; fix what is in your files; mark it fixed (`backlog-board.md`, The running list).' in flat(raw(p)) for p in (TEMPLATES[2], PD)))
 ok('the review brief says how a review is recorded: the verdict and the commit it read, ready or not',

@@ -213,7 +213,7 @@ keep working. To add it back, run the same command with `--add-force-push-guard`
 | `/backlog-it` | Keeps the project's work and bugs on a markdown board (Epic → Story → Task), with a bug queue and parallel fix lanes | Tracking what's next, capturing a bug, or pulling a card back in to work on it |
 | `/deadcode-it` | Finds code your app no longer uses, proves it with tools and a search, and removes it in small checked steps with a deletion log; asks you about anything it can't fully prove | Routine upkeep, or when `/resume-it` says unused code has piled up |
 | `/resolve-it` | Takes a problem someone reported (or an alert, a failed job, a bug card) all the way to the person's outcome, checked on the live system: finds every cause behind it, fixes each one test-first with an independent review, drafts what to tell the person, and records what it learned so the next one is caught sooner | Something a person needed didn't happen, especially when the first fix didn't make it happen |
-| `/threats-it` | Turns a threat advisory, CVE list or IOC list into a verified assessment: archived sources, attack chains, a read-only hunt of your Microsoft tenant, VEX, and a leadership briefing plus technical companion (Markdown + PDF) | A new threat lands and someone asks "does this affect us, and do we have indicators?" |
+| `/threats-it` | Now its own skill, installed on its own: https://github.com/sealmindset/threats-it | A new threat lands and someone asks "does this affect us?" |
 
 ---
 
@@ -1006,6 +1006,16 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 ---
 
 ## Version History
+
+### v1.71.33 -- /threats-it moves to its own repository
+
+- **/threats-it now lives on its own** at https://github.com/sealmindset/threats-it, with its
+  own installer, version and tests. It works without make-it.
+- **make-it no longer ships it.** When you update make-it, it removes only the old copy it
+  installed itself, and only files that are unchanged. A file you changed or added is kept and
+  named. Your organisation profile in `~/.claude/threats-it/` is never touched.
+- **To keep using it,** install it from its repository; the update tells you how, once.
+- **The board's /threats-it cards** moved to the new repository's own board.
 
 ### v1.71.32 -- /backlog-it never shows another project's board
 

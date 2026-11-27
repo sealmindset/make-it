@@ -3,13 +3,12 @@
 #
 # WHAT IS PINNED (whole, D5: an added, removed or changed sentence fails until this test is updated too), compared
 # unit by unit (a paragraph, a list item, a table row, a code line, with its indentation; whitespace folded inside):
-#   - the specialist block of /debug-it, /argo-it, /try-it, /deadcode-it, /resolve-it and /threats-it (from
+#   - the specialist block of /debug-it, /argo-it, /try-it, /deadcode-it and /resolve-it (from
 #     <expert_persona> to </expert_persona>), and of /nemo-it and /fix-it (from "**Adopt the specialist persona" to
 #     the reference's import line).
 #   - /resolve-it's investigator prompt sentence that hands its agent the record.
 # PER SKILL: the task specialist is named in bold, the block reads the record, has the no-record sentence, and has no
-#   re-inference wording ("Infer", "Auto-selected from `app-context.json`", "Signals may layer in"). /threats-it: a
-#   fixed threat intelligence analyst that reads no project record. /resume-it (a builder): works as the project
+#   re-inference wording ("Infer", "Auto-selected from `app-context.json`", "Signals may layer in"). /resume-it (a builder): works as the project
 #   specialist and adds none of its own (its block is pinned whole in test-resume-it-rechecks-specialist.sh).
 # THE REFERENCE (pinned whole in test-project-specialist-rule.sh): rule 1 names every task specialist, the readers
 #   and the skills that get none are listed; /debug-it's old role is gone from it, from debug-it.md and both docs.
@@ -176,18 +175,9 @@ user prompt. See `~/.claude/make-it/references/expert-personas.md`.
 
 </expert_persona>
 BLOCK
-IFS= read -r -d '' WANT_threats_it <<'BLOCK' || true
-<expert_persona>
-
-Work as a **threat intelligence analyst** — verify every claim at its source, map each attack to
-ATT&CK, and report no more than was measured. This is a fixed specialist: /threats-it is standalone,
-not tied to an app, and reads no project specialist record.
-
-</expert_persona>
-BLOCK
 WANT_INV='Work as the specialist this investigation calls for, held to the checks and output standard of every specialist recorded in `expert_persona` in the app'"'"'s `app-context.json`; with no `expert_persona` set, or an older value the reference does not count (its "Reading an older value"), work as that specialist alone.'
 READERS="debug-it nemo-it fix-it argo-it try-it deadcode-it resolve-it"
-for s in $READERS threats-it; do
+for s in $READERS; do
   v="WANT_${s//-/_}"
   check "$s's specialist block is exactly the pinned text" 'pin "$s block" "$(block "$s")" "${!v}"'
 done
@@ -201,14 +191,12 @@ for s in $READERS; do
      printf "%s" "$b" | gq -F "a run outside an app, work as the task specialist alone and say nothing." &&
      ! printf "%s" "$b" | gq -iE "\binfer\b|auto-selected from \`?app-context|signals may layer in"'
 done
-check "/threats-it: a fixed threat intelligence analyst that reads no project record" \
-  'b="$(block threats-it | flat)"; printf "%s" "$b" | gq -F "**threat intelligence analyst**" && printf "%s" "$b" | gq -F "reads no project specialist record" && ! printf "%s" "$b" | gq -F "expert_persona\`"'
 check "/resume-it is a builder: works as the project specialist and adds no task specialist of its own" \
   'b="$(section "$C/resume-it.md" "^[*][*]Project specialist re-check" "^[*][*]A[.] Continue building" | flat)"; printf "%s" "$b" | gq -F "While it builds, /resume-it works as the project specialist, the way /make-it does" && printf "%s" "$b" | gq -F "with no task specialist of its own" && ! printf "%s" "$b" | gq -F "Its task specialist is"'
 check "/resolve-it's investigator prompt hands its agent the record" 'flat < "$INV" | gq -F "$WANT_INV"'
 check "the reference's rule 1 names every task specialist" \
   'r="$(flat < "$REF")"; for e in "\`debug-it\` → senior maintainer of that stack" "\`argo-it\` → Platform / Kubernetes engineer" "\`try-it\` → QA / test engineer" "\`deadcode-it\` → senior maintainer of that stack" "\`resolve-it\` → SRE / incident commander"; do printf "%s" "$r" | gq -F "$e" || { echo "  rule 1 lacks: $e"; exit 1; }; done'
-check "the reference lists the readers and the skills that get none (/demo-it with its reason; /threats-it fixed)" \
+check "the reference lists the readers and the skills that get none (/demo-it with its reason)" \
   'r="$(flat < "$REF")"; printf "%s" "$r" | gq -F "The skills that read it and add a task specialist are \`/debug-it\`, \`/nemo-it\`, \`/fix-it\`, \`/argo-it\`, \`/try-it\`, \`/deadcode-it\` and \`/resolve-it\`" && printf "%s" "$r" | gq -F "\`/demo-it\`, \`/wrap-it\`, \`/clear-it\`, \`/git-it\` and \`/backlog-it\` get no specialist at all: \`/demo-it\` manages demo accounts and their sample data for a product, and does not change or judge an app'"'"'s code."'
 check "/debug-it's old role is gone from the reference, debug-it.md and both docs" \
   '! cat "$REF" "$C/debug-it.md" "$D10" "$OV" | flat | gq -iE "SRE / performance engineer|reliability & performance engineer"'
@@ -227,9 +215,6 @@ for arg in sys.argv[1:]:
     if name == "resume-it":
         if "the primary leading, with no task specialist of its own" not in t: fail("resume-it does not let the primary lead")
         lead, checks = record[0], record
-    elif name == "threats-it":
-        if "reads no project specialist record" not in t: fail("threats-it reads a record")
-        lead, checks = "threat intelligence analyst", []
     else:
         m = re.search(r"Its task specialist is the \*\*(.+?)\*\*", t)
         if not m or "held to the checks and output standard of every specialist recorded in `expert_persona`" not in t: fail(name + ": no task lead held to every recorded specialist")
@@ -238,7 +223,7 @@ for arg in sys.argv[1:]:
 PY
 }
 check "paper check (the test's own reading of the pinned blocks): who leads and whose checks apply, per skill" \
-  'args=(); for s in $READERS threats-it; do args+=("$s=$(block "$s")"); done; args+=("resume-it=$(section "$C/resume-it.md" "^[*][*]Project specialist re-check" "^[*][*]A[.] Continue building")"); paper "${args[@]}"'
+  'args=(); for s in $READERS; do args+=("$s=$(block "$s")"); done; args+=("resume-it=$(section "$C/resume-it.md" "^[*][*]Project specialist re-check" "^[*][*]A[.] Continue building")"); paper "${args[@]}"'
 
 if [ -z "${1:-}" ]; then
   copy() { local d="$TMPD/m"; rm -rf "$d"; mkdir -p "$d"; tar -cf - "$C" "$REF" "$OV" "$D10" .claude/make-it/confluence-docs "$INV" | tar -xf - -C "$d"; echo "$d"; }
@@ -257,9 +242,8 @@ if [ -z "${1:-}" ]; then
   check "(control) /debug-it back to SRE in its block fails" 'fails "$C/debug-it.md" "**Senior maintainer of that stack**" "**SRE / performance engineer**"'
   check "(control) /debug-it back to SRE in its doc page fails" 'fails "$D10" "**senior maintainer of your app'"'"'s stack**" "**reliability & performance engineer**"'
   check "(control) /debug-it back to SRE in the overview fails" 'fails "$OV" "senior maintainer of your app'"'"'s stack |" "reliability & performance engineer |"'
-  check "(control) /threats-it given a project read fails" 'fails "$C/threats-it.md" "and reads no project specialist record." "and reads the \`expert_persona\` record of the app."'
   check "(control) /resume-it given a task specialist of its own fails" 'fails "$C/resume-it.md" "with no task specialist of its own (the" "with QA / test engineer as its own task specialist (the"'
-  for s in $READERS threats-it; do
+  for s in $READERS; do
     check "(control) a sentence added inside $s's block fails" 'd="$(copy)"; perl -0pi -e "s/(<\/expert_persona>|\n\n\@~\/\.claude\/make-it\/references\/expert-personas\.md\n)/ This keeps things tidy.\$1/" "$d/$C/$s.md"; ! cmp -s "$C/$s.md" "$d/$C/$s.md" && ! bash "$SELF" "$d" >/dev/null 2>&1'
   done
 fi
