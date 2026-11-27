@@ -43,6 +43,8 @@ are the Plan format in `backlog-board.md`; a plan marked `status: draft` needs t
   stop reasons: a BLOCKED status you can't resolve, ambiguity that genuinely prevents progress,
   or all tasks complete. "Should I continue?" prompts waste the user's time — they asked you to
   execute the plan.
+- **Leave nothing running** (`approval-block.md`, Leave nothing running): when a helper's final report arrives, stop it (TaskStop) so nothing it started is left running.
+  Every brief template carries the line that tells a helper to stop its own background commands first.
 - **What you tell the owner is plain** (`approval-block.md`, A message to the owner): a few short
   lines, at most one update a day unless they are needed. When you pass on a subagent's or a
   reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.

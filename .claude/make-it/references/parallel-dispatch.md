@@ -76,7 +76,8 @@ other or the working tree:
    explicit constraints ("don't touch other code"), and a defined return ("summary of root
    cause + exactly what you changed").
 3. **Dispatch in parallel** — issue ALL the Agent calls in ONE response.
-4. **Review & integrate** — read each summary, check for conflicts (did two agents touch the
+4. **Review & integrate** — when a helper's final report arrives, stop it (TaskStop) so nothing it
+   started is left running (`approval-block.md`, Leave nothing running). Read each summary, check for conflicts (did two agents touch the
    same file?), run the FULL test suite, and spot-check (agents make systematic errors). What the
    lanes leave for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks) -- never a lane's ids or shorthand
    passed on as-is. When you pass on a lane's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand
@@ -122,6 +123,9 @@ Read the running list for the area you are working in; fix what is in your files
 Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
 they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
 title with its id, never a bare id.
+Wait for CI or long tests with a foreground command that has a time limit, not a background one.
+Never give your final report while a background command you started is still running: stop each one
+with TaskStop first.
 Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
 not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send
 something wrong: fixed before the fix ships. MINOR -- anything else wrong with the change: list at most
@@ -133,8 +137,9 @@ list. File no follow-up cards: leftovers are fixed inside the work.
 
 Every agent prompt ends with that **SAFEGUARDS** line (`approval-block.md`): disclosed is not
 approved, but undisclosed is a rejected lane. It also carries the never-plant line under it.
-Every agent prompt also carries the two blocks from `approval-block.md` that end the example: how to
-report (A message to the owner) and how to sort what it finds (A review sorts its findings).
+Every agent prompt also carries the three blocks from `approval-block.md` that end the example: how to
+report (A message to the owner), how to wait and leave nothing running (Leave nothing running), and how
+to sort what it finds (A review sorts its findings).
 
 ---
 

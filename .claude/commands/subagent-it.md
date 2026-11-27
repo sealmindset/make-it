@@ -116,6 +116,8 @@ stop only for an unresolvable BLOCKED, genuine blocking ambiguity, or completion
 - All three verdicts (spec, quality, safeguards) are required; never skip a re-review. An
   undisclosed weakened safeguard is undone, never kept (`approval-block.md`).
 - Trust the ledger + `git log` over recollection after a compaction/resume.
+- When a helper's final report arrives, stop it (TaskStop) so nothing it started is left running
+  (`approval-block.md`, Leave nothing running).
 - What you tell the owner is plain (`approval-block.md`, A message to the owner): when you pass on a
   subagent's or a reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
 - Findings are sorted (`approval-block.md`, A review sorts its findings): Critical and Important are

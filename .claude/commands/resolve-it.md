@@ -89,6 +89,8 @@ can answer are not asked. A high-stakes step the project gates (a release, a dat
 autonomy level) is asked on its own, with what changes, the evidence, the blast radius and the undo.
 What you tell the owner follows `approval-block.md`, A message to the owner: when you pass on the
 investigator's or the reviewer's report, rewrite it in plain words: names with ids, shortest true form; never forward a lane's shorthand.
+When a helper's final report arrives, stop it (TaskStop) so nothing it started is left running
+(`approval-block.md`, Leave nothing running).
 
 ## Never (any level -- `resolve-it.md` §3)
 - Write anything while investigating; re-run, re-send or restart as a way of looking.

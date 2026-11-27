@@ -132,6 +132,27 @@ IMPORTANT here, and the cap of five is on its Minor findings.
 > send something wrong, or tell the person something untrue; otherwise one line for that skill's running
 > list. File no follow-up cards: leftovers are fixed inside the work.
 
+## Leave nothing running
+
+A background command a helper starts (a CI watch, a long test run) keeps running after the helper
+gives its report. In a session someone works in there is no time limit on it, so a finished helper
+can hold one for days.
+
+**Every brief carries it.** Each lane and reviewer brief template holds these lines:
+
+> Wait for CI or long tests with a foreground command that has a time limit, not a background one.
+> Never give your final report while a background command you started is still running: stop each one
+> with TaskStop first.
+
+**The lead stops each helper.** When a helper's final report arrives, stop it (TaskStop) so nothing it
+started is left running.
+
+**A hook backs it up.** The installers register `~/.claude/make-it/hooks/no-leftover-commands.py` as a
+`SubagentStop` hook. When a helper tries to finish, it reads that helper's own transcript; if a
+background command the helper started is still running, it sends the helper back once with "You still
+have a background command running: <ids>. Stop each with TaskStop, then give your report." The second
+time, or when it can't read the transcript, it lets the helper finish: a tripwire, never a trap.
+
 ## Agents disclose every safeguard they bypassed or weakened
 
 Every agent that changes files -- a test-writer, implementer, fixer, or dispatch lane -- ends its

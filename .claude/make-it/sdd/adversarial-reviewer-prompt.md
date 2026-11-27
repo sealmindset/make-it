@@ -60,6 +60,9 @@ list. File no follow-up cards: leftovers are fixed inside the work.
 Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
 they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
 title with its id, never a bare id.
+Wait for CI or long tests with a foreground command that has a time limit, not a background one.
+Never give your final report while a background command you started is still running: stop each one
+with TaskStop first.
 
 ## Output
 ```

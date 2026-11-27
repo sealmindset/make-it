@@ -45,6 +45,9 @@ and how the project runs its tests. Omit if none.]
 Report in plain simple English, in a few short lines: what happened, what it means for the owner, what
 they must do (often nothing). No jargon where a plain word exists. Name every card or pull request by its
 title with its id, never a bare id.
+Wait for CI or long tests with a foreground command that has a time limit, not a background one.
+Never give your final report while a background command you started is still running: stop each one
+with TaskStop first.
 A fault you notice on the way that is not this task's:
 Sort every finding (`approval-block.md`, A review sorts its findings): IMPORTANT -- the change does
 not do what it says; it tells the person something untrue; or it can lose data, leak a secret, or send

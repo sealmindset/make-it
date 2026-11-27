@@ -93,8 +93,8 @@ live as `signal:` -- when it opens one: `card.py set <id> stage="Fix ready" pr="
 Each prompt must be: **focused** (one domain), **self-contained** (paste the error text,
 failing test names, file paths — the agent sees none of your chat), and **specific about
 output** (return a structured summary of root cause + exact changes + the SAFEGUARDS line from
-`approval-block.md`, and the two blocks every brief carries: how to report and how to sort what it
-finds). Tell it how to attack and
+`approval-block.md`, and the three blocks every brief carries: how to report, how to wait and leave
+nothing running, and how to sort what it finds). Tell it how to attack and
 what NOT to touch. Have each agent follow the `/debug-it` method on its domain.
 
 ## Step 5 -- Dispatch in parallel
@@ -105,7 +105,8 @@ stages, use the Workflow tool instead.
 
 ## Step 6 -- Review & integrate
 
-Read each summary → check for conflicts (same file touched twice?) → run the FULL test suite →
+When a helper's final report arrives, stop it (TaskStop) so nothing it started is left running
+(`approval-block.md`, Leave nothing running). Read each summary → check for conflicts (same file touched twice?) → run the FULL test suite →
 spot-check (agents make systematic errors) → match every weakened safeguard in each lane's diff to
 its SAFEGUARDS line (Verification step 5 in the reference). Then integrate. What the lanes leave
 for the human goes in one list, each item readable cold: its title, what waits and why, 2-4 named answers, a batch as one grouped line, a high-stakes item never batched (`approval-block.md`, A list of asks).
