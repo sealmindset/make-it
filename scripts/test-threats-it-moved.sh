@@ -19,6 +19,8 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 if command -v pwsh >/dev/null 2>&1; then pwsh() { LC_ALL=C LANG=C command pwsh "$@"; }; fi
 sha() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
 MOVED='/threats-it has moved to its own repository'
+# the repository is private: no unauthenticated download works, so the one line says how to get access
+NEW='/threats-it is now a private repository; ask its owner for access, then clone it with `gh repo clone sealmindset/threats-it` and run its installer'
 
 # old_install HOME: what make-it installed before /threats-it moved, with its manifest, and a profile
 old_install() {
@@ -43,7 +45,7 @@ out="$(inst "$H")"; rc=$?
 [ $rc -eq 0 ] && ok "an update over the old copy succeeds" || bad "update failed (exit $rc): $(printf '%s' "$out" | tail -5)"
 [ ! -e "$H/.claude/commands/threats-it.md" ] && [ ! -e "$H/.claude/make-it/threats-it" ] \
   && ok "the unchanged old command and support folder are removed" || bad "old copy left: $(ls "$H/.claude/commands" "$H/.claude/make-it" 2>&1 | grep threats)"
-[ "$(printf '%s\n' "$out" | grep -cF "$MOVED")" -eq 1 ] && printf '%s' "$out" | grep -qF "sealmindset/threats-it/main/install.sh" \
+[ "$(printf '%s\n' "$out" | grep -cF "$MOVED")" -eq 1 ] && printf '%s\n' "$out" | grep -F "$MOVED" | grep -qF "$NEW" \
   && ok "it says once, in one line, that /threats-it moved and how to install it" || bad "no moved line: $out"
 profile_same "$H" "$P" && ok "the profile in ~/.claude/threats-it/ is byte-identical and alone" || bad "the profile changed"
 out="$(inst "$H")"; ! printf '%s' "$out" | grep -qF "$MOVED" && ok "the next update says nothing more about it" || bad "moved line repeated"
@@ -62,7 +64,7 @@ printf '%s' "$line" | grep -qF "$H/.claude/commands/threats-it.md" && printf '%s
 profile_same "$H" "$P" && ok "the profile is byte-identical when files are kept" || bad "the profile changed"
 out="$(inst "$H")"; line="$(printf '%s\n' "$out" | grep -F "$MOVED")"
 ! printf '%s' "$line" | grep -qF "removed" && printf '%s' "$line" | grep -qF "kept these files" && printf '%s' "$line" | grep -qF "references/vex.md" \
-  && printf '%s' "$line" | grep -qF "sealmindset/threats-it/main/install.sh" \
+  && printf '%s' "$line" | grep -qF "$NEW" \
   && ok "the next update, with nothing removed, names the kept files and the install line, and claims no removal" || bad "second run line: $line"
 mkdir -p "$H/.claude/threats-it-support"; : > "$H/.claude/threats-it-support/INSTALLED"
 out="$(inst "$H")"; ! printf '%s' "$out" | grep -qF "$MOVED" && [ -f "$H/.claude/make-it/threats-it/references/vex.md" ] \
@@ -82,7 +84,7 @@ out="$(inst "$H")"
 ! printf '%s' "$out" | grep -qF "$MOVED" && ok "and it says nothing about the move" || bad "separate line: $out"
 H="$T/putback"; old_install "$H"; mkdir -p "$H/.claude/threats-it-support"; : > "$H/.claude/threats-it-support/INSTALLED"
 out="$(inst "$H")"
-[ ! -e "$H/.claude/commands/threats-it.md" ] && [ "$(printf '%s\n' "$out" | grep -cF "which had replaced yours; put yours back with:")" -eq 1 ] \
+[ ! -e "$H/.claude/commands/threats-it.md" ] && [ "$(printf '%s\n' "$out" | grep -F "which had replaced yours" | grep -cF "$NEW")" -eq 1 ] \
   && ok "make-it's command put back over the separate install is removed, and one line says to run the separate installer again" || bad "put-back case: $out"
 out="$(inst "$H")"; ! printf '%s' "$out" | grep -qE "threats-it has|which had replaced" && ok "and the next update is silent" || bad "put-back repeated: $out"
 profile_same "$H" "$P" && ok "the profile is byte-identical beside a separate install" || bad "the profile changed"
@@ -100,7 +102,9 @@ $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefin
                $args[0].Name -in "Test-WasInstalled", "Plan-ThreatsItRetirement" }, $true) |
     ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
 $CLAUDE_DIR = Join-Path $args[1] ".claude"; $COMMANDS_DIR = Join-Path $CLAUDE_DIR "commands"; $MAKEIT_DIR = Join-Path $CLAUDE_DIR "make-it"
-$THREATS_INSTALL = "irm https://raw.githubusercontent.com/sealmindset/threats-it/main/install.ps1 | iex"
+$ast.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+               $args[0].Left.Extent.Text -eq '$THREATS_INSTALL' }, $false) |
+    ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
 $r = Plan-ThreatsItRetirement (Join-Path $args[1] "new")
 "drop=$($r.DropCmd)"; "note=$($r.Note)"
 PS
@@ -115,12 +119,12 @@ PS
     got="$(pwsh -NoProfile -File "$T/plan.ps1" "$root/install.ps1" "$H" 2>&1)"
     if [ "$kind" = kept-only ]; then
       printf '%s' "$got" | grep -qx 'drop=False' && printf '%s' "$got" | grep -qF "kept these files" && ! printf '%s' "$got" | grep -qF "removed" \
-        && printf '%s' "$got" | grep -qF "install.ps1 | iex" && ok "install.ps1: with only kept files left, it names them and the install line, and claims no removal" || bad "install.ps1 kept-only: $got"
+        && printf '%s' "$got" | grep -qF "$NEW" && ok "install.ps1: with only kept files left, it names them and the install line, and claims no removal" || bad "install.ps1 kept-only: $got"
     elif [ "$kind" = separate ]; then
-      printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "which had replaced yours; put yours back with:" \
+      printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -F "which had replaced yours" | grep -qF "$NEW" \
         && ok "install.ps1: make-it's command put back over the separate install is removed, and it says to run the separate installer again" || bad "install.ps1 separate: $got"
     elif [ "$kind" = unchanged ]; then
-      printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "note=$MOVED" && printf '%s' "$got" | grep -qF "install.ps1 | iex" \
+      printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "note=$MOVED" && printf '%s' "$got" | grep -qF "$NEW" \
         && [ -z "$(find "$H/new" -type f)" ] && ok "install.ps1: an unchanged old copy is dropped, with the moved line" || bad "install.ps1 unchanged: $got"
     else
       printf '%s' "$got" | grep -qx 'drop=True' && printf '%s' "$got" | grep -qF "references/vex.md" && [ -f "$H/new/threats-it/references/vex.md" ] \
@@ -137,7 +141,13 @@ fi
   && [ ! -e .claude/make-it/confluence-docs/17-threats-it.md ] && [ -z "$(ls scripts/test-threats-it-*.sh 2>/dev/null | grep -v moved)" ] \
   && ok "make-it ships none of /threats-it's files" || bad "a /threats-it file is still shipped"
 [ "$(grep -c 'threats-it' CONTENT_MANIFEST)" -eq 0 ] && ok "the content manifest lists none of them" || bad "CONTENT_MANIFEST still lists /threats-it"
-for f in README.md CLAUDE.md .claude/make-it/README.md .claude/make-it/confluence-docs/00-make-it-framework-overview.md; do
-  grep -qF 'https://github.com/sealmindset/threats-it' "$f" && ok "$f points at the new repository" || bad "$f has no pointer"
+for f in README.md .claude/make-it/README.md .claude/make-it/confluence-docs/00-make-it-framework-overview.md; do
+  grep -qF 'its own private repository: github.com/sealmindset/threats-it (ask for access)' "$f" \
+    && ok "$f points at the private repository" || bad "$f has no private-repository pointer"
 done
+grep -qF 'private repository' CLAUDE.md && grep -qF 'gh repo clone sealmindset/threats-it' CLAUDE.md \
+  && ok "CLAUDE.md says the repository is private and how to clone it" || bad "CLAUDE.md has no private-repository pointer"
+raw='githubusercontent.com/sealmindset/''threats-it'
+left="$(git grep -nF -e "$raw" -e 'threats-it/main/install' -- . ':!scripts/test-threats-it-moved.sh')"
+[ -z "$left" ] && ok "no make-it text offers the unauthenticated download any more" || bad "unauthenticated install still offered: $left"
 exit $fail
