@@ -108,7 +108,7 @@ Each gap is weighted by change type: Add (1), Enhance (2), Wrap (3), Restructure
 
 ## /threats-it
 
-`/threats-it` (threat feed to a verified, organisation-specific assessment) now lives in its own repository: https://github.com/sealmindset/threats-it. make-it no longer ships it.
+`/threats-it` (threat feed to a verified, organisation-specific assessment) now lives in its own private repository: github.com/sealmindset/threats-it (ask its owner for access, then `gh repo clone sealmindset/threats-it` and run its `install.sh`, or `install.ps1` on Windows). make-it no longer ships it.
 
 ## /wrap-it
 

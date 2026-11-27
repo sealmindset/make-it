@@ -168,7 +168,7 @@ download_repo() {
 }
 
 # ---------------------------------------------------------------------------
-# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it)
+# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it), now private
 # ---------------------------------------------------------------------------
 
 # An update removes make-it's old copy -- ~/.claude/commands/threats-it.md and ~/.claude/make-it/threats-it/ --
@@ -179,7 +179,7 @@ download_repo() {
 THREATS_NOTE=""
 THREATS_KEPT=()
 THREATS_DROP_CMD=0
-THREATS_INSTALL="curl -fsSL https://raw.githubusercontent.com/sealmindset/threats-it/main/install.sh | bash"
+THREATS_INSTALL='/threats-it is now a private repository; ask its owner for access, then clone it with `gh repo clone sealmindset/threats-it` and run its installer (install.sh)'
 sha256() { if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'; else sha256sum "$1" | awk '{print $1}'; fi; }
 # was_installed FILE PATH-IN-MANIFEST MANIFEST: 0 when the manifest records exactly this file's content
 was_installed() { [ -f "$3" ] && [ -f "$1" ] && [ ! -L "$1" ] && [ "$(awk -v p="$2" -v h="$(sha256 "$1")" '$2 == p && $1 == h' "$3" | grep -c .)" -gt 0 ]; }
@@ -206,14 +206,14 @@ plan_threats_it_retirement() {
   # (one case speaks beside it: a make-it update from before the move had put make-it's command back over the
   # separate install's, and that command is gone now, so the separate installer must be run again)
   if [ "$separate" = 1 ]; then
-    [ "$THREATS_DROP_CMD" = 1 ] && THREATS_NOTE="make-it removed its old copy of the /threats-it command, which had replaced yours; put yours back with: $THREATS_INSTALL"
+    [ "$THREATS_DROP_CMD" = 1 ] && THREATS_NOTE="make-it removed its old copy of the /threats-it command, which had replaced yours. $THREATS_INSTALL to put yours back"
     return 0
   fi
   if [ "$removed" = 1 ]; then
-    THREATS_NOTE="/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+    THREATS_NOTE="/threats-it has moved to its own repository, so make-it removed its old copy. $THREATS_INSTALL to keep using it"
     [ "${#THREATS_KEPT[@]}" -eq 0 ] || THREATS_NOTE="$THREATS_NOTE (kept, because they were changed or added: ${THREATS_KEPT[*]})"
   elif [ "${#THREATS_KEPT[@]}" -gt 0 ]; then
-    THREATS_NOTE="/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: ${THREATS_KEPT[*]}. To keep using it, install it with: $THREATS_INSTALL"
+    THREATS_NOTE="/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: ${THREATS_KEPT[*]}. $THREATS_INSTALL to keep using it"
   fi
 }
 
@@ -399,7 +399,7 @@ report() {
         demo-it)     desc="Demo tenant lifecycle for prospect onboarding" ;;
         backlog-it)  desc="Project board: work items, bug queue, parallel fixes" ;;
         deadcode-it) desc="Find and safely remove code your app no longer uses" ;;
-        threats-it)  desc="Installed on its own (github.com/sealmindset/threats-it)" ;;
+        threats-it)  desc="Installed on its own (private: github.com/sealmindset/threats-it, ask for access)" ;;
         *)           desc="Custom skill" ;;
       esac
       printf "    /%-14s -- %s\n" "$cmd_name" "$desc"

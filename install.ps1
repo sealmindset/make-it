@@ -854,13 +854,13 @@ try {
 # Step 5: Install /make-it skills
 # ===========================================================================
 
-# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it). An update removes
+# /threats-it moved to its own repository (https://github.com/sealmindset/threats-it), now private. An update removes
 # make-it's old copy -- ~\.claude\commands\threats-it.md and ~\.claude\make-it\threats-it\ -- but only the files
 # that are still exactly what make-it installed (the CONTENT_MANIFEST of that install says so). A file someone
 # changed is kept where it is and named. A command the separate /threats-it installer wrote (its
 # ~\.claude\threats-it-support\INSTALLED records it) is left alone. The organisation profile in
 # ~\.claude\threats-it\ is never read, moved or removed.
-$THREATS_INSTALL = "irm https://raw.githubusercontent.com/sealmindset/threats-it/main/install.ps1 | iex"
+$THREATS_INSTALL = '/threats-it is now a private repository; ask its owner for access, then clone it with `gh repo clone sealmindset/threats-it` and run its installer (install.ps1)'
 function Test-WasInstalled($file, $rel, $manifest) {
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { return $false }
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $false }
@@ -901,13 +901,13 @@ function Plan-ThreatsItRetirement($newDir) {
     # (one case speaks beside it: a make-it update from before the move had put make-it's command back over the
     # separate install's, and that command is gone now, so the separate installer must be run again)
     $note = ""
-    if ($separate -and $dropCmd) { $note = "make-it removed its old copy of the /threats-it command, which had replaced yours; put yours back with: $THREATS_INSTALL" }
+    if ($separate -and $dropCmd) { $note = "make-it removed its old copy of the /threats-it command, which had replaced yours. $THREATS_INSTALL to put yours back" }
     if (-not $separate) {
         if ($removed) {
-            $note = "/threats-it has moved to its own repository, so make-it removed its old copy; to keep using it, install it with: $THREATS_INSTALL"
+            $note = "/threats-it has moved to its own repository, so make-it removed its old copy. $THREATS_INSTALL to keep using it"
             if ($kept.Count -gt 0) { $note += " (kept, because they were changed or added: $($kept -join ', '))" }
         } elseif ($kept.Count -gt 0) {
-            $note = "/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: $($kept -join ', '). To keep using it, install it with: $THREATS_INSTALL"
+            $note = "/threats-it has moved to its own repository; make-it kept these files of its old copy because they were changed or added: $($kept -join ', '). $THREATS_INSTALL to keep using it"
         }
     }
     return @{ DropCmd = $dropCmd; Note = $note }
@@ -1252,7 +1252,7 @@ function Verify-Setup($state) {
                 "fix-it"      { "Auto-fix security findings from /nemo-it" }
                 "backlog-it"  { "Project board: work items, bug queue, parallel fixes" }
                 "deadcode-it" { "Find and safely remove code your app no longer uses" }
-                "threats-it"  { "Installed on its own (github.com/sealmindset/threats-it)" }
+                "threats-it"  { "Installed on its own (private: github.com/sealmindset/threats-it, ask for access)" }
                 default       { "Custom skill" }
             }
             Info ("    /{0,-14} -- {1}" -f $cmdName, $desc)
