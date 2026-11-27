@@ -179,6 +179,40 @@ ok('after the release: the close-with-a-note line for each original pull request
 r = rd(w, '--version', '9.9.9', '--go', '11')
 ok('the same number twice is refused', r.returncode == 1 and 'release/v9.9.9 is already here' in r.stderr, both(r))
 
+# ============================== ONLY CODE REVIEWED FOR ITS EXACT HEAD GOES IN (review round 1) ==============================
+OKC = [{'__typename': 'CheckRun', 'name': 'tests', 'status': 'COMPLETED', 'conclusion': 'SUCCESS'}]
+def rows(w, heads, spec):  # spec: [(n, {field overrides})]
+    base = dict(isDraft=False, reviewDecision='', mergeStateStatus='CLEAN', baseRefName='main', statusCheckRollup=OKC, updatedAt=f'{TODAY}T00:00:00Z')
+    put(f'{w}/prs.json', json.dumps([dict(base, number=k, title=f'fix: number {k}', headRefOid=heads[k], **o) for k, o in spec]))
+w, heads = world(); R = f'{w}/repo'
+git(R, 'checkout', '-q', '-b', 'feat', 'main'); put(f'{R}/.claude/commands/evil.md', 'UNREVIEWED\n'); git(R, 'add', '-A'); git(R, 'commit', '-qm', 'unreviewed'); git(R, 'push', '-q', 'origin', 'feat')
+git(R, 'checkout', '-q', '-b', 'pr20', 'feat'); put(f'{R}/.claude/commands/d.md', 'delta\n'); git(R, 'add', '-A'); git(R, 'commit', '-qm', 'pr20')
+git(R, 'push', '-q', 'origin', 'pr20:refs/pull/20/head'); heads[20] = git(R, 'rev-parse', 'HEAD'); git(R, 'checkout', '-q', 'main')
+put(f'{w}/board/items/EPIC-01-bugs/stories/S20.md', f'---\nid: E01-S20\ntitle: "Stacked"\ntype: breakfix\nstatus: in-progress\nstage: Fix ready\npr: [20]\nreviewed: {TODAY} ready {heads[20]}\n---\n')
+put(f'{w}/behind/{heads[20]}', json.dumps({'behind_by': 0, 'ahead_by': 1}))
+rows(w, heads, [(20, {'baseRefName': 'feat'})]); before = state(w); r = rd(w, '20')
+ok('a stacked pull request (its base is another branch, not main) is refused with the reason, and nothing of its base comes in', r.returncode == 1 and state(w) == before
+   and 'pull request #20 is not ready' in r.stderr and 'it is stacked on feat, not on main' in r.stderr, both(r))
+r = rd(w); ok('a stacked pull request is never taken as ready when none is named', r.returncode == 0 and 'No pull request is ready' in r.stdout and state(w) == before, both(r))
+rows(w, heads, [(11, {})]); r = rd(w, '--base', 'feat', '--dry-run', '11')
+ok('the release takes only pull requests into its own --base: one into main is refused from a release of feat', r.returncode == 1 and 'it is stacked on main, not on feat' in r.stderr and state(w) == before, both(r))
+rows(w, heads, [(11, {'statusCheckRollup': []})]); r = rd(w, '11')
+ok('a pull request with no check reported on its head is not green: refused with the reason', r.returncode == 1 and state(w) == before and 'no check has run on this version yet' in r.stderr, both(r))
+rows(w, heads, [(11, {'statusCheckRollup': [dict(OKC[0], conclusion='SKIPPED')]})]); r = rd(w, '11')
+ok('a pull request whose every check was skipped is not green either', r.returncode == 1 and 'no check has run on this version yet' in r.stderr, both(r))
+rows(w, heads, [(11, {'isCrossRepository': True, 'headRepositoryOwner': {'login': 'someone-else'}})]); r = rd(w, '--dry-run', '11')
+ok('a pull request from another repository goes in only as the exact commit reviewed: it is fetched as GitHub keeps it (refs/pull/N/head) and checked against the review',
+   r.returncode == 0 and '  merged  "fix: number 11" (#11)' in r.stdout and state(w) == before, both(r))
+rows(w, heads, [(11, {})]); git(R, 'tag', 'v2.0.0', 'main'); git(R, 'push', '-q', 'origin', 'v2.0.0'); git(R, 'tag', '-d', 'v2.0.0')
+before = state(w); r = rd(w, '--version', '2.0.0', '--dry-run')
+ok('a number that is already a tag on the origin (not here) is refused', r.returncode == 2 and 'v2.0.0 is already a release tag' in r.stderr and state(w) == before, both(r))
+for ver in ('1.0.0', '0.9.9'):
+    r = rd(w, '--version', ver, '--dry-run')
+    ok(f'a number not above VERSION (1.0.0) is refused: {ver}', r.returncode == 1 and f'v{ver} is not above the version main is at (1.0.0)' in r.stderr and state(w) == before, both(r))
+r = rd(w, '--version', '1.0.1'); W = f'{R}/.claude/worktrees/release-v1.0.1'
+ok('--version without --go on a real run: the version commit is made here, and nothing is pushed or opened', r.returncode == 0 and state(w)[3:] == before[3:]
+   and open(f'{W}/VERSION').read() == '1.0.1\n' and 'Nothing has been pushed.' in r.stdout, both(r) + str(state(w)))
+
 # ============================== THE GATE IS STILL WHOLE, AND THE ROUTINE IS WRITTEN DOWN ==============================
 wf = open(f'{root}/.github/workflows/manifest-check.yml', encoding='utf-8').read()
 ok('CI still fails a pull request whose manifest does not match its files, exactly (the check was not loosened to make room for this)',

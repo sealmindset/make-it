@@ -103,6 +103,8 @@ for c in ('E02-S1', 'E02-S2', 'E02-S60', 'E02-S3', 'E02-S4', 'E02-S62'): sit(d, 
 out = sits(d, 'pick')
 ok('pick: a bundle counts once -- the bundle is brought, its parts are not',
    picks(out) == ['Two sign-in changes in one sitting (E02-S70)', 'Move the invoices to a new table (E02-S61)'] and 'Change who may reset a password' not in out, out)
+ask = lambda d, cid, q, a: subprocess.run([sys.executable, f'{BIN}/card.py', '--board', f'{d}/board', 'set', cid, f'decision={q}', f'answers={a}'], capture_output=True, text=True)  # the skill writes the question as asked
+ask(d, 'E02-S70', 'Both sign-in changes touch every account. Rehearse them first, or change them now?', 'Rehearse first -- both run on the staging copy first | Change now -- both go live today | Not now -- stays on the board')
 r = sit(d, 'answer', 'E02-S70', 'Rehearse first', stdin='both changes run on the staging copy before anything live changes\n')
 ok('a bundle that was brought can be answered, and its answer is on the bundle card', r.returncode == 0 and '**Rehearse first**' in text(d, 'E02-S70')
    and picks(sits(d, 'pick')) == ['Move the invoices to a new table (E02-S61)'], r.stdout + r.stderr)
@@ -110,6 +112,14 @@ ok('a bundle that was brought can be answered, and its answer is on the bundle c
 # --- an answer is written on the card, and the card is not brought again unless it changes ---
 d = board(); T = titles(d)
 r = subprocess.run([sys.executable, f'{BIN}/card.py', '--board', f'{d}/board', 'set', 'E02-S2', 'decision=The billing tables hold live invoices. Change them now, or after month end?', 'answers=Now -- rehearse on a copy first | After month end -- waits two weeks'], capture_output=True, text=True)
+before = (state(d), text(d, 'E02-S1'))
+r = sit(d, 'answer', 'E02-S1', 'Add alongside', stdin='x\n')
+ok('answer: a card with no answers of its own is refused in plain words, nothing written', r.returncode not in (0, 3) and 'has no answers of its own' in r.stderr and (state(d), text(d, 'E02-S1')) == before, r.stdout + r.stderr)
+ask(d, 'E02-S1', 'Every sign-in moves to the new provider. Run it beside the old one, or switch over?', 'Add alongside -- the new one runs beside the old | Switch over -- the old one stops | Not now -- stays on the board')
+before = (state(d), text(d, 'E02-S1'))
+r = sit(d, 'answer', 'E02-S1', 'Yes', stdin='x\n')
+ok('answer: a pick that is not one of the card\'s own answers (a plain "Yes") is refused, naming the answers it has; nothing written', r.returncode not in (0, 3)
+   and '"Yes" is not one of its answers (Add alongside, Switch over, Not now)' in r.stderr and (state(d), text(d, 'E02-S1')) == before, r.stdout + r.stderr)
 r = sit(d, 'answer', 'E02-S1', 'Add alongside', stdin='the new provider runs beside the old one; rehearse on the staging copy first\n')
 c = text(d, 'E02-S1') if r.returncode == 0 else ''
 ok('answer: the pick is written under ## Answers with the date, the answer by name and what it does',
@@ -160,6 +170,9 @@ sit(d, 'not-now', 'E02-S4'); out = first(d)
 ok('first screen, a sitting was held today: no due line, no sitting choice, and the day the next one is due',
    'A weekly sitting is due' not in out and 'Hold the sitting' not in out and f'Held, high-stakes: 4 cards. The next weekly sitting is due {day(7)}' in out, out)
 flat = lambda p: re.sub(r'\s+', ' ', open(f'{root}/{p}', encoding='utf-8').read())
+d3 = board(*QUIET); add(d3, 'E02-S80', 'Rotate the backup keys', stakes='critical', sat=f'{day(-10)} not-now 000000000000'); o3 = first(d3)
+due3 = (re.search(r'^  Held, high-stakes: .*A weekly sitting is due \(.*$', o3, re.M) or [''])[0]
+ok('first screen, a sitting last held 10 days ago: the due line names that day and fits in 110 even with 57 held cards', f'(last {day(-10)})' in due3 and len(due3) + 1 <= 110, due3 or o3)
 cmd, ref = flat('.claude/commands/backlog-it.md'), flat('.claude/make-it/references/backlog-board.md')
 ok('the skill: `sitting` is routed, one question per card, the answers are the specifics, and the helper records each pick',
    '| `sitting` |' in cmd and '## Step 2c -- The weekly sitting' in cmd and 'one AskUserQuestion per card, never batched' in cmd and 'sitting.py --board "$BOARD" --project "$PROJECT" answer <id>' in cmd
@@ -197,6 +210,20 @@ for kind, g, says in (('sort-set', 'CAN BE SETTLED', 'every check passed, but no
                       ('sort-set,reviewed,behind', 'OUT OF DATE', '2 commits behind main: rebase it onto main')):
     o = sort(board('--with', kind))
     ok(f'sort ({kind}): the refund pull request is {g} -- "{says}"', '(#11)' in group(o, g) and says in group(o, g) and '(#11)' not in group(o, 'READY'), o)
+rel = lambda o: 'Release it -- I bring it up to date if needed' in o  # the first screen offers to release the one reviewed pull request (#11); any other ready one is offered as "I confirm its review"
+def edited(kind, **over):  # a board whose refund pull request (#11) has these facts instead
+    d = board('--with', kind); rows = json.load(open(f'{d}/prs.json'))
+    for x in rows:
+        if x['number'] == 11: x.update(over)
+    json.dump(rows, open(f'{d}/prs.json', 'w')); return d
+for over, g, says in (({'baseRefName': 'feat'}, 'OUT OF DATE', 'it is stacked on feat, not on main'),
+                      ({'statusCheckRollup': []}, None, 'no check has run on this version yet'),
+                      ({'statusCheckRollup': [{'__typename': 'CheckRun', 'name': 'tests', 'status': 'COMPLETED', 'conclusion': 'SKIPPED'}]}, None, 'no check has run on this version yet')):
+    e = edited('sort-set,reviewed', **over); o = sort(e)
+    where = group(o, g) if g else (re.search(r'^Still moving.*$', o, re.M) or [''])[0]
+    ok(f'sort: reviewed for its head but {says} -> never READY, {g or "still moving"}', '(#11)' not in group(o, 'READY') and '(#11)' in where and (says in where or not g), o)
+    ok(f'first screen: the same pull request is not offered as reviewed and ready to release ({says})', not rel(first(e)), first(e))
+ok('(control) with every fact right the same pull request is READY and the first screen offers "Release it"', '(#11)' in group(sort(edited('sort-set,reviewed')), 'READY') and rel(first(edited('sort-set,reviewed'))), first(edited('sort-set,reviewed')))
 o = sort(board('--with', 'sort-set,reviewed,cannot-compare'))
 ok('sort: a pull request whose facts cannot be read is not sorted, and is said so', '(#11)' not in ''.join(group(o, g) for g in want)
    and re.search(r'^NOT SORTED .*\n  "fix: refund totals" \(#11\).*could not tell whether it is behind main', o, re.M) is not None, o)
