@@ -146,11 +146,14 @@ Held high-stakes cards come to the owner once a week, a few at a time (the refer
      working path -- …`, `Not needed -- the card closes` -- and one is always `Not now -- stays on
      the board`. Never a plain yes;
    - exactly one marked Recommended, with the strongest argument against it beside it.
+   Before asking, write the question and its answers on the card as asked:
+   `card.py set <id> decision="<the question>" answers="<Name -- what it does> | … | Not now -- stays on the board"`.
+   The helper records only one of those names, so a plain yes cannot be recorded.
 3. Record each pick before the next card is asked: pipe what the answer does to
    `python3 ~/.claude/make-it/backlog/bin/sitting.py --board "$BOARD" --project "$PROJECT" answer <id> "<the answer's name>"`;
    for "Not now", `sitting.py … not-now <id>` (the card stays out of the next sittings for two
-   weeks unless it changes). Relay the line it prints. A dismissed ask records nothing, and that
-   card comes back at the next sitting.
+   weeks unless it changes). Relay the line it prints. A dismissed ask records no answer: its question stays on the card,
+   under the questions that wait on you.
 4. An answer starts nothing by itself. After the last card, one line per card says what was
    decided. A card that got a go is then started with `start <id>`, on the owner's pick, with
    every gate `start` has for a high-stakes card.
@@ -262,8 +265,8 @@ group. The helper sorts; never move a pull request to another group yourself.
 
 | Group | What it means | What you do |
 |-------|---------------|-------------|
-| READY | Reviewed for the commit that is its head now, every check passed, up to date with main | It goes out with the day's release |
-| OUT OF DATE | Behind main, or in conflict with it | Rebase it onto main and push with `--force-with-lease`; its checks run again, and the new commit needs its review again |
+| READY | Into main, reviewed for the commit that is its head now, at least one check ran on it and every one passed, up to date with main | It goes out with the day's release |
+| OUT OF DATE | Stacked on another branch, behind main, or in conflict with it | Rebase it onto main (a stacked one once its base is in main, pointed at main) and push with `--force-with-lease`; its checks run again, and the new commit needs its review again |
 | CAN BE SETTLED | A failing check, a review that said not ready, or no review of this commit yet | A failing check or a review finding goes through `/resolve-it`; a missing review goes to an independent reviewer, and you record the result on the card (`reviewed:`) |
 | STALLED | Still being worked on, with no activity for two days | Chase its lane; if it does not answer, take the work over |
 | NEEDS YOU | Its card has a question only the owner can answer | Ask it as a one-click question (Answer now) |

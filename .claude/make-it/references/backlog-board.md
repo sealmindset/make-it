@@ -639,7 +639,9 @@ writes each question (`/backlog-it`, Step 2c).
 - **Each card is its own question**, never batched (`approval-block.md`): what it is by title with
   id, what waits and why in two plain sentences, 2-4 named answers that are the specifics, one
   Recommended with its strongest counter-argument, and always "Not now".
-- **The record** (`sitting.py answer <id> "<answer>"`, what it does on stdin): one line under
+- **The record** (`sitting.py answer <id> "<answer>"`, what it does on stdin): only one of the
+  card's own `answers:` names -- the skill writes the question and its answers on the card before
+  asking -- so a plain yes is refused. One line under
   `## Answers` -- the date, the answer by name, what it does -- and `decision:` / `answers:` cleared.
   The card is then marked, for example `sat: 2026-11-25 answered 1a2b3c4d5e6f`: the day, and a print
   of the card as answered. An answered card is not brought again while it is unchanged.
@@ -657,9 +659,14 @@ rebase clashed in `CONTENT_MANIFEST` because every branch had regenerated it.
 
 `scripts/release-day.sh` (in the make-it repo; a project without it uses its own release steps):
 
-1. takes only pull requests the sort calls READY -- reviewed for the exact commit that is the head
-   now, every check passed, up to date with main; a pull request named by hand that is not READY
-   is refused with the reason;
+1. takes only pull requests the sort calls READY -- into main itself (a stacked one, based on
+   another branch, would bring that branch's unreviewed commits), reviewed for the exact commit
+   that is the head now, at least one check ran on that commit and every one passed (none
+   reported yet is not green), up to date with main; a pull request named by hand that is not
+   READY is refused with the reason. Right before each merge it fetches the head again from GitHub
+   and merges that exact commit only if it is still the one reviewed. A pull request from another
+   repository is handled the same way: GitHub's own copy of its head (`refs/pull/N/head`), only as
+   the commit reviewed;
 2. builds one release branch from main in its own worktree and squash-merges each in turn. A
    clash in the manifest alone is not a conflict. Any other clash stops the run, names the pull
    request and removes the branch again;
@@ -670,7 +677,8 @@ rebase clashed in `CONTENT_MANIFEST` because every branch had regenerated it.
 5. prints the version commit, the commands, the note that closes each original pull request, and
    the cards to close.
 
-It never picks the version number. It sends the branch and opens the release pull request only
+It never picks the version number, and refuses one that is already a tag (here or on the origin)
+or is not above `VERSION` on main. It sends the branch and opens the release pull request only
 with `--version X.Y.Z --go`. It never merges and it never tags: the release pull request needs an
 independent review and green checks on current main like any other, and those commands are
 printed. `--dry-run` changes nothing. After the release, each original pull request is closed, not
@@ -698,9 +706,9 @@ pull request lands in exactly one group, the first that holds:
 | WILL NEVER MERGE | Its card is already closed, or main already holds everything in it | close it with a note, keep the branch |
 | NEEDS YOU | Its card has a question only you can answer (`decision:`) | a one-click question |
 | STALLED | Still being worked on (a draft, or checks not finished) with no activity for 48 hours (`STALL_HOURS`) | chase its lane, or take it over |
-| OUT OF DATE | It conflicts with main, or is behind it | rebase it onto main; its checks run again |
+| OUT OF DATE | It is stacked on another branch, conflicts with main, or is behind it | rebase it onto main (a stacked one once its base is in main, pointed at main); its checks run again |
 | CAN BE SETTLED | A check fails, or its last review said not ready; or every check passed and no ready review of this exact commit is on its card | `/resolve-it` for the failing check or the finding; an independent review for the missing one |
-| READY | Reviewed for this commit, every check passed, up to date with main | release it with the day's release |
+| READY | Into main, reviewed for this commit, at least one check ran on it and every one passed, up to date with main | release it with the day's release |
 
 Each line names the pull request by its own title and number, the card it is for, why it is in
 its group, and the action. A pull request that is being worked on and active is counted as "still

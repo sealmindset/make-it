@@ -14,7 +14,8 @@ pick     the cards for this sitting, by the written rule in status.py (`sitting`
          then the older card; a bundle counts once; at most SIT[1]. A card answered at a sitting, or put off as
          "not now" in the last SIT_REST days, is left out for as long as it has not changed since.
 due      whether a sitting is due: a card can be brought, and no sitting is on record in the last SIT_EVERY days.
-answer   writes the owner's pick on the card under `## Answers` (and clears `decision:` and `answers:`), then
+answer   only one of the card's own `answers:` names (the skill writes the question and its answers on the card before
+         asking; any other pick, a plain "yes" included, is refused); writes the owner's pick on the card under `## Answers` (and clears `decision:` and `answers:`), then
          marks it `sat: <date> answered <print of the card>` so it is not brought again unless it changes.
 not-now  keeps the "not now" on the card the same way (`sat: <date> not-now <print>`): not brought again for
          SIT_REST days unless the card changes.
@@ -59,6 +60,11 @@ def record(B, cid, label, text, proj, nosync, T=None):
     p = C.find(B, cid); raw, d = R.fm(p), R.load(B)[p]  # d: the card as the board reads it -- a bundle is high-stakes when a part is
     if v(d, 'status') == 'done': no(f'{R.name(d)} is closed')
     if not R.warn(d): no(f'{R.name(d)} is not a held high-stakes card: the sitting is for those; answer any other question with `card.py append {v(d, "id")} Answers`')
+    if label is not None:  # only one of the card's own answers, as asked: never a plain yes (the skill writes `decision:` and `answers:` before it asks)
+        names = [re.split(r' (?:--|—) ', a.strip(), 1)[0].strip() for a in v(d, 'answers').split('|') if a.strip()]
+        if not names: no(f'{R.name(d)} has no answers of its own: write the question and its 2-4 answers on it first (`card.py set {v(d, "id")} decision=... answers=...`), then ask it')
+        if label.lower() not in [x.lower() for x in names]: no(f'"{label}" is not one of its answers ({", ".join(names)}): record the answer the owner picked, by its name')
+        label = next(x for x in names if x.lower() == label.lower())
     if label is None:
         kind, line = 'not-now', f'- {T} weekly sitting -- **Not now**: stays on the board; not brought again before {T + datetime.timedelta(days=S.SIT_REST)} unless the card changes'
     else:

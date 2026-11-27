@@ -166,7 +166,7 @@ def sort(B, repo, proj=None, as_json=False, T=None):
     if rows is None: return f'Open pull requests could not be read ({why}): nothing was sorted.', 2
     g = S.sort_prs(rows)
     if not as_json: return S.sort_text(g, R.arg(proj or os.path.basename(B)), T), 0
-    row = lambda pr, why, act: dict(n=pr['n'], head=pr['head'], title=pr['title'], card=v(pr['card'] or {}, 'id') or None, card_name=R.name(pr['card'], 80) if pr['card'] else None,
+    row = lambda pr, why, act: dict(n=pr['n'], head=pr['head'], base=pr['base'], title=pr['title'], card=v(pr['card'] or {}, 'id') or None, card_name=R.name(pr['card'], 80) if pr['card'] else None,
                                     name=S.pr_called(pr), why=why, action=act)
     return json.dumps({'open': len(rows), 'groups': {k: [row(*x) for x in xs] for k, xs in g.items()}}, ensure_ascii=False), 0
 

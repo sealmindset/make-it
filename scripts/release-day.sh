@@ -10,8 +10,11 @@
 #
 # WHAT IT DOES
 #   1. Reads the facts, never a guess: `sync-prs.py --sort` (GitHub through `gh`, and each card's
-#      `reviewed:` line). A pull request goes in only if it is READY: reviewed for the exact
-#      commit that is its head now, every check passed, up to date with main.
+#      `reviewed:` line). A pull request goes in only if it is READY: into --base itself (never
+#      stacked on another branch), reviewed for the exact commit that is its head now, at least one
+#      check ran on that commit and every one passed, up to date with main. Its head is fetched
+#      again right before its merge and must still be that commit. A pull request from another
+#      repository is taken the same way: GitHub's copy of its head, only as the commit reviewed.
 #   2. Builds one release branch from origin/main in its own worktree and squash-merges each
 #      pull request in turn. A clash in CONTENT_MANIFEST alone is not a conflict: the manifest is
 #      rewritten at the end. Any other clash stops the run and names the pull request.
@@ -75,6 +78,9 @@ fi
 if [ -n "$version" ]; then
   printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "release-day: --version takes a number like 1.72.0, not \"$version\"" >&2; exit 2; }
   ! git -C "$repo" rev-parse -q --verify "refs/tags/v$version" >/dev/null || { echo "release-day: v$version is already a release tag: pick the next number" >&2; exit 2; }
+  rc=0; git -C "$repo" ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || { echo "release-day: v$version is already a release tag on the origin: pick the next number" >&2; exit 2; }
+  [ "$rc" -eq 2 ] || { echo "release-day: the origin's tags could not be read, so v$version could not be checked: nothing was built" >&2; exit 2; }
 fi
 [ -z "$notes" ] || [ -f "$notes" ] || { echo "release-day: no notes file at $notes" >&2; exit 2; }
 
@@ -101,10 +107,12 @@ if ! python3 "$BIN/sync-prs.py" "$board" --repo "$repo" --sort --json >"$tmp/fac
   exit 2
 fi
 # shellcheck disable=SC2086
-python3 - "$tmp/facts.json" "$tmp/chosen.tsv" $prs <<'PY' || exit 1
+python3 - "$tmp/facts.json" "$tmp/chosen.tsv" "$base" $prs <<'PY' || exit 1
 import json, sys
-facts = json.load(open(sys.argv[1], encoding='utf-8')); want = [int(x) for x in sys.argv[3:]]
+facts = json.load(open(sys.argv[1], encoding='utf-8')); base = sys.argv[3]; want = [int(x) for x in sys.argv[4:]]
 rows = {r['n']: dict(r, group=g) for g, rs in facts['groups'].items() for r in rs}
+for r in rows.values():  # only a pull request into this release's own base: a stacked one would bring in its base branch's unreviewed commits
+    if r['group'] == 'ready' and r.get('base') != base: r.update(group='out', why=f"it is stacked on {r.get('base')}, not on {base}")
 bad = [n for n in want if n not in rows or rows[n]['group'] != 'ready']
 for n in bad:
     print(f'release-day: pull request #{n} is not ready, so it is left out: ' + (f"{rows[n]['name']} -- {rows[n]['why']}" if n in rows else 'it is not an open pull request'), file=sys.stderr)
@@ -139,6 +147,11 @@ else
   made="$branch"
 fi
 from="$(git -C "$work" rev-parse HEAD)"
+if [ -n "$version" ] && [ -f "$work/VERSION" ]; then  # the number goes up: never at or below the version $base is at
+  at="$(tr -d '[:space:]' <"$work/VERSION")"
+  python3 -c 'import sys; n = lambda s: tuple(int(x) for x in s.split(".")); sys.exit(0 if n(sys.argv[1]) > n(sys.argv[2]) else 1)' "$version" "$at" 2>/dev/null \
+    || stop "v$version is not above the version $base is at ($at): pick a higher number"
+fi
 
 : >"$tmp/merged.txt"
 while IFS="$(printf '\t')" read -r n head title card cname; do

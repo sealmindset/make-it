@@ -289,7 +289,7 @@ def pr_rows(repo, cards, T, now=None):
         pr = dict(n=n, title=title, card=d, gone=None if still or not mine else mine[0], behind=0, ahead=None, head=x.get('headRefOid') or '', base=x.get('baseRefName') or 'main',
                   draft=bool(x.get('isDraft')), merge=x.get('mergeStateStatus'), decision=x.get('reviewDecision'), hours=hours,
                   failed=[c.get('name') or c.get('context') or 'a check' for c, st in zip(checks, state) if st in ('FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE')],
-                  passed=all(c in ('SUCCESS', 'SKIPPED', 'NEUTRAL') for c in state),  # ponytail: a repo with no checks at all counts as passed
+                  ran=any(c not in ('SKIPPED', 'NEUTRAL') for c in state), passed='SUCCESS' in state and all(c in ('SUCCESS', 'SKIPPED', 'NEUTRAL') for c in state),  # green: at least one check ran on this head and every one that ran passed; none reported (CI not started) is not green
                   quiet=max(0, (T - (day(up[:10]) or T)).days),
                   name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(title, 50)}\" (#{n})")
         pr['review'], pr['reviewed_on'] = review_of(d, pr['head'])
@@ -313,10 +313,10 @@ def sort_prs(rows):
       never    its card is already closed, or main already holds everything in it -> close with a note, keep the branch
       you      its card has a question only the owner can answer -> a one-click ask
       stalled  still being worked on (a draft, or checks not finished) with no activity for STALL_HOURS -> chase or take over
-      out      it conflicts with main, or is behind it -> rebase
+      out      it is stacked on another branch, conflicts with main, or is behind it -> rebase (a stacked one onto main)
       settle   a check fails, or its last review said not ready -> /resolve-it; or every check passed and no ready
                review of this exact commit is on its card -> get that review
-      ready    reviewed for this commit, every check passed, up to date with main -> release it
+      ready    based on main, reviewed for this commit, at least one check ran and every one passed, up to date with main -> release it
     Two more keys are not groups: `moving` (being worked on, active: nothing to do yet) and `unread` (a fact could
     not be read, so it is not sorted and is said so)."""
     out = {k: [] for k in ('ready', 'out', 'settle', 'stalled', 'you', 'never', 'moving', 'unread')}
@@ -329,6 +329,7 @@ def sort_prs(rows):
         elif d and R.asks(d):
             q = R.ask(d)[0]
             put('you', f"its card waits on your answer -- \"{R.cut(q.rsplit('. ', 1)[-1], 80)}\"", 'ask it as a one-click question')
+        elif pr['base'] != 'main': put('out', f"it is stacked on {pr['base']}, not on main, so releasing it would bring in {pr['base']}'s own unreviewed commits", f"once {pr['base']} is in main, rebase it onto main and point it at main")
         elif pr['draft']: put('stalled' if stale else 'moving', ('a draft with a failing check, ' if pr['failed'] else 'still a draft, ') + idle, 'chase its lane, or take it over')
         elif pr['merge'] == 'DIRTY': put('out', 'it conflicts with main', 'rebase it onto main, then its checks run again')
         elif pr['merge'] == 'BEHIND' or pr['behind']:
@@ -336,7 +337,7 @@ def sort_prs(rows):
         elif pr['failed']: put('settle', f"a check fails ({', '.join(pr['failed'][:3])})", 'send it through /resolve-it')
         elif pr['decision'] == 'CHANGES_REQUESTED' or pr['review'] == 'not ready': put('settle', 'its last review said not ready', 'send its findings through /resolve-it')
         elif pr['behind'] is None: put('unread', 'could not tell whether it is behind main', 'look again when GitHub answers')
-        elif not pr['passed']: put('stalled' if stale else 'moving', 'its checks have not finished, ' + idle, 'chase its lane, or take it over')
+        elif not pr['passed']: put('stalled' if stale else 'moving', ('its checks have not finished, ' if pr['ran'] else 'no check has run on this version yet, ') + idle, 'chase its lane, or take it over')
         elif pr['review'] == 'current': put('ready', f"reviewed for this version ({pr['reviewed_on']}), every check passed, up to date with main", "release it with the day's release")
         elif pr['review'] == 'old': put('settle', 'every check passed, but its review was of an earlier version', 'get this version reviewed')
         else: put('settle', 'every check passed, but no review is recorded for this version' + ('' if d else ' (no card names it, so there is nowhere to record one)'), 'get its independent review')
@@ -374,7 +375,7 @@ def open_prs(repo, f):
     if rows is None: return None, why, [], None
     gh, ready, stuck = gh_for(repo), [], []
     for pr in rows:
-        green = not pr['draft'] and pr['passed'] and pr['merge'] not in ('DIRTY', 'BEHIND') and pr['decision'] not in ('CHANGES_REQUESTED', 'REVIEW_REQUIRED')
+        green = not pr['draft'] and pr['base'] == 'main' and pr['passed'] and pr['merge'] not in ('DIRTY', 'BEHIND') and pr['decision'] not in ('CHANGES_REQUESTED', 'REVIEW_REQUIRED')
         if pr['merge'] == 'DIRTY': stuck.append((pr, 'it conflicts with main'))
         elif pr['merge'] == 'BEHIND': stuck.append((pr, 'it is behind main'))
         elif green and pr['behind']: stuck.append((pr, f"{pr['behind']} commit{'s' * (pr['behind'] != 1)} behind main"))
@@ -543,7 +544,7 @@ def first(f, proj, prs, lane_cap, seen=False, _tight=False):
     if held := f['held']:
         st = sitting(f); sit = st['picks'][:SIT[0] if w or len(lines) > 2 else SIT[1]]
         head = f"  Held, high-stakes: {len(held)} card{'s' * (len(held) != 1)}."
-        if st['due']: head += ' A weekly sitting is due (' + ('none on record' if st['last'] is None else f"the last: {st['last']}") + f'): the {len(sit)} that free the most other work:'
+        if st['due']: head += ' A weekly sitting is due (' + ('none on record' if st['last'] is None else f"last {st['last']}") + f'): the {len(sit)} that free the most other work:'
         elif sit: head += (f" The next weekly sitting is due {st['last'] + D(days=SIT_EVERY)}; " if st['last'] else ' For the weekly sitting, ') + f'the {len(sit)} that free the most other work:'
         else: head += ' None to bring to a sitting: each is answered, or put off as "not now".'
         out.append(head)

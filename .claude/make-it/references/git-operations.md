@@ -182,8 +182,8 @@ and do what the group says. With a `/backlog-it` board, `sync-prs.py --sort` doe
 
 | Group | When | What to do |
 |-------|------|------------|
-| READY | Reviewed for this exact commit, every check passed, up to date with `main` | Release it (the day's release, below) |
-| OUT OF DATE | Behind `main`, or in conflict with it | Rebase onto `main`, re-run **fresh CI**, get the new commit reviewed |
+| READY | Into `main`, reviewed for this exact commit, at least one check ran on it and every one passed, up to date with `main` | Release it (the day's release, below) |
+| OUT OF DATE | Stacked on another branch, behind `main`, or in conflict with it | Rebase onto `main` (a stacked one once its base is in `main`), re-run **fresh CI**, get the new commit reviewed |
 | CAN BE SETTLED | A failing check, or a review finding | Send it through `/resolve-it`; a pull request with no review yet gets an independent one |
 | STALLED | Still being worked on, no activity for two days | Chase its lane, or take the work over |
 | NEEDS YOU | A question only the owner can answer | Ask it as one click, each answer saying what it does |
