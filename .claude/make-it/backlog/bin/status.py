@@ -11,8 +11,9 @@ Usage: status.py [board_dir] [--project NAME] [--needs-you]
            said so). --seen records this look in <board>/.last-seen.json (kept out of the board's git).
   Dates come from the board's git history (when a card went done, and when it last changed). With
   no git history, from each card's created: and updated:.
-  This file also holds the rule for which quiet cards close by themselves (`expiry`); `shrink.py
-  expire` is what closes them.
+  This file also holds the rule for which quiet cards close by themselves (`expiry`; `shrink.py
+  expire` closes them), the rule for the weekly sitting (`sitting`; `sitting.py` asks and records),
+  and the rule that sorts every open pull request by what it needs (`sort_prs`; `sync-prs.py --sort`).
 """
 import datetime, hashlib, importlib.util, json, os, re, statistics, subprocess, sys
 
@@ -28,11 +29,14 @@ GROW_WEEKS = 2    # weeks running with more cards opened than closed before a gr
 GROOM_AGE = 14    # days after which the last groom is too old to trust, whatever the trend: its order was made for a board two weeks gone
 GROOM_REST = 7    # days a groom is left alone even while the pile grows, so the board never answers "groom" twice in the same week
 SIT = (3, 5)      # held cards brought to a weekly sitting: three when questions also wait, five at most, so the screen stays short enough to read
+SIT_EVERY = 7     # days between sittings: the owner chose a short weekly one (2026-11-24), so one is due only when none is on record in the last seven days
+SIT_REST = 14     # days a "not now" keeps a card out of the sitting unless the card changes: it sits out the next sitting too, so the same card is not put to the owner two weeks running
+STALL_HOURS = PR_STALL * 24  # hours with no activity after which a pull request still being worked on (a draft, or checks not finished) counts as stalled: the same two quiet days as PR_STALL, in hours because lanes work in hours
 # Expiry (owner's choice, 2026-11-24: "Yes, after 30 days, never a safety one"):
 EXPIRE_DAYS = 30  # quiet days after which a card marked safe to close closes itself: a month with no change, no pull request and no mention means nobody is asking
 EXPIRE_WARN = 7   # the first screen counts the cards that will close within this many days: a week's notice, so one look a week is enough to save one
 SAFETY = r'secur|secret|credential|password|token|\bkey\b|leak|vulnerab|\bCVE|auth|permission|privacy|personal|data loss|los\w* (?:\w+ )?data|delet|destroy|overwrit|corrupt|wrong|untrue|false|mislead|\blie[sd]?\b|\bpay|\bbill|money|\bgate|guard|\bscan|fail'  # words in a title or category that mark a card as one that can hurt someone (lose data, leak a secret, send something wrong, say something untrue) or as a gate or failed check: it never expires, marked or not. A guard on top of the judge's mark, never the judgement itself: a word list always misses the next one
-STAMP_SKIP = ('updated', 'expires', 'expires_why', 'expires_by', 'expires_of', 'mode', 'plan', 'files', 'reconciled')  # the fields a helper itself writes as bookkeeping (the date of the last write, the mark, plan's and groom's notes-to-self): changing one says nothing new about the card, so it does not clear a judge's mark; any other change does
+STAMP_SKIP = ('updated', 'expires', 'expires_why', 'expires_by', 'expires_of', 'mode', 'plan', 'files', 'reconciled', 'sat')  # the fields a helper itself writes as bookkeeping (the date of the last write, the mark, the sitting's own record, plan's and groom's notes-to-self): changing one says nothing new about the card, so it does not clear a judge's mark; any other change does
 MARK = '.last-seen.json'  # when the owner last opened the first screen, and what the board held then
 
 def day(s):
@@ -238,44 +242,146 @@ def render(f, proj, needs_only=False):
     out.append(f"  {'Reported → shipped':<19}{med(f['cycle'][''])} · " + ' · '.join(f"{pr} {med(f['cycle'][pr])}" for pr in ('P1', 'P2', 'P3')))
     return '\n'.join(out)
 
-def open_prs(repo, f):
-    """The repo's open pull requests from `gh`, sorted by what each needs: ([ready], [(stuck, why)], [all])
-    as {n, name, card, behind}; or (None, why, []) when gh can't say. Ready says only what gh shows: no
-    longer a draft, no changes asked for, every check finished and passed, no conflict with main, and not
-    behind main -- worked out here by comparing its head with main, because a repo with no branch rule
-    never reports "behind" (behind=None: could not tell). Whether it was reviewed is not something gh
-    shows in a repo that records no review there: only the card's `reviewed:` says so. Stuck = behind or
-    in conflict with main, or a draft, a failing check or a running check with no change for PR_STALL
-    days. Any other open pull request is moving, and is left out."""
-    if not repo: return None, 'no code folder was given', []
+def gh_for(repo):
     def gh(*a):
         try:
             r = subprocess.run(['gh', *a], cwd=repo, capture_output=True, text=True, encoding='utf-8', timeout=60)
             return json.loads(r.stdout) if r.returncode == 0 else None
         except (OSError, subprocess.TimeoutExpired, ValueError): return None
+    return gh
+
+def review_of(d, head):
+    """What a card says of its pull request's last review: ('current' | 'old' | 'not ready' | 'none', the date).
+    `reviewed: <date> ready <commit>` or `<date> not ready ...`: a review counts only when it said ready AND read
+    the commit that is the pull request's head now; any other shape is no review at all."""
+    m = re.fullmatch(r'(\d{4}-\d{2}-\d{2}) (?:(ready) ([0-9a-f]{7,40})|(not ready)\b.*)', v(d or {}, 'reviewed'))
+    if not m: return 'none', ''
+    if not m.group(2): return 'not ready', m.group(1)
+    return ('current' if head.startswith(m.group(3)) else 'old'), m.group(1)
+
+def pr_rows(repo, cards, T, now=None):
+    """Every open pull request in `repo`, each with the facts `gh` and the board hold: ([row], None), or (None, why)
+    when they cannot be read. A row: its number, title, head commit, draft or not, GitHub's merge state, the checks
+    that fail and whether every check passed, days and hours since its last activity, how far behind main it is
+    (worked out by comparing its head with main, because a repo with no branch rule never reports "behind"; None =
+    could not tell; asked for every pull request that is not a draft and not already known to be behind or in
+    conflict), the open card it belongs to (a card whose `pr:` lists it, else a card its own title names), a closed
+    card when that is all that names it, and what that card says of its review."""
+    if not repo: return None, 'no code folder was given'
+    gh = gh_for(repo)
     rows = gh('pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,title,isDraft,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt,baseRefName,headRefOid')
-    if not isinstance(rows, list): return None, 'GitHub could not be asked', []
-    card = {int(n): d for d in f['cards'].values() if v(d, 'status') != 'done' for n in re.findall(r'\d+', re.sub(r'https?://\S+', ' ', v(d, 'pr')))}
-    ready, stuck, every = [], [], []
+    if not isinstance(rows, list): return None, 'GitHub could not be asked'
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    byid, listed = {v(d, 'id').upper(): d for d in cards.values()}, {}
+    for d in cards.values():
+        for n in re.findall(r'\d+', re.sub(r'https?://\S+', ' ', v(d, 'pr'))): listed.setdefault(int(n), []).append(d)
+    out = []
     for x in sorted(rows, key=lambda x: x['number']):
-        n = x['number']; d = card.get(n)
-        pr = dict(n=n, card=d, behind=0, head=x.get('headRefOid') or '', title=x.get('title') or 'no title', name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(x.get('title') or 'no title', 50)}\" (#{n})")
-        every.append(pr)
-        state = [c.get('conclusion') or c.get('state') or c.get('status') or 'PENDING' for c in x.get('statusCheckRollup') or []]
-        failing = any(c in ('FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE') for c in state)
-        passed = all(c in ('SUCCESS', 'SKIPPED', 'NEUTRAL') for c in state)  # ponytail: a repo with no checks at all counts as passed
-        quiet = max(0, (f['T'] - (day((x.get('updatedAt') or '')[:10]) or f['T'])).days)
-        merge = x.get('mergeStateStatus')
-        green = not x.get('isDraft') and passed and merge not in ('DIRTY', 'BEHIND') and x.get('reviewDecision') not in ('CHANGES_REQUESTED', 'REVIEW_REQUIRED')
-        if green:  # one more call, only for a pull request that would otherwise be offered for release
-            cmp = gh('api', 'repos/{owner}/{repo}/compare/' + f"{x.get('baseRefName') or 'main'}...{x.get('headRefOid')}") if x.get('headRefOid') else None
-            pr['behind'] = cmp.get('behind_by') if isinstance(cmp, dict) and isinstance(cmp.get('behind_by'), int) else None
-        if merge == 'DIRTY': stuck.append((pr, 'it conflicts with main'))
-        elif merge == 'BEHIND': stuck.append((pr, 'it is behind main'))
+        n, title = x['number'], x.get('title') or 'no title'
+        mine = listed.get(n) or [byid[i] for i in re.findall(r'\bE\d+-S\d+\b', title.upper()) if i in byid][:1]
+        still = [d for d in mine if v(d, 'status') != 'done']
+        d = still[-1] if still else None
+        checks = x.get('statusCheckRollup') or []
+        state = [c.get('conclusion') or c.get('state') or c.get('status') or 'PENDING' for c in checks]
+        up = x.get('updatedAt') or ''
+        try: hours = max(0.0, (now - datetime.datetime.fromisoformat(up.replace('Z', '+00:00'))).total_seconds() / 3600)
+        except (ValueError, TypeError): hours = None
+        pr = dict(n=n, title=title, card=d, gone=None if still or not mine else mine[0], behind=0, ahead=None, head=x.get('headRefOid') or '', base=x.get('baseRefName') or 'main',
+                  draft=bool(x.get('isDraft')), merge=x.get('mergeStateStatus'), decision=x.get('reviewDecision'), hours=hours,
+                  failed=[c.get('name') or c.get('context') or 'a check' for c, st in zip(checks, state) if st in ('FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE')],
+                  ran=any(c not in ('SKIPPED', 'NEUTRAL') for c in state), passed='SUCCESS' in state and all(c in ('SUCCESS', 'SKIPPED', 'NEUTRAL') for c in state),  # green: at least one check ran on this head and every one that ran passed; none reported (CI not started) is not green
+                  quiet=max(0, (T - (day(up[:10]) or T)).days),
+                  name=f"{R.name(d, 50)}, pull request #{n}" if d else f"\"{R.cut(title, 50)}\" (#{n})")
+        pr['review'], pr['reviewed_on'] = review_of(d, pr['head'])
+        out.append(pr)
+    def compare(pr):
+        cmp = gh('api', 'repos/{owner}/{repo}/compare/' + f"{pr['base']}...{pr['head']}") if pr['head'] else None
+        known = isinstance(cmp, dict) and isinstance(cmp.get('behind_by'), int)
+        pr['behind'] = cmp['behind_by'] if known else None
+        pr['ahead'] = cmp['ahead_by'] if known and isinstance(cmp.get('ahead_by'), int) else None
+    import concurrent.futures  # one call each, side by side: the first screen should not wait a second per pull request
+    with concurrent.futures.ThreadPoolExecutor(8) as ex: list(ex.map(compare, [pr for pr in out if not pr['draft'] and pr['merge'] not in ('DIRTY', 'BEHIND')]))
+    return out, None
+
+GROUPS = (('ready', 'READY', 'release it', 'ready'), ('out', 'OUT OF DATE', 'rebase it onto main', 'out of date'), ('settle', 'CAN BE SETTLED', 'no need for you: a failing check or a review finding goes through /resolve-it', 'can be settled'),
+          ('stalled', 'STALLED', 'chase its lane, or take it over', 'stalled'), ('you', 'NEEDS YOU', 'a one-click question', 'needs you'), ('never', 'WILL NEVER MERGE', 'close it with a note and keep its branch', 'will never merge'))
+
+def sort_prs(rows):
+    """Every open pull request in exactly one group, from the facts alone (the owner's rule of 2026-11-24: after every
+    merge, every open pull request is checked and sorted by what it needs): {group: [(row, why, the action)]}. The
+    first line that holds decides:
+      never    its card is already closed, or main already holds everything in it -> close with a note, keep the branch
+      you      its card has a question only the owner can answer -> a one-click ask
+      stalled  still being worked on (a draft, or checks not finished) with no activity for STALL_HOURS -> chase or take over
+      out      it is stacked on another branch, conflicts with main, or is behind it -> rebase (a stacked one onto main)
+      settle   a check fails, or its last review said not ready -> /resolve-it; or every check passed and no ready
+               review of this exact commit is on its card -> get that review
+      ready    based on main, reviewed for this commit, at least one check ran and every one passed, up to date with main -> release it
+    Two more keys are not groups: `moving` (being worked on, active: nothing to do yet) and `unread` (a fact could
+    not be read, so it is not sorted and is said so)."""
+    out = {k: [] for k in ('ready', 'out', 'settle', 'stalled', 'you', 'never', 'moving', 'unread')}
+    for pr in rows:
+        d, put = pr['card'], lambda k, why, act: out[k].append((pr, why, act))
+        stale = pr['hours'] is not None and pr['hours'] >= STALL_HOURS
+        idle = 'no activity for ' + (f"{pr['quiet']} days" if pr['quiet'] >= 2 else f"{int(pr['hours'] or 0)} hours")
+        if pr['gone']: put('never', f"its card, {R.name(pr['gone'])}, is already closed", 'close it with a note and keep its branch')
+        elif pr['ahead'] == 0: put('never', 'main already holds everything in it', 'close it with a note and keep its branch')
+        elif d and R.asks(d):
+            q = R.ask(d)[0]
+            put('you', f"its card waits on your answer -- \"{R.cut(q.rsplit('. ', 1)[-1], 80)}\"", 'ask it as a one-click question')
+        elif pr['base'] != 'main': put('out', f"it is stacked on {pr['base']}, not on main, so releasing it would bring in {pr['base']}'s own unreviewed commits", f"once {pr['base']} is in main, rebase it onto main and point it at main")
+        elif pr['draft']: put('stalled' if stale else 'moving', ('a draft with a failing check, ' if pr['failed'] else 'still a draft, ') + idle, 'chase its lane, or take it over')
+        elif pr['merge'] == 'DIRTY': put('out', 'it conflicts with main', 'rebase it onto main, then its checks run again')
+        elif pr['merge'] == 'BEHIND' or pr['behind']:
+            put('out', f"{pr['behind']} commit{'s' * (pr['behind'] != 1)} behind main" if pr['behind'] else 'it is behind main', 'rebase it onto main, then its checks run again')
+        elif pr['failed']: put('settle', f"a check fails ({', '.join(pr['failed'][:3])})", 'send it through /resolve-it')
+        elif pr['decision'] == 'CHANGES_REQUESTED' or pr['review'] == 'not ready': put('settle', 'its last review said not ready', 'send its findings through /resolve-it')
+        elif pr['behind'] is None: put('unread', 'could not tell whether it is behind main', 'look again when GitHub answers')
+        elif not pr['passed']: put('stalled' if stale else 'moving', ('its checks have not finished, ' if pr['ran'] else 'no check has run on this version yet, ') + idle, 'chase its lane, or take it over')
+        elif pr['review'] == 'current': put('ready', f"reviewed for this version ({pr['reviewed_on']}), every check passed, up to date with main", "release it with the day's release")
+        elif pr['review'] == 'old': put('settle', 'every check passed, but its review was of an earlier version', 'get this version reviewed')
+        else: put('settle', 'every check passed, but no review is recorded for this version' + ('' if d else ' (no card names it, so there is nowhere to record one)'), 'get its independent review')
+    return out
+
+def pr_called(pr):  # a pull request in the sorted list: its own title and number, then the card it is for
+    title = re.sub(r'\s*\((?:[^()]*\b)?E\d+(?:-S\d+)?\b[^()]*\)', '', pr['title']).strip() or pr['title']  # a card id inside the quoted title would be a bare id: the card is named after it
+    return f"\"{R.cut(title, 60)}\" (#{pr['n']})" + (f", for {R.name(pr['card'], 60)}" if pr['card'] else '')
+
+def sort_counts(g, every=False):
+    n = lambda k: len(g[k])
+    said = [f"{n(k)} {'need you' if k == 'you' and n(k) != 1 else word}" for k, _, _, word in GROUPS if n(k)]
+    return ' · '.join(said + ([f"{n('moving')} still moving"] * bool(n('moving')) + [f"{n('unread')} not sorted"] * bool(n('unread')) if every else []))
+
+def sort_text(g, proj, T):
+    """The sorted list as the board prints it: a count line, then each group that holds something, one line per
+    pull request: its title and number, the card it is for, why it is in that group, and the action."""
+    total = sum(map(len, g.values()))
+    out = [f"Open pull requests, sorted -- {proj} · {T} · " + (f'{total} open: {sort_counts(g, True)}' if total else 'none open')]
+    for k, label, act, _ in GROUPS:
+        if g[k]: out += [f'{label} -- {act} ({len(g[k])})'] + [f'  {pr_called(pr)}: {why}: {a}' for pr, why, a in g[k]]
+    if g['unread']: out += [f"NOT SORTED -- a fact could not be read ({len(g['unread'])})"] + [f'  {pr_called(pr)}: {why}: {a}' for pr, why, a in g['unread']]
+    if g['moving']: out.append(f"Still moving, nothing to do yet ({len(g['moving'])}): " + ', '.join(pr_called(pr) for pr, _, _ in g['moving']))
+    return '\n'.join(out)
+
+def open_prs(repo, f):
+    """The repo's open pull requests from `gh`, by what each needs: ([ready], [(stuck, why)], [all], the six
+    groups of `sort_prs`); or (None, why, [], None) when gh can't say. Ready says only what gh shows: no
+    longer a draft, no changes asked for, every check finished and passed, no conflict with main, and not
+    behind main (behind=None: could not tell). Whether it was reviewed is not something gh
+    shows in a repo that records no review there: only the card's `reviewed:` says so. Stuck = behind or
+    in conflict with main, or a draft, a failing check or a running check with no change for PR_STALL
+    days. Any other open pull request is moving, and is left out."""
+    rows, why = pr_rows(repo, f['cards'], f['T'])
+    if rows is None: return None, why, [], None
+    gh, ready, stuck = gh_for(repo), [], []
+    for pr in rows:
+        green = not pr['draft'] and pr['base'] == 'main' and pr['passed'] and pr['merge'] not in ('DIRTY', 'BEHIND') and pr['decision'] not in ('CHANGES_REQUESTED', 'REVIEW_REQUIRED')
+        if pr['merge'] == 'DIRTY': stuck.append((pr, 'it conflicts with main'))
+        elif pr['merge'] == 'BEHIND': stuck.append((pr, 'it is behind main'))
         elif green and pr['behind']: stuck.append((pr, f"{pr['behind']} commit{'s' * (pr['behind'] != 1)} behind main"))
         elif green: ready.append(pr)
-        elif quiet >= PR_STALL: stuck.append((pr, ('a check fails, and ' if failing else '') + f'no change for {quiet} days'))
-    return ready, stuck, [(pr, lambda n=pr['n']: gh('pr', 'view', str(n), '--json', 'files')) for pr in every]
+        elif pr['quiet'] >= PR_STALL: stuck.append((pr, ('a check fails, and ' if pr['failed'] else '') + f"no change for {pr['quiet']} days"))
+    return ready, stuck, [(pr, lambda n=pr['n']: gh('pr', 'view', str(n), '--json', 'files')) for pr in rows], sort_prs(rows)
 
 def plan_files(B, ids):
     """The files PLAN.md says each of these cards will change: {id: [paths]} from each wave bullet's `files:`."""
@@ -306,12 +412,9 @@ def next_thing(f, prs, lane_cap):
     ready, stuck = (prs[0], prs[1]) if prs[0] is not None else ([], [])
     if ready:
         pr = ready[0]
-        # `reviewed: <date> ready <commit>` or `<date> not ready ...`: a review counts only when it said ready AND read the
-        # commit that is the pull request's head now; any other shape is no review at all
-        m = re.fullmatch(r'(\d{4}-\d{2}-\d{2}) (?:(ready) ([0-9a-f]{7,40})|(not ready)\b.*)', v(pr['card'] or {}, 'reviewed'))
-        current = bool(m and m.group(2) and pr['head'].startswith(m.group(3)))
-        review = (f'recorded on its card for this version ({m.group(1)}).' if current else 'recorded for an earlier version, so confirm it again.' if m and m.group(2)
-                  else 'its last review said not ready, so confirm it first.' if m else 'none recorded, so confirm it first.')
+        current = pr['review'] == 'current'
+        review = {'current': f"recorded on its card for this version ({pr['reviewed_on']}).", 'old': 'recorded for an earlier version, so confirm it again.',
+                  'not ready': 'its last review said not ready, so confirm it first.', 'none': 'none recorded, so confirm it first.'}[pr['review']]
         facts = [pr['name'], f'Review: {review} ' + ('Could not tell whether it is up to date with main.' if pr['behind'] is None else 'Up to date with main.')]
         out.append(('Release it', f"Release {n_of(ready, '1 pull request', '{} pull requests')}: no longer a draft, no conflict with main, checks pass.",
                     facts + [f'+{len(ready) - 1} more'] * (len(ready) > 1),
@@ -381,6 +484,12 @@ def next_thing(f, prs, lane_cap):
         d = c[nxt_card[0]]
         out.append(('Start it', f"Start the next safe card ({v(d, 'priority') or 'no priority'}{', a bug' if v(d, 'type') == 'breakfix' else ''}): nothing it waits on is open.",
                     [name(nxt_card[0])] + [f'part: {R.name(m, 60)}' for m in R.open_parts(d, f['tree'])], 'brings the card back as a prompt you can change, and runs it on your go', 'a groom or a plan might pick a better card'))
+    s = sitting(f)
+    if s['due']:  # the last step before "wait": the owner's time is the one thing a sitting needs, so it is the recommendation only when nothing else is
+        k, ago = s['can'], None if s['last'] is None else (T - s['last']).days
+        out.append(('Hold the sitting', f"Hold the weekly sitting: {k} held card{'s wait' if k != 1 else ' waits'}, and " + ('no sitting is on record.' if ago is None else f"the last sitting was {ago} days ago."),
+                    top([name(p) for p, _ in s['picks']]), f"I bring each card as its own one-click question, {len(s['picks'])} this week",
+                    'it takes your time now, and a high-stakes answer is hard to take back'))
     if not out:
         why = (f"wave {plan[3].split('.')[0]} of the plan is running" if busy else f'{len(running)} of {lane_cap} lanes are busy' if running else 'no card can start safely')
         out.append(('Wait', f'Nothing to start right now: {why}, so wait.',
@@ -402,7 +511,7 @@ def running_list(f):
             if left: n += len(left); areas.add(area.lower())
     return n, len(areas)
 
-def first(f, proj, prs, lane_cap, seen=False):
+def first(f, proj, prs, lane_cap, seen=False, _tight=False):
     """The first screen, at most about 25 lines of at most about 110 characters: DO NEXT, NEEDS YOU, what
     changed, the trend."""
     c, T, B = f['cards'], f['T'], f['B']
@@ -417,10 +526,15 @@ def first(f, proj, prs, lane_cap, seen=False):
     todo = next_thing(f, prs, lane_cap)
     lab, sent, lines, does, against = todo[0]
     out = [f'BOARD — {proj} · {T}', 'DO NEXT', f'  {sent}'] + [f'    {l}' for l in lines]
-    opts = [f'{lab} -- {does} (Recommended)'] + [f'{l} -- {d}' for l, _, _, d, _ in todo[1:3 if len(lines) <= 4 else 2]] + ['Full status -- prints the whole report; nothing starts']
+    others = todo[1:3 if len(lines) <= 4 else 2]
+    hold = next((x for x in todo[1:] if x[0] == 'Hold the sitting'), None)  # a sitting that is due is always one of the choices
+    added = bool(hold) and hold not in others
+    if added: others = others[:0 if _tight else 1] + [hold]  # _tight: the screen ran past its 25 lines, so the sitting takes the other choice's place
+    opts = [f'{lab} -- {does} (Recommended)'] + [f'{l} -- {d}' for l, _, _, d, _ in others] + ['Full status -- prints the whole report; nothing starts']
     out += [f'  {i}. {o}' for i, o in enumerate(opts, 1)]
     out.insert(-len(opts) + 1, f'     against: {against}')  # the strongest argument against the recommendation, right under it
     if prs[0] is None: out.append(f'  (pull requests not checked: {prs[1]})')
+    elif sort_counts(prs[3]): out.append(f'  Pull requests: {sort_counts(prs[3])}')  # every open pull request sorted by what it needs; `reconcile --prs` lists them
     out += ['', 'NEEDS YOU']
     w = f['waiting']
     for p in w[:3]:  # the title with its id, then what waits and the question: the start of the context, and always the question itself
@@ -428,14 +542,13 @@ def first(f, proj, prs, lane_cap, seen=False):
         out += [f'  {name(p)}:', '    ' + (q if len(q) <= 104 else f'{R.cut(q, 103 - len(ask))} {ask}' if 0 < len(ask) < 60 else R.cut(q, 104))]
     out += ['  Questions: nothing waits on you'] * (not w) + [f'  +{len(w) - 3} more questions (`/backlog-it status` lists them)'] * (len(w) > 3)
     if held := f['held']:
-        frees = {}  # held card -> the open cards that wait on it (directly, or through a card or epic it sits under)
-        for i, d in f['tree'][0].items():
-            if v(d, 'status') != 'done':
-                for leaf, _, via in R.needs(i, f['tree']): frees.setdefault(leaf, set()).add(i); frees.setdefault(via, set()).add(i)
-        n = lambda p: len(frees.get(v(c[p], 'id').upper(), ()))
-        sit = sorted(held, key=lambda p: (-n(p), v(c[p], 'priority') or 'P9', -f['idle'](p)))[:SIT[0] if w or len(lines) > 2 else SIT[1]]
-        out.append(f"  Held, high-stakes: {len(held)} card{'s' * (len(held) != 1)}. For the weekly sitting, the {len(sit)} that free the most other work:")
-        out += [f"    {name(p)} -- " + (f"frees {n(p)} other card{'s' * (n(p) != 1)}" if n(p) else 'nothing else waits on it') for p in sit]
+        st = sitting(f); sit = st['picks'][:SIT[0] if w or len(lines) > 2 else SIT[1]]
+        head = f"  Held, high-stakes: {len(held)} card{'s' * (len(held) != 1)}."
+        if st['due']: head += ' A weekly sitting is due (' + ('none on record' if st['last'] is None else f"last {st['last']}") + f'): the {len(sit)} that free the most other work:'
+        elif sit: head += (f" The next weekly sitting is due {st['last'] + D(days=SIT_EVERY)}; " if st['last'] else ' For the weekly sitting, ') + f'the {len(sit)} that free the most other work:'
+        else: head += ' None to bring to a sitting: each is answered, or put off as "not now".'
+        out.append(head)
+        out += [f"    {name(p)} -- " + (f"frees {len(n)} other card{'s' * (len(n) != 1)}" if n else 'nothing else waits on it') for p, n in sit]
     items, areas = running_list(f)
     if items: out.append(f"  Running list: {items} small item{'s' * (items != 1)} across {areas} area{'s' * (areas != 1)}")
     listed = len(out) - 1 if items else None
@@ -495,8 +608,53 @@ def first(f, proj, prs, lane_cap, seen=False):
     else: out.append('TREND  No full week of history yet.')
     # the least urgent line on the screen (nothing will close): said only while the screen stays within its 25 lines
     if unmarked and len(out) < 25: out.insert(unmarked, '  Quiet cards: no card is marked as safe to close yet: groom marks them')
+    if added and not _tight and len(out) > 25: return first(f, proj, prs, lane_cap, seen, _tight=True)
     if seen and not mark_seen(B, snap): out.append('  (this look was not recorded: the board folder could not be written)')
     return '\n'.join(out)
+
+def frees(f):
+    """{a card's id: the ids of the open cards that wait on it} -- directly, or through a card or an epic it sits under."""
+    out = {}
+    for i, d in f['tree'][0].items():
+        if v(d, 'status') != 'done':
+            for leaf, _, via in R.needs(i, f['tree']): out.setdefault(leaf, set()).add(i); out.setdefault(via, set()).add(i)
+    return out
+
+def sitting(f):
+    """The weekly sitting, by a written rule (the owner's choice of 2026-11-24: held high-stakes cards come to him in
+    a short weekly sitting, the three to five that free the most other work). Returns picks = [(path, [ids it
+    frees])], at most SIT[1]: the held cards (high-stakes, no question already waiting, a bundle once and never its
+    parts), the one that frees the most other cards first, then the higher priority, then the older card. Left out:
+    `answered` -- a card answered at a sitting -- and `rested` = [(path, the day it comes back)] -- a card put off as
+    "not now" in the last SIT_REST days -- each only while the card is still what was answered (`sat: <date> <kind>
+    <print of the card>`): any change brings it back. `can` = how many cards could be brought; `last` = the day of
+    the last sitting on record (any card's `sat:`); `due` = a card can be brought and no sitting is on record in the
+    last SIT_EVERY days."""
+    c, T, fr = f['cards'], f['T'], frees(f)
+    last, picks, answered, rested = None, [], [], []
+    for d in c.values():
+        when = day(v(d, 'sat').split(' ')[0])
+        if when and when <= T: last = max(last or when, when)
+    for p in f['held']:
+        m = re.fullmatch(r'(\d{4}-\d{2}-\d{2}) (answered|not-now) ([0-9a-f]{12})', v(c[p], 'sat'))
+        when = day(m.group(1)) if m else None
+        try: same = bool(when) and when <= T and m.group(3) == stamp_of(open(p, encoding='utf-8-sig').read())
+        except (OSError, UnicodeDecodeError): same = False
+        if same and m.group(2) == 'answered': answered.append(p)
+        elif same and (T - when).days < SIT_REST: rested.append((p, when + D(days=SIT_REST)))
+        else: picks.append(p)
+    waits = lambda p: sorted(fr.get(v(c[p], 'id').upper(), set()) - set(R.parts(c[p])) - {v(c[p], 'id').upper()})
+    picks.sort(key=lambda p: (-len(waits(p)), v(c[p], 'priority') or 'P9', f['opened'](p), R.num(c[p]), p))
+    return dict(picks=[(p, waits(p)) for p in picks[:SIT[1]]], can=len(picks), answered=answered, rested=rested, last=last,
+                due=bool(picks) and (last is None or (T - last).days >= SIT_EVERY))
+
+def due_line(s, T):  # whether a sitting is due, in one plain line
+    n, last = s['can'], s['last']
+    ago = None if last is None else (T - last).days
+    days = lambda k: 'today' if k == 0 else f"{k} day{'s' * (k != 1)} ago"
+    if s['due']: return f"A weekly sitting is due: {n} held card{'s' * (n != 1)} can be brought, and " + ('no sitting is on record.' if last is None else f'the last sitting was {days(ago)}.')
+    if not n: return 'No sitting is due: no held card can be brought' + (' (each one is answered, or put off as "not now").' if s['answered'] or s['rested'] else '.')
+    return f'No sitting is due: the last was {days(ago)} ({last}); the next is due {last + D(days=SIT_EVERY)}.'
 
 def stamp_of(text):
     """What a judge read when it marked a card safe to close: a short print of the WHOLE card -- every frontmatter

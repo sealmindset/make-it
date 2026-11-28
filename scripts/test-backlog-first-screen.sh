@@ -173,7 +173,7 @@ d = board(*without(4), '--plan', 'none', '--groom-days', '1'); out = first(d); s
 ok('otherwise -> the next safe card, named', s.startswith('Start the next safe card (P2, a bug): nothing it waits on is open.') and 'Export drops the last row (E01-S10)' in s, out)
 ok('next safe card: no bare card id', not bare(out, titles(d)), bare(out, titles(d)))
 
-d = board(*without(5), '--plan', 'none', '--groom-days', '1'); out = first(d); s = shape('wait', out, 'Wait')
+d = board(*without(5), '--plan', 'none', '--groom-days', '1', '--with', 'sat'); out = first(d); s = shape('wait', out, 'Wait')  # a sitting on record today: none is due, so the rule's last step is to wait
 ok('nothing can start -> wait, said plainly', s.startswith('Nothing to start right now') and 'wait' in s.lower(), out)
 
 # --- what changed since last time ---

@@ -18,6 +18,7 @@
 #
 # USAGE
 #   content-manifest.sh generate <root>              # root contains .claude/  -> manifest on stdout
+#   content-manifest.sh generate <root> --write [path]   # writes the file (default <root>/CONTENT_MANIFEST), prints one line
 #   content-manifest.sh verify   <manifest> <claude_dir>
 #   content-manifest.sh digest   <manifest>          # one-line sha256 of the manifest
 #
@@ -136,16 +137,46 @@ digest() {
   sha256_of "$manifest"
 }
 
+# generate [<root>] [--write [path]]: without --write the manifest is PRINTED and nothing is written (as it always
+# was). With --write it is written to <path> (default <root>/CONTENT_MANIFEST), whole or not at all, and one line
+# says so. A folder after --write is the root, never the file to write.
+generate_cmd() {
+  local root="" write="" path="" tmp
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --write) write=1; if [ $# -gt 1 ] && [ "${2#--}" = "$2" ] && [ ! -d "$2" ]; then path="$2"; shift; fi ;;
+      *) root="$1" ;;
+    esac
+    shift
+  done
+  root="${root:-.}"
+  if [ -z "$write" ]; then generate "$root"; return; fi
+  path="${path:-$root/CONTENT_MANIFEST}"
+  tmp="$(mktemp "$path.XXXXXX")"
+  if ! (generate "$root") >"$tmp" || [ ! -s "$tmp" ]; then
+    rm -f "$tmp"
+    echo "ERROR: the manifest could not be generated; $path was left as it was" >&2
+    exit 1
+  fi
+  chmod 644 "$tmp"
+  mv "$tmp" "$path"
+  echo "wrote $path ($(wc -l <"$path" | tr -d ' ') files)"
+}
+
 case "${1:-}" in
-  generate) shift; generate "${1:-.}" ;;
+  generate) shift; generate_cmd "$@" ;;
   verify)   shift; verify "${1:?manifest required}" "${2:?claude_dir required}" ;;
   digest)   shift; digest "${1:?manifest required}" ;;
   *)
     cat >&2 <<EOF
 usage:
-  $(basename "$0") generate <root>                 # root contains .claude/
+  $(basename "$0") generate <root>                 # root contains .claude/; PRINTS the manifest, writes nothing
+  $(basename "$0") generate <root> --write [path]  # writes it (default <root>/CONTENT_MANIFEST), prints one line
   $(basename "$0") verify   <manifest> <claude_dir>
   $(basename "$0") digest   <manifest>
+
+\`generate\` without --write only prints. Three lanes lost work by running it and throwing away what it
+printed, then committing a stale CONTENT_MANIFEST. Use --write, or redirect the output into the file.
 EOF
     exit 2
     ;;

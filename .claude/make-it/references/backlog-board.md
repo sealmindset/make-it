@@ -160,6 +160,7 @@ answers:   Retry -- runs it again tonight | Refile -- you re-enter the 3 rows   
 pr:        [1590]         # the fix PR(s), set by the fixing lane when it opens one; another repo's PR as its URL
 signal:    worker log shows 'filed: 2/2' for a new filing   # optional, one line: what a real run would show if the fix holds; the lane writes it with the PR. Nothing waits on it
 reviewed:  2026-11-24 ready 1a2b3c4   # optional: the pull request's last review -- `<date> ready <commit it read>` or `<date> not ready`; the lead writes it. The first screen says "reviewed" only from this
+sat:       2026-11-25 answered 1a2b3c4d5e6f   # set by `sitting`: the day this held card was answered (or `not-now`) at a weekly sitting, and a print of the card as it then was; any change to the card brings it back
 files:     [src/export.py, src/csv.py]   # optional: the files this card would change, repo-relative -- the ONE place a card lists them (see combine)
 bundles:   [E07-S3, E07-S9]   # a bundle card only: the cards it does as one piece of work (see combine)
 bundledIn: E07-S12        # a part of a bundle: the bundle card that carries it; the part closes only on its own check
@@ -395,7 +396,9 @@ worktree (the `/dispatch-it` pattern), taken from the top of the line when they 
 | `unbundle <id>` | Put a bundle's cards back in line as they were (a bundle's id), or take one card out (that card's id) |
 | `reopen <id> <what was seen>` | Put a closed card back in line, with your words kept on it |
 | `expire [--dry-run]` | Close the quiet cards a judge marked safe to close (30 quiet days; no mark, never; never a safety one); `--dry-run` only lists them |
-| `reconcile [<id>\|all]` | Check cards against the code, tests, and live system; `--prs` closes cards whose fix is released with passing tests |
+| `reconcile [<id>\|all]` | Check cards against the code, tests, and live system; `--prs` closes cards whose fix is released with passing tests, then sorts every open pull request by what it needs |
+| `sitting` | The weekly sitting: the three to five held high-stakes cards that free the most other work, one question each; the answer goes on the card (see [`sitting`](#sitting)) |
+| `release` | One release a day: every pull request that is ready goes out as one numbered release (see [One release a day](#one-release-a-day)) |
 | `dispatch [--dry-run]` | New bugs into free lanes, then `PLAN.md`'s next wave, else the bug line, else the next safe item; ends with what needs you |
 | `plan [filter] [--with-deps] [--apply\|--dry-run]` | Route each card to solo, spike, `/subagent-it` or `/dispatch-it`, in waves → `PLAN.md`; `--with-deps` also plans the cards the filter waits on, across epics |
 | `mode <id> <solo\|spike\|subagent-it\|dispatch-it\|auto>` | Choose a card's mode yourself (`auto` hands it back to `plan`) |
@@ -553,11 +556,14 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
    Then the choices, 2-4, each `Name -- what happens`: the recommendation first, marked
    Recommended, with the strongest argument against it on the line under it (`against: …`); then
    the next steps of the rule that also hold; `Full status` last. No line is longer than about 110
-   characters.
+   characters. Under the choices, one line counts the open pull requests by what each needs
+   ("Pull requests: 2 ready · 1 out of date · 1 stalled"; see [After every merge](#after-every-merge-every-open-pull-request-is-sorted)).
 2. **NEEDS YOU** -- each question waiting on you as one line (the card's title with its id, then its
    `decision:`: what waits, and the question), the first three, or "nothing waits on you". Held
    high-stakes cards are a count, then the three to five that free the most other cards (the ones
-   for the weekly sitting), never the whole list. Then one line counting the running list: its
+   for the weekly sitting), never the whole list. The same line says when a sitting is due (none
+   on record in the last 7 days), or the day the next one is; while one is due, "Hold the sitting"
+   is always one of the choices under DO NEXT. Then one line counting the running list: its
    open lines and how many areas they are in. Then, only when there are any: **Reopened** -- how many
    fixes did not hold, by title with id (the signal that matters most); and **Quiet cards** -- how many
    marked cards will close by themselves in the next 7 days, with the command that lists them (or,
@@ -589,10 +595,11 @@ answer. The skill prints it as-is and asks the choices as one select; it never p
 | 5 | The plan is stale: every wave is done, or its next wave is stuck, or more than half the cards that can start are not in it | plan |
 | 6 | More cards were opened than closed two weeks running (and the last groom is at least 7 days old), or the last groom is over 14 days old | groom |
 | 7 | A card can start and a lane is free. While a plan is in force only a card it does not list: the plan keeps the order of the ones it does | start the next safe card |
-| 8 | None of the above | wait, and why (a wave is running, the lanes are busy, or nothing can start safely) |
+| 8 | A weekly sitting is due: a held card can be brought, and none is on record in the last 7 days | hold the sitting (it needs your time, so it is the recommendation only when no earlier step holds; it is always offered as a choice) |
+| 9 | None of the above | wait, and why (a wave is running, the lanes are busy, or nothing can start safely) |
 
 The numbers are named constants at the top of `status.py`, each with its reason (`PR_STALL`,
-`PLAN_STALE`, `GROW_WEEKS`, `GROOM_AGE`, `GROOM_REST`, `SIT`). Pull requests come from `gh pr list`
+`PLAN_STALE`, `GROW_WEEKS`, `GROOM_AGE`, `GROOM_REST`, `SIT`, `SIT_EVERY`, `SIT_REST`, `STALL_HOURS`). Pull requests come from `gh pr list`
 in `repo`; a pull request named in a card's `pr:` is called by that card's title. With no `repo` or
 no `gh`, steps 2 and 3 are skipped and the screen says so. A pull request that is simply moving (a
 fresh draft, checks running) is not mentioned.
@@ -614,6 +621,103 @@ wave card names in `PLAN.md` against the files of every open pull request (`gh p
 files`); when either cannot be read it says so. When some of the wave's cards share a file with
 an open pull request, starting the others is the recommendation; when every card does, the
 recommendation is to wait for that pull request, or release it, first.
+
+### `sitting`
+
+Held high-stakes cards never start by themselves, so they pile up unless someone brings them. The
+owner's choice (2026-11-24): a short weekly sitting, the three to five that free the most other
+work. `sitting.py` picks, says when one is due, and records the answers -- no AI call; the skill
+writes each question (`/backlog-it`, Step 2c).
+
+- **The pick** (`sitting.py pick`, read-only; the rule is `sitting` in `status.py`): the held cards
+  -- high-stakes, open, with no question already waiting (those are under Waiting on you). The card
+  that frees the most other cards comes first (every open card that waits on it, directly or through
+  a card or epic it sits under), then the higher priority, then the older card. A bundle counts once:
+  the bundle is brought, never its parts. At most five (`SIT`). The rest wait for a later sitting.
+- **Due** (`sitting.py due`): a card can be brought, and no sitting is on record in the last 7 days
+  (`SIT_EVERY`). The first screen says so in one line and offers one choice.
+- **Each card is its own question**, never batched (`approval-block.md`): what it is by title with
+  id, what waits and why in two plain sentences, 2-4 named answers that are the specifics, one
+  Recommended with its strongest counter-argument, and always "Not now".
+- **The record** (`sitting.py answer <id> "<answer>"`, what it does on stdin): only one of the
+  card's own `answers:` names -- the skill writes the question and its answers on the card before
+  asking -- so a plain yes is refused. One line under
+  `## Answers` -- the date, the answer by name, what it does -- and `decision:` / `answers:` cleared.
+  The card is then marked, for example `sat: 2026-11-25 answered 1a2b3c4d5e6f`: the day, and a print
+  of the card as answered. An answered card is not brought again while it is unchanged.
+- **Not now is kept** (`sitting.py not-now <id>`): written on the card the same way, and the card
+  stays out for 14 days (`SIT_REST`), so it is not asked two weeks running. Any change to the card
+  -- a new note, a new priority, new evidence -- brings it back at once.
+- An answer starts nothing. Starting an answered card is `start <id>`, with the high-stakes gate
+  as it is.
+
+### One release a day
+
+The owner's choice (2026-11-24): one release a day carrying that day's reviewed fixes, not one
+release per fix. Each release used to move main, so every other branch had to rebase, and every
+rebase clashed in `CONTENT_MANIFEST` because every branch had regenerated it.
+
+`scripts/release-day.sh` (in the make-it repo; a project without it uses its own release steps):
+
+1. takes only pull requests the sort calls READY -- into main itself (a stacked one, based on
+   another branch, would bring that branch's unreviewed commits), reviewed for the exact commit
+   that is the head now, at least one check ran on that commit and every one passed (none
+   reported yet is not green), up to date with main; a pull request named by hand that is not
+   READY is refused with the reason. Right before each merge it fetches the head again from GitHub
+   and merges that exact commit only if it is still the one reviewed. A pull request from another
+   repository is handled the same way: GitHub's own copy of its head (`refs/pull/N/head`), only as
+   the commit reviewed;
+2. builds one release branch from main in its own worktree and squash-merges each in turn. A
+   clash in the manifest alone is not a conflict. Any other clash stops the run, names the pull
+   request and removes the branch again;
+3. writes the manifest: written once, at release time, from the merged files, then checked
+   against them exactly;
+4. runs the quick contract tests -- the ones that changed or that name a changed file; CI runs
+   all of them on the release pull request;
+5. prints the version commit, the commands, the note that closes each original pull request, and
+   the cards to close.
+
+It never picks the version number, and refuses one that is already a tag (here or on the origin)
+or is not above `VERSION` on main. It sends the branch and opens the release pull request only
+with `--version X.Y.Z --go`. It never merges and it never tags: the release pull request needs an
+independent review and green checks on current main like any other, and those commands are
+printed. `--dry-run` changes nothing. After the release, each original pull request is closed, not
+merged: close it with a note that names the release, keep the branch, and add the release pull
+request to the card's `pr:` so `reconcile --prs` closes the card from facts.
+
+**Why every pull request still carries a matching manifest.** The installer and `/make-it update`
+read `CONTENT_MANIFEST` from the tip of main, and main has no branch rule, so the CI check that
+fails a pull request whose manifest does not match its files is the only thing that stops a stale
+manifest reaching users. Letting fix pull requests skip the manifest would mean loosening that
+check, so it stays as it is. The clash is removed where it cost time instead: the release writes
+the manifest itself, and a branch that must rebase settles it with one command,
+`content-manifest.sh generate . --write`.
+
+### After every merge: every open pull request is sorted
+
+The owner's rule (2026-11-24): on every merge, check every open pull request and sort it by what
+it needs. `sync-prs.py --sort` does it from facts, no AI (`gh`: draft or not, GitHub's merge state,
+how far behind main, each check, the last activity; the board: the card a pull request belongs to
+-- one whose `pr:` lists it, else one its title names -- and that card's `reviewed:` line). Each
+pull request lands in exactly one group, the first that holds:
+
+| Group | When | The action |
+|-------|------|------------|
+| WILL NEVER MERGE | Its card is already closed, or main already holds everything in it | close it with a note, keep the branch |
+| NEEDS YOU | Its card has a question only you can answer (`decision:`) | a one-click question |
+| STALLED | Still being worked on (a draft, or checks not finished) with no activity for 48 hours (`STALL_HOURS`) | chase its lane, or take it over |
+| OUT OF DATE | It is stacked on another branch, conflicts with main, or is behind it | rebase it onto main (a stacked one once its base is in main, pointed at main); its checks run again |
+| CAN BE SETTLED | A check fails, or its last review said not ready; or every check passed and no ready review of this exact commit is on its card | `/resolve-it` for the failing check or the finding; an independent review for the missing one |
+| READY | Into main, reviewed for this commit, at least one check ran on it and every one passed, up to date with main | release it with the day's release |
+
+Each line names the pull request by its own title and number, the card it is for, why it is in
+its group, and the action. A pull request that is being worked on and active is counted as "still
+moving" and left alone. One whose facts cannot be read is listed as not sorted, never guessed;
+when GitHub cannot be asked at all, the helper says so, sorts nothing and exits 2.
+
+It runs without anyone remembering: `reconcile --prs` ends with the list (so a groom, a dispatch
+and `/resume-it`'s catch-up all print it), the skill runs it after every merge and every release,
+and the first screen counts each group.
 
 ### Plain words on the board
 

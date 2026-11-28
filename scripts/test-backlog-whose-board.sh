@@ -54,12 +54,21 @@ OUT="$(cd "$H/code/plain" && printf 'a report\n' | env -u BACKLOG_DIR HOME="$H" 
 check "outside: a capture is refused"               has "$OUT" "card: this folder has no board, so nothing was read or written."
 check "outside: the personal board is unchanged"    [ "$(snap)" = "$BEFORE" ]
 # Every helper's default board: refused from outside, nothing written (one mutant per helper default)
-for h in status regen-board sync-prs shrink; do
-  a=(); [ "$h" = shrink ] && a=(combine)
+for h in status regen-board sync-prs shrink sitting; do
+  a=(); [ "$h" = shrink ] && a=(combine); [ "$h" = sitting ] && a=(pick)
   OUT="$(run "$H/code/plain" python3 "$BIN/$h.py" ${a[@]+"${a[@]}"})"
   check "outside: $h refuses, nothing read"         has "$OUT" "$h: this folder has no board, so nothing was read or written."
 done
+git init -q "$H/code/plain"
+OUT="$(run "$H/code/plain" bash "$root/scripts/release-day.sh" --dry-run)"
+check "outside: release-day refuses, nothing read"  has "$OUT" "release-day: this folder has no board, so nothing was read or written."
+rm -rf "$H/code/plain/.git"
 check "outside: the personal board still unchanged" [ "$(snap)" = "$BEFORE" ]
+# Inside the personal repo, release-day finds the personal board by the same rule (not <repo>/.claude/backlog)
+git init -q "$H/work/docai"; printf '[]\n' > "$T/prs.json"
+OUT="$(run "$H/work/docai" env GH_STUB_PRS="$T/prs.json" PATH="$root/scripts/backlog-stand-in:$PATH" bash "$root/scripts/release-day.sh" --dry-run)"
+check "inside: release-day reads the personal board" has "$OUT" "No pull request is ready"
+rm -rf "$H/work/docai/.git"
 
 # Where a new board may go: never home, never ~/.claude, never a folder holding the personal repo
 W="$(where "$H")"

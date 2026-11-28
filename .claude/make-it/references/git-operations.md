@@ -41,6 +41,8 @@ Agent-side discipline; invisible to the vibe-coder. Composes with `worktree-work
    If the base moved, let mergeability recompute before merging.
 10. **After any merge to `main`, everyone rebases.** `git fetch && git rebase origin/main` on
     every live branch so duplicates collapse and conflicts surface early.
+11. **After every merge, sort every open pull request** by what it needs, so none is left to rot
+    (see [After every merge](#after-every-merge-every-open-pull-request-is-sorted)).
 
 ### Before any save
 
@@ -171,6 +173,49 @@ Run this on any open PR or lingering branch (it's how you keep the PR list and b
 
 ---
 
+## After every merge: every open pull request is sorted
+
+After every merge, sort every open pull request into exactly one group, from facts (GitHub's merge
+state and checks, the last activity, and the review recorded for the commit that is its head now),
+and do what the group says. With a `/backlog-it` board, `sync-prs.py --sort` does the sorting and
+`reconcile --prs` ends with it; without one, apply the same table by hand.
+
+| Group | When | What to do |
+|-------|------|------------|
+| READY | Into `main`, reviewed for this exact commit, at least one check ran on it and every one passed, up to date with `main` | Release it (the day's release, below) |
+| OUT OF DATE | Stacked on another branch, behind `main`, or in conflict with it | Rebase onto `main` (a stacked one once its base is in `main`), re-run **fresh CI**, get the new commit reviewed |
+| CAN BE SETTLED | A failing check, or a review finding | Send it through `/resolve-it`; a pull request with no review yet gets an independent one |
+| STALLED | Still being worked on, no activity for two days | Chase its lane, or take the work over |
+| NEEDS YOU | A question only the owner can answer | Ask it as one click, each answer saying what it does |
+| WILL NEVER MERGE | Superseded, or released another way | Close it with a note saying where the work went; keep the branch |
+
+When the facts cannot be read, say so and sort nothing: a guess here merges the wrong thing.
+
+---
+
+## One release a day
+
+Where a project releases by version (make-it itself does), the day's reviewed fixes go out as
+**one** numbered release, not one release per fix. Every release moves `main`; one a day means the
+other branches rebase once a day, not once per fix.
+
+- **What goes in:** only pull requests that are READY above. Being close is not ready.
+- **How:** one release branch off the latest `main`, each ready pull request squash-merged into it
+  in turn; a real conflict stops the run and that pull request waits for tomorrow. In the make-it
+  repo `scripts/release-day.sh` does this (`--dry-run` first; it never picks the version number,
+  and it sends the branch and opens the pull request only with `--version X.Y.Z --go`).
+- **The gate does not change:** the release pull request needs its own independent review and
+  checks green on current `main`, like any merge. Nothing merges or is tagged by a script.
+- **After it:** close each original pull request with a note that names the release, keep its
+  branch, and sort what is still open (above).
+- **Generated files are written once, at release time.** A file every branch regenerates (make-it's
+  `CONTENT_MANIFEST`) clashes on every rebase. The release writes it from the merged files. On a
+  branch, never merge it by hand: after a rebase, regenerate it
+  (`.claude/make-it/scripts/content-manifest.sh generate . --write`) and continue. Every pull
+  request still carries a manifest that matches its files, because CI checks exactly that.
+
+---
+
 ## Safety & recovery (everything stays reversible)
 
 - **`--force-with-lease`, never `--force`.** Never rewrite *published/shared* history others have
@@ -207,7 +252,7 @@ START   git fetch origin --prune  →  branch/worktree off origin/main
 WORK    atomic conventional commits (stage your own paths)  →  hooks gate each commit
 SYNC    git fetch && git rebase origin/main  (often; --force-with-lease on push)
 LAND    rebase onto main → FRESH CI green → verify → squash-merge → delete branch
-AFTER   every other branch: git fetch && git rebase origin/main
+AFTER   every other branch: git fetch && git rebase origin/main; sort every open pull request
 TIDY    fetch --prune; delete merged branches you own; prune finished worktrees
 ```
 
