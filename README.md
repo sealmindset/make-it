@@ -1007,6 +1007,23 @@ Building in Claude Desktop or Cowork instead of Claude Code? See [`desktop/READM
 
 ## Version History
 
+### v1.71.35 -- a weekly sitting for held cards, one release a day, and every open pull request sorted after a merge
+
+- **A weekly sitting.** `/backlog-it sitting` brings you the three to five held high-stakes
+  cards that free the most other work, each as its own one-click question. An answer must be
+  one of the card's own named answers. "Not now" is kept for a while unless the card changes.
+  The first screen says when a sitting is due.
+- **One release a day.** A release-day script collects every pull request that is reviewed for
+  its exact version and whose checks ran and passed, merges each in turn onto one release
+  branch, writes the content manifest and runs the quick tests. It refuses a pull request
+  built on another branch, one with no checks run yet, one changed after its review, and a
+  version number that is not new. It pushes nothing unless you give both the version and
+  the go. `content-manifest.sh generate --write` writes the file in place.
+- **Every open pull request sorted after a merge,** into ready, out of date, can be settled,
+  stalled, needs you, or will never merge, each with what to do in plain words. The first
+  screen shows the count in each group. When a fact can't be read, it says so and sorts
+  nothing.
+
 ### v1.71.34 -- make-it points at /threats-it as a private repository
 
 - **/threats-it's repository is now private.** make-it no longer offers a one-line download
